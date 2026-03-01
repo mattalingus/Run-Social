@@ -20,6 +20,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/query-client";
 import C from "@/constants/colors";
 import { MARKER_ICONS } from "@/constants/markerIcons";
+import { formatDistance } from "@/lib/formatDistance";
 
 const MILESTONE_LABELS: Record<number, string> = {
   25: "First 25",
@@ -192,7 +193,7 @@ export default function ProfileScreen() {
 
       <View style={styles.statsGrid}>
         <View style={styles.statCard}>
-          <Text style={styles.statNum}>{user.total_miles.toFixed(1)}</Text>
+          <Text style={styles.statNum}>{formatDistance(user.total_miles)}</Text>
           <Text style={styles.statName}>Total Miles</Text>
         </View>
         <View style={styles.statCard}>
@@ -230,7 +231,7 @@ export default function ProfileScreen() {
           <View style={styles.statsItem}>
             <Feather name="target" size={16} color={C.blue} />
             <View>
-              <Text style={styles.statsVal}>{user.avg_distance} mi</Text>
+              <Text style={styles.statsVal}>{formatDistance(user.avg_distance)} mi</Text>
               <Text style={styles.statsLabel}>Avg Distance</Text>
             </View>
           </View>
@@ -281,21 +282,21 @@ export default function ProfileScreen() {
         <View style={styles.goalCard}>
           <View style={styles.goalHeader}>
             <Text style={styles.goalLabel}>This Month</Text>
-            <Text style={styles.goalValues}>{user.miles_this_month.toFixed(1)} / {user.monthly_goal} mi</Text>
+            <Text style={styles.goalValues}>{formatDistance(user.miles_this_month)} / {user.monthly_goal} mi</Text>
           </View>
           <ProgressBar value={user.miles_this_month} total={user.monthly_goal} />
           <Text style={styles.goalRemain}>
-            {Math.max(0, user.monthly_goal - user.miles_this_month).toFixed(1)} mi remaining
+            {formatDistance(Math.max(0, user.monthly_goal - user.miles_this_month))} mi remaining
           </Text>
         </View>
         <View style={[styles.goalCard, { marginTop: 10 }]}>
           <View style={styles.goalHeader}>
             <Text style={styles.goalLabel}>This Year</Text>
-            <Text style={styles.goalValues}>{user.miles_this_year.toFixed(1)} / {user.yearly_goal} mi</Text>
+            <Text style={styles.goalValues}>{formatDistance(user.miles_this_year)} / {user.yearly_goal} mi</Text>
           </View>
           <ProgressBar value={user.miles_this_year} total={user.yearly_goal} color={C.blue} />
           <Text style={styles.goalRemain}>
-            {Math.max(0, user.yearly_goal - user.miles_this_year).toFixed(1)} mi remaining
+            {formatDistance(Math.max(0, user.yearly_goal - user.miles_this_year))} mi remaining
           </Text>
         </View>
       </View>
@@ -343,7 +344,7 @@ export default function ProfileScreen() {
               <Text style={styles.nextName}>{MILESTONE_LABELS[nextMilestone]} — {nextMilestone} miles</Text>
             </View>
             <ProgressBar value={user.total_miles} total={nextMilestone} />
-            <Text style={styles.nextRemain}>{Math.max(0, nextMilestone - user.total_miles).toFixed(1)} mi to go</Text>
+            <Text style={styles.nextRemain}>{formatDistance(Math.max(0, nextMilestone - user.total_miles))} mi to go</Text>
           </View>
         )}
       </View>
@@ -370,7 +371,7 @@ export default function ProfileScreen() {
                 </View>
                 <View>
                   <Text style={styles.historyTitle} numberOfLines={1}>{run.title}</Text>
-                  <Text style={styles.historyMeta}>{formatDate(run.date)} · {run.min_distance}–{run.max_distance} mi</Text>
+                  <Text style={styles.historyMeta}>{formatDate(run.date)} · {formatDistance(run.min_distance)}–{formatDistance(run.max_distance)} mi</Text>
                 </View>
               </View>
               <View style={[styles.historyStatus, { backgroundColor: run.is_completed ? C.primary + "22" : C.border }]}>

@@ -16,6 +16,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import C from "@/constants/colors";
 import RangeSlider from "@/components/RangeSlider";
+import { formatDistance } from "@/lib/formatDistance";
 
 interface Run {
   id: string;
@@ -116,8 +117,8 @@ export default function MapScreen() {
   }
 
   function fmtDist(miles: number) {
-    if (unit === "km") return `${(miles * 1.60934).toFixed(1)} km`;
-    return `${miles.toFixed(1)} mi`;
+    if (unit === "km") return `${formatDistance(miles * 1.60934)} km`;
+    return `${formatDistance(miles)} mi`;
   }
 
   const topPad = insets.top + 67;
@@ -210,7 +211,7 @@ export default function MapScreen() {
                   <View style={styles.dot} />
                   <View style={styles.stat}>
                     <Feather name="target" size={12} color={C.blue} />
-                    <Text style={styles.statText}>{run.min_distance}–{run.max_distance} mi</Text>
+                    <Text style={styles.statText}>{formatDistance(run.min_distance)}–{formatDistance(run.max_distance)} mi</Text>
                   </View>
                   <View style={styles.dot} />
                   <View style={styles.stat}>

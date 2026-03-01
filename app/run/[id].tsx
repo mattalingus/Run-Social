@@ -16,6 +16,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/query-client";
 import C from "@/constants/colors";
+import { formatDistance } from "@/lib/formatDistance";
 
 const RUN_TAG_ICONS: Record<string, string> = {
   Talkative: "message-circle",
@@ -231,7 +232,7 @@ export default function RunDetailScreen() {
             <View style={styles.reqDivider} />
             <View style={styles.reqItem}>
               <Feather name="target" size={20} color={C.blue} />
-              <Text style={styles.reqValue}>{run.min_distance} – {run.max_distance}</Text>
+              <Text style={styles.reqValue}>{formatDistance(run.min_distance)} – {formatDistance(run.max_distance)}</Text>
               <Text style={styles.reqLabel}>Distance (mi)</Text>
             </View>
             <View style={styles.reqDivider} />
@@ -256,7 +257,7 @@ export default function RunDetailScreen() {
               }]}>
                 {(user.avg_pace >= run.min_pace && user.avg_pace <= run.max_pace && user.avg_distance >= run.min_distance)
                   ? "You meet the requirements"
-                  : `Your pace (${formatPace(user.avg_pace)}/mi) or distance (${user.avg_distance} mi) doesn't match`}
+                  : `Your pace (${formatPace(user.avg_pace)}/mi) or distance (${formatDistance(user.avg_distance)} mi) doesn't match`}
               </Text>
             </View>
           )}
@@ -294,7 +295,7 @@ export default function RunDetailScreen() {
                   </View>
                   <View style={styles.participantInfo}>
                     <Text style={styles.participantName}>{p.name}</Text>
-                    <Text style={styles.participantPace}>{formatPace(p.avg_pace)}/mi · {p.avg_distance} mi avg</Text>
+                    <Text style={styles.participantPace}>{formatPace(p.avg_pace)}/mi · {formatDistance(p.avg_distance)} mi avg</Text>
                   </View>
                   <View style={[styles.participantStatus, { backgroundColor: p.status === "confirmed" ? C.primary + "22" : C.border }]}>
                     <Text style={[styles.participantStatusText, { color: p.status === "confirmed" ? C.primary : C.textMuted }]}>

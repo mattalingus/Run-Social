@@ -21,6 +21,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import C from "@/constants/colors";
 import RangeSlider from "@/components/RangeSlider";
+import { formatDistance } from "@/lib/formatDistance";
 
 const HOUSTON: Region = {
   latitude: 29.7604,
@@ -331,7 +332,9 @@ export default function MapScreen() {
   }
 
   function fmtDist(mi: number) {
-    return unit === "km" ? `${(mi * 1.60934).toFixed(1)} km` : `${mi.toFixed(1)} mi`;
+    return unit === "km"
+      ? `${formatDistance(mi * 1.60934)} km`
+      : `${formatDistance(mi)} mi`;
   }
 
   const topPad = insets.top;
@@ -480,7 +483,7 @@ export default function MapScreen() {
             <View style={s.chip}>
               <Feather name="map" size={11} color={C.blue} />
               <Text style={[s.chipTxt, { color: C.blue }]}>
-                {selectedRun.min_distance.toFixed(1)}–{selectedRun.max_distance.toFixed(1)} mi
+                {formatDistance(selectedRun.min_distance)}–{formatDistance(selectedRun.max_distance)} mi
               </Text>
             </View>
             <View style={s.chip}>

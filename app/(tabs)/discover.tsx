@@ -16,6 +16,7 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useQuery } from "@tanstack/react-query";
 import C from "@/constants/colors";
+import { formatDistance } from "@/lib/formatDistance";
 
 const RUN_TAGS = ["All", "Talkative", "Quiet", "Motivational", "Training", "Ministry", "Recovery"];
 
@@ -99,7 +100,7 @@ function RunCard({ run, onPress }: { run: Run; onPress: () => void }) {
         <View style={styles.statDivider} />
         <View style={styles.stat}>
           <Feather name="target" size={13} color={C.blue} />
-          <Text style={styles.statLabel}>{run.min_distance}–{run.max_distance}</Text>
+          <Text style={styles.statLabel}>{formatDistance(run.min_distance)}–{formatDistance(run.max_distance)}</Text>
           <Text style={styles.statUnit}>mi</Text>
         </View>
         <View style={styles.statDivider} />
