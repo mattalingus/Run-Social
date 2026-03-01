@@ -10,10 +10,6 @@ function NativeTabLayout() {
   return (
     <NativeTabs>
       <NativeTabs.Trigger name="index">
-        <Icon sf={{ default: "map", selected: "map.fill" }} />
-        <Label>Map</Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="discover">
         <Icon sf={{ default: "magnifyingglass", selected: "magnifyingglass" }} />
         <Label>Discover</Label>
       </NativeTabs.Trigger>
@@ -30,9 +26,7 @@ function NativeTabLayout() {
 }
 
 function TabBarBackground() {
-  return (
-    <View style={styles.tabBarBg} />
-  );
+  return <View style={styles.tabBarBg} />;
 }
 
 function ClassicTabLayout() {
@@ -59,22 +53,11 @@ function ClassicTabLayout() {
           fontSize: 11,
           marginBottom: 2,
         },
-        tabBarIconStyle: {
-          marginTop: 4,
-        },
+        tabBarIconStyle: { marginTop: 4 },
       }}
     >
       <Tabs.Screen
         name="index"
-        options={{
-          title: "Map",
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "map" : "map-outline"} size={24} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="discover"
         options={{
           title: "Discover",
           tabBarIcon: ({ color, focused }) => (

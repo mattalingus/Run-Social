@@ -54,6 +54,10 @@ function RootLayoutNav() {
           name="rate/[runId]"
           options={{ presentation: "modal", headerShown: false }}
         />
+        <Stack.Screen
+          name="map"
+          options={{ headerShown: false }}
+        />
       </Stack>
     </>
   );
