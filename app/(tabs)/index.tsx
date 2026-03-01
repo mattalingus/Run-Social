@@ -20,6 +20,7 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import MapView, { Marker } from "react-native-maps";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import C from "@/constants/colors";
 import RangeSlider from "@/components/RangeSlider";
@@ -41,7 +42,7 @@ const SORT_OPTIONS: { key: SortOption; label: string }[] = [
   { key: "dist_desc",label: "Distance: High → Low"  },
 ];
 
-const HOST_STYLES = ["Talkative", "Quiet", "Motivational", "Training", "Ministry", "Recovery"];
+const HOST_STYLES = ["General", "Talkative", "Quiet", "Motivational", "Training", "Ministry", "Recovery", "Girlies", "Bros"];
 const PROX_STEPS  = [1, 5, 10, 25, 50]; // miles
 
 interface FilterState {
@@ -494,11 +495,57 @@ export default function DiscoverScreen() {
   const [hMaxDist, setHMaxDist] = useState("6");
   const [hMinPace, setHMinPace] = useState(8);
   const [hMaxPace, setHMaxPace] = useState(12);
+  const [hLocationLat, setHLocationLat] = useState<number | null>(null);
+  const [hLocationLng, setHLocationLng] = useState<number | null>(null);
+  const [hostPage, setHostPage] = useState<"form" | "location">("form");
+  const [pinCoord, setPinCoord] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [isGeocodingPin, setIsGeocodingPin] = useState(false);
+  // (showLocationModal removed — location picker is now embedded in the host modal)
 
   function resetHostForm() {
     setHTitle(""); setHLocation(""); setHDate(""); setHTime("");
     setHPrivacy("public"); setHPassword(""); setHMaxParticipants(20);
     setHTags([]); setHMinDist("3"); setHMaxDist("6"); setHMinPace(8); setHMaxPace(12);
+    setHLocationLat(null); setHLocationLng(null); setPinCoord(null); setHostPage("form");
+  }
+
+  // ─── Date / Time parse helpers ─────────────────────────────────────────────
+  function parseDMY(raw: string): Date | null {
+    const cleaned = raw.trim().replace(/\//g, "/");
+    const [d, m, y] = cleaned.split("/");
+    if (!d || !m || !y) return null;
+    const year = y.length === 2 ? 2000 + parseInt(y, 10) : parseInt(y, 10);
+    const date = new Date(year, parseInt(m, 10) - 1, parseInt(d, 10));
+    return isNaN(date.getTime()) ? null : date;
+  }
+
+  function parseHHMMAMPM(raw: string): { hours: number; minutes: number } | null {
+    const match = raw.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)$/i);
+    if (!match) return null;
+    let hours = parseInt(match[1], 10);
+    const minutes = parseInt(match[2], 10);
+    const ampm = match[3].toUpperCase();
+    if (ampm === "PM" && hours !== 12) hours += 12;
+    if (ampm === "AM" && hours === 12) hours = 0;
+    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+    return { hours, minutes };
+  }
+
+  // ─── Reverse-geocode a pin coordinate ──────────────────────────────────────
+  async function reverseGeocode(lat: number, lng: number) {
+    setIsGeocodingPin(true);
+    try {
+      const results = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
+      if (results.length > 0) {
+        const r = results[0];
+        const parts = [r.name, r.street, r.city, r.region].filter(Boolean);
+        setHLocation(parts.join(", "));
+      }
+    } catch {
+      // silently ignore geocoding errors
+    } finally {
+      setIsGeocodingPin(false);
+    }
   }
 
   const PACE_STEP_30S = 0.5; // 30 seconds in minutes
@@ -543,16 +590,21 @@ export default function DiscoverScreen() {
   const createRunMutation = useMutation({
     mutationFn: async () => {
       if (!hTitle.trim()) throw new Error("Run title is required");
-      if (!hLocation.trim()) throw new Error("Location name is required");
+      if (!hLocation.trim()) throw new Error("Location is required — tap the pin to set it on the map");
+      if (hLocationLat === null || hLocationLng === null) throw new Error("Please pick a location on the map");
       if (!hDate.trim() || !hTime.trim()) throw new Error("Date and time are required");
-      const dateTime = new Date(`${hDate.trim()}T${hTime.trim()}:00`);
-      if (isNaN(dateTime.getTime())) throw new Error("Invalid date or time — use YYYY-MM-DD and HH:MM");
+      const parsedDate = parseDMY(hDate.trim());
+      if (!parsedDate) throw new Error("Invalid date — use DD/MM/YY (e.g. 25/06/25)");
+      const parsedTime = parseHHMMAMPM(hTime.trim());
+      if (!parsedTime) throw new Error("Invalid time — use HH:MM AM/PM (e.g. 7:30 AM)");
+      parsedDate.setHours(parsedTime.hours, parsedTime.minutes, 0, 0);
+      if (isNaN(parsedDate.getTime())) throw new Error("Invalid date or time");
       const res = await apiRequest("POST", "/api/runs", {
         title: hTitle.trim(),
         privacy: hPrivacy,
-        date: dateTime.toISOString(),
-        locationLat: userLocation?.latitude ?? 37.7749,
-        locationLng: userLocation?.longitude ?? -122.4194,
+        date: parsedDate.toISOString(),
+        locationLat: hLocationLat,
+        locationLng: hLocationLng,
         locationName: hLocation.trim(),
         minDistance: parseFloat(hMinDist) || 1,
         maxDistance: parseFloat(hMaxDist) || 6,
@@ -872,21 +924,85 @@ export default function DiscoverScreen() {
 
           {/* Header */}
           <View style={s.sheetHeader}>
-            <Pressable style={s.sheetHeaderBtn} onPress={() => { setShowHostModal(false); resetHostForm(); }}>
-              <Feather name="x" size={20} color={C.textSecondary} />
-            </Pressable>
-            <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 17, color: C.text }}>Host a Run</Text>
-            <Pressable
-              style={[s.sheetHeaderBtn, s.sheetPostBtn, createRunMutation.isPending && { opacity: 0.6 }]}
-              onPress={() => createRunMutation.mutate()}
-              disabled={createRunMutation.isPending}
-            >
-              {createRunMutation.isPending
-                ? <ActivityIndicator size="small" color={C.bg} />
-                : <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 14, color: C.bg }}>Post</Text>}
-            </Pressable>
+            {hostPage === "location" ? (
+              <Pressable style={s.sheetHeaderBtn} onPress={() => setHostPage("form")}>
+                <Feather name="arrow-left" size={20} color={C.textSecondary} />
+              </Pressable>
+            ) : (
+              <Pressable style={s.sheetHeaderBtn} onPress={() => { setShowHostModal(false); resetHostForm(); }}>
+                <Feather name="x" size={20} color={C.textSecondary} />
+              </Pressable>
+            )}
+            <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 17, color: C.text }}>
+              {hostPage === "location" ? "Drop a Pin" : "Host a Run"}
+            </Text>
+            {hostPage === "location" ? (
+              <Pressable
+                style={[s.sheetHeaderBtn, s.sheetPostBtn]}
+                onPress={() => {
+                  if (pinCoord) {
+                    setHLocationLat(pinCoord.latitude);
+                    setHLocationLng(pinCoord.longitude);
+                  }
+                  setHostPage("form");
+                  Haptics.selectionAsync();
+                }}
+              >
+                <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 14, color: C.bg }}>Done</Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                style={[s.sheetHeaderBtn, s.sheetPostBtn, createRunMutation.isPending && { opacity: 0.6 }]}
+                onPress={() => createRunMutation.mutate()}
+                disabled={createRunMutation.isPending}
+              >
+                {createRunMutation.isPending
+                  ? <ActivityIndicator size="small" color={C.bg} />
+                  : <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 14, color: C.bg }}>Post</Text>}
+              </Pressable>
+            )}
           </View>
 
+          {hostPage === "location" && (
+            <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 8 }}>
+              <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary, marginBottom: 12 }}>
+                Tap anywhere on the map to set the meeting point.
+              </Text>
+              {Platform.OS !== "web" && pinCoord ? (
+                <MapView
+                  style={{ height: 280, borderRadius: 14, overflow: "hidden" }}
+                  initialRegion={{
+                    latitude: pinCoord.latitude,
+                    longitude: pinCoord.longitude,
+                    latitudeDelta: 0.01,
+                    longitudeDelta: 0.01,
+                  }}
+                  onPress={(e) => {
+                    const coord = e.nativeEvent.coordinate;
+                    setPinCoord(coord);
+                    reverseGeocode(coord.latitude, coord.longitude);
+                  }}
+                >
+                  <Marker coordinate={pinCoord} pinColor={C.primary} />
+                </MapView>
+              ) : (
+                <View style={{ height: 280, borderRadius: 14, backgroundColor: C.card, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: C.border }}>
+                  <Feather name="map" size={32} color={C.textMuted} />
+                  <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textMuted, marginTop: 8 }}>Map picker on mobile only</Text>
+                </View>
+              )}
+              <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary, marginTop: 16, marginBottom: 6 }}>Location Name</Text>
+              <TextInput
+                style={s.hInput}
+                value={hLocation}
+                onChangeText={setHLocation}
+                placeholder={isGeocodingPin ? "Getting address…" : "e.g. Riverside Park North Entrance"}
+                placeholderTextColor={C.textMuted}
+                editable={!isGeocodingPin}
+              />
+            </View>
+          )}
+          {hostPage === "form" && (
           <ScrollView
             style={{ flex: 1 }}
             contentContainerStyle={s.sheetForm}
@@ -906,13 +1022,19 @@ export default function DiscoverScreen() {
 
             {/* Location */}
             <Text style={s.hLabel}>Location *</Text>
-            <TextInput
-              style={s.hInput}
-              value={hLocation}
-              onChangeText={setHLocation}
-              placeholder="e.g. Riverside Park North Entrance"
-              placeholderTextColor={C.textMuted}
-            />
+            <Pressable
+              style={[s.hInput, { flexDirection: "row", alignItems: "center", gap: 10 }]}
+              onPress={() => {
+                setPinCoord(hLocationLat !== null ? { latitude: hLocationLat, longitude: hLocationLng! } : (userLocation ?? { latitude: 40.7128, longitude: -74.006 }));
+                setHostPage("location");
+              }}
+            >
+              <Feather name="map-pin" size={16} color={hLocation ? C.primary : C.textMuted} />
+              <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 14, color: hLocation ? C.text : C.textMuted, flex: 1 }} numberOfLines={1}>
+                {hLocation || "Tap to drop a pin on the map"}
+              </Text>
+              {hLocation ? <Feather name="edit-2" size={14} color={C.textMuted} /> : null}
+            </Pressable>
 
             {/* Date + Time */}
             <Text style={s.hLabel}>Date & Time *</Text>
@@ -921,7 +1043,7 @@ export default function DiscoverScreen() {
                 style={[s.hInput, { flex: 1 }]}
                 value={hDate}
                 onChangeText={setHDate}
-                placeholder="YYYY-MM-DD"
+                placeholder="DD/MM/YY"
                 placeholderTextColor={C.textMuted}
                 keyboardType="numbers-and-punctuation"
               />
@@ -929,7 +1051,7 @@ export default function DiscoverScreen() {
                 style={[s.hInput, { flex: 1 }]}
                 value={hTime}
                 onChangeText={setHTime}
-                placeholder="HH:MM"
+                placeholder="7:30 AM"
                 placeholderTextColor={C.textMuted}
                 keyboardType="numbers-and-punctuation"
               />
@@ -1059,11 +1181,13 @@ export default function DiscoverScreen() {
               </View>
             </View>
           </ScrollView>
+          )}
         </View>
         </View>
       </Modal>
 
-      {/* ── Community Rules Modal ────────────────────────────────────────────── */}
+      {/* ── Community Rules Modal ──────────────────────────────────────────────
+           NOTE: The closing )} above closes {hostPage === "form" && (        */}
       <Modal visible={showRulesModal} transparent animationType="slide" onRequestClose={() => setShowRulesModal(false)}>
         <View style={s.modalWrap}>
         <Pressable style={s.modalOverlay} onPress={() => setShowRulesModal(false)} />
@@ -1323,8 +1447,8 @@ const s = StyleSheet.create({
     backgroundColor: C.surface,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    borderTopWidth: 1.5,
-    borderTopColor: C.primary + "33",
+    borderTopWidth: 1,
+    borderTopColor: C.border,
     maxHeight: "90%",
     flex: 1,
   },
@@ -1411,9 +1535,9 @@ const s = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 10,
-    backgroundColor: C.primaryMuted,
+    backgroundColor: C.card,
     borderWidth: 1,
-    borderColor: C.primary + "55",
+    borderColor: C.border,
     alignItems: "center",
     justifyContent: "center",
   },
