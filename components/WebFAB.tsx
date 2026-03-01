@@ -4,23 +4,15 @@ import { useEffect, useCallback } from "react";
 import { Platform } from "react-native";
 
 interface Props {
-  hostUnlocked: boolean;
-  onUnlockedPress: () => void;
+  onPress: () => void;
 }
 
-export default function WebFAB({ hostUnlocked, onUnlockedPress }: Props) {
+export default function WebFAB({ onPress }: Props) {
   const handleClick = useCallback(() => {
-    if (!hostUnlocked) {
-      window.alert(
-        "Host Privileges Required\n\nComplete 3 runs with 2+ different hosts to unlock hosting."
-      );
-      return;
-    }
-    onUnlockedPress();
-  }, [hostUnlocked, onUnlockedPress]);
+    onPress();
+  }, [onPress]);
 
   useEffect(() => {
-    console.log("[WebFAB] effect running on Platform:", Platform.OS);
     if (Platform.OS !== "web") return;
     if (typeof document === "undefined") return;
 

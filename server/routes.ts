@@ -258,8 +258,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/runs", requireAuth, async (req, res) => {
     try {
-      const user = await storage.getUserById(req.session.userId!);
-      if (!user?.host_unlocked) return res.status(403).json({ message: "Host privileges required" });
       const run = await storage.createRun({ ...req.body, hostId: req.session.userId! });
       res.status(201).json(run);
     } catch (e: any) {

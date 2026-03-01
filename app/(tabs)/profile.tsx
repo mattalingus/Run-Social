@@ -184,10 +184,6 @@ export default function ProfileScreen() {
     enabled: !!user,
   });
 
-  const { data: unlockProgress } = useQuery<{ unique_hosts: number; total_runs: number }>({
-    queryKey: ["/api/users/me/unlock-progress"],
-    enabled: !!user && !user.host_unlocked,
-  });
 
   const goalsMutation = useMutation({
     mutationFn: async () => {
@@ -307,21 +303,14 @@ export default function ProfileScreen() {
               : <Feather name="camera" size={11} color={C.bg} />
             }
           </View>
-          {user.host_unlocked && (
-            <View style={styles.hostBadge}>
-              <Feather name="star" size={10} color={C.bg} />
-            </View>
-          )}
         </Pressable>
 
         <View style={styles.profileInfo}>
           <Text style={styles.profileName}>{user.name}</Text>
           <Text style={styles.profileEmail}>{user.email}</Text>
           <View style={styles.roleChip}>
-            <Feather name={user.host_unlocked ? "star" : "user"} size={11} color={user.host_unlocked ? C.gold : C.primary} />
-            <Text style={[styles.roleText, { color: user.host_unlocked ? C.gold : C.primary }]}>
-              {user.host_unlocked ? "Host" : "Runner"}
-            </Text>
+            <Feather name="user" size={11} color={C.primary} />
+            <Text style={[styles.roleText, { color: C.primary }]}>Runner</Text>
           </View>
         </View>
 
@@ -516,9 +505,8 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-      {/* ── Map Marker (hosts only) ────────────────────────────────────────── */}
-      {user.host_unlocked && (
-        <View style={styles.section}>
+      {/* ── Map Marker ────────────────────────────────────────────────────── */}
+      <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Map Pin</Text>
             <Pressable onPress={() => setShowIconPicker(true)} style={styles.editBtn}>
@@ -551,7 +539,6 @@ export default function ProfileScreen() {
             <Feather name="chevron-right" size={18} color={C.textMuted} />
           </Pressable>
         </View>
-      )}
 
       {/* ── Mileage Goals ─────────────────────────────────────────────────── */}
       <View style={styles.section}>
@@ -584,27 +571,6 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-      {/* ── Host Unlock Progress ───────────────────────────────────────────── */}
-      {!user.host_unlocked && unlockProgress && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Host Unlock Progress</Text>
-          <View style={styles.unlockCard}>
-            <View style={styles.unlockRow}>
-              <Feather name="users" size={16} color={C.primary} />
-              <Text style={styles.unlockText}>Runs completed with different hosts</Text>
-              <Text style={styles.unlockCount}>{unlockProgress.unique_hosts}/2</Text>
-            </View>
-            <ProgressBar value={unlockProgress.unique_hosts} total={2} />
-            <View style={[styles.unlockRow, { marginTop: 12 }]}>
-              <Feather name="check-circle" size={16} color={C.primary} />
-              <Text style={styles.unlockText}>Total runs completed</Text>
-              <Text style={styles.unlockCount}>{unlockProgress.total_runs}/3</Text>
-            </View>
-            <ProgressBar value={unlockProgress.total_runs} total={3} />
-            <Text style={styles.unlockHint}>Complete 3 runs with at least 2 different hosts to unlock hosting</Text>
-          </View>
-        </View>
-      )}
 
       {/* ── Run History ───────────────────────────────────────────────────── */}
       <View style={styles.section}>

@@ -178,8 +178,8 @@ export default function DiscoverScreen() {
               />
             </Pressable>
 
-            {/* Create run (web only, if host unlocked) */}
-            {user?.host_unlocked && (
+            {/* Create run */}
+            {user && (
               <Pressable style={st.hBtnRow} onPress={() => router.push("/create-run")}>
                 <Feather name="plus" size={15} color={C.textSecondary} />
                 <Text style={st.hBtnTxt}>Create</Text>

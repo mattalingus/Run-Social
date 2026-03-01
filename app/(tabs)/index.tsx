@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import C from "@/constants/colors";
 import RangeSlider from "@/components/RangeSlider";
@@ -527,9 +528,17 @@ export default function DiscoverScreen() {
     Haptics.selectionAsync();
   }
 
+  const [showRulesModal, setShowRulesModal] = useState(false);
+
   // ─── Host FAB helpers ───────────────────────────────────────────────────────
-  const hostUnlocked = user?.host_unlocked ?? false;
-  const openHostModal = useCallback(() => setShowHostModal(true), []);
+  const openHostModal = useCallback(async () => {
+    const seen = await AsyncStorage.getItem("@paceup/hosting_rules_seen");
+    if (!seen) {
+      setShowRulesModal(true);
+    } else {
+      setShowHostModal(true);
+    }
+  }, []);
 
   const createRunMutation = useMutation({
     mutationFn: async () => {
@@ -1052,20 +1061,69 @@ export default function DiscoverScreen() {
         </View>
       </Modal>
 
+      {/* ── Community Rules Modal ────────────────────────────────────────────── */}
+      <Modal visible={showRulesModal} transparent animationType="slide" onRequestClose={() => setShowRulesModal(false)}>
+        <Pressable style={s.modalOverlay} onPress={() => setShowRulesModal(false)} />
+        <View style={[s.modalSheet, { paddingBottom: insets.bottom + 24 }]}>
+          <View style={s.sheetHandle} />
+          <View style={s.sheetHeader}>
+            <Text style={s.sheetTitle}>Host Guidelines</Text>
+            <Pressable style={s.sheetHeaderBtn} onPress={() => setShowRulesModal(false)}>
+              <Feather name="x" size={18} color={C.textSecondary} />
+            </Pressable>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
+            <Text style={s.rulesIntro}>
+              By hosting a run on PaceUp, you agree to uphold these community standards. Every runner deserves a safe and welcoming experience.
+            </Text>
+
+            {[
+              { icon: "heart" as const,      title: "Be kind and respectful",       body: "Treat every participant with courtesy. No runner should feel unwelcome or judged." },
+              { icon: "clock" as const,       title: "Be on time",                   body: "Start and finish as scheduled. If something comes up, notify your group as early as possible." },
+              { icon: "target" as const,      title: "Set honest expectations",      body: "List accurate pace and distance ranges. Don't leave runners behind who joined based on your stated criteria." },
+              { icon: "shield" as const,      title: "Prioritize safety",            body: "Choose safe routes. Watch out for traffic, uneven terrain, and the wellbeing of all participants." },
+              { icon: "users" as const,       title: "Leave no one behind",          body: "Check in on slower runners. A great host makes sure everyone finishes, not just the front of the pack." },
+              { icon: "x-circle" as const,    title: "Cancel responsibly",           body: "If you can't make it, cancel your run well in advance so participants can adjust their plans." },
+            ].map((rule) => (
+              <View key={rule.title} style={s.ruleRow}>
+                <View style={s.ruleIcon}>
+                  <Feather name={rule.icon} size={16} color={C.primary} />
+                </View>
+                <View style={s.ruleText}>
+                  <Text style={s.ruleTitle}>{rule.title}</Text>
+                  <Text style={s.ruleBody}>{rule.body}</Text>
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+
+          <View style={s.rulesFooter}>
+            <Pressable
+              style={s.rulesAgreeBtn}
+              onPress={async () => {
+                await AsyncStorage.setItem("@paceup/hosting_rules_seen", "1");
+                setShowRulesModal(false);
+                setShowHostModal(true);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              }}
+            >
+              <Text style={s.rulesAgreeTxt}>I Agree — Continue</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       {/* ── FAB ─────────────────────────────────────────────────────────────── */}
       {Platform.OS === "web" ? (
-        <WebFAB hostUnlocked={hostUnlocked} onUnlockedPress={openHostModal} />
+        <WebFAB onPress={openHostModal} />
       ) : (
         <Pressable
           testID="host-fab"
           style={[s.fab, { bottom: insets.bottom + 24 }]}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            if (!hostUnlocked) {
-              Alert.alert("Host Privileges Required", "Complete 3 runs with 2+ different hosts to unlock hosting.");
-              return;
-            }
-            setShowHostModal(true);
+            openHostModal();
           }}
         >
           <Feather name="plus" size={26} color={C.bg} />
@@ -1384,6 +1442,49 @@ const s = StyleSheet.create({
     color: C.textSecondary,
     width: 56,
   },
+
+  rulesIntro: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 14,
+    color: C.textSecondary,
+    lineHeight: 21,
+    marginHorizontal: 24,
+    marginTop: 4,
+    marginBottom: 20,
+  },
+  ruleRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 14,
+    marginHorizontal: 24,
+    marginBottom: 18,
+  },
+  ruleIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: C.primaryMuted,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1,
+  },
+  ruleText: { flex: 1 },
+  ruleTitle: { fontFamily: "Outfit_700Bold", fontSize: 14, color: C.text, marginBottom: 2 },
+  ruleBody: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary, lineHeight: 19 },
+  rulesFooter: {
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+  },
+  rulesAgreeBtn: {
+    height: 52,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: C.primary,
+  },
+  rulesAgreeTxt: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.bg },
 });
 
 // ─── Filter Modal Styles ──────────────────────────────────────────────────────

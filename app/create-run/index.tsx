@@ -102,19 +102,6 @@ export default function CreateRunScreen() {
     Haptics.selectionAsync();
   }
 
-  if (!user?.host_unlocked) {
-    return (
-      <View style={[styles.container, styles.center]}>
-        <Feather name="lock" size={48} color={C.textMuted} />
-        <Text style={styles.lockedTitle}>Host Privileges Required</Text>
-        <Text style={styles.lockedSub}>Complete 3 runs with 2+ different hosts to unlock hosting</Text>
-        <Pressable style={styles.closeBtn} onPress={() => router.back()}>
-          <Text style={styles.closeBtnText}>Go Back</Text>
-        </Pressable>
-      </View>
-    );
-  }
-
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
