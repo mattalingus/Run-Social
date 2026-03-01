@@ -366,7 +366,7 @@ export default function ProfileScreen() {
       </View>
 
       {/* ── Achievements Card ─────────────────────────────────────────────── */}
-      <View style={[styles.statCard, styles.achCard]}>
+      <View style={styles.achOuterCard}>
         <Pressable
           style={styles.achCardHeader}
           onPress={() => { setShowAchievements((v) => !v); setSelectedAchievement(null); setAchFilter("All"); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
@@ -385,23 +385,26 @@ export default function ProfileScreen() {
 
             {/* Category filter */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-              {["All", "Beginner", "Consistency", "Mileage", "Social", "Speed", "Lifestyle"].map((cat) => (
-                <Pressable
-                  key={cat}
-                  style={[styles.achFilterChip, achFilter === cat && styles.achFilterChipActive]}
-                  onPress={() => { setAchFilter(cat); setSelectedAchievement(null); }}
-                >
-                  <Text style={[styles.achFilterTxt, achFilter === cat && styles.achFilterTxtActive]}>{cat}</Text>
-                </Pressable>
-              ))}
+              {["All", "Beginner", "Consistency", "Mileage", "Social", "Speed", "Lifestyle"].map((cat) => {
+                const active = achFilter === cat;
+                return (
+                  <Pressable
+                    key={cat}
+                    style={[styles.achFilterChip, active && styles.achFilterChipActive]}
+                    onPress={() => { setAchFilter(cat); setSelectedAchievement(null); }}
+                  >
+                    <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: active ? C.primary : C.text }}>{cat}</Text>
+                  </Pressable>
+                );
+              })}
             </ScrollView>
 
             {/* 5-per-row grid — chunked into explicit rows so flex works on web */}
-            <View style={{ gap: 4, alignSelf: "stretch" }}>
+            <View style={{ gap: 4 }}>
               {Array.from({ length: Math.ceil(filteredAchievements.length / 5) }, (_, rowIdx) => {
                 const row = filteredAchievements.slice(rowIdx * 5, rowIdx * 5 + 5);
                 return (
-                  <View key={rowIdx} style={{ flexDirection: "row", alignSelf: "stretch" }}>
+                  <View key={rowIdx} style={{ flexDirection: "row" }}>
                     {row.map((ach) => {
                       const earned = earnedSlugs.has(ach.slug);
                       const isSelected = selectedAchievement?.slug === ach.slug;
@@ -1189,10 +1192,12 @@ const iconStyles = StyleSheet.create({
     borderRadius: 10, overflow: "hidden" as const,
   },
   achInlineIcon: { fontSize: 18 },
-  achEarnedLabel: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted },
-  achCard: { alignItems: "stretch", alignSelf: "stretch", flex: undefined, paddingVertical: 12 },
-  achCardHeader: { flexDirection: "row", alignItems: "center", gap: 8, alignSelf: "stretch" },
-  achExpandedInCard: { gap: 14, marginTop: 14, alignSelf: "stretch" },
+  achOuterCard: {
+    backgroundColor: C.card, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12,
+    borderWidth: 1, borderColor: C.border, overflow: "hidden" as const,
+  },
+  achCardHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
+  achExpandedInCard: { gap: 14, marginTop: 14 },
   achDivider: { height: 1, backgroundColor: C.border },
 
   achGrid: { flexDirection: "row", flexWrap: "wrap" },
