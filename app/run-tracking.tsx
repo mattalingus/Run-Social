@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -18,9 +18,23 @@ import { apiRequest } from "@/lib/query-client";
 import C from "@/constants/colors";
 import { formatDistance } from "@/lib/formatDistance";
 
+const IS_NATIVE = Platform.OS !== "web";
+
+// Lazy-load react-native-maps only on native to avoid web crashes
+let MapView: any = null;
+let Marker: any = null;
+let Polyline: any = null;
+if (IS_NATIVE) {
+  const maps = require("react-native-maps");
+  MapView = maps.default;
+  Marker = maps.Marker;
+  Polyline = maps.Polyline;
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Phase = "idle" | "active" | "paused" | "done";
+type Coord = { latitude: number; longitude: number };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -63,13 +77,15 @@ export default function RunTrackingScreen() {
   const [elapsed, setElapsed] = useState(0);
   const [displayDist, setDisplayDist] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [routeState, setRouteState] = useState<Coord[]>([]);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const locationSubRef = useRef<Location.LocationSubscription | null>(null);
   const webWatchIdRef = useRef<number | null>(null);
-  const lastCoordRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  const lastCoordRef = useRef<Coord | null>(null);
   const totalDistRef = useRef(0);
-  const routePathRef = useRef<Array<{ latitude: number; longitude: number }>>([]);
+  const routePathRef = useRef<Coord[]>([]);
+  const mapRef = useRef<any>(null);
 
   // ─── Timer ─────────────────────────────────────────────────────────────────
 
@@ -93,8 +109,11 @@ export default function RunTrackingScreen() {
     return () => { stopWatching(); };
   }, [phase]);
 
-  function handleCoord(latitude: number, longitude: number) {
-    routePathRef.current.push({ latitude, longitude });
+  const handleCoord = useCallback((latitude: number, longitude: number) => {
+    const coord: Coord = { latitude, longitude };
+    routePathRef.current.push(coord);
+    setRouteState((prev) => [...prev, coord]);
+
     if (lastCoordRef.current) {
       const d = haversine(
         lastCoordRef.current.latitude,
@@ -107,8 +126,16 @@ export default function RunTrackingScreen() {
         setDisplayDist(totalDistRef.current);
       }
     }
-    lastCoordRef.current = { latitude, longitude };
-  }
+    lastCoordRef.current = coord;
+
+    // Pan map to follow runner
+    if (mapRef.current) {
+      mapRef.current.animateToRegion(
+        { latitude, longitude, latitudeDelta: 0.004, longitudeDelta: 0.004 },
+        300
+      );
+    }
+  }, []);
 
   async function watchLocation() {
     if (Platform.OS === "web") {
@@ -164,6 +191,7 @@ export default function RunTrackingScreen() {
     lastCoordRef.current = null;
     totalDistRef.current = 0;
     routePathRef.current = [];
+    setRouteState([]);
     setDisplayDist(0);
     setElapsed(0);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -237,10 +265,49 @@ export default function RunTrackingScreen() {
     const pace = distance > 0.01 ? (elapsed / 60) / distance : null;
     const paceM = pace ? Math.floor(pace) : 0;
     const paceS = pace ? Math.round((pace - paceM) * 60) : 0;
+    const hasRoute = IS_NATIVE && routeState.length > 1;
+    const lastPt = routeState[routeState.length - 1];
 
     return (
-      <View style={[t.container, { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 24), paddingBottom: insets.bottom + 32 }]}>
-        <View style={t.summaryCard}>
+      <View style={[t.container, { paddingBottom: insets.bottom + 32 }]}>
+        {/* Mini route map */}
+        {hasRoute && MapView && (
+          <View style={[t.miniMap, { marginTop: insets.top + (Platform.OS === "web" ? 67 : 16) }]}>
+            <MapView
+              style={StyleSheet.absoluteFillObject}
+              initialRegion={{
+                latitude: lastPt.latitude,
+                longitude: lastPt.longitude,
+                latitudeDelta: 0.01,
+                longitudeDelta: 0.01,
+              }}
+              scrollEnabled={false}
+              zoomEnabled={false}
+              rotateEnabled={false}
+              pitchEnabled={false}
+              customMapStyle={darkMapStyle}
+            >
+              <Polyline
+                coordinates={routeState}
+                strokeColor={C.primary}
+                strokeWidth={3}
+              />
+              {lastPt && (
+                <Marker coordinate={lastPt} anchor={{ x: 0.5, y: 0.5 }}>
+                  <View style={t.currentDot} />
+                </Marker>
+              )}
+            </MapView>
+            <View style={t.miniMapOverlay}>
+              <View style={t.miniMapBadge}>
+                <Feather name="map-pin" size={11} color={C.primary} />
+                <Text style={t.miniMapBadgeTxt}>Your Route</Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        <View style={[t.summaryCard, !hasRoute && { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 48) }]}>
           <View style={t.checkCircle}>
             <Feather name="check" size={28} color={C.primary} />
           </View>
@@ -291,33 +358,85 @@ export default function RunTrackingScreen() {
   // ─── Tracker UI ──────────────────────────────────────────────────────────
 
   const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
+  const showMap = IS_NATIVE && MapView && (phase === "active" || phase === "paused") && routeState.length > 0;
+  const currentPt = routeState[routeState.length - 1];
 
   return (
     <View style={t.container}>
       {/* Cancel */}
-      <Pressable style={[t.cancelBtn, { top: topPad + 16 }]} onPress={handleCancel}>
+      <Pressable
+        style={[t.cancelBtn, { top: (showMap ? insets.top : topPad) + 16, zIndex: 20 }]}
+        onPress={handleCancel}
+      >
         <Feather name="x" size={20} color={C.textSecondary} />
       </Pressable>
 
-      <View style={[t.body, { paddingTop: topPad + 60 }]}>
+      {/* Live map — shown when running or paused */}
+      {showMap && (
+        <View style={t.mapContainer}>
+          <MapView
+            ref={mapRef}
+            style={StyleSheet.absoluteFillObject}
+            initialRegion={{
+              latitude: currentPt.latitude,
+              longitude: currentPt.longitude,
+              latitudeDelta: 0.004,
+              longitudeDelta: 0.004,
+            }}
+            customMapStyle={darkMapStyle}
+            showsUserLocation={false}
+            showsCompass={false}
+            toolbarEnabled={false}
+          >
+            {routeState.length > 1 && (
+              <Polyline
+                coordinates={routeState}
+                strokeColor={C.primary}
+                strokeWidth={3}
+              />
+            )}
+            {currentPt && (
+              <Marker coordinate={currentPt} anchor={{ x: 0.5, y: 0.5 }}>
+                <View style={t.currentDot} />
+              </Marker>
+            )}
+          </MapView>
 
-        {/* Status chip */}
-        <View style={t.statusChip}>
-          <View style={[
-            t.statusDot,
-            {
-              backgroundColor:
-                phase === "active" ? C.primary :
-                phase === "paused" ? C.orange : C.textMuted,
-            },
-          ]} />
-          <Text style={t.statusTxt}>
-            {phase === "idle" ? "Ready" : phase === "active" ? "Running" : "Paused"}
-          </Text>
+          {/* Paused overlay badge */}
+          {phase === "paused" && (
+            <View style={t.pausedBadge}>
+              <Ionicons name="pause" size={12} color={C.text} />
+              <Text style={t.pausedBadgeTxt}>Paused</Text>
+            </View>
+          )}
         </View>
+      )}
 
-        {/* Timer — largest element */}
-        <Text style={t.timerTxt}>{formatElapsed(elapsed)}</Text>
+      {/* Stats + controls */}
+      <View style={[
+        t.body,
+        showMap ? t.bodyWithMap : { paddingTop: topPad + 60 },
+      ]}>
+        {!showMap && (
+          <View style={t.statusChip}>
+            <View style={[
+              t.statusDot,
+              {
+                backgroundColor:
+                  phase === "active" ? C.primary :
+                  phase === "paused" ? C.orange : C.textMuted,
+              },
+            ]} />
+            <Text style={t.statusTxt}>
+              {phase === "idle" ? "Ready" : phase === "active" ? "Running" : "Paused"}
+            </Text>
+          </View>
+        )}
+
+        {/* Timer */}
+        <Text style={[t.timerTxt, showMap && t.timerTxtCompact]}>
+          {formatElapsed(elapsed)}
+        </Text>
 
         {/* Live stats */}
         <View style={t.liveRow}>
@@ -376,15 +495,53 @@ export default function RunTrackingScreen() {
   );
 }
 
+// ─── Dark map style ────────────────────────────────────────────────────────────
+
+const darkMapStyle = [
+  { elementType: "geometry", stylers: [{ color: "#0d1f18" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#4a7a60" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#0d1f18" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#1a3328" }] },
+  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#0d1f18" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#071510" }] },
+  { featureType: "poi", stylers: [{ visibility: "off" }] },
+  { featureType: "transit", stylers: [{ visibility: "off" }] },
+];
+
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const t = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
 
+  mapContainer: {
+    height: "55%",
+    width: "100%",
+    overflow: "hidden",
+  },
+
+  pausedBadge: {
+    position: "absolute",
+    bottom: 12,
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: C.surface + "EE",
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
+  pausedBadgeTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 12,
+    color: C.textSecondary,
+  },
+
   cancelBtn: {
     position: "absolute",
     left: 20,
-    zIndex: 10,
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -401,6 +558,10 @@ const t = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 32,
     gap: 28,
+  },
+  bodyWithMap: {
+    paddingTop: 20,
+    gap: 20,
   },
 
   statusChip: {
@@ -428,6 +589,10 @@ const t = StyleSheet.create({
     color: C.text,
     letterSpacing: -2,
     lineHeight: 72,
+  },
+  timerTxtCompact: {
+    fontSize: 48,
+    lineHeight: 54,
   },
 
   liveRow: {
@@ -497,6 +662,47 @@ const t = StyleSheet.create({
     fontSize: 13,
     color: C.textMuted,
     textAlign: "center",
+  },
+
+  // ─── Current position dot ─────────────────────────────────────────────────
+  currentDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: C.primary,
+    borderWidth: 2.5,
+    borderColor: "#fff",
+  },
+
+  // ─── Done screen ──────────────────────────────────────────────────────────
+  miniMap: {
+    height: 220,
+    marginHorizontal: 20,
+    borderRadius: 16,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  miniMapOverlay: {
+    position: "absolute",
+    bottom: 10,
+    left: 10,
+  },
+  miniMapBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: C.surface + "DD",
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  miniMapBadgeTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 11,
+    color: C.textSecondary,
   },
 
   summaryCard: {
