@@ -791,11 +791,6 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 22,
-    shadowColor: C.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    elevation: 6,
   },
   planBtnTxt: { fontFamily: "Outfit_700Bold", fontSize: 14, color: C.bg },
 
