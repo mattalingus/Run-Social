@@ -10,6 +10,7 @@ import {
   Image,
   ScrollView,
   Platform,
+  TextInput,
 } from "react-native";
 import MapView, { Marker, Region } from "react-native-maps";
 import * as Location from "expo-location";
@@ -222,7 +223,6 @@ export default function MapScreen() {
   const boundsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [showFilter, setShowFilter] = useState(false);
-  const [unit, setUnit] = useState<"mi" | "km">("mi");
 
   const initStyles = params.styles ? params.styles.split(",").filter(Boolean) : [];
   const [draft, setDraft] = useState({ ...DEFAULT_FILTERS, styles: initStyles });
@@ -240,10 +240,10 @@ export default function MapScreen() {
 
   const queryUrl = useMemo(() => {
     const p = new URLSearchParams();
-    p.set("paceMin", applied.paceMin.toString());
-    p.set("paceMax", applied.paceMax.toString());
-    p.set("distMin", applied.distMin.toString());
-    p.set("distMax", applied.distMax.toString());
+    p.set("minPace", applied.paceMin.toString());
+    p.set("maxPace", applied.paceMax.toString());
+    p.set("minDistance", applied.distMin.toString());
+    p.set("maxDistance", applied.distMax.toString());
     if (applied.styles.length > 0) p.set("styles", applied.styles.join(","));
     if (bounds) {
       p.set("swLat", bounds.swLat.toString());
@@ -362,10 +362,6 @@ export default function MapScreen() {
 
   function applyFilters() { setApplied({ ...draft }); setShowFilter(false); }
   function resetFilters() { setDraft({ ...DEFAULT_FILTERS }); }
-  function fmtDist(mi: number) {
-    return unit === "km" ? `${formatDistance(mi * 1.60934)} km` : `${formatDistance(mi)} mi`;
-  }
-
   const topPad = insets.top;
 
   return (
@@ -574,7 +570,7 @@ export default function MapScreen() {
       </View>{/* ── end mapCard ──────────────────────────────────────────────── */}
 
       {/* ─── Insights strip (below map card, fixed height so map never jumps) */}
-      <View style={[s.insightArea, { paddingBottom: insets.bottom + 4 }]}>
+      <View style={[s.insightArea, { marginBottom: insets.bottom + 4 }]}>
         {insights.length > 0 && (
           <ScrollView
             horizontal
@@ -624,26 +620,38 @@ export default function MapScreen() {
             </View>
 
             <View style={s.section}>
-              <View style={s.sectionHead}>
-                <Text style={s.sectionLabel}>Distance</Text>
-                <View style={s.unitRow}>
-                  {(["mi", "km"] as const).map((u) => (
-                    <Pressable key={u} style={[s.unitBtn, unit === u && s.unitBtnOn]} onPress={() => setUnit(u)}>
-                      <Text style={[s.unitTxt, unit === u && s.unitTxtOn]}>{u}</Text>
-                    </Pressable>
-                  ))}
+              <Text style={s.sectionLabel}>Run Length</Text>
+              <View style={{ height: 10 }} />
+              <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.inputLabel}>Min (mi)</Text>
+                  <TextInput
+                    style={s.numInput}
+                    value={draft.distMin === 1 ? "" : draft.distMin.toString()}
+                    onChangeText={(t) => {
+                      const n = parseFloat(t);
+                      setDraft((p) => ({ ...p, distMin: isNaN(n) ? 1 : Math.max(0.1, n) }));
+                    }}
+                    placeholder="e.g. 3"
+                    placeholderTextColor={C.textMuted}
+                    keyboardType="decimal-pad"
+                  />
                 </View>
-              </View>
-              <Text style={s.sectionValue}>{fmtDist(draft.distMin)} – {fmtDist(draft.distMax)}</Text>
-              <RangeSlider
-                min={1} max={200} step={1}
-                low={draft.distMin} high={draft.distMax}
-                onLowChange={(v) => setDraft((p) => ({ ...p, distMin: v }))}
-                onHighChange={(v) => setDraft((p) => ({ ...p, distMax: v }))}
-              />
-              <View style={s.edgeRow}>
-                <Text style={s.edgeLabel}>{unit === "km" ? "1.6 km" : "1 mi"}</Text>
-                <Text style={s.edgeLabel}>{unit === "km" ? "321.9 km" : "200 mi"}</Text>
+                <Text style={{ color: C.textMuted, fontFamily: "Outfit_400Regular", fontSize: 14, marginTop: 18 }}>–</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.inputLabel}>Max (mi)</Text>
+                  <TextInput
+                    style={s.numInput}
+                    value={draft.distMax === 200 ? "" : draft.distMax.toString()}
+                    onChangeText={(t) => {
+                      const n = parseFloat(t);
+                      setDraft((p) => ({ ...p, distMax: isNaN(n) ? 200 : Math.min(200, n) }));
+                    }}
+                    placeholder="e.g. 10"
+                    placeholderTextColor={C.textMuted}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
               </View>
             </View>
 
@@ -812,11 +820,12 @@ const s = StyleSheet.create({
   edgeRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 10, paddingHorizontal: 2 },
   edgeLabel: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted },
 
-  unitRow: { flexDirection: "row", borderRadius: 10, overflow: "hidden", borderWidth: 1, borderColor: C.border },
-  unitBtn: { paddingHorizontal: 12, paddingVertical: 5, backgroundColor: C.card },
-  unitBtnOn: { backgroundColor: C.primaryMuted },
-  unitTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.textSecondary },
-  unitTxtOn: { color: C.primary },
+  inputLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.textSecondary, marginBottom: 6 },
+  numInput: {
+    backgroundColor: C.card, borderRadius: 12, borderWidth: 1, borderColor: C.border,
+    paddingHorizontal: 14, paddingVertical: 11,
+    fontFamily: "Outfit_400Regular", fontSize: 14, color: C.text,
+  },
 
   styleGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   stylePill: {
