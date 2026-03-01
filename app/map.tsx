@@ -64,6 +64,8 @@ interface Run {
   tags: string[];
   participant_count: number;
   max_participants: number;
+  is_locked?: boolean;
+  privacy?: string;
 }
 
 interface Bounds {
@@ -97,6 +99,35 @@ function avatarUrl(name: string) {
 
 // ─── Custom Marker ─────────────────────────────────────────────────────────
 
+function LockedRunMarker({ run, isSelected, onPress }: { run: Run; isSelected: boolean; onPress: () => void }) {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  function handlePress() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Animated.sequence([
+      Animated.spring(scale, { toValue: 1.2, useNativeDriver: true, tension: 500, friction: 8 }),
+      Animated.spring(scale, { toValue: 1, useNativeDriver: true, tension: 300, friction: 12 }),
+    ]).start();
+    onPress();
+  }
+
+  return (
+    <Marker
+      coordinate={{ latitude: run.location_lat, longitude: run.location_lng }}
+      onPress={handlePress}
+      anchor={{ x: 0.5, y: 0.5 }}
+      tracksViewChanges={false}
+    >
+      <Animated.View style={[mk.wrap, { transform: [{ scale }] }]}>
+        <View style={[mk.circle, mk.circleGray, isSelected && mk.circleGraySelected]}>
+          <Feather name="lock" size={20} color="#777" />
+        </View>
+        <View style={mk.pinGray} />
+      </Animated.View>
+    </Marker>
+  );
+}
+
 function RunMarker({ run, isSelected, onPress }: { run: Run; isSelected: boolean; onPress: () => void }) {
   const scale = useRef(new Animated.Value(1)).current;
   const [loaded, setLoaded] = useState(false);
@@ -105,6 +136,10 @@ function RunMarker({ run, isSelected, onPress }: { run: Run; isSelected: boolean
   const isEmojiIcon = !!icon && !icon.startsWith("http") && !icon.startsWith("/api/objects");
   const isUrlIcon = !!icon && (icon.startsWith("http") || icon.startsWith("/api/objects"));
   const photoSrc = isUrlIcon ? icon : (run.host_photo || avatarUrl(run.host_name));
+
+  if (run.is_locked) {
+    return <LockedRunMarker run={run} isSelected={isSelected} onPress={onPress} />;
+  }
 
   function handlePress() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -159,6 +194,8 @@ const mk = StyleSheet.create({
     elevation: 10,
   },
   circleSelected: { borderColor: "#FFFFFF", shadowColor: C.primary, shadowOpacity: 1, shadowRadius: 16 },
+  circleGray: { borderColor: "#444", shadowColor: "#000", shadowOpacity: 0.2 },
+  circleGraySelected: { borderColor: "#888" },
   img: { width: "100%", height: "100%" },
   emoji: { fontSize: 26 },
   pin: {
@@ -167,6 +204,7 @@ const mk = StyleSheet.create({
     shadowColor: C.primary, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 4,
     elevation: 3,
   },
+  pinGray: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#555", marginTop: 3 },
 });
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
@@ -435,64 +473,104 @@ export default function MapScreen() {
             { bottom: insets.bottom + 16, opacity: cardOpacity, transform: [{ translateY: slideAnim }] },
           ]}
         >
-          <View style={s.cardTop}>
-            {selectedRun.host_marker_icon ? (
-              <View style={s.cardAvatar}>
-                <Text style={{ fontSize: 24 }}>{selectedRun.host_marker_icon}</Text>
+          {selectedRun.is_locked ? (
+            <>
+              <View style={s.cardTop}>
+                <View style={s.cardAvatarLocked}>
+                  <Feather name="lock" size={22} color="#666" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.cardTitle} numberOfLines={1}>Friend's Private Run</Text>
+                  <Text style={s.cardHost}>{selectedRun.host_name}</Text>
+                </View>
+                <Pressable onPress={closeCard} hitSlop={12}>
+                  <Feather name="x" size={18} color={C.textSecondary} />
+                </Pressable>
               </View>
-            ) : (
-              <Image
-                source={{ uri: selectedRun.host_photo || avatarUrl(selectedRun.host_name) }}
-                style={s.cardAvatarImg}
-              />
-            )}
-            <View style={{ flex: 1 }}>
-              <Text style={s.cardTitle} numberOfLines={1}>{selectedRun.title}</Text>
-              <Text style={s.cardHost}>
-                {selectedRun.host_name}
-                {selectedRun.host_rating > 0 ? `  ★ ${selectedRun.host_rating.toFixed(1)}` : ""}
-              </Text>
-            </View>
-            <Pressable onPress={closeCard} hitSlop={12}>
-              <Feather name="x" size={18} color={C.textSecondary} />
-            </Pressable>
-          </View>
-
-          <View style={s.chips}>
-            <View style={s.chip}>
-              <Feather name="clock" size={11} color={C.primary} />
-              <Text style={s.chipTxt}>{formatDate(selectedRun.date)} · {formatTime(selectedRun.date)}</Text>
-            </View>
-            <View style={s.chip}>
-              <Ionicons name="walk" size={11} color={C.orange} />
-              <Text style={[s.chipTxt, { color: C.orange }]}>
-                {formatPace(selectedRun.min_pace)}–{formatPace(selectedRun.max_pace)} /mi
-              </Text>
-            </View>
-            <View style={s.chip}>
-              <Feather name="map" size={11} color={C.blue} />
-              <Text style={[s.chipTxt, { color: C.blue }]}>
-                {formatDistance(selectedRun.min_distance)}–{formatDistance(selectedRun.max_distance)} mi
-              </Text>
-            </View>
-            <View style={s.chip}>
-              <Feather name="users" size={11} color={C.textSecondary} />
-              <Text style={s.chipTxt}>{selectedRun.participant_count}/{selectedRun.max_participants}</Text>
-            </View>
-            {selectedRun.tags?.[0] && (
-              <View style={[s.chip, s.chipTag]}>
-                <Text style={[s.chipTxt, { color: C.primary }]}>{selectedRun.tags[0]}</Text>
+              <View style={s.lockedHint}>
+                <Feather name="info" size={12} color={C.textMuted} />
+                <Text style={s.lockedHintTxt}>You need an invite code or password to join. Tap to request access.</Text>
               </View>
-            )}
-          </View>
+              <View style={s.chips}>
+                <View style={s.chip}>
+                  <Feather name="clock" size={11} color={C.textSecondary} />
+                  <Text style={s.chipTxt}>{formatDate(selectedRun.date)} · {formatTime(selectedRun.date)}</Text>
+                </View>
+                <View style={s.chip}>
+                  <Feather name="map-pin" size={11} color={C.textSecondary} />
+                  <Text style={s.chipTxt} numberOfLines={1}>{selectedRun.location_name}</Text>
+                </View>
+              </View>
+              <Pressable
+                style={({ pressed }) => [s.joinBtn, s.joinBtnGray, { opacity: pressed ? 0.85 : 1 }]}
+                onPress={() => { closeCard(); router.push(`/run/${selectedRun.id}`); }}
+              >
+                <Feather name="unlock" size={16} color={C.text} />
+                <Text style={[s.joinTxt, { color: C.text }]}>Enter Code to Join</Text>
+              </Pressable>
+            </>
+          ) : (
+            <>
+              <View style={s.cardTop}>
+                {selectedRun.host_marker_icon ? (
+                  <View style={s.cardAvatar}>
+                    <Text style={{ fontSize: 24 }}>{selectedRun.host_marker_icon}</Text>
+                  </View>
+                ) : (
+                  <Image
+                    source={{ uri: selectedRun.host_photo || avatarUrl(selectedRun.host_name) }}
+                    style={s.cardAvatarImg}
+                  />
+                )}
+                <View style={{ flex: 1 }}>
+                  <Text style={s.cardTitle} numberOfLines={1}>{selectedRun.title}</Text>
+                  <Text style={s.cardHost}>
+                    {selectedRun.host_name}
+                    {selectedRun.host_rating > 0 ? `  ★ ${selectedRun.host_rating.toFixed(1)}` : ""}
+                  </Text>
+                </View>
+                <Pressable onPress={closeCard} hitSlop={12}>
+                  <Feather name="x" size={18} color={C.textSecondary} />
+                </Pressable>
+              </View>
 
-          <Pressable
-            style={({ pressed }) => [s.joinBtn, { opacity: pressed ? 0.85 : 1 }]}
-            onPress={() => { closeCard(); router.push(`/run/${selectedRun.id}`); }}
-          >
-            <Text style={s.joinTxt}>View &amp; Join Run</Text>
-            <Feather name="arrow-right" size={16} color={C.bg} />
-          </Pressable>
+              <View style={s.chips}>
+                <View style={s.chip}>
+                  <Feather name="clock" size={11} color={C.primary} />
+                  <Text style={s.chipTxt}>{formatDate(selectedRun.date)} · {formatTime(selectedRun.date)}</Text>
+                </View>
+                <View style={s.chip}>
+                  <Ionicons name="walk" size={11} color={C.orange} />
+                  <Text style={[s.chipTxt, { color: C.orange }]}>
+                    {formatPace(selectedRun.min_pace)}–{formatPace(selectedRun.max_pace)} /mi
+                  </Text>
+                </View>
+                <View style={s.chip}>
+                  <Feather name="map" size={11} color={C.blue} />
+                  <Text style={[s.chipTxt, { color: C.blue }]}>
+                    {formatDistance(selectedRun.min_distance)}–{formatDistance(selectedRun.max_distance)} mi
+                  </Text>
+                </View>
+                <View style={s.chip}>
+                  <Feather name="users" size={11} color={C.textSecondary} />
+                  <Text style={s.chipTxt}>{selectedRun.participant_count}/{selectedRun.max_participants}</Text>
+                </View>
+                {selectedRun.tags?.[0] && (
+                  <View style={[s.chip, s.chipTag]}>
+                    <Text style={[s.chipTxt, { color: C.primary }]}>{selectedRun.tags[0]}</Text>
+                  </View>
+                )}
+              </View>
+
+              <Pressable
+                style={({ pressed }) => [s.joinBtn, { opacity: pressed ? 0.85 : 1 }]}
+                onPress={() => { closeCard(); router.push(`/run/${selectedRun.id}`); }}
+              >
+                <Text style={s.joinTxt}>View &amp; Join Run</Text>
+                <Feather name="arrow-right" size={16} color={C.bg} />
+              </Pressable>
+            </>
+          )}
         </Animated.View>
       )}
 
@@ -694,10 +772,18 @@ const s = StyleSheet.create({
   },
   chipTag: { borderColor: C.primary + "44", backgroundColor: C.primaryMuted },
   chipTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.text },
+  cardAvatarLocked: {
+    width: 48, height: 48, borderRadius: 24,
+    backgroundColor: "#1C1C1C", alignItems: "center", justifyContent: "center",
+    borderWidth: 2, borderColor: "#333",
+  },
+  lockedHint: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10, marginTop: -6 },
+  lockedHintTxt: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted, flex: 1 },
   joinBtn: {
     backgroundColor: C.primary, borderRadius: 14, height: 50,
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
   },
+  joinBtnGray: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
   joinTxt: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.bg },
 
   overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)" },

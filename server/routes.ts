@@ -130,6 +130,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(progress);
   });
 
+  app.get("/api/users/search", requireAuth, async (req, res) => {
+    try {
+      const q = (req.query.q as string || "").trim();
+      if (!q || q.length < 2) return res.json([]);
+      const results = await storage.searchUsers(q, req.session.userId!);
+      res.json(results);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/friends", requireAuth, async (req, res) => {
+    try {
+      const friends = await storage.getFriends(req.session.userId!);
+      res.json(friends);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/friends/requests", requireAuth, async (req, res) => {
+    try {
+      const [incoming, sent] = await Promise.all([
+        storage.getPendingRequests(req.session.userId!),
+        storage.getSentRequests(req.session.userId!),
+      ]);
+      res.json({ incoming, sent });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/friends/request", requireAuth, async (req, res) => {
+    try {
+      const { userId } = req.body;
+      if (!userId) return res.status(400).json({ message: "userId required" });
+      if (userId === req.session.userId) return res.status(400).json({ message: "Cannot add yourself" });
+      const result = await storage.sendFriendRequest(req.session.userId!, userId);
+      if (result.error) return res.status(400).json({ message: result.error === "already_friends" ? "Already friends" : "Request already sent" });
+      res.json(result.data);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.put("/api/friends/:id/accept", requireAuth, async (req, res) => {
+    try {
+      const friendship = await storage.acceptFriendRequest(req.params.id, req.session.userId!);
+      if (!friendship) return res.status(404).json({ message: "Request not found" });
+      res.json(friendship);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.delete("/api/friends/:id", requireAuth, async (req, res) => {
+    try {
+      await storage.removeFriend(req.params.id, req.session.userId!);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.get("/api/runs", async (req, res) => {
     try {
       const filters: any = {};
@@ -146,8 +210,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (req.query.swLng) filters.swLng = parseFloat(req.query.swLng as string);
       if (req.query.neLat) filters.neLat = parseFloat(req.query.neLat as string);
       if (req.query.neLng) filters.neLng = parseFloat(req.query.neLng as string);
-      const runs = await storage.getPublicRuns(filters);
-      res.json(runs);
+      const publicRuns = await storage.getPublicRuns(filters);
+      if (req.session.userId) {
+        const bounds = (filters.swLat !== undefined && filters.neLat !== undefined && filters.swLng !== undefined && filters.neLng !== undefined)
+          ? { swLat: filters.swLat, neLat: filters.neLat, swLng: filters.swLng, neLng: filters.neLng }
+          : undefined;
+        const [friendLocked, invited] = await Promise.all([
+          storage.getFriendPrivateRuns(req.session.userId, bounds),
+          storage.getInvitedPrivateRuns(req.session.userId, bounds),
+        ]);
+        const combined = [...publicRuns, ...invited, ...friendLocked];
+        const seen = new Set<string>();
+        const deduped = combined.filter(r => { if (seen.has(r.id)) return false; seen.add(r.id); return true; });
+        return res.json(deduped);
+      }
+      res.json(publicRuns);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
@@ -173,10 +250,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/runs/invite/:token", async (req, res) => {
+    try {
+      const run = await storage.getRunByInviteToken(req.params.token.toUpperCase());
+      if (!run) return res.status(404).json({ message: "Invalid invite code" });
+      if (req.session.userId) {
+        await storage.grantRunAccess(run.id, req.session.userId);
+      }
+      res.json({ runId: run.id, title: run.title, hostName: run.host_name });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/runs/:id/access", requireAuth, async (req, res) => {
+    try {
+      const run = await storage.getRunById(req.params.id);
+      if (!run) return res.status(404).json({ message: "Run not found" });
+      if (run.privacy !== "private") return res.json({ hasAccess: true });
+      const hasAccess = await storage.hasRunAccess(req.params.id, req.session.userId!);
+      res.json({ hasAccess, hasPassword: !!run.invite_password });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/runs/:id/join-private", requireAuth, async (req, res) => {
+    try {
+      const { password, token } = req.body;
+      const result = await storage.verifyAndJoinPrivateRun(req.params.id, req.session.userId!, password, token);
+      if (result.error) {
+        if (result.error === "run_not_found") return res.status(404).json({ message: "Run not found" });
+        return res.status(403).json({ message: "Incorrect password or invite code" });
+      }
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/runs/:id/invite", requireAuth, async (req, res) => {
+    try {
+      const { friendId } = req.body;
+      const run = await storage.getRunById(req.params.id);
+      if (!run) return res.status(404).json({ message: "Run not found" });
+      if (run.host_id !== req.session.userId) return res.status(403).json({ message: "Only host can invite" });
+      await storage.inviteToRun(req.params.id, friendId, req.session.userId!);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.get("/api/runs/:id", async (req, res) => {
-    const run = await storage.getRunById(req.params.id);
-    if (!run) return res.status(404).json({ message: "Run not found" });
-    res.json(run);
+    try {
+      const run = await storage.getRunById(req.params.id);
+      if (!run) return res.status(404).json({ message: "Run not found" });
+      if (run.privacy === "private") {
+        if (!req.session.userId) return res.status(403).json({ message: "Private run", isPrivate: true });
+        const hasAccess = await storage.hasRunAccess(req.params.id, req.session.userId);
+        if (!hasAccess) {
+          return res.status(403).json({
+            message: "Private run",
+            isPrivate: true,
+            hasPassword: !!run.invite_password,
+            hostName: run.host_name,
+            title: run.title,
+          });
+        }
+      }
+      res.json(run);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
   });
 
   app.get("/api/runs/:id/participants", async (req, res) => {

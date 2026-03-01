@@ -95,6 +95,8 @@ export default function ProfileScreen() {
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [uploadingProfile, setUploadingProfile] = useState(false);
   const [uploadingPin, setUploadingPin] = useState(false);
+  const [profileTab, setProfileTab] = useState<"profile" | "friends">("profile");
+  const [friendSearch, setFriendSearch] = useState("");
 
   // ─── Handlers ──────────────────────────────────────────────────────────────
 
@@ -197,6 +199,54 @@ export default function ProfileScreen() {
     onSuccess: () => { refreshUser(); setShowPace(false); },
   });
 
+  const { data: friendsList = [] } = useQuery<any[]>({
+    queryKey: ["/api/friends"],
+    enabled: !!user,
+  });
+
+  const { data: friendRequests } = useQuery<{ incoming: any[]; sent: any[] }>({
+    queryKey: ["/api/friends/requests"],
+    enabled: !!user,
+  });
+
+  const { data: searchResults = [] } = useQuery<any[]>({
+    queryKey: ["/api/users/search", friendSearch],
+    queryFn: async () => {
+      if (!friendSearch || friendSearch.length < 2) return [];
+      const res = await apiRequest("GET", `/api/users/search?q=${encodeURIComponent(friendSearch)}`);
+      return res.json();
+    },
+    enabled: !!user && friendSearch.length >= 2,
+  });
+
+  const sendRequestMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await apiRequest("POST", "/api/friends/request", { userId });
+      if (!res.ok) { const b = await res.json(); throw new Error(b.message); }
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/friends/requests"] }); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); },
+    onError: (e: any) => Alert.alert("Error", e.message),
+  });
+
+  const acceptMutation = useMutation({
+    mutationFn: async (friendshipId: string) => {
+      await apiRequest("PUT", `/api/friends/${friendshipId}/accept`, {});
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/friends"] }); qc.invalidateQueries({ queryKey: ["/api/friends/requests"] }); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); },
+  });
+
+  const removeFriendMutation = useMutation({
+    mutationFn: async (friendshipId: string) => {
+      await apiRequest("DELETE", `/api/friends/${friendshipId}`, {});
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/friends"] }); qc.invalidateQueries({ queryKey: ["/api/friends/requests"] }); },
+  });
+
+  const incomingRequests = friendRequests?.incoming || [];
+  const sentRequests = friendRequests?.sent || [];
+  const friendIds = new Set(friendsList.map((f: any) => f.id));
+  const sentIds = new Set(sentRequests.map((r: any) => r.id));
+
   const milestones = [25, 100, 250, 500, 1000];
   const earnedIds = new Set(achievements.map((a: any) => a.milestone));
 
@@ -270,6 +320,181 @@ export default function ProfileScreen() {
         </Pressable>
       </View>
 
+      {/* ── Tab Selector ──────────────────────────────────────────────────── */}
+      <View style={styles.tabSelector}>
+        <Pressable
+          style={[styles.tabBtn, profileTab === "profile" && styles.tabBtnActive]}
+          onPress={() => { setProfileTab("profile"); Haptics.selectionAsync(); }}
+        >
+          <Feather name="user" size={14} color={profileTab === "profile" ? C.primary : C.textSecondary} />
+          <Text style={[styles.tabBtnTxt, profileTab === "profile" && styles.tabBtnTxtActive]}>Profile</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.tabBtn, profileTab === "friends" && styles.tabBtnActive]}
+          onPress={() => { setProfileTab("friends"); Haptics.selectionAsync(); }}
+        >
+          <Feather name="users" size={14} color={profileTab === "friends" ? C.primary : C.textSecondary} />
+          <Text style={[styles.tabBtnTxt, profileTab === "friends" && styles.tabBtnTxtActive]}>
+            Friends{friendsList.length > 0 ? ` (${friendsList.length})` : ""}
+          </Text>
+          {incomingRequests.length > 0 && <View style={styles.tabDot} />}
+        </Pressable>
+      </View>
+
+      {profileTab === "friends" ? (
+        <View style={styles.friendsTab}>
+          {/* Search */}
+          <View style={styles.searchBox}>
+            <Feather name="search" size={16} color={C.textMuted} />
+            <TextInput
+              style={styles.searchInput}
+              value={friendSearch}
+              onChangeText={setFriendSearch}
+              placeholder="Search runners by name..."
+              placeholderTextColor={C.textMuted}
+              autoCapitalize="words"
+            />
+            {friendSearch.length > 0 && (
+              <Pressable onPress={() => setFriendSearch("")} hitSlop={8}>
+                <Feather name="x" size={14} color={C.textMuted} />
+              </Pressable>
+            )}
+          </View>
+
+          {friendSearch.length >= 2 && searchResults.length > 0 && (
+            <View style={styles.friendsSection}>
+              <Text style={styles.friendsSectionTitle}>Search Results</Text>
+              {searchResults.map((u: any) => {
+                const isAlreadyFriend = friendIds.has(u.id);
+                const hasSent = sentIds.has(u.id);
+                const hasIncoming = incomingRequests.some((r: any) => r.id === u.id);
+                return (
+                  <View key={u.id} style={styles.friendCard}>
+                    <View style={styles.friendAvatar}>
+                      {u.photo_url ? (
+                        <Image source={{ uri: u.photo_url }} style={styles.friendAvatarImg} />
+                      ) : (
+                        <Text style={styles.friendAvatarTxt}>{u.name.charAt(0).toUpperCase()}</Text>
+                      )}
+                    </View>
+                    <View style={styles.friendInfo}>
+                      <Text style={styles.friendName}>{u.name}</Text>
+                      <Text style={styles.friendStat}>{u.completed_runs} runs · {formatDistance(u.total_miles)} mi</Text>
+                    </View>
+                    {isAlreadyFriend ? (
+                      <View style={styles.friendStatusBadge}>
+                        <Feather name="check" size={12} color={C.primary} />
+                        <Text style={styles.friendStatusTxt}>Friends</Text>
+                      </View>
+                    ) : hasSent ? (
+                      <View style={styles.friendStatusBadge}>
+                        <Text style={styles.friendStatusTxt}>Sent</Text>
+                      </View>
+                    ) : hasIncoming ? (
+                      <Pressable
+                        style={styles.friendAcceptBtn}
+                        onPress={() => { const r = incomingRequests.find((req: any) => req.id === u.id); if (r) acceptMutation.mutate(r.friendship_id); }}
+                      >
+                        <Text style={styles.friendAcceptTxt}>Accept</Text>
+                      </Pressable>
+                    ) : (
+                      <Pressable
+                        style={styles.friendAddBtn}
+                        onPress={() => sendRequestMutation.mutate(u.id)}
+                        disabled={sendRequestMutation.isPending}
+                      >
+                        <Feather name="user-plus" size={14} color={C.bg} />
+                      </Pressable>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          {friendSearch.length >= 2 && searchResults.length === 0 && (
+            <View style={styles.emptyState}>
+              <Feather name="search" size={28} color={C.textMuted} />
+              <Text style={styles.emptyStateTxt}>No runners found for "{friendSearch}"</Text>
+            </View>
+          )}
+
+          {incomingRequests.length > 0 && friendSearch.length < 2 && (
+            <View style={styles.friendsSection}>
+              <Text style={styles.friendsSectionTitle}>Requests ({incomingRequests.length})</Text>
+              {incomingRequests.map((req: any) => (
+                <View key={req.friendship_id} style={styles.friendCard}>
+                  <View style={styles.friendAvatar}>
+                    {req.photo_url ? (
+                      <Image source={{ uri: req.photo_url }} style={styles.friendAvatarImg} />
+                    ) : (
+                      <Text style={styles.friendAvatarTxt}>{req.name.charAt(0).toUpperCase()}</Text>
+                    )}
+                  </View>
+                  <View style={styles.friendInfo}>
+                    <Text style={styles.friendName}>{req.name}</Text>
+                    <Text style={styles.friendStat}>Wants to be friends</Text>
+                  </View>
+                  <View style={styles.requestActions}>
+                    <Pressable
+                      style={styles.friendAcceptBtn}
+                      onPress={() => acceptMutation.mutate(req.friendship_id)}
+                    >
+                      <Text style={styles.friendAcceptTxt}>Accept</Text>
+                    </Pressable>
+                    <Pressable
+                      style={styles.friendDeclineBtn}
+                      onPress={() => removeFriendMutation.mutate(req.friendship_id)}
+                    >
+                      <Text style={styles.friendDeclineTxt}>Decline</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {friendsList.length > 0 && friendSearch.length < 2 && (
+            <View style={styles.friendsSection}>
+              <Text style={styles.friendsSectionTitle}>Friends ({friendsList.length})</Text>
+              {friendsList.map((f: any) => (
+                <View key={f.friendship_id} style={styles.friendCard}>
+                  <View style={styles.friendAvatar}>
+                    {f.photo_url ? (
+                      <Image source={{ uri: f.photo_url }} style={styles.friendAvatarImg} />
+                    ) : (
+                      <Text style={styles.friendAvatarTxt}>{f.name.charAt(0).toUpperCase()}</Text>
+                    )}
+                  </View>
+                  <View style={styles.friendInfo}>
+                    <Text style={styles.friendName}>{f.name}</Text>
+                    <Text style={styles.friendStat}>{f.completed_runs} runs · {formatDistance(f.total_miles)} mi</Text>
+                  </View>
+                  <Pressable
+                    style={styles.friendRemoveBtn}
+                    onPress={() => Alert.alert("Remove Friend", `Remove ${f.name} from your friends?`, [
+                      { text: "Cancel", style: "cancel" },
+                      { text: "Remove", style: "destructive", onPress: () => removeFriendMutation.mutate(f.friendship_id) },
+                    ])}
+                  >
+                    <Feather name="user-x" size={16} color={C.textMuted} />
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {friendsList.length === 0 && incomingRequests.length === 0 && friendSearch.length < 2 && (
+            <View style={styles.emptyState}>
+              <Feather name="users" size={36} color={C.textMuted} />
+              <Text style={styles.emptyStateTitle}>No friends yet</Text>
+              <Text style={styles.emptyStateTxt}>Search by name to find other runners and add them as friends.</Text>
+            </View>
+          )}
+        </View>
+      ) : (
+
+      <>
       {/* ── Stats Grid ────────────────────────────────────────────────────── */}
       <View style={styles.statsGrid}>
         <View style={styles.statCard}>
@@ -500,6 +725,8 @@ export default function ProfileScreen() {
             <Text style={devStyles.devCloseText}>Close Dev Mode</Text>
           </Pressable>
         </View>
+      )}
+      </>
       )}
 
       {/* ── Modals ────────────────────────────────────────────────────────── */}
@@ -831,6 +1058,36 @@ const iconStyles = StyleSheet.create({
   iconInitial: { fontFamily: "Outfit_700Bold", fontSize: 22, color: C.primary },
   iconEmoji: { fontSize: 26 },
   iconLabel: { fontFamily: "Outfit_400Regular", fontSize: 9, color: C.textSecondary },
+  tabSelector: { flexDirection: "row", gap: 8, marginBottom: 20, backgroundColor: C.surface, borderRadius: 14, padding: 4, borderWidth: 1, borderColor: C.border },
+  tabBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10, borderRadius: 11, position: "relative" },
+  tabBtnActive: { backgroundColor: C.card },
+  tabBtnTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.textSecondary },
+  tabBtnTxtActive: { color: C.primary },
+  tabDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: C.orange, position: "absolute", top: 6, right: 10 },
+  friendsTab: { gap: 20 },
+  searchBox: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: C.surface, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: C.border },
+  searchInput: { flex: 1, fontFamily: "Outfit_400Regular", fontSize: 15, color: C.text },
+  friendsSection: { gap: 10 },
+  friendsSectionTitle: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.text },
+  friendCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: C.card, borderRadius: 14, padding: 12, borderWidth: 1, borderColor: C.border },
+  friendAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.primaryMuted, borderWidth: 1, borderColor: C.primary + "33", alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  friendAvatarImg: { width: 44, height: 44, borderRadius: 22 },
+  friendAvatarTxt: { fontFamily: "Outfit_700Bold", fontSize: 18, color: C.primary },
+  friendInfo: { flex: 1, gap: 2 },
+  friendName: { fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.text },
+  friendStat: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary },
+  friendAddBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: C.primary, alignItems: "center", justifyContent: "center" },
+  friendRemoveBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, alignItems: "center", justifyContent: "center" },
+  friendStatusBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: C.primaryMuted, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: C.primary + "33" },
+  friendStatusTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.primary },
+  requestActions: { flexDirection: "row", gap: 8 },
+  friendAcceptBtn: { backgroundColor: C.primary, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6 },
+  friendAcceptTxt: { fontFamily: "Outfit_700Bold", fontSize: 12, color: C.bg },
+  friendDeclineBtn: { backgroundColor: C.surface, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: C.border },
+  friendDeclineTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.textSecondary },
+  emptyState: { alignItems: "center", justifyContent: "center", paddingVertical: 48, gap: 12 },
+  emptyStateTitle: { fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text },
+  emptyStateTxt: { fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textSecondary, textAlign: "center" },
 });
 
 const devStyles = StyleSheet.create({

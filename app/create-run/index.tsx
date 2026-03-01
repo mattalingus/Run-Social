@@ -9,11 +9,14 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  Modal,
+  Share,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import * as Clipboard from "expo-clipboard";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/query-client";
@@ -45,6 +48,8 @@ export default function CreateRunScreen() {
   const [maxPace, setMaxPace] = useState("12");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [maxParticipants, setMaxParticipants] = useState("20");
+  const [invitePassword, setInvitePassword] = useState("");
+  const [inviteModal, setInviteModal] = useState<{ token: string; title: string } | null>(null);
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -56,7 +61,7 @@ export default function CreateRunScreen() {
       const dateTime = new Date(`${date}T${time}:00`);
       if (isNaN(dateTime.getTime())) throw new Error("Invalid date or time format");
 
-      await apiRequest("POST", "/api/runs", {
+      const res = await apiRequest("POST", "/api/runs", {
         title: title.trim(),
         description: description.trim() || undefined,
         privacy,
@@ -70,15 +75,21 @@ export default function CreateRunScreen() {
         maxPace: parseFloat(maxPace),
         tags: selectedTags,
         maxParticipants: parseInt(maxParticipants),
+        invitePassword: privacy === "private" && invitePassword.trim() ? invitePassword.trim() : undefined,
       });
+      return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (run: any) => {
       qc.invalidateQueries({ queryKey: ["/api/runs"] });
       qc.invalidateQueries({ queryKey: ["/api/runs/mine"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert("Run Created!", "Your run is now live on the map.", [
-        { text: "Great!", onPress: () => router.back() },
-      ]);
+      if (run?.privacy === "private" && run?.invite_token) {
+        setInviteModal({ token: run.invite_token, title: run.title });
+      } else {
+        Alert.alert("Run Created!", "Your run is now live on the map.", [
+          { text: "Great!", onPress: () => router.back() },
+        ]);
+      }
     },
     onError: (e: any) => {
       Alert.alert("Error", e.message || "Failed to create run");
@@ -171,6 +182,25 @@ export default function CreateRunScreen() {
             ))}
           </View>
         </View>
+
+        {privacy === "private" && (
+          <View style={styles.field}>
+            <View style={styles.passwordHeader}>
+              <Feather name="key" size={14} color={C.textSecondary} />
+              <Text style={styles.label}>Join Password (optional)</Text>
+            </View>
+            <TextInput
+              style={styles.input}
+              value={invitePassword}
+              onChangeText={setInvitePassword}
+              placeholder="Set a password runners must enter to join"
+              placeholderTextColor={C.textMuted}
+              secureTextEntry={false}
+              autoCapitalize="none"
+            />
+            <Text style={styles.passwordHint}>If left blank, only invited runners with the invite code can join.</Text>
+          </View>
+        )}
 
         <View style={styles.row}>
           <View style={[styles.field, { flex: 1 }]}>
@@ -316,6 +346,49 @@ export default function CreateRunScreen() {
           </View>
         </View>
       </ScrollView>
+
+      {inviteModal && (
+        <Modal transparent animationType="fade">
+          <View style={styles.modalOverlay}>
+            <View style={styles.inviteModal}>
+              <View style={styles.inviteIconWrap}>
+                <Feather name="lock" size={28} color={C.primary} />
+              </View>
+              <Text style={styles.inviteTitle}>Private Run Created!</Text>
+              <Text style={styles.inviteSub}>Share this invite code with runners you want to join:</Text>
+
+              <View style={styles.tokenBox}>
+                <Text style={styles.tokenText} selectable>{inviteModal.token}</Text>
+              </View>
+
+              <View style={styles.inviteActions}>
+                <Pressable
+                  style={styles.inviteCopyBtn}
+                  onPress={async () => {
+                    await Clipboard.setStringAsync(inviteModal.token);
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    Alert.alert("Copied!", "Invite code copied to clipboard.");
+                  }}
+                >
+                  <Feather name="copy" size={16} color={C.primary} />
+                  <Text style={styles.inviteCopyTxt}>Copy Code</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.inviteShareBtn}
+                  onPress={() => Share.share({ message: `Join my private run "${inviteModal.title}" on PaceUp! Use invite code: ${inviteModal.token}` })}
+                >
+                  <Feather name="share-2" size={16} color={C.bg} />
+                  <Text style={styles.inviteShareTxt}>Share</Text>
+                </Pressable>
+              </View>
+
+              <Pressable style={styles.inviteDoneBtn} onPress={() => { setInviteModal(null); router.back(); }}>
+                <Text style={styles.inviteDoneTxt}>Done</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -377,4 +450,20 @@ const styles = StyleSheet.create({
   tagChipActive: { backgroundColor: C.primaryMuted, borderColor: C.primary },
   tagChipText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary },
   tagChipTextActive: { color: C.primary },
+  passwordHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 },
+  passwordHint: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted, marginTop: 4 },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", alignItems: "center", justifyContent: "center", padding: 24 },
+  inviteModal: { backgroundColor: C.surface, borderRadius: 20, padding: 28, width: "100%", alignItems: "center", gap: 16, borderWidth: 1, borderColor: C.border },
+  inviteIconWrap: { width: 60, height: 60, borderRadius: 30, backgroundColor: C.primaryMuted, alignItems: "center", justifyContent: "center" },
+  inviteTitle: { fontFamily: "Outfit_700Bold", fontSize: 22, color: C.text, textAlign: "center" },
+  inviteSub: { fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textSecondary, textAlign: "center" },
+  tokenBox: { backgroundColor: C.card, borderRadius: 14, paddingHorizontal: 20, paddingVertical: 16, width: "100%", alignItems: "center", borderWidth: 1, borderColor: C.border },
+  tokenText: { fontFamily: "Outfit_700Bold", fontSize: 28, color: C.primary, letterSpacing: 4 },
+  inviteActions: { flexDirection: "row", gap: 12, width: "100%" },
+  inviteCopyBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: C.primaryMuted, borderRadius: 12, paddingVertical: 12, borderWidth: 1, borderColor: C.primary },
+  inviteCopyTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.primary },
+  inviteShareBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: C.primary, borderRadius: 12, paddingVertical: 12 },
+  inviteShareTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.bg },
+  inviteDoneBtn: { width: "100%", alignItems: "center", paddingVertical: 12, borderTopWidth: 1, borderTopColor: C.border, marginTop: 4 },
+  inviteDoneTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.textSecondary },
 });

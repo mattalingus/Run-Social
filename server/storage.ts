@@ -103,6 +103,27 @@ export async function initDb() {
 
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS route_path JSONB DEFAULT NULL;
 
+    CREATE TABLE IF NOT EXISTS friends (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      requester_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      addressee_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      status VARCHAR DEFAULT 'pending',
+      created_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(requester_id, addressee_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS run_invites (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      run_id VARCHAR NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+      invitee_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      invited_by VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(run_id, invitee_id)
+    );
+
+    ALTER TABLE runs ADD COLUMN IF NOT EXISTS invite_token TEXT DEFAULT NULL;
+    ALTER TABLE runs ADD COLUMN IF NOT EXISTS invite_password TEXT DEFAULT NULL;
+
     CREATE TABLE IF NOT EXISTS achievements (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id VARCHAR NOT NULL REFERENCES users(id),
@@ -165,14 +186,183 @@ export async function createRun(data: {
   maxPace: number;
   tags: string[];
   maxParticipants: number;
+  invitePassword?: string;
 }) {
+  const inviteToken = data.privacy === "private"
+    ? Math.random().toString(36).substring(2, 10).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase()
+    : null;
   const result = await pool.query(
-    `INSERT INTO runs (host_id, title, description, privacy, date, location_lat, location_lng, location_name, min_distance, max_distance, min_pace, max_pace, tags, max_participants)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
-    [data.hostId, data.title, data.description || null, data.privacy, data.date, data.locationLat, data.locationLng, data.locationName, data.minDistance, data.maxDistance, data.minPace, data.maxPace, data.tags, data.maxParticipants]
+    `INSERT INTO runs (host_id, title, description, privacy, date, location_lat, location_lng, location_name, min_distance, max_distance, min_pace, max_pace, tags, max_participants, invite_token, invite_password)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
+    [data.hostId, data.title, data.description || null, data.privacy, data.date, data.locationLat, data.locationLng, data.locationName, data.minDistance, data.maxDistance, data.minPace, data.maxPace, data.tags, data.maxParticipants, inviteToken, data.invitePassword || null]
   );
   await pool.query(`UPDATE users SET hosted_runs = hosted_runs + 1 WHERE id = $1`, [data.hostId]);
   return result.rows[0];
+}
+
+export async function searchUsers(query: string, currentUserId: string) {
+  const result = await pool.query(
+    `SELECT id, name, photo_url, completed_runs, total_miles FROM users WHERE id != $1 AND name ILIKE $2 LIMIT 20`,
+    [currentUserId, `%${query}%`]
+  );
+  return result.rows;
+}
+
+export async function getFriends(userId: string) {
+  const result = await pool.query(
+    `SELECT u.id, u.name, u.photo_url, u.completed_runs, u.total_miles,
+       f.id as friendship_id, f.status, f.created_at as friends_since
+     FROM friends f
+     JOIN users u ON (CASE WHEN f.requester_id = $1 THEN f.addressee_id ELSE f.requester_id END) = u.id
+     WHERE (f.requester_id = $1 OR f.addressee_id = $1) AND f.status = 'accepted'
+     ORDER BY u.name ASC`,
+    [userId]
+  );
+  return result.rows;
+}
+
+export async function getSentRequests(userId: string) {
+  const result = await pool.query(
+    `SELECT u.id, u.name, u.photo_url, f.id as friendship_id, f.created_at
+     FROM friends f JOIN users u ON f.addressee_id = u.id
+     WHERE f.requester_id = $1 AND f.status = 'pending'`,
+    [userId]
+  );
+  return result.rows;
+}
+
+export async function getPendingRequests(userId: string) {
+  const result = await pool.query(
+    `SELECT u.id, u.name, u.photo_url, f.id as friendship_id, f.created_at
+     FROM friends f JOIN users u ON f.requester_id = u.id
+     WHERE f.addressee_id = $1 AND f.status = 'pending'
+     ORDER BY f.created_at DESC`,
+    [userId]
+  );
+  return result.rows;
+}
+
+export async function sendFriendRequest(requesterId: string, addresseeId: string) {
+  const existing = await pool.query(
+    `SELECT id, status FROM friends WHERE (requester_id = $1 AND addressee_id = $2) OR (requester_id = $2 AND addressee_id = $1)`,
+    [requesterId, addresseeId]
+  );
+  if (existing.rows.length > 0) return { error: existing.rows[0].status === "accepted" ? "already_friends" : "already_requested" };
+  const result = await pool.query(
+    `INSERT INTO friends (requester_id, addressee_id, status) VALUES ($1, $2, 'pending') RETURNING *`,
+    [requesterId, addresseeId]
+  );
+  return { data: result.rows[0] };
+}
+
+export async function acceptFriendRequest(friendshipId: string, userId: string) {
+  const result = await pool.query(
+    `UPDATE friends SET status = 'accepted' WHERE id = $1 AND addressee_id = $2 RETURNING *`,
+    [friendshipId, userId]
+  );
+  return result.rows[0] || null;
+}
+
+export async function removeFriend(friendshipId: string, userId: string) {
+  await pool.query(
+    `DELETE FROM friends WHERE id = $1 AND (requester_id = $2 OR addressee_id = $2)`,
+    [friendshipId, userId]
+  );
+}
+
+export async function getFriendIds(userId: string): Promise<string[]> {
+  const result = await pool.query(
+    `SELECT CASE WHEN requester_id = $1 THEN addressee_id ELSE requester_id END as friend_id
+     FROM friends WHERE (requester_id = $1 OR addressee_id = $1) AND status = 'accepted'`,
+    [userId]
+  );
+  return result.rows.map((r: any) => r.friend_id);
+}
+
+export async function getFriendPrivateRuns(userId: string, bounds?: { swLat: number; neLat: number; swLng: number; neLng: number }) {
+  let query = `SELECT r.id, r.title, r.date, r.location_lat, r.location_lng, r.location_name,
+    r.min_pace, r.max_pace, r.min_distance, r.max_distance, r.max_participants, r.privacy,
+    u.name as host_name, u.photo_url as host_photo, u.marker_icon as host_marker_icon, u.avg_rating as host_rating,
+    (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled') as participant_count,
+    true as is_locked
+  FROM runs r
+  JOIN users u ON u.id = r.host_id
+  JOIN friends f ON ((f.requester_id = $1 AND f.addressee_id = r.host_id) OR (f.addressee_id = $1 AND f.requester_id = r.host_id))
+  WHERE r.privacy = 'private' AND r.date > NOW() AND r.is_completed = false
+    AND f.status = 'accepted' AND r.host_id != $1
+    AND r.id NOT IN (SELECT run_id FROM run_invites WHERE invitee_id = $1)`;
+  const params: any[] = [userId];
+  let idx = 2;
+  if (bounds) {
+    query += ` AND r.location_lat BETWEEN $${idx++} AND $${idx++} AND r.location_lng BETWEEN $${idx++} AND $${idx++}`;
+    params.push(bounds.swLat, bounds.neLat, bounds.swLng, bounds.neLng);
+  }
+  query += ` ORDER BY r.date ASC LIMIT 50`;
+  const result = await pool.query(query, params);
+  return result.rows;
+}
+
+export async function getInvitedPrivateRuns(userId: string, bounds?: { swLat: number; neLat: number; swLng: number; neLng: number }) {
+  let query = `SELECT r.*, u.name as host_name, u.avg_rating as host_rating, u.photo_url as host_photo, u.marker_icon as host_marker_icon,
+    (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled') as participant_count,
+    false as is_locked
+  FROM runs r
+  JOIN users u ON u.id = r.host_id
+  JOIN run_invites ri ON ri.run_id = r.id AND ri.invitee_id = $1
+  WHERE r.privacy = 'private' AND r.date > NOW() AND r.is_completed = false`;
+  const params: any[] = [userId];
+  let idx = 2;
+  if (bounds) {
+    query += ` AND r.location_lat BETWEEN $${idx++} AND $${idx++} AND r.location_lng BETWEEN $${idx++} AND $${idx++}`;
+    params.push(bounds.swLat, bounds.neLat, bounds.swLng, bounds.neLng);
+  }
+  query += ` ORDER BY r.date ASC LIMIT 50`;
+  const result = await pool.query(query, params);
+  return result.rows;
+}
+
+export async function hasRunAccess(runId: string, userId: string): Promise<boolean> {
+  const hostCheck = await pool.query(`SELECT id FROM runs WHERE id = $1 AND host_id = $2`, [runId, userId]);
+  if (hostCheck.rows.length > 0) return true;
+  const inviteCheck = await pool.query(`SELECT id FROM run_invites WHERE run_id = $1 AND invitee_id = $2`, [runId, userId]);
+  return inviteCheck.rows.length > 0;
+}
+
+export async function grantRunAccess(runId: string, userId: string) {
+  await pool.query(
+    `INSERT INTO run_invites (run_id, invitee_id, invited_by) SELECT $1, $2, host_id FROM runs WHERE id = $1 ON CONFLICT (run_id, invitee_id) DO NOTHING`,
+    [runId, userId]
+  );
+}
+
+export async function verifyAndJoinPrivateRun(runId: string, userId: string, password?: string, token?: string) {
+  const run = await pool.query(`SELECT host_id, invite_password, invite_token FROM runs WHERE id = $1 AND privacy = 'private'`, [runId]);
+  if (!run.rows[0]) return { error: "run_not_found" };
+  const r = run.rows[0];
+  if (password && r.invite_password && r.invite_password === password) {
+    await grantRunAccess(runId, userId);
+    return { success: true };
+  }
+  if (token && r.invite_token && r.invite_token.toUpperCase() === token.toUpperCase()) {
+    await grantRunAccess(runId, userId);
+    return { success: true };
+  }
+  return { error: "invalid_credentials" };
+}
+
+export async function getRunByInviteToken(token: string) {
+  const result = await pool.query(
+    `SELECT r.*, u.name as host_name FROM runs r JOIN users u ON u.id = r.host_id WHERE r.invite_token = $1`,
+    [token]
+  );
+  return result.rows[0] || null;
+}
+
+export async function inviteToRun(runId: string, inviteeId: string, hostId: string) {
+  await pool.query(
+    `INSERT INTO run_invites (run_id, invitee_id, invited_by) VALUES ($1, $2, $3) ON CONFLICT (run_id, invitee_id) DO NOTHING`,
+    [runId, inviteeId, hostId]
+  );
 }
 
 export async function updateMarkerIcon(userId: string, icon: string | null) {

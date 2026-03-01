@@ -7,6 +7,7 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
+  TextInput,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -43,20 +44,55 @@ function formatTime(dateStr: string) {
 }
 
 export default function RunDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, token } = useLocalSearchParams<{ id: string; token?: string }>();
   const insets = useSafeAreaInsets();
   const { user, refreshUser } = useAuth();
   const qc = useQueryClient();
   const [joining, setJoining] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
+  const [tokenInput, setTokenInput] = useState(token || "");
+  const [accessError, setAccessError] = useState("");
+  const [unlocking, setUnlocking] = useState(false);
 
-  const { data: run, isLoading } = useQuery<any>({
+  const { data: run, isLoading, refetch } = useQuery<any>({
     queryKey: ["/api/runs", id],
     queryFn: async () => {
       const res = await apiRequest("GET", `/api/runs/${id}`);
+      if (!res.ok) {
+        const body = await res.json();
+        return body;
+      }
       return res.json();
     },
   });
+
+  async function handleUnlockWithPassword() {
+    if (!passwordInput.trim() && !tokenInput.trim()) {
+      setAccessError("Enter a password or invite code");
+      return;
+    }
+    setUnlocking(true);
+    setAccessError("");
+    try {
+      const res = await apiRequest("POST", `/api/runs/${id}/join-private`, {
+        password: passwordInput.trim() || undefined,
+        token: tokenInput.trim() || undefined,
+      });
+      if (!res.ok) {
+        const body = await res.json();
+        setAccessError(body.message || "Incorrect password or code");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      } else {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        refetch();
+      }
+    } catch {
+      setAccessError("Something went wrong. Try again.");
+    } finally {
+      setUnlocking(false);
+    }
+  }
 
   const { data: participants = [] } = useQuery<any[]>({
     queryKey: ["/api/runs", id, "participants"],
@@ -161,6 +197,68 @@ export default function RunDetailScreen() {
         <Pressable onPress={() => router.back()} style={styles.backLink}>
           <Text style={styles.backLinkText}>Go back</Text>
         </Pressable>
+      </View>
+    );
+  }
+
+  if (run.isPrivate) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20, paddingHorizontal: 28 }]}>
+        <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={12}>
+          <Feather name="arrow-left" size={20} color={C.textSecondary} />
+        </Pressable>
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 16 }}>
+          <View style={styles.lockIcon}>
+            <Feather name="lock" size={36} color={C.primary} />
+          </View>
+          <Text style={styles.lockTitle}>Private Run</Text>
+          {run.hostName && (
+            <Text style={styles.lockHost}>Hosted by {run.hostName}</Text>
+          )}
+          {run.title && (
+            <Text style={styles.lockRunTitle}>{run.title}</Text>
+          )}
+          <Text style={styles.lockSub}>Enter the invite code or password to access this run.</Text>
+
+          <View style={styles.lockInputGroup}>
+            {run.hasPassword && (
+              <TextInput
+                style={styles.lockInput}
+                value={passwordInput}
+                onChangeText={setPasswordInput}
+                placeholder="Enter password..."
+                placeholderTextColor={C.textMuted}
+                autoCapitalize="none"
+                secureTextEntry={false}
+              />
+            )}
+            <TextInput
+              style={styles.lockInput}
+              value={tokenInput}
+              onChangeText={v => setTokenInput(v.toUpperCase())}
+              placeholder="Enter invite code (e.g. ABC123XY)"
+              placeholderTextColor={C.textMuted}
+              autoCapitalize="characters"
+            />
+          </View>
+
+          {accessError ? <Text style={styles.lockError}>{accessError}</Text> : null}
+
+          <Pressable
+            style={[styles.lockUnlockBtn, { opacity: unlocking ? 0.7 : 1 }]}
+            onPress={handleUnlockWithPassword}
+            disabled={unlocking}
+          >
+            {unlocking ? (
+              <ActivityIndicator size="small" color={C.bg} />
+            ) : (
+              <>
+                <Feather name="unlock" size={18} color={C.bg} />
+                <Text style={styles.lockUnlockTxt}>Unlock Run</Text>
+              </>
+            )}
+          </Pressable>
+        </View>
       </View>
     );
   }
@@ -434,4 +532,18 @@ const styles = StyleSheet.create({
   errorText: { fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text },
   backLink: { marginTop: 16 },
   backLinkText: { fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.primary },
+  lockIcon: { width: 80, height: 80, borderRadius: 40, backgroundColor: C.primaryMuted, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: C.primary + "44" },
+  lockTitle: { fontFamily: "Outfit_700Bold", fontSize: 26, color: C.text, textAlign: "center" },
+  lockHost: { fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textSecondary, textAlign: "center" },
+  lockRunTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 16, color: C.text, textAlign: "center" },
+  lockSub: { fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textSecondary, textAlign: "center" },
+  lockInputGroup: { width: "100%", gap: 10 },
+  lockInput: {
+    backgroundColor: C.surface, borderRadius: 14, borderWidth: 1, borderColor: C.border,
+    paddingHorizontal: 16, paddingVertical: 14, fontFamily: "Outfit_400Regular", fontSize: 15, color: C.text,
+    textAlign: "center", letterSpacing: 1,
+  },
+  lockError: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: "#FF6B6B", textAlign: "center" },
+  lockUnlockBtn: { backgroundColor: C.primary, borderRadius: 14, height: 52, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 32, width: "100%" },
+  lockUnlockTxt: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.bg },
 });
