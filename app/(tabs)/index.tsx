@@ -460,13 +460,33 @@ export default function DiscoverScreen() {
   const [hTags, setHTags] = useState<string[]>([]);
   const [hMinDist, setHMinDist] = useState("3");
   const [hMaxDist, setHMaxDist] = useState("6");
-  const [hMinPace, setHMinPace] = useState("8");
-  const [hMaxPace, setHMaxPace] = useState("12");
+  const [hMinPace, setHMinPace] = useState(8);
+  const [hMaxPace, setHMaxPace] = useState(12);
 
   function resetHostForm() {
     setHTitle(""); setHLocation(""); setHDate(""); setHTime("");
     setHPrivacy("public"); setHPassword(""); setHMaxParticipants(20);
-    setHTags([]); setHMinDist("3"); setHMaxDist("6"); setHMinPace("8"); setHMaxPace("12");
+    setHTags([]); setHMinDist("3"); setHMaxDist("6"); setHMinPace(8); setHMaxPace(12);
+  }
+
+  const PACE_STEP_30S = 0.5; // 30 seconds in minutes
+
+  function formatPaceMM(pace: number): string {
+    const mins = Math.floor(pace);
+    const secs = Math.round((pace % 1) * 60);
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  }
+
+  function stepMinPace(dir: 1 | -1) {
+    const next = Math.round((hMinPace + dir * PACE_STEP_30S) * 10) / 10;
+    setHMinPace(Math.max(5, Math.min(hMaxPace - PACE_STEP_30S, next)));
+    Haptics.selectionAsync();
+  }
+
+  function stepMaxPace(dir: 1 | -1) {
+    const next = Math.round((hMaxPace + dir * PACE_STEP_30S) * 10) / 10;
+    setHMaxPace(Math.max(hMinPace + PACE_STEP_30S, Math.min(20, next)));
+    Haptics.selectionAsync();
   }
 
   function stepParticipants(dir: 1 | -1) {
@@ -496,8 +516,8 @@ export default function DiscoverScreen() {
         locationName: hLocation.trim(),
         minDistance: parseFloat(hMinDist) || 1,
         maxDistance: parseFloat(hMaxDist) || 6,
-        minPace: parseFloat(hMinPace) || 8,
-        maxPace: parseFloat(hMaxPace) || 12,
+        minPace: hMinPace,
+        maxPace: hMaxPace,
         tags: hTags,
         maxParticipants: hMaxParticipants === 0 ? 9999 : hMaxParticipants,
         invitePassword: hPrivacy === "private" && hPassword.trim() ? hPassword.trim() : undefined,
@@ -949,25 +969,36 @@ export default function DiscoverScreen() {
             </View>
 
             {/* Pace Range */}
-            <Text style={s.hLabel}>Pace Range (min/mile)</Text>
-            <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
-              <TextInput
-                style={[s.hInput, { flex: 1, textAlign: "center" }]}
-                value={hMinPace}
-                onChangeText={setHMinPace}
-                placeholder="Min"
-                placeholderTextColor={C.textMuted}
-                keyboardType="decimal-pad"
-              />
-              <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textMuted }}>to</Text>
-              <TextInput
-                style={[s.hInput, { flex: 1, textAlign: "center" }]}
-                value={hMaxPace}
-                onChangeText={setHMaxPace}
-                placeholder="Max"
-                placeholderTextColor={C.textMuted}
-                keyboardType="decimal-pad"
-              />
+            <Text style={s.hLabel}>Pace Range (min/mile) · 30 sec steps</Text>
+            <View style={{ gap: 8 }}>
+              <View style={s.hPaceRow}>
+                <Text style={s.hPaceLabel}>Slowest</Text>
+                <View style={s.hStepper}>
+                  <Pressable style={s.hStepBtn} onPress={() => stepMaxPace(-1)}>
+                    <Feather name="minus" size={18} color={C.primary} />
+                  </Pressable>
+                  <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 20, color: C.text, minWidth: 64, textAlign: "center" }}>
+                    {formatPaceMM(hMaxPace)}
+                  </Text>
+                  <Pressable style={s.hStepBtn} onPress={() => stepMaxPace(1)}>
+                    <Feather name="plus" size={18} color={C.primary} />
+                  </Pressable>
+                </View>
+              </View>
+              <View style={s.hPaceRow}>
+                <Text style={s.hPaceLabel}>Fastest</Text>
+                <View style={s.hStepper}>
+                  <Pressable style={s.hStepBtn} onPress={() => stepMinPace(-1)}>
+                    <Feather name="minus" size={18} color={C.primary} />
+                  </Pressable>
+                  <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 20, color: C.text, minWidth: 64, textAlign: "center" }}>
+                    {formatPaceMM(hMinPace)}
+                  </Text>
+                  <Pressable style={s.hStepBtn} onPress={() => stepMinPace(1)}>
+                    <Feather name="plus" size={18} color={C.primary} />
+                  </Pressable>
+                </View>
+              </View>
             </View>
           </ScrollView>
         </View>
@@ -1292,6 +1323,18 @@ const s = StyleSheet.create({
   hTagActive: {
     backgroundColor: C.primaryMuted,
     borderColor: C.primary,
+  },
+
+  hPaceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  hPaceLabel: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 13,
+    color: C.textSecondary,
+    width: 56,
   },
 });
 
