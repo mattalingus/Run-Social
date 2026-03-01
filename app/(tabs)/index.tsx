@@ -833,7 +833,7 @@ export default function DiscoverScreen() {
             {/* Host */}
             <Pressable style={s.hBtnRow} onPress={openHostModal} testID="host-button">
               <Feather name="plus" size={15} color={C.primary} />
-              <Text style={s.hBtnTxt}>+Host</Text>
+              <Text style={s.hBtnTxt}>Host</Text>
             </Pressable>
           </View>
         </View>
@@ -1285,19 +1285,19 @@ export default function DiscoverScreen() {
         </View>
       </Modal>
 
-      {/* ── FAB ─────────────────────────────────────────────────────────────── */}
+      {/* ── Map FAB ──────────────────────────────────────────────────────────── */}
       {Platform.OS === "web" ? (
-        <WebFAB onPress={openHostModal} />
+        <WebFAB onPress={goToMap} />
       ) : (
         <Pressable
-          testID="host-fab"
+          testID="map-fab"
           style={[s.fab, { bottom: insets.bottom + 24 }]}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            openHostModal();
+            goToMap();
           }}
         >
-          <Feather name="plus" size={26} color={C.bg} />
+          <Feather name="map" size={24} color={C.bg} />
         </Pressable>
       )}
     </View>
@@ -1467,7 +1467,7 @@ const s = StyleSheet.create({
   },
   fab: {
     position: "absolute",
-    right: 20,
+    left: 20,
     width: 56,
     height: 56,
     borderRadius: 28,

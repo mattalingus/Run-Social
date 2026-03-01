@@ -16,16 +16,16 @@ export default function WebFAB({ onPress }: Props) {
     if (Platform.OS !== "web") return;
     if (typeof document === "undefined") return;
 
-    const prev = document.querySelector("[data-testid='host-fab']");
+    const prev = document.querySelector("[data-testid='map-fab']");
     if (prev) prev.remove();
 
     const btn = document.createElement("button");
-    btn.setAttribute("data-testid", "host-fab");
-    btn.setAttribute("aria-label", "Host a Run");
+    btn.setAttribute("data-testid", "map-fab");
+    btn.setAttribute("aria-label", "Open Map");
     btn.style.cssText = [
       "position:fixed",
       "bottom:100px",
-      "right:20px",
+      "left:20px",
       "width:56px",
       "height:56px",
       "border-radius:50%",
@@ -33,8 +33,7 @@ export default function WebFAB({ onPress }: Props) {
       "border:none",
       "cursor:pointer",
       "z-index:99999",
-      "font-size:26px",
-      "font-weight:bold",
+      "font-size:22px",
       "color:#080F0C",
       "display:flex",
       "align-items:center",
@@ -42,7 +41,7 @@ export default function WebFAB({ onPress }: Props) {
       "box-shadow:none",
       "line-height:56px",
     ].join(";");
-    btn.textContent = "+";
+    btn.textContent = "🗺";
     btn.addEventListener("click", handleClick);
     document.body.appendChild(btn);
 
