@@ -860,11 +860,6 @@ export default function ProfileScreen() {
             </View>
           )}
 
-          {friendSearch.length < 2 && (
-            <View style={styles.searchHint}>
-              <Text style={styles.searchHintTxt}>Type at least 2 characters to search</Text>
-            </View>
-          )}
         </View>
       </Modal>
 
