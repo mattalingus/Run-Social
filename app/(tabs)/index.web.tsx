@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   TextInput,
   Modal,
+  Switch,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -18,17 +19,35 @@ import C from "@/constants/colors";
 import RangeSlider from "@/components/RangeSlider";
 import { formatDistance } from "@/lib/formatDistance";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const PACE_STEP = 5 / 60;
 
 type SortOption = "soonest" | "dist_asc" | "dist_desc";
 
-const SORT_OPTIONS: { key: SortOption; label: string; icon: keyof typeof Feather.glyphMap }[] = [
-  { key: "soonest",  label: "Soonest",      icon: "clock"       },
-  { key: "dist_asc", label: "Short → Long", icon: "trending-up" },
-  { key: "dist_desc",label: "Long → Short", icon: "trending-down"},
+const SORT_OPTIONS: { key: SortOption; label: string }[] = [
+  { key: "soonest",  label: "Soonest"              },
+  { key: "dist_asc", label: "Distance: Low → High" },
+  { key: "dist_desc",label: "Distance: High → Low" },
 ];
 
-const RUN_TAGS = ["All", "Talkative", "Quiet", "Motivational", "Training", "Ministry", "Recovery"];
+const HOST_STYLES = ["Talkative", "Quiet", "Motivational", "Training", "Ministry", "Recovery"];
+
+interface FilterState {
+  paceMin: number;
+  paceMax: number;
+  distMin: number;
+  distMax: number;
+  styles: string[];
+}
+
+const DEFAULT_FILTERS: FilterState = {
+  paceMin: 6.0,
+  paceMax: 12.0,
+  distMin: 1,
+  distMax: 20,
+  styles: [],
+};
 
 interface Run {
   id: string;
@@ -45,9 +64,6 @@ interface Run {
   participant_count: number;
   max_participants: number;
 }
-
-const RUN_STYLES = ["Talkative", "Quiet", "Motivational", "Training", "Ministry", "Recovery"];
-const DEFAULT_FILTERS = { paceMin: 6.0, paceMax: 12.0, distMin: 1, distMax: 20, styles: [] as string[] };
 
 function formatPace(pace: number) {
   const m = Math.floor(pace);
@@ -70,14 +86,12 @@ function formatTime(dateStr: string) {
 export default function DiscoverScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const [search, setSearch] = useState("");
-  const [activeTag, setActiveTag] = useState("All");
+  const [search, setSearch]       = useState("");
   const [sortOption, setSortOption] = useState<SortOption>("soonest");
-  const [showSort, setShowSort] = useState(false);
+  const [showSort, setShowSort]   = useState(false);
   const [showFilter, setShowFilter] = useState(false);
-  const [unit, setUnit] = useState<"mi" | "km">("mi");
-  const [draft, setDraft] = useState({ ...DEFAULT_FILTERS });
-  const [applied, setApplied] = useState({ ...DEFAULT_FILTERS });
+  const [draft, setDraft]         = useState<FilterState>({ ...DEFAULT_FILTERS });
+  const [applied, setApplied]     = useState<FilterState>({ ...DEFAULT_FILTERS });
 
   const isFiltered =
     applied.paceMin !== DEFAULT_FILTERS.paceMin ||
@@ -86,18 +100,10 @@ export default function DiscoverScreen() {
     applied.distMax !== DEFAULT_FILTERS.distMax ||
     applied.styles.length > 0;
 
-  const queryUrl = useMemo(() => {
-    const p = new URLSearchParams();
-    p.set("paceMin", applied.paceMin.toString());
-    p.set("paceMax", applied.paceMax.toString());
-    p.set("distMin", applied.distMin.toString());
-    p.set("distMax", applied.distMax.toString());
-    if (applied.styles.length > 0) p.set("styles", applied.styles.join(","));
-    return `/api/runs?${p.toString()}`;
-  }, [applied]);
+  const isNonDefaultSort = sortOption !== "soonest";
 
   const { data: runs = [], isLoading } = useQuery<Run[]>({
-    queryKey: [queryUrl],
+    queryKey: ["/api/runs"],
     staleTime: 30_000,
   });
 
@@ -108,8 +114,10 @@ export default function DiscoverScreen() {
         r.title.toLowerCase().includes(q) ||
         r.location_name.toLowerCase().includes(q) ||
         r.host_name.toLowerCase().includes(q);
-      const matchTag = activeTag === "All" || r.tags?.includes(activeTag);
-      return matchSearch && matchTag;
+      const matchPace  = r.min_pace <= applied.paceMax && r.max_pace >= applied.paceMin;
+      const matchDist  = r.min_distance <= applied.distMax && r.max_distance >= applied.distMin;
+      const matchStyle = applied.styles.length === 0 || r.tags?.some((t) => applied.styles.includes(t));
+      return matchSearch && matchPace && matchDist && matchStyle;
     });
 
     switch (sortOption) {
@@ -124,56 +132,57 @@ export default function DiscoverScreen() {
         break;
     }
     return list;
-  }, [runs, search, activeTag, sortOption]);
+  }, [runs, search, applied, sortOption]);
 
   function toggleStyle(s: string) {
-    setDraft((prev) => ({
-      ...prev,
-      styles: prev.styles.includes(s) ? prev.styles.filter((x) => x !== s) : [...prev.styles, s],
+    setDraft((p) => ({
+      ...p,
+      styles: p.styles.includes(s) ? p.styles.filter((x) => x !== s) : [...p.styles, s],
     }));
   }
 
   function applyFilters() { setApplied({ ...draft }); setShowFilter(false); }
   function resetFilters() { setDraft({ ...DEFAULT_FILTERS }); }
-  function fmtDist(miles: number) {
-    return unit === "km" ? `${formatDistance(miles * 1.60934)} km` : `${formatDistance(miles)} mi`;
-  }
 
   const topPad = insets.top + 67;
-  const sortLabel = SORT_OPTIONS.find((o) => o.key === sortOption)?.label ?? "Sort";
 
   return (
     <View style={[st.container, { paddingTop: topPad }]}>
-      {/* ─── Header ─────────────────────────────────────────────────────── */}
+      {/* ─── Header ───────────────────────────────────────────────────────── */}
       <View style={st.header}>
         <View style={st.titleRow}>
-          <View>
-            <Text style={st.title}>Discover</Text>
-            <Text style={st.subtitle}>Upcoming Runs</Text>
-          </View>
-          <View style={st.headerActions}>
-            {/* Sort */}
-            <Pressable
-              style={[st.sortBtn, showSort && st.sortBtnActive]}
-              onPress={() => setShowSort((v) => !v)}
-            >
-              <Feather name="sliders" size={13} color={showSort ? C.primary : C.textSecondary} />
-              <Text style={[st.sortBtnTxt, showSort && { color: C.primary }]}>{sortLabel}</Text>
-              <Feather name={showSort ? "chevron-up" : "chevron-down"} size={12} color={showSort ? C.primary : C.textMuted} />
-            </Pressable>
+          <Text style={st.title}>PaceUp</Text>
+          <View style={st.headerBtns}>
             {/* Filter */}
             <Pressable
-              style={[st.filterBtn, isFiltered && st.filterBtnActive]}
-              onPress={() => { setDraft({ ...applied }); setShowFilter(true); }}
+              style={[st.hBtn, isFiltered && st.hBtnActive]}
+              onPress={() => { setDraft({ ...applied }); setShowSort(false); setShowFilter(true); }}
+              testID="filter-button"
             >
-              <Feather name="sliders" size={15} color={isFiltered ? C.primary : C.text} />
-              <Text style={[st.filterBtnText, isFiltered && { color: C.primary }]}>Filter</Text>
-              {isFiltered && <View style={st.filterDot} />}
+              <Feather name="sliders" size={16} color={isFiltered ? C.primary : C.textSecondary} />
+              {isFiltered && <View style={st.dot} />}
             </Pressable>
+
+            {/* Sort */}
+            <Pressable
+              style={[st.hBtnRow, showSort && st.hBtnActive]}
+              onPress={() => { setShowSort((v) => !v); setShowFilter(false); }}
+              testID="sort-button"
+            >
+              {isNonDefaultSort && <View style={st.dot} />}
+              <Text style={[st.hBtnTxt, showSort && { color: C.text }]}>Sort by</Text>
+              <Feather
+                name={showSort ? "chevron-up" : "chevron-down"}
+                size={13}
+                color={showSort ? C.text : C.textMuted}
+              />
+            </Pressable>
+
+            {/* Create run (web only, if host unlocked) */}
             {user?.host_unlocked && (
-              <Pressable style={st.createBtn} onPress={() => router.push("/create-run/index")}>
-                <Feather name="plus" size={16} color={C.bg} />
-                <Text style={st.createBtnText}>Create</Text>
+              <Pressable style={st.hBtnRow} onPress={() => router.push("/create-run/index")}>
+                <Feather name="plus" size={15} color={C.textSecondary} />
+                <Text style={st.hBtnTxt}>Create</Text>
               </Pressable>
             )}
           </View>
@@ -181,40 +190,27 @@ export default function DiscoverScreen() {
 
         {/* Search */}
         <View style={st.searchWrap}>
-          <Feather name="search" size={16} color={C.textMuted} />
+          <Feather name="search" size={15} color={C.textMuted} />
           <TextInput
             style={st.searchInput}
             value={search}
-            onChangeText={setSearch}
+            onChangeText={(t) => { setSearch(t); setShowSort(false); }}
             placeholder="Search runs, hosts, locations..."
             placeholderTextColor={C.textMuted}
           />
           {search.length > 0 && (
             <Pressable onPress={() => setSearch("")}>
-              <Feather name="x" size={16} color={C.textMuted} />
+              <Feather name="x" size={15} color={C.textMuted} />
             </Pressable>
           )}
         </View>
-
-        {/* Tag chips */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.tagsContent}>
-          {RUN_TAGS.map((t) => (
-            <Pressable
-              key={t}
-              style={[st.tagChip, activeTag === t && st.tagChipActive]}
-              onPress={() => setActiveTag(t)}
-            >
-              <Text style={[st.tagChipTxt, activeTag === t && st.tagChipTxtActive]}>{t}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
       </View>
 
-      {/* ─── Sort dropdown ───────────────────────────────────────────────── */}
+      {/* ─── Sort dropdown ────────────────────────────────────────────────── */}
       {showSort && (
         <>
           <Pressable style={st.sortOverlay} onPress={() => setShowSort(false)} />
-          <View style={st.sortMenu}>
+          <View style={[st.sortMenu, { top: topPad + 108 }]}>
             {SORT_OPTIONS.map((opt) => {
               const active = sortOption === opt.key;
               return (
@@ -223,9 +219,8 @@ export default function DiscoverScreen() {
                   style={[st.sortItem, active && st.sortItemActive]}
                   onPress={() => { setSortOption(opt.key); setShowSort(false); }}
                 >
-                  <Feather name={opt.icon} size={14} color={active ? C.primary : C.textSecondary} />
-                  <Text style={[st.sortItemTxt, active && { color: C.primary }]}>{opt.label}</Text>
-                  {active && <Feather name="check" size={13} color={C.primary} style={{ marginLeft: "auto" as any }} />}
+                  <Text style={[st.sortItemTxt, active && st.sortItemTxtActive]}>{opt.label}</Text>
+                  {active && <Feather name="check" size={13} color={C.primary} />}
                 </Pressable>
               );
             })}
@@ -233,7 +228,7 @@ export default function DiscoverScreen() {
         </>
       )}
 
-      {/* ─── List ───────────────────────────────────────────────────────── */}
+      {/* ─── List ────────────────────────────────────────────────────────── */}
       {isLoading ? (
         <View style={st.center}>
           <ActivityIndicator color={C.primary} size="large" />
@@ -246,10 +241,10 @@ export default function DiscoverScreen() {
         >
           {sorted.length === 0 ? (
             <View style={st.empty}>
-              <Ionicons name="walk-outline" size={48} color={C.textMuted} />
+              <Ionicons name="walk-outline" size={44} color={C.textMuted} />
               <Text style={st.emptyTitle}>No runs found</Text>
               <Text style={st.emptyText}>
-                {search || activeTag !== "All" || isFiltered ? "Try different filters" : "Check back soon"}
+                {search || isFiltered ? "Try adjusting your filters" : "Check back soon"}
               </Text>
             </View>
           ) : (
@@ -258,7 +253,7 @@ export default function DiscoverScreen() {
               return (
                 <Pressable
                   key={run.id}
-                  style={({ pressed }) => [st.card, { opacity: pressed ? 0.9 : 1 }]}
+                  style={({ pressed }) => [st.card, { opacity: pressed ? 0.88 : 1 }]}
                   onPress={() => router.push(`/run/${run.id}`)}
                 >
                   <View style={st.cardTop}>
@@ -276,11 +271,11 @@ export default function DiscoverScreen() {
                   </View>
                   <View style={st.cardMeta}>
                     <View style={st.metaItem}>
-                      <Feather name="calendar" size={12} color={C.primary} />
+                      <Feather name="calendar" size={12} color={C.textMuted} />
                       <Text style={st.metaText}>{formatDate(run.date)} · {formatTime(run.date)}</Text>
                     </View>
                     <View style={st.metaItem}>
-                      <Feather name="map-pin" size={12} color={C.primary} />
+                      <Feather name="map-pin" size={12} color={C.textMuted} />
                       <Text style={st.metaText} numberOfLines={1}>{run.location_name}</Text>
                     </View>
                   </View>
@@ -289,12 +284,14 @@ export default function DiscoverScreen() {
                       <Ionicons name="walk" size={12} color={C.orange} />
                       <Text style={st.statText}>{formatPace(run.min_pace)}–{formatPace(run.max_pace)}/mi</Text>
                     </View>
-                    <View style={st.dot} />
+                    <View style={st.divDot} />
                     <View style={st.stat}>
                       <Feather name="target" size={12} color={C.blue} />
-                      <Text style={st.statText}>{formatDistance(run.min_distance)}–{formatDistance(run.max_distance)} mi</Text>
+                      <Text style={st.statText}>
+                        {formatDistance(run.min_distance)}–{formatDistance(run.max_distance)} mi
+                      </Text>
                     </View>
-                    <View style={st.dot} />
+                    <View style={st.divDot} />
                     <View style={st.stat}>
                       <Ionicons name="people" size={12} color={C.textMuted} />
                       <Text style={st.statText}>{run.participant_count}/{run.max_participants}</Text>
@@ -316,81 +313,136 @@ export default function DiscoverScreen() {
         </ScrollView>
       )}
 
-      {/* ─── Filter sheet ─────────────────────────────────────────────────── */}
+      {/* ─── Filter Modal ─────────────────────────────────────────────────── */}
       <Modal visible={showFilter} transparent animationType="slide" onRequestClose={() => setShowFilter(false)}>
-        <Pressable style={st.modalOverlay} onPress={() => setShowFilter(false)} />
-        <View style={[st.filterSheet, { paddingBottom: insets.bottom + 34 }]}>
-          <View style={st.filterHandle} />
-          <View style={st.filterHeader}>
-            <Text style={st.filterTitle}>Filters</Text>
-            <Pressable onPress={() => setShowFilter(false)} hitSlop={12}>
-              <Feather name="x" size={22} color={C.textSecondary} />
+        <Pressable style={fm.overlay} onPress={() => setShowFilter(false)} />
+        <View style={[fm.sheet, { paddingBottom: insets.bottom + 16 }]}>
+          <View style={fm.handle} />
+          <View style={fm.header}>
+            <Text style={fm.title}>Filters</Text>
+            <Pressable onPress={() => setShowFilter(false)} hitSlop={12} style={fm.closeBtn}>
+              <Feather name="x" size={18} color={C.textSecondary} />
             </Pressable>
           </View>
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
-            <View style={st.filterSection}>
-              <Text style={st.filterSectionTitle}>Pace</Text>
-              <Text style={st.filterSectionValue}>{formatPace(draft.paceMin)} – {formatPace(draft.paceMax)} /mi</Text>
+
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }} bounces={false}>
+            {/* Pace */}
+            <View style={fm.section}>
+              <View style={fm.sectionHead}>
+                <Text style={fm.sectionTitle}>Pace</Text>
+                <Text style={fm.sectionValue}>
+                  {formatPace(draft.paceMin)} – {formatPace(draft.paceMax)} /mi
+                </Text>
+              </View>
               <RangeSlider
-                min={6} max={12} step={0.5}
+                min={6} max={12} step={PACE_STEP}
                 low={draft.paceMin} high={draft.paceMax}
                 onLowChange={(v) => setDraft((p) => ({ ...p, paceMin: v }))}
                 onHighChange={(v) => setDraft((p) => ({ ...p, paceMax: v }))}
+                color={C.primary} trackColor={C.border}
               />
-              <View style={st.sliderEdge}>
-                <Text style={st.sliderEdgeTxt}>6:00</Text>
-                <Text style={st.sliderEdgeTxt}>12:00</Text>
+              <View style={fm.edgeRow}>
+                <Text style={fm.edgeLabel}>6:00</Text>
+                <Text style={fm.edgeLabel}>12:00 /mi</Text>
               </View>
             </View>
-            <View style={st.filterSection}>
-              <View style={st.filterSectionHeader}>
-                <Text style={st.filterSectionTitle}>Distance</Text>
-                <View style={st.unitToggle}>
-                  {(["mi", "km"] as const).map((u) => (
-                    <Pressable key={u} style={[st.unitBtn, unit === u && st.unitBtnActive]} onPress={() => setUnit(u)}>
-                      <Text style={[st.unitBtnTxt, unit === u && st.unitBtnTxtActive]}>{u}</Text>
-                    </Pressable>
-                  ))}
-                </View>
+            <View style={fm.divider} />
+
+            {/* Run Length */}
+            <View style={fm.section}>
+              <View style={fm.sectionHead}>
+                <Text style={fm.sectionTitle}>Run Length</Text>
+                <Text style={fm.sectionValue}>
+                  {formatDistance(draft.distMin)} – {formatDistance(draft.distMax)} mi
+                </Text>
               </View>
-              <Text style={st.filterSectionValue}>{fmtDist(draft.distMin)} – {fmtDist(draft.distMax)}</Text>
               <RangeSlider
                 min={1} max={20} step={0.5}
                 low={draft.distMin} high={draft.distMax}
                 onLowChange={(v) => setDraft((p) => ({ ...p, distMin: v }))}
                 onHighChange={(v) => setDraft((p) => ({ ...p, distMax: v }))}
+                color={C.primary} trackColor={C.border}
               />
-              <View style={st.sliderEdge}>
-                <Text style={st.sliderEdgeTxt}>{unit === "km" ? "1.6 km" : "1 mi"}</Text>
-                <Text style={st.sliderEdgeTxt}>{unit === "km" ? "32.2 km" : "20 mi"}</Text>
+              <View style={fm.edgeRow}>
+                <Text style={fm.edgeLabel}>1 mi</Text>
+                <Text style={fm.edgeLabel}>20 mi</Text>
               </View>
             </View>
-            <View style={st.filterSection}>
-              <Text style={st.filterSectionTitle}>Style</Text>
-              <View style={{ height: 12 }} />
-              <View style={st.styleGrid}>
-                {RUN_STYLES.map((s) => {
-                  const active = draft.styles.includes(s);
+            <View style={fm.divider} />
+
+            {/* Distance From Me — not available on web */}
+            <View style={fm.section}>
+              <View style={fm.sectionHead}>
+                <Text style={fm.sectionTitle}>Distance From Me</Text>
+                <View style={fm.noLocBadge}>
+                  <Feather name="map-pin" size={10} color={C.textMuted} />
+                  <Text style={fm.noLocTxt}>Not available on web</Text>
+                </View>
+              </View>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, opacity: 0.35 }}>
+                {["Any", "1 mi", "5 mi", "10 mi", "25 mi", "50 mi"].map((l) => (
+                  <View key={l} style={fm.proxChip}>
+                    <Text style={fm.proxChipTxt}>{l}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+            <View style={fm.divider} />
+
+            {/* Host Style */}
+            <View style={fm.section}>
+              <Text style={fm.sectionTitle}>Host Style</Text>
+              <View style={fm.styleGrid}>
+                {HOST_STYLES.map((style) => {
+                  const active = draft.styles.includes(style);
                   return (
                     <Pressable
-                      key={s}
-                      style={[st.styleChip, active && st.styleChipActive]}
-                      onPress={() => toggleStyle(s)}
+                      key={style}
+                      style={[fm.stylePill, active && fm.stylePillActive]}
+                      onPress={() => toggleStyle(style)}
                     >
-                      {active && <Feather name="check" size={13} color={C.primary} style={{ marginRight: 4 }} />}
-                      <Text style={[st.styleChipTxt, active && st.styleChipTxtActive]}>{s}</Text>
+                      {active && <Feather name="check" size={11} color={C.primary} style={{ marginRight: 4 }} />}
+                      <Text style={[fm.stylePillTxt, active && fm.stylePillTxtActive]}>{style}</Text>
                     </Pressable>
                   );
                 })}
               </View>
             </View>
+            <View style={fm.divider} />
+
+            {/* Future filters */}
+            <View style={[fm.section, { opacity: 0.4 }]}>
+              <View style={fm.sectionHead}>
+                <Text style={[fm.sectionTitle, { color: C.textSecondary }]}>More Filters</Text>
+                <View style={fm.soonBadge}>
+                  <Text style={fm.soonTxt}>Coming soon</Text>
+                </View>
+              </View>
+              <Text style={fm.futureLabel}>Day of Week</Text>
+              <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
+                {["M","T","W","T","F","S","S"].map((d, i) => (
+                  <View key={i} style={[fm.proxChip, { minWidth: 34 }]}>
+                    <Text style={fm.proxChipTxt}>{d}</Text>
+                  </View>
+                ))}
+              </View>
+              <Text style={[fm.futureLabel, { marginTop: 14 }]}>Time of Day</Text>
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                {["Morning","Afternoon","Evening"].map((t) => (
+                  <View key={t} style={fm.proxChip}>
+                    <Text style={fm.proxChipTxt}>{t}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
           </ScrollView>
-          <View style={st.filterFooter}>
-            <Pressable style={st.resetBtn} onPress={resetFilters}>
-              <Text style={st.resetBtnTxt}>Reset</Text>
+
+          <View style={fm.footer}>
+            <Pressable style={fm.resetBtn} onPress={resetFilters}>
+              <Text style={fm.resetTxt}>Reset</Text>
             </Pressable>
-            <Pressable style={st.applyBtn} onPress={applyFilters}>
-              <Text style={st.applyBtnTxt}>Apply Filters</Text>
+            <Pressable style={fm.applyBtn} onPress={applyFilters}>
+              <Text style={fm.applyTxt}>Apply Filters</Text>
             </Pressable>
           </View>
         </View>
@@ -399,95 +451,133 @@ export default function DiscoverScreen() {
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const st = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
-  header: { paddingHorizontal: 20, paddingBottom: 12, gap: 12 },
-  titleRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
-  title: { fontFamily: "Outfit_700Bold", fontSize: 28, color: C.text },
-  subtitle: { fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textSecondary, marginTop: 2 },
-  headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
-  sortBtn: {
-    flexDirection: "row", alignItems: "center", gap: 5,
-    paddingHorizontal: 11, paddingVertical: 8, borderRadius: 20,
-    backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, maxWidth: 130,
+  header: { paddingHorizontal: 20, paddingBottom: 12 },
+  titleRow: {
+    flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12,
   },
-  sortBtnActive: { borderColor: C.primary, backgroundColor: C.primaryMuted },
-  sortBtnTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.textSecondary, flexShrink: 1 },
-  filterBtn: {
-    flexDirection: "row", alignItems: "center", gap: 6,
-    paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20,
+  title: { fontFamily: "Outfit_700Bold", fontSize: 26, color: C.text, letterSpacing: -0.5 },
+  headerBtns: { flexDirection: "row", alignItems: "center", gap: 6 },
+
+  hBtn: {
+    width: 38, height: 36, borderRadius: 10,
+    backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
+    alignItems: "center", justifyContent: "center",
+  },
+  hBtnRow: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    height: 36, paddingHorizontal: 11, borderRadius: 10,
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
   },
-  filterBtnActive: { borderColor: C.primary, backgroundColor: C.primaryMuted },
-  filterBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.text },
-  filterDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: C.primary, marginLeft: -2 },
-  createBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: C.primary, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 9 },
-  createBtnText: { fontFamily: "Outfit_700Bold", fontSize: 13, color: C.bg },
-  searchWrap: { flexDirection: "row", alignItems: "center", backgroundColor: C.surface, borderRadius: 12, borderWidth: 1, borderColor: C.border, paddingHorizontal: 14, height: 46, gap: 10 },
-  searchInput: { flex: 1, fontFamily: "Outfit_400Regular", fontSize: 15, color: C.text },
-  tagsContent: { gap: 8, paddingVertical: 2 },
-  tagChip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
-  tagChipActive: { backgroundColor: C.primaryMuted, borderColor: C.primary },
-  tagChipTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary },
-  tagChipTxtActive: { color: C.primary },
+  hBtnActive: { borderColor: C.primary + "55", backgroundColor: C.primaryMuted + "AA" },
+  hBtnTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary },
+  dot: {
+    width: 6, height: 6, borderRadius: 3, backgroundColor: C.primary,
+    position: "absolute", top: 5, right: 5,
+  },
+
+  searchWrap: {
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: C.surface, borderRadius: 11, borderWidth: 1, borderColor: C.border,
+    paddingHorizontal: 13, height: 44, gap: 10,
+  },
+  searchInput: { flex: 1, fontFamily: "Outfit_400Regular", fontSize: 14, color: C.text },
 
   sortOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 10 },
   sortMenu: {
-    position: "absolute", right: 20, top: 140, zIndex: 11,
-    backgroundColor: C.surface, borderRadius: 14, borderWidth: 1, borderColor: C.border,
-    minWidth: 180, shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.5, shadowRadius: 20, elevation: 16, overflow: "hidden",
+    position: "absolute", right: 20, zIndex: 11,
+    backgroundColor: C.surface, borderRadius: 12, borderWidth: 1, borderColor: C.border,
+    minWidth: 200, overflow: "hidden",
+    shadowColor: "#000", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.45, shadowRadius: 16, elevation: 14,
   },
-  sortItem: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: C.border },
-  sortItemActive: { backgroundColor: C.primaryMuted },
-  sortItemTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.textSecondary, flex: 1 },
+  sortItem: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 16, paddingVertical: 14,
+    borderBottomWidth: 1, borderBottomColor: C.border,
+  },
+  sortItemActive: { backgroundColor: C.card },
+  sortItemTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.textSecondary },
+  sortItemTxtActive: { color: C.text },
 
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  list: { paddingHorizontal: 20, paddingTop: 4, gap: 12 },
-  card: { backgroundColor: C.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: C.border, gap: 10 },
-  cardTop: { gap: 2 },
+  list: { paddingHorizontal: 16, paddingTop: 10, gap: 10 },
+
+  card: {
+    backgroundColor: C.surface, borderRadius: 14, padding: 15,
+    borderWidth: 1, borderColor: C.border, gap: 9,
+  },
+  cardTop: { gap: 3 },
   cardTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  cardTitle: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.text, flex: 1 },
-  urgentBadge: { backgroundColor: C.orange + "22", borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, borderWidth: 1, borderColor: C.orange + "44" },
+  cardTitle: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.text, flex: 1 },
+  urgentBadge: {
+    backgroundColor: C.orange + "20", borderRadius: 5, paddingHorizontal: 7, paddingVertical: 2,
+    borderWidth: 1, borderColor: C.orange + "40",
+  },
   urgentText: { fontFamily: "Outfit_600SemiBold", fontSize: 10, color: C.orange },
-  hostName: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary },
-  cardMeta: { gap: 4 },
+  hostName: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary },
+  cardMeta: { gap: 3 },
   metaItem: { flexDirection: "row", alignItems: "center", gap: 6 },
   metaText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary },
-  cardStats: { flexDirection: "row", alignItems: "center", gap: 8 },
+  cardStats: { flexDirection: "row", alignItems: "center", gap: 10 },
   stat: { flexDirection: "row", alignItems: "center", gap: 4 },
   statText: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.textSecondary },
-  dot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: C.border },
-  tagRow: { flexDirection: "row", gap: 6, flexWrap: "wrap" },
-  tag: { backgroundColor: C.primaryMuted, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: C.primary + "33" },
-  tagText: { fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.primary },
-  empty: { alignItems: "center", gap: 12, paddingTop: 80 },
-  emptyTitle: { fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text },
-  emptyText: { fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textSecondary, textAlign: "center" },
+  divDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: C.border },
+  tagRow: { flexDirection: "row", gap: 5, flexWrap: "wrap" },
+  tag: {
+    backgroundColor: C.card, borderRadius: 5, paddingHorizontal: 7, paddingVertical: 2,
+    borderWidth: 1, borderColor: C.borderLight,
+  },
+  tagText: { fontFamily: "Outfit_600SemiBold", fontSize: 10, color: C.textSecondary },
+  empty: { alignItems: "center", gap: 10, paddingTop: 80 },
+  emptyTitle: { fontFamily: "Outfit_700Bold", fontSize: 17, color: C.text },
+  emptyText: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary, textAlign: "center" },
+});
 
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)" },
-  filterSheet: { backgroundColor: C.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 12, paddingHorizontal: 24, borderTopWidth: 1, borderColor: C.border, maxHeight: "85%" },
-  filterHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: C.border, alignSelf: "center", marginBottom: 16 },
-  filterHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 20 },
-  filterTitle: { fontFamily: "Outfit_700Bold", fontSize: 22, color: C.text },
-  filterSection: { marginBottom: 28 },
-  filterSectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
-  filterSectionTitle: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.text },
-  filterSectionValue: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.primary, marginBottom: 14 },
-  sliderEdge: { flexDirection: "row", justifyContent: "space-between", marginTop: 10, paddingHorizontal: 2 },
-  sliderEdgeTxt: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted },
-  unitToggle: { flexDirection: "row", borderRadius: 10, overflow: "hidden", borderWidth: 1, borderColor: C.border },
-  unitBtn: { paddingHorizontal: 12, paddingVertical: 5, backgroundColor: C.card },
-  unitBtnActive: { backgroundColor: C.primaryMuted },
-  unitBtnTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.textSecondary },
-  unitBtnTxtActive: { color: C.primary },
-  styleGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  styleChip: { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20, backgroundColor: C.card, borderWidth: 1, borderColor: C.border },
-  styleChipActive: { backgroundColor: C.primaryMuted, borderColor: C.primary },
-  styleChipTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary },
-  styleChipTxtActive: { color: C.primary },
-  filterFooter: { flexDirection: "row", gap: 12, paddingTop: 16, borderTopWidth: 1, borderTopColor: C.border, marginTop: 8 },
-  resetBtn: { flex: 1, height: 52, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: C.card, borderWidth: 1, borderColor: C.border },
-  resetBtnTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.textSecondary },
-  applyBtn: { flex: 2, height: 52, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: C.primary },
-  applyBtnTxt: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.bg },
+const fm = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)" },
+  sheet: {
+    backgroundColor: C.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    borderTopWidth: 1, borderColor: C.borderLight, maxHeight: "90%",
+  },
+  handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: C.border, alignSelf: "center", marginTop: 12, marginBottom: 4 },
+  header: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 24, paddingVertical: 14,
+    borderBottomWidth: 1, borderBottomColor: C.border,
+  },
+  title: { fontFamily: "Outfit_700Bold", fontSize: 20, color: C.text },
+  closeBtn: { width: 32, height: 32, borderRadius: 8, backgroundColor: C.card, alignItems: "center", justifyContent: "center" },
+
+  section: { paddingHorizontal: 24, paddingVertical: 20 },
+  sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
+  sectionTitle: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.text },
+  sectionValue: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.primary },
+  edgeRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 10, paddingHorizontal: 2 },
+  edgeLabel: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted },
+  divider: { height: 1, backgroundColor: C.border },
+
+  noLocBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: C.card, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  noLocTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 10, color: C.textMuted },
+
+  proxChip: { paddingHorizontal: 13, paddingVertical: 8, borderRadius: 8, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, alignItems: "center", justifyContent: "center" },
+  proxChipTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary },
+
+  styleGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
+  stylePill: { flexDirection: "row", alignItems: "center", paddingHorizontal: 13, paddingVertical: 8, borderRadius: 8, backgroundColor: C.card, borderWidth: 1, borderColor: C.border },
+  stylePillActive: { backgroundColor: C.primaryMuted, borderColor: C.primary },
+  stylePillTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary },
+  stylePillTxtActive: { color: C.primary },
+
+  futureLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.textMuted, marginBottom: 8 },
+  soonBadge: { backgroundColor: C.card, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: C.borderLight },
+  soonTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 10, color: C.textMuted },
+
+  footer: { flexDirection: "row", gap: 10, paddingHorizontal: 24, paddingTop: 14, borderTopWidth: 1, borderTopColor: C.border },
+  resetBtn: { flex: 1, height: 50, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: C.card, borderWidth: 1, borderColor: C.border },
+  resetTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.textSecondary },
+  applyBtn: { flex: 2, height: 50, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: C.primary },
+  applyTxt: { fontFamily: "Outfit_700Bold", fontSize: 14, color: C.bg },
 });
