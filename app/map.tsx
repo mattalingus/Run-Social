@@ -123,8 +123,10 @@ function RunMarker({ run, isSelected, onPress }: { run: Run; isSelected: boolean
   const scale = useRef(new Animated.Value(1)).current;
   const [loaded, setLoaded] = useState(false);
   const soon = isWithin24h(run.date);
-  const hasEmoji = !!run.host_marker_icon;
-  const photoSrc = run.host_photo || avatarUrl(run.host_name);
+  const icon = run.host_marker_icon;
+  const isEmojiIcon = !!icon && !icon.startsWith("http") && !icon.startsWith("/api/objects");
+  const isUrlIcon = !!icon && (icon.startsWith("http") || icon.startsWith("/api/objects"));
+  const photoSrc = isUrlIcon ? icon : (run.host_photo || avatarUrl(run.host_name));
 
   function handlePress() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -140,13 +142,13 @@ function RunMarker({ run, isSelected, onPress }: { run: Run; isSelected: boolean
       coordinate={{ latitude: run.location_lat, longitude: run.location_lng }}
       onPress={handlePress}
       anchor={{ x: 0.5, y: 0.5 }}
-      tracksViewChanges={hasEmoji ? false : !loaded}
+      tracksViewChanges={isEmojiIcon ? false : !loaded}
     >
       <Animated.View style={[mk.wrap, { transform: [{ scale }] }]}>
         {soon && <View style={mk.glow} />}
         <View style={[mk.circle, isSelected && mk.circleSelected]}>
-          {hasEmoji ? (
-            <Text style={mk.emoji}>{run.host_marker_icon}</Text>
+          {isEmojiIcon ? (
+            <Text style={mk.emoji}>{icon}</Text>
           ) : (
             <Image
               source={{ uri: photoSrc }}

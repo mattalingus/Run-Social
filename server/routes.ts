@@ -3,8 +3,12 @@ import { createServer, type Server } from "node:http";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { Pool } from "pg";
+import multer from "multer";
 import * as storage from "./storage";
 import { generateDummyRuns, clearAndReseedRuns, getRunCount } from "./seed";
+import { uploadPhotoBuffer, streamObject } from "./objectStorage";
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 
 declare module "express-session" {
   interface SessionData {
@@ -311,6 +315,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(safeUser);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
+    }
+  });
+
+  // ─── Photo upload ────────────────────────────────────────────────────────────
+
+  app.post("/api/upload/photo", requireAuth, upload.single("photo"), async (req: any, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ message: "No photo provided" });
+      const ext = (req.file.originalname.split(".").pop() || "jpg").toLowerCase();
+      const filename = `${req.session.userId}-${Date.now()}.${ext}`;
+      const url = await uploadPhotoBuffer(req.file.buffer, filename, req.file.mimetype);
+      res.json({ url });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  // ─── Serve object storage files ───────────────────────────────────────────────
+
+  app.get(/^\/api\/objects\/(.+)$/, async (req: any, res) => {
+    try {
+      const objectPath = req.params[0];
+      const { stream, contentType } = await streamObject(objectPath);
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Cache-Control", "public, max-age=31536000");
+      stream.pipe(res);
+      stream.on("error", () => res.status(404).json({ message: "Not found" }));
+    } catch (e: any) {
+      res.status(404).json({ message: "Not found" });
     }
   });
 

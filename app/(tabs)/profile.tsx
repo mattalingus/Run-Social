@@ -10,6 +10,7 @@ import {
   Alert,
   Modal,
   TextInput,
+  Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons } from "@expo/vector-icons";
@@ -21,6 +22,9 @@ import { apiRequest } from "@/lib/query-client";
 import C from "@/constants/colors";
 import { MARKER_ICONS } from "@/constants/markerIcons";
 import { formatDistance } from "@/lib/formatDistance";
+import { pickAndUploadImage } from "@/lib/uploadImage";
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const MILESTONE_LABELS: Record<number, string> = {
   25: "First 25",
@@ -37,6 +41,11 @@ const MILESTONE_ICONS: Record<number, string> = {
   500: "shield",
   1000: "activity",
 };
+
+function isPhotoUrl(v: string | null | undefined): boolean {
+  if (!v) return false;
+  return v.startsWith("http") || v.startsWith("/api/objects");
+}
 
 function ProgressBar({ value, total, color = C.primary }: { value: number; total: number; color?: string }) {
   const pct = Math.min(1, total > 0 ? value / total : 0);
@@ -68,10 +77,13 @@ function formatDate(s: string) {
   return new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+// ─── Main Screen ──────────────────────────────────────────────────────────────
+
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { user, logout, refreshUser } = useAuth();
   const qc = useQueryClient();
+
   const [showGoals, setShowGoals] = useState(false);
   const [showPace, setShowPace] = useState(false);
   const [monthlyGoal, setMonthlyGoal] = useState(user?.monthly_goal?.toString() || "50");
@@ -81,6 +93,41 @@ export default function ProfileScreen() {
   const [devTaps, setDevTaps] = useState(0);
   const [showDevMode, setShowDevMode] = useState(false);
   const [showIconPicker, setShowIconPicker] = useState(false);
+  const [uploadingProfile, setUploadingProfile] = useState(false);
+  const [uploadingPin, setUploadingPin] = useState(false);
+
+  // ─── Handlers ──────────────────────────────────────────────────────────────
+
+  async function handleChangeProfilePhoto() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      setUploadingProfile(true);
+      const url = await pickAndUploadImage("profile");
+      if (!url) return;
+      await apiRequest("PUT", "/api/users/me", { photoUrl: url });
+      await refreshUser();
+    } catch (e: any) {
+      Alert.alert("Upload Failed", e.message || "Could not upload photo");
+    } finally {
+      setUploadingProfile(false);
+    }
+  }
+
+  async function handleChangePinPhoto() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      setUploadingPin(true);
+      const url = await pickAndUploadImage("pin");
+      if (!url) return;
+      await apiRequest("PATCH", "/api/users/me/marker-icon", { icon: url });
+      await refreshUser();
+      setShowIconPicker(false);
+    } catch (e: any) {
+      Alert.alert("Upload Failed", e.message || "Could not upload photo");
+    } finally {
+      setUploadingPin(false);
+    }
+  }
 
   function handleVersionTap() {
     const next = devTaps + 1;
@@ -91,6 +138,8 @@ export default function ProfileScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
   }
+
+  // ─── Mutations ─────────────────────────────────────────────────────────────
 
   const seedMutation = useMutation({
     mutationFn: async () => {
@@ -110,6 +159,8 @@ export default function ProfileScreen() {
     onSuccess: () => { refreshUser(); setShowIconPicker(false); },
     onError: (e: any) => Alert.alert("Error", e.message),
   });
+
+  // ─── Queries ───────────────────────────────────────────────────────────────
 
   const { data: achievements = [] } = useQuery<any[]>({
     queryKey: ["/api/users/me/achievements"],
@@ -152,6 +203,9 @@ export default function ProfileScreen() {
   if (!user) return <View style={styles.container}><ActivityIndicator color={C.primary} /></View>;
 
   const nextMilestone = milestones.find((m) => !earnedIds.has(m));
+  const hasPinPhoto = isPhotoUrl(user.marker_icon);
+
+  // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
     <ScrollView
@@ -165,17 +219,34 @@ export default function ProfileScreen() {
       ]}
       showsVerticalScrollIndicator={false}
     >
+      {/* ── Profile Header ────────────────────────────────────────────────── */}
       <View style={styles.profileHeader}>
-        <View style={styles.avatarWrap}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{user.name.charAt(0).toUpperCase()}</Text>
+        <Pressable
+          style={styles.avatarWrap}
+          onPress={handleChangeProfilePhoto}
+          disabled={uploadingProfile}
+          testID="change-photo-btn"
+        >
+          {user.photo_url ? (
+            <Image source={{ uri: user.photo_url }} style={styles.avatarPhoto} />
+          ) : (
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{user.name.charAt(0).toUpperCase()}</Text>
+            </View>
+          )}
+          <View style={styles.cameraBadge}>
+            {uploadingProfile
+              ? <ActivityIndicator size="small" color={C.bg} />
+              : <Feather name="camera" size={11} color={C.bg} />
+            }
           </View>
           {user.host_unlocked && (
             <View style={styles.hostBadge}>
               <Feather name="star" size={10} color={C.bg} />
             </View>
           )}
-        </View>
+        </Pressable>
+
         <View style={styles.profileInfo}>
           <Text style={styles.profileName}>{user.name}</Text>
           <Text style={styles.profileEmail}>{user.email}</Text>
@@ -186,11 +257,20 @@ export default function ProfileScreen() {
             </Text>
           </View>
         </View>
-        <Pressable onPress={async () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); await logout(); router.replace("/(auth)/login"); }} style={styles.logoutBtn}>
+
+        <Pressable
+          onPress={async () => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            await logout();
+            router.replace("/(auth)/login");
+          }}
+          style={styles.logoutBtn}
+        >
           <Feather name="log-out" size={18} color={C.textMuted} />
         </Pressable>
       </View>
 
+      {/* ── Stats Grid ────────────────────────────────────────────────────── */}
       <View style={styles.statsGrid}>
         <View style={styles.statCard}>
           <Text style={styles.statNum}>{formatDistance(user.total_miles)}</Text>
@@ -212,6 +292,7 @@ export default function ProfileScreen() {
         )}
       </View>
 
+      {/* ── My Stats ──────────────────────────────────────────────────────── */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>My Stats</Text>
@@ -224,7 +305,9 @@ export default function ProfileScreen() {
           <View style={styles.statsItem}>
             <Ionicons name="walk" size={16} color={C.orange} />
             <View>
-              <Text style={styles.statsVal}>{Math.floor(user.avg_pace)}:{Math.round((user.avg_pace % 1) * 60).toString().padStart(2, "0")}/mi</Text>
+              <Text style={styles.statsVal}>
+                {Math.floor(user.avg_pace)}:{Math.round((user.avg_pace % 1) * 60).toString().padStart(2, "0")}/mi
+              </Text>
               <Text style={styles.statsLabel}>Avg Pace</Text>
             </View>
           </View>
@@ -238,21 +321,21 @@ export default function ProfileScreen() {
         </View>
       </View>
 
+      {/* ── Map Marker (hosts only) ────────────────────────────────────────── */}
       {user.host_unlocked && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Map Marker</Text>
+            <Text style={styles.sectionTitle}>Map Pin</Text>
             <Pressable onPress={() => setShowIconPicker(true)} style={styles.editBtn}>
               <Feather name="edit-2" size={14} color={C.primary} />
               <Text style={styles.editBtnText}>Change</Text>
             </Pressable>
           </View>
-          <Pressable
-            style={iconStyles.markerPreview}
-            onPress={() => setShowIconPicker(true)}
-          >
+          <Pressable style={iconStyles.markerPreview} onPress={() => setShowIconPicker(true)}>
             <View style={iconStyles.markerCircle}>
-              {user.marker_icon ? (
+              {hasPinPhoto ? (
+                <Image source={{ uri: user.marker_icon! }} style={iconStyles.markerPhoto} />
+              ) : user.marker_icon ? (
                 <Text style={iconStyles.markerEmoji}>{user.marker_icon}</Text>
               ) : (
                 <Text style={iconStyles.markerInitial}>{user.name.charAt(0).toUpperCase()}</Text>
@@ -260,10 +343,14 @@ export default function ProfileScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={iconStyles.markerLabel}>
-                {user.marker_icon ? "Custom icon" : "Profile initial"}
+                {hasPinPhoto ? "Custom photo" : user.marker_icon ? "Custom icon" : "Profile initial"}
               </Text>
               <Text style={iconStyles.markerSub}>
-                {user.marker_icon ? "Your runs show this icon on the map" : "Tap to choose a custom map icon"}
+                {hasPinPhoto
+                  ? "Your runs show this photo on the map"
+                  : user.marker_icon
+                  ? "Your runs show this icon on the map"
+                  : "Tap to choose a custom map pin"}
               </Text>
             </View>
             <Feather name="chevron-right" size={18} color={C.textMuted} />
@@ -271,6 +358,7 @@ export default function ProfileScreen() {
         </View>
       )}
 
+      {/* ── Mileage Goals ─────────────────────────────────────────────────── */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Mileage Goals</Text>
@@ -301,6 +389,7 @@ export default function ProfileScreen() {
         </View>
       </View>
 
+      {/* ── Host Unlock Progress ───────────────────────────────────────────── */}
       {!user.host_unlocked && unlockProgress && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Host Unlock Progress</Text>
@@ -322,6 +411,7 @@ export default function ProfileScreen() {
         </View>
       )}
 
+      {/* ── Achievements ──────────────────────────────────────────────────── */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Achievements</Text>
         <View style={styles.badgesGrid}>
@@ -349,6 +439,7 @@ export default function ProfileScreen() {
         )}
       </View>
 
+      {/* ── Run History ───────────────────────────────────────────────────── */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Run History</Text>
         {runsLoading ? (
@@ -384,6 +475,7 @@ export default function ProfileScreen() {
         )}
       </View>
 
+      {/* ── Dev Mode ──────────────────────────────────────────────────────── */}
       <Pressable onPress={handleVersionTap} style={devStyles.versionWrap}>
         <Text style={devStyles.versionText}>PaceUp v1.0</Text>
       </Pressable>
@@ -409,6 +501,8 @@ export default function ProfileScreen() {
           </Pressable>
         </View>
       )}
+
+      {/* ── Modals ────────────────────────────────────────────────────────── */}
 
       <Modal visible={showGoals} transparent animationType="slide" onRequestClose={() => setShowGoals(false)}>
         <Pressable style={styles.modalOverlay} onPress={() => setShowGoals(false)} />
@@ -478,13 +572,43 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
+      {/* ── Map Pin Picker Modal ───────────────────────────────────────────── */}
       <Modal visible={showIconPicker} transparent animationType="slide" onRequestClose={() => setShowIconPicker(false)}>
         <Pressable style={styles.modalOverlay} onPress={() => setShowIconPicker(false)} />
         <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 24 }]}>
-          <Text style={styles.modalTitle}>Choose Map Marker</Text>
+          <Text style={styles.modalTitle}>Customize Map Pin</Text>
           <Text style={[styles.modalLabel, { marginBottom: 16 }]}>
-            This icon appears on the map when you host a run
+            This appears on the map when you host a run
           </Text>
+
+          {/* Upload photo option */}
+          <Pressable
+            style={[iconStyles.uploadPhotoBtn, uploadingPin && { opacity: 0.6 }]}
+            onPress={handleChangePinPhoto}
+            disabled={uploadingPin}
+          >
+            {uploadingPin ? (
+              <ActivityIndicator color={C.primary} size="small" />
+            ) : hasPinPhoto ? (
+              <Image source={{ uri: user.marker_icon! }} style={iconStyles.uploadPhotoBtnThumb} />
+            ) : (
+              <Feather name="upload" size={18} color={C.primary} />
+            )}
+            <View style={{ flex: 1 }}>
+              <Text style={iconStyles.uploadPhotoLabel}>
+                {hasPinPhoto ? "Change photo" : "Upload a photo"}
+              </Text>
+              <Text style={iconStyles.uploadPhotoSub}>Use a custom image as your pin</Text>
+            </View>
+            <Feather name="chevron-right" size={16} color={C.textMuted} />
+          </Pressable>
+
+          <View style={iconStyles.divider}>
+            <View style={iconStyles.divLine} />
+            <Text style={iconStyles.divText}>or choose an icon</Text>
+            <View style={iconStyles.divLine} />
+          </View>
+
           <View style={iconStyles.iconGrid}>
             <Pressable
               style={[iconStyles.iconCell, !user?.marker_icon && iconStyles.iconCellActive]}
@@ -496,7 +620,10 @@ export default function ProfileScreen() {
             {MARKER_ICONS.map((item) => (
               <Pressable
                 key={item.emoji}
-                style={[iconStyles.iconCell, user?.marker_icon === item.emoji && iconStyles.iconCellActive]}
+                style={[
+                  iconStyles.iconCell,
+                  user?.marker_icon === item.emoji && iconStyles.iconCellActive,
+                ]}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   iconMutation.mutate(item.emoji);
@@ -516,226 +643,209 @@ export default function ProfileScreen() {
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   content: { paddingHorizontal: 20, gap: 24 },
   profileHeader: { flexDirection: "row", alignItems: "center", gap: 14 },
+
   avatarWrap: { position: "relative" },
   avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: C.primaryMuted,
-    borderWidth: 2,
-    borderColor: C.primary,
-    alignItems: "center",
-    justifyContent: "center",
+    width: 64, height: 64, borderRadius: 32,
+    backgroundColor: C.primaryMuted, borderWidth: 2, borderColor: C.primary,
+    alignItems: "center", justifyContent: "center",
   },
-  avatarText: { fontFamily: "Outfit_700Bold", fontSize: 26, color: C.primary },
+  avatarPhoto: {
+    width: 64, height: 64, borderRadius: 32,
+    borderWidth: 2, borderColor: C.primary,
+  },
+  cameraBadge: {
+    position: "absolute",
+    bottom: 0, right: 0,
+    width: 22, height: 22, borderRadius: 11,
+    backgroundColor: C.primaryDark,
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 2, borderColor: C.bg,
+  },
   hostBadge: {
     position: "absolute",
-    bottom: 0,
-    right: 0,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    bottom: 0, left: 0,
+    width: 20, height: 20, borderRadius: 10,
     backgroundColor: C.gold,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: C.bg,
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 2, borderColor: C.bg,
   },
+  avatarText: { fontFamily: "Outfit_700Bold", fontSize: 26, color: C.primary },
+
   profileInfo: { flex: 1, gap: 2 },
   profileName: { fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text },
   profileEmail: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary },
   roleChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginTop: 4,
-    alignSelf: "flex-start",
-    backgroundColor: C.card,
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderWidth: 1,
-    borderColor: C.border,
+    flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4,
+    alignSelf: "flex-start", backgroundColor: C.card, borderRadius: 6,
+    paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: C.border,
   },
   roleText: { fontFamily: "Outfit_600SemiBold", fontSize: 11 },
   logoutBtn: { padding: 8 },
+
   statsGrid: { flexDirection: "row", gap: 10, flexWrap: "wrap" },
   statCard: {
-    flex: 1,
-    minWidth: "40%",
-    backgroundColor: C.card,
-    borderRadius: 14,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: C.border,
-    alignItems: "center",
-    gap: 4,
+    flex: 1, minWidth: "40%", backgroundColor: C.card, borderRadius: 14, padding: 16,
+    borderWidth: 1, borderColor: C.border, alignItems: "center", gap: 4,
   },
   statNum: { fontFamily: "Outfit_700Bold", fontSize: 24, color: C.primary },
   statName: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary },
+
   section: { gap: 12 },
   sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   sectionTitle: { fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text },
   editBtn: { flexDirection: "row", alignItems: "center", gap: 4 },
   editBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.primary },
-  statsRow: { flexDirection: "row", gap: 12 },
-  statsItem: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    backgroundColor: C.card,
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: C.border,
+
+  statsRow: {
+    flexDirection: "row", gap: 16, backgroundColor: C.card,
+    borderRadius: 14, padding: 16, borderWidth: 1, borderColor: C.border,
   },
-  statsVal: { fontFamily: "Outfit_700Bold", fontSize: 14, color: C.text },
+  statsItem: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
+  statsVal: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.text },
   statsLabel: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textSecondary },
-  goalCard: { backgroundColor: C.card, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: C.border, gap: 8 },
-  goalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  goalLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text },
-  goalValues: { fontFamily: "Outfit_700Bold", fontSize: 14, color: C.primary },
-  goalRemain: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary },
-  unlockCard: { backgroundColor: C.card, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: C.border, gap: 8 },
-  unlockRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  unlockText: { flex: 1, fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary },
-  unlockCount: { fontFamily: "Outfit_700Bold", fontSize: 14, color: C.primary },
-  unlockHint: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, fontStyle: "italic", marginTop: 4 },
-  badgesGrid: { flexDirection: "row", gap: 10, flexWrap: "wrap" },
-  badge: {
-    width: "28%",
-    flex: 1,
-    minWidth: 90,
-    borderRadius: 14,
-    padding: 14,
-    alignItems: "center",
-    gap: 6,
-    borderWidth: 1,
+
+  goalCard: {
+    backgroundColor: C.card, borderRadius: 14, padding: 16,
+    borderWidth: 1, borderColor: C.border, gap: 10,
   },
-  badgeEarned: { backgroundColor: C.primaryMuted, borderColor: C.primary + "44" },
-  badgeLocked: { backgroundColor: C.surface, borderColor: C.border },
+  goalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  goalLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text },
+  goalValues: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary },
+  goalRemain: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted },
+
+  unlockCard: {
+    backgroundColor: C.card, borderRadius: 14, padding: 16,
+    borderWidth: 1, borderColor: C.border, gap: 8,
+  },
+  unlockRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  unlockText: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary, flex: 1 },
+  unlockCount: { fontFamily: "Outfit_700Bold", fontSize: 13, color: C.primary },
+  unlockHint: {
+    fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted,
+    marginTop: 4, lineHeight: 18,
+  },
+
+  badgesGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  badge: {
+    width: "30%", flexGrow: 1, borderRadius: 14, padding: 14, alignItems: "center",
+    gap: 6, borderWidth: 1,
+  },
+  badgeEarned: { backgroundColor: C.primaryMuted, borderColor: C.primary + "55" },
+  badgeLocked: { backgroundColor: C.card, borderColor: C.border },
   badgeLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 11, textAlign: "center" },
   badgeMiles: { fontFamily: "Outfit_700Bold", fontSize: 14 },
-  nextMilestoneCard: { backgroundColor: C.card, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: C.border, gap: 8 },
-  nextLabel: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary },
+
+  nextMilestoneCard: {
+    backgroundColor: C.card, borderRadius: 14, padding: 16,
+    borderWidth: 1, borderColor: C.border, gap: 10,
+  },
+  nextLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.textSecondary },
   nextRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  nextName: { fontFamily: "Outfit_700Bold", fontSize: 14, color: C.text },
+  nextName: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text, flex: 1 },
   nextRemain: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted },
+
   historyCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: C.card,
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: C.border,
+    flexDirection: "row", alignItems: "center", backgroundColor: C.card,
+    borderRadius: 12, padding: 12, borderWidth: 1, borderColor: C.border,
+    marginBottom: 8, gap: 12,
   },
   historyLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
   historyType: { width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center" },
-  historyTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text, maxWidth: 200 },
-  historyMeta: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary },
-  historyStatus: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
+  historyTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text },
+  historyMeta: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textSecondary },
+  historyStatus: {
+    borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4,
+  },
   historyStatusText: { fontFamily: "Outfit_600SemiBold", fontSize: 11 },
+
   emptyHistory: { alignItems: "center", gap: 8, paddingVertical: 24 },
-  emptyHistoryText: { fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textSecondary, textAlign: "center" },
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)" },
+  emptyHistoryText: { fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textSecondary },
+
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)" },
   modalSheet: {
-    backgroundColor: C.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    gap: 16,
-    borderWidth: 1,
-    borderColor: C.border,
+    backgroundColor: C.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    borderTopWidth: 1, borderTopColor: C.borderLight, padding: 24, gap: 16,
   },
   modalTitle: { fontFamily: "Outfit_700Bold", fontSize: 20, color: C.text },
   modalField: { gap: 6 },
   modalLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary },
   modalInput: {
-    backgroundColor: C.card,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: C.border,
-    padding: 14,
-    fontFamily: "Outfit_400Regular",
-    fontSize: 15,
-    color: C.text,
+    backgroundColor: C.card, borderRadius: 12, borderWidth: 1, borderColor: C.border,
+    paddingHorizontal: 14, paddingVertical: 12,
+    fontFamily: "Outfit_400Regular", fontSize: 15, color: C.text,
   },
-  modalBtn: { backgroundColor: C.primary, borderRadius: 14, height: 52, alignItems: "center", justifyContent: "center" },
-  modalBtnText: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.bg },
-});
-
-const devStyles = StyleSheet.create({
-  versionWrap: { alignItems: "center", paddingVertical: 16 },
-  versionText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted },
-  devPanel: {
-    backgroundColor: C.card,
-    borderRadius: 16,
-    padding: 20,
-    gap: 12,
-    borderWidth: 1,
-    borderColor: C.border,
+  modalBtn: {
+    backgroundColor: C.primary, borderRadius: 14, paddingVertical: 15,
+    alignItems: "center", justifyContent: "center",
   },
-  devTitle: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.text },
-  devBtn: {
-    backgroundColor: C.primaryMuted,
-    borderRadius: 12,
-    height: 48,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: C.primary + "55",
-  },
-  devBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.primary },
-  devClose: { alignItems: "center", paddingVertical: 8 },
-  devCloseText: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textMuted },
+  modalBtnText: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.bg },
 });
 
 const iconStyles = StyleSheet.create({
   markerPreview: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    backgroundColor: C.card,
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: C.border,
+    flexDirection: "row", alignItems: "center", gap: 14,
+    backgroundColor: C.card, borderRadius: 14, padding: 14,
+    borderWidth: 1, borderColor: C.border,
   },
   markerCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: C.surface,
-    borderWidth: 3,
-    borderColor: C.primary,
-    alignItems: "center",
-    justifyContent: "center",
+    width: 52, height: 52, borderRadius: 26,
+    backgroundColor: C.surface, borderWidth: 2, borderColor: C.primary,
+    alignItems: "center", justifyContent: "center", overflow: "hidden",
   },
-  markerEmoji: { fontSize: 28 },
+  markerPhoto: { width: 52, height: 52, borderRadius: 26 },
+  markerEmoji: { fontSize: 26 },
   markerInitial: { fontFamily: "Outfit_700Bold", fontSize: 22, color: C.primary },
   markerLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text },
   markerSub: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary, marginTop: 2 },
+
+  uploadPhotoBtn: {
+    flexDirection: "row", alignItems: "center", gap: 14,
+    backgroundColor: C.card, borderRadius: 14, padding: 14,
+    borderWidth: 1, borderColor: C.border, marginBottom: 4,
+  },
+  uploadPhotoBtnThumb: {
+    width: 44, height: 44, borderRadius: 22,
+    borderWidth: 2, borderColor: C.primary,
+  },
+  uploadPhotoLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text },
+  uploadPhotoSub: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary, marginTop: 2 },
+
+  divider: { flexDirection: "row", alignItems: "center", gap: 10, marginVertical: 4 },
+  divLine: { flex: 1, height: 1, backgroundColor: C.border },
+  divText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted },
+
   iconGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   iconCell: {
-    width: 70,
-    height: 70,
-    borderRadius: 14,
-    backgroundColor: C.card,
-    borderWidth: 1,
-    borderColor: C.border,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
+    width: 70, height: 70, borderRadius: 14,
+    backgroundColor: C.card, borderWidth: 1, borderColor: C.border,
+    alignItems: "center", justifyContent: "center", gap: 4,
   },
-  iconCellActive: { borderColor: C.primary, backgroundColor: C.primaryMuted },
-  iconEmoji: { fontSize: 28 },
+  iconCellActive: { backgroundColor: C.primaryMuted, borderColor: C.primary },
   iconInitial: { fontFamily: "Outfit_700Bold", fontSize: 22, color: C.primary },
-  iconLabel: { fontFamily: "Outfit_400Regular", fontSize: 10, color: C.textSecondary },
+  iconEmoji: { fontSize: 26 },
+  iconLabel: { fontFamily: "Outfit_400Regular", fontSize: 9, color: C.textSecondary },
+});
+
+const devStyles = StyleSheet.create({
+  versionWrap: { alignItems: "center", paddingVertical: 8 },
+  versionText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted },
+  devPanel: {
+    backgroundColor: C.card, borderRadius: 14, padding: 20,
+    borderWidth: 1, borderColor: C.border, gap: 12,
+  },
+  devTitle: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.text },
+  devBtn: {
+    backgroundColor: C.primaryMuted, borderRadius: 12, padding: 14,
+    alignItems: "center", borderWidth: 1, borderColor: C.primary + "55",
+  },
+  devBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.primary },
+  devClose: { alignItems: "center", paddingVertical: 8 },
+  devCloseText: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textMuted },
 });
