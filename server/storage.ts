@@ -82,6 +82,8 @@ export async function initDb() {
       created_at TIMESTAMP DEFAULT NOW()
     );
 
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS marker_icon TEXT DEFAULT NULL;
+
     CREATE TABLE IF NOT EXISTS achievements (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id VARCHAR NOT NULL REFERENCES users(id),
@@ -154,8 +156,12 @@ export async function createRun(data: {
   return result.rows[0];
 }
 
+export async function updateMarkerIcon(userId: string, icon: string | null) {
+  await pool.query(`UPDATE users SET marker_icon = $2 WHERE id = $1`, [userId, icon]);
+}
+
 export async function getPublicRuns(filters?: { minPace?: number; maxPace?: number; minDistance?: number; maxDistance?: number; tag?: string }) {
-  let query = `SELECT r.*, u.name as host_name, u.avg_rating as host_rating, u.photo_url as host_photo,
+  let query = `SELECT r.*, u.name as host_name, u.avg_rating as host_rating, u.photo_url as host_photo, u.marker_icon as host_marker_icon,
     (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled') as participant_count
     FROM runs r JOIN users u ON u.id = r.host_id
     WHERE r.privacy = 'public' AND r.date > NOW() AND r.is_completed = false`;

@@ -21,6 +21,7 @@ interface User {
   avg_rating: number;
   rating_count: number;
   notifications_enabled: boolean;
+  marker_icon?: string | null;
 }
 
 interface AuthContextValue {

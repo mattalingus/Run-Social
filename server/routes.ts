@@ -230,6 +230,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch("/api/users/me/marker-icon", requireAuth, async (req, res) => {
+    try {
+      const { icon } = req.body;
+      await storage.updateMarkerIcon(req.session.userId!, icon ?? null);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.post("/api/admin/seed-runs", async (req, res) => {
     try {
       const { count = 20 } = req.body;

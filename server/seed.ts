@@ -30,17 +30,17 @@ const TITLES = [
   "Sugarland Social Jog",
 ];
 
-const DUMMY_HOSTS = [
-  { name: "Marcus T.", pfp: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=face" },
+const DUMMY_HOSTS: { name: string; pfp: string; icon?: string }[] = [
+  { name: "Marcus T.", pfp: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=face", icon: "🔥" },
   { name: "Aisha K.", pfp: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop&crop=face" },
-  { name: "Devon R.", pfp: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&h=200&fit=crop&crop=face" },
+  { name: "Devon R.", pfp: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&h=200&fit=crop&crop=face", icon: "⚡" },
   { name: "Sofia M.", pfp: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&h=200&fit=crop&crop=face" },
-  { name: "Jamal W.", pfp: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop&crop=face" },
-  { name: "Lily C.", pfp: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&h=200&fit=crop&crop=face" },
+  { name: "Jamal W.", pfp: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop&crop=face", icon: "🏆" },
+  { name: "Lily C.", pfp: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&h=200&fit=crop&crop=face", icon: "🌿" },
   { name: "Brendan O.", pfp: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=200&h=200&fit=crop&crop=face" },
-  { name: "Priya S.", pfp: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop&crop=face" },
+  { name: "Priya S.", pfp: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop&crop=face", icon: "🎯" },
   { name: "Tyler H.", pfp: "https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=200&h=200&fit=crop&crop=face" },
-  { name: "Naomi J.", pfp: "https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=200&h=200&fit=crop&crop=face" },
+  { name: "Naomi J.", pfp: "https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=200&h=200&fit=crop&crop=face", icon: "🌟" },
 ];
 
 function randFloat(min: number, max: number) {
@@ -51,13 +51,18 @@ function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-async function getOrCreateDummyHost(host: { name: string; pfp: string }): Promise<string> {
+async function getOrCreateDummyHost(host: { name: string; pfp: string; icon?: string }): Promise<string> {
   const email = `dummy-${host.name.toLowerCase().replace(/[^a-z]/g, "")}@paceup.dev`;
   const existing = await pool.query(`SELECT id FROM users WHERE email = $1`, [email]);
-  if (existing.rows.length > 0) return existing.rows[0].id;
+  if (existing.rows.length > 0) {
+    if (host.icon) {
+      await pool.query(`UPDATE users SET marker_icon = $2 WHERE id = $1`, [existing.rows[0].id, host.icon]);
+    }
+    return existing.rows[0].id;
+  }
   const inserted = await pool.query(
-    `INSERT INTO users (email, password, name, photo_url, host_unlocked, role) VALUES ($1, $2, $3, $4, true, 'host') RETURNING id`,
-    [email, "not-a-real-password-hash", host.name, host.pfp]
+    `INSERT INTO users (email, password, name, photo_url, marker_icon, host_unlocked, role) VALUES ($1, $2, $3, $4, $5, true, 'host') RETURNING id`,
+    [email, "not-a-real-password-hash", host.name, host.pfp, host.icon ?? null]
   );
   return inserted.rows[0].id;
 }

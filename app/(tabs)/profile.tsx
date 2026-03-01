@@ -19,6 +19,7 @@ import { router } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/query-client";
 import C from "@/constants/colors";
+import { MARKER_ICONS } from "@/constants/markerIcons";
 
 const MILESTONE_LABELS: Record<number, string> = {
   25: "First 25",
@@ -78,6 +79,7 @@ export default function ProfileScreen() {
   const [avgDistance, setAvgDistance] = useState(user?.avg_distance?.toString() || "3");
   const [devTaps, setDevTaps] = useState(0);
   const [showDevMode, setShowDevMode] = useState(false);
+  const [showIconPicker, setShowIconPicker] = useState(false);
 
   function handleVersionTap() {
     const next = devTaps + 1;
@@ -97,6 +99,14 @@ export default function ProfileScreen() {
       qc.invalidateQueries({ queryKey: ["/api/runs"] });
       Alert.alert("Done", "Generated 20 fresh runs on the map.");
     },
+    onError: (e: any) => Alert.alert("Error", e.message),
+  });
+
+  const iconMutation = useMutation({
+    mutationFn: async (icon: string | null) => {
+      await apiRequest("PATCH", "/api/users/me/marker-icon", { icon });
+    },
+    onSuccess: () => { refreshUser(); setShowIconPicker(false); },
     onError: (e: any) => Alert.alert("Error", e.message),
   });
 
@@ -226,6 +236,39 @@ export default function ProfileScreen() {
           </View>
         </View>
       </View>
+
+      {user.host_unlocked && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Map Marker</Text>
+            <Pressable onPress={() => setShowIconPicker(true)} style={styles.editBtn}>
+              <Feather name="edit-2" size={14} color={C.primary} />
+              <Text style={styles.editBtnText}>Change</Text>
+            </Pressable>
+          </View>
+          <Pressable
+            style={iconStyles.markerPreview}
+            onPress={() => setShowIconPicker(true)}
+          >
+            <View style={iconStyles.markerCircle}>
+              {user.marker_icon ? (
+                <Text style={iconStyles.markerEmoji}>{user.marker_icon}</Text>
+              ) : (
+                <Text style={iconStyles.markerInitial}>{user.name.charAt(0).toUpperCase()}</Text>
+              )}
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={iconStyles.markerLabel}>
+                {user.marker_icon ? "Custom icon" : "Profile initial"}
+              </Text>
+              <Text style={iconStyles.markerSub}>
+                {user.marker_icon ? "Your runs show this icon on the map" : "Tap to choose a custom map icon"}
+              </Text>
+            </View>
+            <Feather name="chevron-right" size={18} color={C.textMuted} />
+          </Pressable>
+        </View>
+      )}
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
@@ -433,6 +476,41 @@ export default function ProfileScreen() {
           </Pressable>
         </View>
       </Modal>
+
+      <Modal visible={showIconPicker} transparent animationType="slide" onRequestClose={() => setShowIconPicker(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setShowIconPicker(false)} />
+        <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 24 }]}>
+          <Text style={styles.modalTitle}>Choose Map Marker</Text>
+          <Text style={[styles.modalLabel, { marginBottom: 16 }]}>
+            This icon appears on the map when you host a run
+          </Text>
+          <View style={iconStyles.iconGrid}>
+            <Pressable
+              style={[iconStyles.iconCell, !user?.marker_icon && iconStyles.iconCellActive]}
+              onPress={() => iconMutation.mutate(null)}
+            >
+              <Text style={iconStyles.iconInitial}>{user?.name.charAt(0).toUpperCase()}</Text>
+              <Text style={iconStyles.iconLabel}>Initial</Text>
+            </Pressable>
+            {MARKER_ICONS.map((item) => (
+              <Pressable
+                key={item.emoji}
+                style={[iconStyles.iconCell, user?.marker_icon === item.emoji && iconStyles.iconCellActive]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  iconMutation.mutate(item.emoji);
+                }}
+              >
+                <Text style={iconStyles.iconEmoji}>{item.emoji}</Text>
+                <Text style={iconStyles.iconLabel}>{item.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+          {iconMutation.isPending && (
+            <ActivityIndicator color={C.primary} style={{ marginTop: 16 }} />
+          )}
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -616,4 +694,47 @@ const devStyles = StyleSheet.create({
   devBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.primary },
   devClose: { alignItems: "center", paddingVertical: 8 },
   devCloseText: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textMuted },
+});
+
+const iconStyles = StyleSheet.create({
+  markerPreview: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    backgroundColor: C.card,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  markerCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: C.surface,
+    borderWidth: 3,
+    borderColor: C.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  markerEmoji: { fontSize: 28 },
+  markerInitial: { fontFamily: "Outfit_700Bold", fontSize: 22, color: C.primary },
+  markerLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text },
+  markerSub: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary, marginTop: 2 },
+  iconGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  iconCell: {
+    width: 70,
+    height: 70,
+    borderRadius: 14,
+    backgroundColor: C.card,
+    borderWidth: 1,
+    borderColor: C.border,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
+  iconCellActive: { borderColor: C.primary, backgroundColor: C.primaryMuted },
+  iconEmoji: { fontSize: 28 },
+  iconInitial: { fontFamily: "Outfit_700Bold", fontSize: 22, color: C.primary },
+  iconLabel: { fontFamily: "Outfit_400Regular", fontSize: 10, color: C.textSecondary },
 });
