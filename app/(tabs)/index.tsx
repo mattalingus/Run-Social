@@ -1291,13 +1291,13 @@ export default function DiscoverScreen() {
       ) : (
         <Pressable
           testID="map-fab"
-          style={[s.fab, { bottom: insets.bottom + 24 }]}
+          style={[s.fab, { bottom: insets.bottom + 42 }]}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
             goToMap();
           }}
         >
-          <Feather name="map" size={24} color={C.bg} />
+          <Feather name="map" size={28} color={C.bg} />
         </Pressable>
       )}
     </View>
@@ -1467,10 +1467,10 @@ const s = StyleSheet.create({
   },
   fab: {
     position: "absolute",
-    left: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    right: 20,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: C.primary,
     alignItems: "center",
     justifyContent: "center",

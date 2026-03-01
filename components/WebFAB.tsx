@@ -24,10 +24,10 @@ export default function WebFAB({ onPress }: Props) {
     btn.setAttribute("aria-label", "Open Map");
     btn.style.cssText = [
       "position:fixed",
-      "bottom:100px",
-      "left:20px",
-      "width:56px",
-      "height:56px",
+      "bottom:120px",
+      "right:20px",
+      "width:64px",
+      "height:64px",
       "border-radius:50%",
       "background:#00D97E",
       "border:none",
