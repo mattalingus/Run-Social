@@ -520,19 +520,23 @@ export default function ProfileScreen() {
                 <Image source={{ uri: user.marker_icon! }} style={styles.markerPhoto} />
               ) : user.marker_icon ? (
                 <Text style={styles.markerEmoji}>{user.marker_icon}</Text>
+              ) : user.photo_url ? (
+                <Image source={{ uri: user.photo_url }} style={styles.markerPhoto} />
               ) : (
                 <Text style={styles.markerInitial}>{user.name.charAt(0).toUpperCase()}</Text>
               )}
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.markerLabel}>
-                {hasPinPhoto ? "Custom photo" : user.marker_icon ? "Custom icon" : "Profile initial"}
+                {hasPinPhoto ? "Custom photo" : user.marker_icon ? "Custom icon" : user.photo_url ? "Profile photo" : "Profile initial"}
               </Text>
               <Text style={styles.markerSub}>
                 {hasPinPhoto
                   ? "Your runs show this photo on the map"
                   : user.marker_icon
                   ? "Your runs show this icon on the map"
+                  : user.photo_url
+                  ? "Your profile photo is used as your pin"
                   : "Tap to choose a custom map pin"}
               </Text>
             </View>
@@ -747,8 +751,12 @@ export default function ProfileScreen() {
               style={[styles.iconCell, !user?.marker_icon && styles.iconCellActive]}
               onPress={() => iconMutation.mutate(null)}
             >
-              <Text style={styles.iconInitial}>{user?.name.charAt(0).toUpperCase()}</Text>
-              <Text style={styles.iconLabel}>Initial</Text>
+              {user?.photo_url ? (
+                <Image source={{ uri: user.photo_url }} style={styles.iconProfileThumb} />
+              ) : (
+                <Text style={styles.iconInitial}>{user?.name.charAt(0).toUpperCase()}</Text>
+              )}
+              <Text style={styles.iconLabel}>{user?.photo_url ? "Profile" : "Initial"}</Text>
             </Pressable>
             {MARKER_ICONS.map((item) => (
               <Pressable
@@ -1108,6 +1116,7 @@ const styles = StyleSheet.create({
   iconInitial: { fontFamily: "Outfit_700Bold", fontSize: 22, color: C.primary },
   iconEmoji: { fontSize: 26 },
   iconLabel: { fontFamily: "Outfit_400Regular", fontSize: 9, color: C.textSecondary },
+  iconProfileThumb: { width: 38, height: 38, borderRadius: 19 },
   fqRow: { flexDirection: "row", gap: 10, alignItems: "stretch" },
   fqCard: {
     flex: 1, minWidth: "40%",

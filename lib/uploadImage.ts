@@ -23,19 +23,29 @@ export async function pickAndUploadImage(purpose: UploadPurpose): Promise<string
 
   const asset = result.assets[0];
   const uri = asset.uri;
-  const ext = (uri.split(".").pop() || "jpg").toLowerCase().replace("jpeg", "jpg");
-  const mimeType = ext === "png" ? "image/png" : "image/jpeg";
-  const filename = `${purpose}-${Date.now()}.${ext}`;
-
-  const formData = new FormData();
-  formData.append("photo", {
-    uri,
-    type: mimeType,
-    name: filename,
-  } as any);
 
   const baseUrl = getApiUrl();
   const uploadUrl = new URL("/api/upload/photo", baseUrl).toString();
+
+  const formData = new FormData();
+
+  if (Platform.OS === "web") {
+    const fetchRes = await fetch(uri);
+    const blob = await fetchRes.blob();
+    const mimeType = blob.type || asset.mimeType || "image/jpeg";
+    const ext = mimeType === "image/png" ? "png" : "jpg";
+    const filename = `${purpose}-${Date.now()}.${ext}`;
+    formData.append("photo", blob, filename);
+  } else {
+    const mimeType = asset.mimeType || (uri.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg");
+    const ext = mimeType === "image/png" ? "png" : "jpg";
+    const filename = `${purpose}-${Date.now()}.${ext}`;
+    formData.append("photo", {
+      uri,
+      type: mimeType,
+      name: filename,
+    } as any);
+  }
 
   const response = await fetch(uploadUrl, {
     method: "POST",
