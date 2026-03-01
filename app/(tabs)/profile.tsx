@@ -373,7 +373,7 @@ export default function ProfileScreen() {
         >
           <Text style={styles.achInlineIcon}>🏆</Text>
           <Text style={styles.goalLabel}>Achievements</Text>
-          <Text style={styles.achEarnedLabel}>{earnedCount}/{ACHIEVEMENTS.length} earned</Text>
+          <Text style={styles.statName}>{earnedCount}/{ACHIEVEMENTS.length} earned</Text>
           <View style={{ flex: 1 }} />
           <Feather name={showAchievements ? "chevron-up" : "chevron-down"} size={16} color={C.textMuted} />
         </Pressable>
@@ -396,20 +396,30 @@ export default function ProfileScreen() {
               ))}
             </ScrollView>
 
-            {/* 5-per-row grid */}
-            <View style={styles.achGrid}>
-              {filteredAchievements.map((ach) => {
-                const earned = earnedSlugs.has(ach.slug);
-                const isSelected = selectedAchievement?.slug === ach.slug;
+            {/* 5-per-row grid — chunked into explicit rows so flex works on web */}
+            <View style={{ gap: 4 }}>
+              {Array.from({ length: Math.ceil(filteredAchievements.length / 5) }, (_, rowIdx) => {
+                const row = filteredAchievements.slice(rowIdx * 5, rowIdx * 5 + 5);
                 return (
-                  <Pressable
-                    key={ach.slug}
-                    style={[styles.achGridCell, isSelected && styles.achGridCellSelected]}
-                    onPress={() => setSelectedAchievement(isSelected ? null : ach)}
-                  >
-                    <Text style={[styles.achGridIcon, !earned && styles.achItemIconLocked]}>{ach.icon}</Text>
-                    {earned && <View style={styles.achGridDot} />}
-                  </Pressable>
+                  <View key={rowIdx} style={{ flexDirection: "row" }}>
+                    {row.map((ach) => {
+                      const earned = earnedSlugs.has(ach.slug);
+                      const isSelected = selectedAchievement?.slug === ach.slug;
+                      return (
+                        <Pressable
+                          key={ach.slug}
+                          style={[styles.achGridCell, isSelected && styles.achGridCellSelected]}
+                          onPress={() => setSelectedAchievement(isSelected ? null : ach)}
+                        >
+                          <Text style={{ fontSize: 36, opacity: earned ? 1 : 0.2 }}>{ach.icon}</Text>
+                          {earned && <View style={styles.achGridDot} />}
+                        </Pressable>
+                      );
+                    })}
+                    {row.length < 5 && Array.from({ length: 5 - row.length }, (_, i) => (
+                      <View key={`pad-${i}`} style={{ flex: 1 }} />
+                    ))}
+                  </View>
                 );
               })}
             </View>
@@ -424,22 +434,22 @@ export default function ProfileScreen() {
               return (
                 <View style={styles.achDetailPanel}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    <Text style={styles.achDetailPanelIcon}>{ach.icon}</Text>
+                    <Text style={{ fontSize: 28 }}>{ach.icon}</Text>
                     <View style={{ flex: 1 }}>
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                        <Text style={styles.achItemName}>{ach.name}</Text>
+                        <Text style={styles.goalLabel}>{ach.name}</Text>
                         {earned && <Feather name="check-circle" size={13} color={C.primary} />}
                       </View>
-                      <Text style={styles.achDetailCategory}>{ach.category} · Difficulty {ach.difficulty}/6</Text>
+                      <Text style={styles.statName}>{ach.category} · Difficulty {ach.difficulty}/6</Text>
                     </View>
                   </View>
-                  <Text style={styles.achItemDesc}>{ach.desc}</Text>
+                  <Text style={styles.statName}>{ach.desc}</Text>
                   {ach.progressTarget && (
                     <View style={styles.achDetailProgress}>
                       <View style={styles.achProgressTrack}>
                         <View style={[styles.achProgressFill, { width: `${Math.round(pct * 100)}%` as any, backgroundColor: earned ? C.primary : C.primaryDark }]} />
                       </View>
-                      <Text style={styles.achProgressTxt}>
+                      <Text style={styles.statName}>
                         {ach.progressKey === "max_single_run_miles_x10"
                           ? `${(current / 10).toFixed(1)} / ${(target / 10).toFixed(1)} mi`
                           : `${Math.round(current)} / ${target} ${ach.progressLabel ?? ""}`}
@@ -1187,7 +1197,7 @@ const iconStyles = StyleSheet.create({
 
   achGrid: { flexDirection: "row", flexWrap: "wrap" },
   achGridCell: {
-    width: "20%" as any, alignItems: "center", justifyContent: "center",
+    flex: 1, alignItems: "center", justifyContent: "center",
     paddingVertical: 10, borderRadius: 10,
   },
   achGridCellSelected: { backgroundColor: C.primaryMuted },
