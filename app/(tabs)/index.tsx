@@ -54,8 +54,8 @@ interface FilterState {
 }
 
 const DEFAULT_FILTERS: FilterState = {
-  paceMin: 6.0,
-  paceMax: 12.0,
+  paceMin: 4.0,
+  paceMax: 15.0,
   distMin: 1,
   distMax: 20,
   maxDistFromMe: null,
@@ -170,7 +170,7 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
               </Text>
             </View>
             <RangeSlider
-              min={6} max={12} step={PACE_STEP}
+              min={4} max={15} step={PACE_STEP}
               low={draft.paceMin} high={draft.paceMax}
               onLowChange={(v) => setDraft((p) => ({ ...p, paceMin: v }))}
               onHighChange={(v) => setDraft((p) => ({ ...p, paceMax: v }))}
@@ -178,8 +178,8 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
               trackColor={C.border}
             />
             <View style={fm.edgeRow}>
-              <Text style={fm.edgeLabel}>6:00</Text>
-              <Text style={fm.edgeLabel}>12:00 /mi</Text>
+              <Text style={fm.edgeLabel}>4:00</Text>
+              <Text style={fm.edgeLabel}>15:00 /mi</Text>
             </View>
           </View>
 
