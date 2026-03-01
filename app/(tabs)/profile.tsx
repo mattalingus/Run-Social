@@ -403,7 +403,7 @@ export default function ProfileScreen() {
               {Array.from({ length: Math.ceil(filteredAchievements.length / 5) }, (_, rowIdx) => {
                 const row = filteredAchievements.slice(rowIdx * 5, rowIdx * 5 + 5);
                 return (
-                  <View key={rowIdx} style={{ flexDirection: "row" }}>
+                  <View key={rowIdx} style={{ flexDirection: "row", justifyContent: "space-evenly", alignSelf: "stretch" }}>
                     {row.map((ach) => {
                       const earned = earnedSlugs.has(ach.slug);
                       const isSelected = selectedAchievement?.slug === ach.slug;
@@ -419,7 +419,7 @@ export default function ProfileScreen() {
                       );
                     })}
                     {row.length < 5 && Array.from({ length: 5 - row.length }, (_, i) => (
-                      <View key={`pad-${i}`} style={{ flex: 1 }} />
+                      <View key={`pad-${i}`} style={styles.achGridCell} />
                     ))}
                   </View>
                 );
