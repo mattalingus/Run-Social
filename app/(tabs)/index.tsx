@@ -830,10 +830,10 @@ export default function DiscoverScreen() {
               />
             </Pressable>
 
-            {/* Map */}
-            <Pressable style={s.hBtnRow} onPress={goToMap} testID="map-button">
-              <Feather name="map" size={15} color={C.primary} />
-              <Text style={s.hBtnTxt}>Map</Text>
+            {/* Host */}
+            <Pressable style={s.hBtnRow} onPress={openHostModal} testID="host-button">
+              <Feather name="plus" size={15} color={C.primary} />
+              <Text style={s.hBtnTxt}>+Host</Text>
             </Pressable>
           </View>
         </View>
