@@ -526,21 +526,21 @@ export default function ProfileScreen() {
               <Text style={styles.editBtnText}>Change</Text>
             </Pressable>
           </View>
-          <Pressable style={iconStyles.markerPreview} onPress={() => setShowIconPicker(true)}>
-            <View style={iconStyles.markerCircle}>
+          <Pressable style={styles.markerPreview} onPress={() => setShowIconPicker(true)}>
+            <View style={styles.markerCircle}>
               {hasPinPhoto ? (
-                <Image source={{ uri: user.marker_icon! }} style={iconStyles.markerPhoto} />
+                <Image source={{ uri: user.marker_icon! }} style={styles.markerPhoto} />
               ) : user.marker_icon ? (
-                <Text style={iconStyles.markerEmoji}>{user.marker_icon}</Text>
+                <Text style={styles.markerEmoji}>{user.marker_icon}</Text>
               ) : (
-                <Text style={iconStyles.markerInitial}>{user.name.charAt(0).toUpperCase()}</Text>
+                <Text style={styles.markerInitial}>{user.name.charAt(0).toUpperCase()}</Text>
               )}
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={iconStyles.markerLabel}>
+              <Text style={styles.markerLabel}>
                 {hasPinPhoto ? "Custom photo" : user.marker_icon ? "Custom icon" : "Profile initial"}
               </Text>
-              <Text style={iconStyles.markerSub}>
+              <Text style={styles.markerSub}>
                 {hasPinPhoto
                   ? "Your runs show this photo on the map"
                   : user.marker_icon
@@ -750,54 +750,54 @@ export default function ProfileScreen() {
 
           {/* Upload photo option */}
           <Pressable
-            style={[iconStyles.uploadPhotoBtn, uploadingPin && { opacity: 0.6 }]}
+            style={[styles.uploadPhotoBtn, uploadingPin && { opacity: 0.6 }]}
             onPress={handleChangePinPhoto}
             disabled={uploadingPin}
           >
             {uploadingPin ? (
               <ActivityIndicator color={C.primary} size="small" />
             ) : hasPinPhoto ? (
-              <Image source={{ uri: user.marker_icon! }} style={iconStyles.uploadPhotoBtnThumb} />
+              <Image source={{ uri: user.marker_icon! }} style={styles.uploadPhotoBtnThumb} />
             ) : (
               <Feather name="upload" size={18} color={C.primary} />
             )}
             <View style={{ flex: 1 }}>
-              <Text style={iconStyles.uploadPhotoLabel}>
+              <Text style={styles.uploadPhotoLabel}>
                 {hasPinPhoto ? "Change photo" : "Upload a photo"}
               </Text>
-              <Text style={iconStyles.uploadPhotoSub}>Use a custom image as your pin</Text>
+              <Text style={styles.uploadPhotoSub}>Use a custom image as your pin</Text>
             </View>
             <Feather name="chevron-right" size={16} color={C.textMuted} />
           </Pressable>
 
-          <View style={iconStyles.divider}>
-            <View style={iconStyles.divLine} />
-            <Text style={iconStyles.divText}>or choose an icon</Text>
-            <View style={iconStyles.divLine} />
+          <View style={styles.divider}>
+            <View style={styles.divLine} />
+            <Text style={styles.divText}>or choose an icon</Text>
+            <View style={styles.divLine} />
           </View>
 
-          <View style={iconStyles.iconGrid}>
+          <View style={styles.iconGrid}>
             <Pressable
-              style={[iconStyles.iconCell, !user?.marker_icon && iconStyles.iconCellActive]}
+              style={[styles.iconCell, !user?.marker_icon && styles.iconCellActive]}
               onPress={() => iconMutation.mutate(null)}
             >
-              <Text style={iconStyles.iconInitial}>{user?.name.charAt(0).toUpperCase()}</Text>
-              <Text style={iconStyles.iconLabel}>Initial</Text>
+              <Text style={styles.iconInitial}>{user?.name.charAt(0).toUpperCase()}</Text>
+              <Text style={styles.iconLabel}>Initial</Text>
             </Pressable>
             {MARKER_ICONS.map((item) => (
               <Pressable
                 key={item.emoji}
                 style={[
-                  iconStyles.iconCell,
-                  user?.marker_icon === item.emoji && iconStyles.iconCellActive,
+                  styles.iconCell,
+                  user?.marker_icon === item.emoji && styles.iconCellActive,
                 ]}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   iconMutation.mutate(item.emoji);
                 }}
               >
-                <Text style={iconStyles.iconEmoji}>{item.emoji}</Text>
-                <Text style={iconStyles.iconLabel}>{item.label}</Text>
+                <Text style={styles.iconEmoji}>{item.emoji}</Text>
+                <Text style={styles.iconLabel}>{item.label}</Text>
               </Pressable>
             ))}
           </View>
@@ -1098,9 +1098,8 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
   },
   modalBtnText: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.bg },
-});
 
-const iconStyles = StyleSheet.create({
+  // ─── Icon Picker + Marker ─────────────────────────────────────────────────
   markerPreview: {
     flexDirection: "row", alignItems: "center", gap: 14,
     backgroundColor: C.card, borderRadius: 14, padding: 14,

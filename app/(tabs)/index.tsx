@@ -12,16 +12,20 @@ import {
   Modal,
   ScrollView,
   Switch,
+  Alert,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import C from "@/constants/colors";
 import RangeSlider from "@/components/RangeSlider";
 import { formatDistance } from "@/lib/formatDistance";
+import { useAuth } from "@/contexts/AuthContext";
+import { apiRequest } from "@/lib/query-client";
+import WebFAB from "@/components/WebFAB";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -428,8 +432,12 @@ function RunCard({
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
+const PARTICIPANT_STEPS = [5, 10, 15, 20, 25, 30, 40, 50, 75, 100, 0]; // 0 = unlimited
+
 export default function DiscoverScreen() {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const qc = useQueryClient();
 
   const [search, setSearch] = useState("");
   const [sortOption, setSortOption] = useState<SortOption>("nearest");
@@ -439,6 +447,79 @@ export default function DiscoverScreen() {
 
   const [draft,    setDraft]    = useState<FilterState>({ ...DEFAULT_FILTERS });
   const [applied,  setApplied]  = useState<FilterState>({ ...DEFAULT_FILTERS });
+
+  // ─── Host modal state ───────────────────────────────────────────────────────
+  const [showHostModal, setShowHostModal] = useState(false);
+  const [hTitle, setHTitle] = useState("");
+  const [hLocation, setHLocation] = useState("");
+  const [hDate, setHDate] = useState("");
+  const [hTime, setHTime] = useState("");
+  const [hPrivacy, setHPrivacy] = useState("public");
+  const [hPassword, setHPassword] = useState("");
+  const [hMaxParticipants, setHMaxParticipants] = useState(20);
+  const [hTags, setHTags] = useState<string[]>([]);
+  const [hMinDist, setHMinDist] = useState("3");
+  const [hMaxDist, setHMaxDist] = useState("6");
+  const [hMinPace, setHMinPace] = useState("8");
+  const [hMaxPace, setHMaxPace] = useState("12");
+
+  function resetHostForm() {
+    setHTitle(""); setHLocation(""); setHDate(""); setHTime("");
+    setHPrivacy("public"); setHPassword(""); setHMaxParticipants(20);
+    setHTags([]); setHMinDist("3"); setHMaxDist("6"); setHMinPace("8"); setHMaxPace("12");
+  }
+
+  function stepParticipants(dir: 1 | -1) {
+    const idx = PARTICIPANT_STEPS.indexOf(hMaxParticipants);
+    const next = PARTICIPANT_STEPS[Math.max(0, Math.min(PARTICIPANT_STEPS.length - 1, idx + dir))];
+    setHMaxParticipants(next ?? 0);
+    Haptics.selectionAsync();
+  }
+
+  // ─── Host FAB helpers ───────────────────────────────────────────────────────
+  const hostUnlocked = user?.host_unlocked ?? false;
+  const openHostModal = useCallback(() => setShowHostModal(true), []);
+
+  const createRunMutation = useMutation({
+    mutationFn: async () => {
+      if (!hTitle.trim()) throw new Error("Run title is required");
+      if (!hLocation.trim()) throw new Error("Location name is required");
+      if (!hDate.trim() || !hTime.trim()) throw new Error("Date and time are required");
+      const dateTime = new Date(`${hDate.trim()}T${hTime.trim()}:00`);
+      if (isNaN(dateTime.getTime())) throw new Error("Invalid date or time — use YYYY-MM-DD and HH:MM");
+      const res = await apiRequest("POST", "/api/runs", {
+        title: hTitle.trim(),
+        privacy: hPrivacy,
+        date: dateTime.toISOString(),
+        locationLat: userLocation?.latitude ?? 37.7749,
+        locationLng: userLocation?.longitude ?? -122.4194,
+        locationName: hLocation.trim(),
+        minDistance: parseFloat(hMinDist) || 1,
+        maxDistance: parseFloat(hMaxDist) || 6,
+        minPace: parseFloat(hMinPace) || 8,
+        maxPace: parseFloat(hMaxPace) || 12,
+        tags: hTags,
+        maxParticipants: hMaxParticipants === 0 ? 9999 : hMaxParticipants,
+        invitePassword: hPrivacy === "private" && hPassword.trim() ? hPassword.trim() : undefined,
+      });
+      return res.json();
+    },
+    onSuccess: (run: any) => {
+      qc.invalidateQueries({ queryKey: ["/api/runs"] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setShowHostModal(false);
+      resetHostForm();
+      if (run?.privacy === "private" && run?.invite_token) {
+        Alert.alert("Run Created!", `Share this invite code with your runners:\n\n${run.invite_token}`);
+      } else {
+        Alert.alert("Run Created!", "Your run is now live on the map.");
+      }
+    },
+    onError: (e: any) => {
+      Alert.alert("Error", e.message || "Failed to create run");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    },
+  });
 
   const headerTopPad = insets.top + (Platform.OS === "web" ? 67 : 16);
 
@@ -702,6 +783,215 @@ export default function DiscoverScreen() {
         onReset={resetFilters}
         userLocation={userLocation}
       />
+
+      {/* ── Host Run Modal ───────────────────────────────────────────────────── */}
+      <Modal visible={showHostModal} transparent animationType="slide" onRequestClose={() => setShowHostModal(false)}>
+        <Pressable style={s.modalOverlay} onPress={() => setShowHostModal(false)} />
+        <View style={[s.modalSheet, { paddingBottom: insets.bottom + 24 }]}>
+
+          {/* Sheet handle */}
+          <View style={s.sheetHandle} />
+
+          {/* Header */}
+          <View style={s.sheetHeader}>
+            <Pressable style={s.sheetHeaderBtn} onPress={() => { setShowHostModal(false); resetHostForm(); }}>
+              <Feather name="x" size={20} color={C.textSecondary} />
+            </Pressable>
+            <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 17, color: C.text }}>Host a Run</Text>
+            <Pressable
+              style={[s.sheetHeaderBtn, s.sheetPostBtn, createRunMutation.isPending && { opacity: 0.6 }]}
+              onPress={() => createRunMutation.mutate()}
+              disabled={createRunMutation.isPending}
+            >
+              {createRunMutation.isPending
+                ? <ActivityIndicator size="small" color={C.bg} />
+                : <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 14, color: C.bg }}>Post</Text>}
+            </Pressable>
+          </View>
+
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={s.sheetForm}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {/* Title */}
+            <Text style={s.hLabel}>Run Title *</Text>
+            <TextInput
+              style={s.hInput}
+              value={hTitle}
+              onChangeText={setHTitle}
+              placeholder="e.g. Morning 5K in the Park"
+              placeholderTextColor={C.textMuted}
+              maxLength={60}
+            />
+
+            {/* Location */}
+            <Text style={s.hLabel}>Location *</Text>
+            <TextInput
+              style={s.hInput}
+              value={hLocation}
+              onChangeText={setHLocation}
+              placeholder="e.g. Riverside Park North Entrance"
+              placeholderTextColor={C.textMuted}
+            />
+
+            {/* Date + Time */}
+            <Text style={s.hLabel}>Date & Time *</Text>
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <TextInput
+                style={[s.hInput, { flex: 1 }]}
+                value={hDate}
+                onChangeText={setHDate}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={C.textMuted}
+                keyboardType="numbers-and-punctuation"
+              />
+              <TextInput
+                style={[s.hInput, { flex: 1 }]}
+                value={hTime}
+                onChangeText={setHTime}
+                placeholder="HH:MM"
+                placeholderTextColor={C.textMuted}
+                keyboardType="numbers-and-punctuation"
+              />
+            </View>
+
+            {/* Privacy */}
+            <Text style={s.hLabel}>Visibility</Text>
+            <View style={{ flexDirection: "row", gap: 10, marginBottom: 4 }}>
+              {[
+                { val: "public",  icon: "globe" as const,  label: "Public",  desc: "Anyone can join" },
+                { val: "private", icon: "lock"  as const,  label: "Private", desc: "Invite only" },
+              ].map((opt) => (
+                <Pressable
+                  key={opt.val}
+                  style={[s.hPrivOpt, hPrivacy === opt.val && s.hPrivOptActive]}
+                  onPress={() => { setHPrivacy(opt.val); Haptics.selectionAsync(); }}
+                >
+                  <Feather name={opt.icon} size={15} color={hPrivacy === opt.val ? C.primary : C.textSecondary} />
+                  <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: hPrivacy === opt.val ? C.primary : C.textSecondary, marginTop: 4 }}>{opt.label}</Text>
+                  <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted, marginTop: 2 }}>{opt.desc}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            {/* Password (private only) */}
+            {hPrivacy === "private" && (
+              <>
+                <Text style={[s.hLabel, { marginTop: 10 }]}>Join Password <Text style={{ color: C.textMuted, fontFamily: "Outfit_400Regular" }}>(optional)</Text></Text>
+                <TextInput
+                  style={s.hInput}
+                  value={hPassword}
+                  onChangeText={setHPassword}
+                  placeholder="Leave blank to use invite code only"
+                  placeholderTextColor={C.textMuted}
+                  autoCapitalize="none"
+                />
+              </>
+            )}
+
+            {/* Max Runners */}
+            <Text style={s.hLabel}>Max Runners</Text>
+            <View style={s.hStepper}>
+              <Pressable
+                style={[s.hStepBtn, hMaxParticipants <= 5 && { opacity: 0.4 }]}
+                onPress={() => stepParticipants(-1)}
+                disabled={hMaxParticipants <= 5 && hMaxParticipants !== 0}
+              >
+                <Feather name="minus" size={18} color={C.primary} />
+              </Pressable>
+              <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 20, color: C.text, minWidth: 90, textAlign: "center" }}>
+                {hMaxParticipants === 0 ? "Unlimited" : hMaxParticipants}
+              </Text>
+              <Pressable style={s.hStepBtn} onPress={() => stepParticipants(1)}>
+                <Feather name="plus" size={18} color={C.primary} />
+              </Pressable>
+            </View>
+
+            {/* Host Style */}
+            <Text style={s.hLabel}>Host Style</Text>
+            <View style={s.hTagRow}>
+              {HOST_STYLES.map((tag) => (
+                <Pressable
+                  key={tag}
+                  style={[s.hTag, hTags.includes(tag) && s.hTagActive]}
+                  onPress={() => {
+                    setHTags((prev) => prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]);
+                    Haptics.selectionAsync();
+                  }}
+                >
+                  <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: hTags.includes(tag) ? C.primary : C.textSecondary }}>{tag}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            {/* Distance Range */}
+            <Text style={s.hLabel}>Distance Range (miles)</Text>
+            <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
+              <TextInput
+                style={[s.hInput, { flex: 1, textAlign: "center" }]}
+                value={hMinDist}
+                onChangeText={setHMinDist}
+                placeholder="Min"
+                placeholderTextColor={C.textMuted}
+                keyboardType="decimal-pad"
+              />
+              <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textMuted }}>to</Text>
+              <TextInput
+                style={[s.hInput, { flex: 1, textAlign: "center" }]}
+                value={hMaxDist}
+                onChangeText={setHMaxDist}
+                placeholder="Max"
+                placeholderTextColor={C.textMuted}
+                keyboardType="decimal-pad"
+              />
+            </View>
+
+            {/* Pace Range */}
+            <Text style={s.hLabel}>Pace Range (min/mile)</Text>
+            <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
+              <TextInput
+                style={[s.hInput, { flex: 1, textAlign: "center" }]}
+                value={hMinPace}
+                onChangeText={setHMinPace}
+                placeholder="Min"
+                placeholderTextColor={C.textMuted}
+                keyboardType="decimal-pad"
+              />
+              <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textMuted }}>to</Text>
+              <TextInput
+                style={[s.hInput, { flex: 1, textAlign: "center" }]}
+                value={hMaxPace}
+                onChangeText={setHMaxPace}
+                placeholder="Max"
+                placeholderTextColor={C.textMuted}
+                keyboardType="decimal-pad"
+              />
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* ── FAB ─────────────────────────────────────────────────────────────── */}
+      {Platform.OS === "web" ? (
+        <WebFAB hostUnlocked={hostUnlocked} onUnlockedPress={openHostModal} />
+      ) : (
+        <Pressable
+          testID="host-fab"
+          style={[s.fab, { bottom: insets.bottom + 24 }]}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            if (!hostUnlocked) {
+              Alert.alert("Host Privileges Required", "Complete 3 runs with 2+ different hosts to unlock hosting.");
+              return;
+            }
+            setShowHostModal(true);
+          }}
+        >
+          <Feather name="plus" size={26} color={C.bg} />
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -856,6 +1146,152 @@ const s = StyleSheet.create({
     color: C.textSecondary,
     textAlign: "center",
     paddingHorizontal: 40,
+  },
+
+  // ─── FAB ──────────────────────────────────────────────────────────────────
+  fabLayer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 9999,
+  },
+  fab: {
+    position: "absolute",
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: C.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: C.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
+    elevation: 8,
+    zIndex: 9999,
+  },
+
+  // ─── Host Modal ──────────────────────────────────────────────────────────
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+  },
+  modalSheet: {
+    backgroundColor: C.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderTopWidth: 1.5,
+    borderTopColor: C.primary + "33",
+    maxHeight: "90%",
+    flex: 0,
+  },
+  sheetHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: C.border,
+    alignSelf: "center",
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  sheetHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+  },
+  sheetHeaderBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sheetPostBtn: {
+    backgroundColor: C.primary,
+    paddingHorizontal: 14,
+    width: "auto",
+  },
+  sheetForm: {
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 16,
+    gap: 4,
+  },
+  hLabel: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 13,
+    color: C.textSecondary,
+    marginBottom: 8,
+    marginTop: 14,
+  },
+  hInput: {
+    backgroundColor: C.card,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontFamily: "Outfit_400Regular",
+    fontSize: 14,
+    color: C.text,
+  },
+  hPrivOpt: {
+    flex: 1,
+    backgroundColor: C.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+    padding: 14,
+    alignItems: "center",
+  },
+  hPrivOptActive: {
+    backgroundColor: C.primaryMuted,
+    borderColor: C.primary,
+  },
+  hStepper: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: C.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  hStepBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: C.primaryMuted,
+    borderWidth: 1,
+    borderColor: C.primary + "55",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  hTagRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  hTag: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: C.card,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  hTagActive: {
+    backgroundColor: C.primaryMuted,
+    borderColor: C.primary,
   },
 });
 

@@ -160,7 +160,7 @@ export default function RunDetailScreen() {
         { text: "Cancel", style: "cancel" },
         {
           text: "Confirm",
-          onPress: async (miles) => {
+          onPress: async (miles: string | undefined) => {
             setConfirming(true);
             try {
               await apiRequest("POST", `/api/runs/${id}/complete`, { milesLogged: parseFloat(miles || "3") });

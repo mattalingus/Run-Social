@@ -458,7 +458,7 @@ export default function MapScreen() {
         {user?.host_unlocked && (
           <Pressable
             style={[s.sideBtn, s.sideBtnGreen]}
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); router.push("/create-run/index"); }}
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); router.push("/create-run"); }}
           >
             <Feather name="plus" size={20} color={C.bg} />
           </Pressable>
