@@ -454,7 +454,7 @@ export async function getPublicRuns(filters?: {
   let query = `SELECT r.*, u.name as host_name, u.avg_rating as host_rating, u.photo_url as host_photo, u.marker_icon as host_marker_icon,
     (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled') as participant_count
     FROM runs r JOIN users u ON u.id = r.host_id
-    WHERE r.privacy = 'public' AND r.date > NOW() AND r.is_completed = false`;
+    WHERE r.privacy = 'public' AND r.date > NOW() - INTERVAL '2 hours' AND r.is_completed = false`;
   const params: any[] = [];
   let idx = 1;
   if (filters?.minPace !== undefined) { query += ` AND r.max_pace >= $${idx++}`; params.push(filters.minPace); }

@@ -626,6 +626,7 @@ export default function DiscoverScreen() {
       if (!parsedTime) throw new Error("Invalid time — use H:MM (e.g. 7:30)");
       parsedDate.setHours(parsedTime.hours, parsedTime.minutes, 0, 0);
       if (isNaN(parsedDate.getTime())) throw new Error("Invalid date or time");
+      if (parsedDate.getTime() < Date.now() - 5 * 60 * 1000) throw new Error("Run date must be in the future");
       const res = await apiRequest("POST", "/api/runs", {
         title: hTitle.trim(),
         privacy: hPrivacy,
