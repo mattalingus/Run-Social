@@ -20,7 +20,9 @@ import C from "@/constants/colors";
 export default function RegisterScreen() {
   const insets = useSafeAreaInsets();
   const { register } = useAuth();
-  const [name, setName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
@@ -28,7 +30,7 @@ export default function RegisterScreen() {
   const [error, setError] = useState("");
 
   async function handleRegister() {
-    if (!name.trim() || !email.trim() || !password) {
+    if (!firstName.trim() || !lastName.trim() || !username.trim() || !email.trim() || !password) {
       setError("Please fill in all fields");
       return;
     }
@@ -36,10 +38,14 @@ export default function RegisterScreen() {
       setError("Password must be at least 6 characters");
       return;
     }
+    if (!/^[a-zA-Z0-9_]+$/.test(username.trim())) {
+      setError("Username can only contain letters, numbers, and underscores");
+      return;
+    }
     setError("");
     setLoading(true);
     try {
-      await register(email.trim(), password, name.trim());
+      await register(email.trim(), password, firstName.trim(), lastName.trim(), username.trim());
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace("/(tabs)");
     } catch (e: any) {
@@ -74,17 +80,49 @@ export default function RegisterScreen() {
             </View>
           ) : null}
 
+          <View style={styles.nameRow}>
+            <View style={[styles.inputGroup, { flex: 1 }]}>
+              <Text style={styles.label}>First Name</Text>
+              <View style={styles.inputWrap}>
+                <TextInput
+                  style={styles.input}
+                  value={firstName}
+                  onChangeText={setFirstName}
+                  placeholder="Jane"
+                  placeholderTextColor={C.textMuted}
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                />
+              </View>
+            </View>
+            <View style={[styles.inputGroup, { flex: 1 }]}>
+              <Text style={styles.label}>Last Name</Text>
+              <View style={styles.inputWrap}>
+                <TextInput
+                  style={styles.input}
+                  value={lastName}
+                  onChangeText={setLastName}
+                  placeholder="Doe"
+                  placeholderTextColor={C.textMuted}
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                />
+              </View>
+            </View>
+          </View>
+
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Full Name</Text>
+            <Text style={styles.label}>Username</Text>
             <View style={styles.inputWrap}>
-              <Feather name="user" size={16} color={C.textMuted} style={styles.inputIcon} />
+              <Feather name="at-sign" size={16} color={C.textMuted} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                value={name}
-                onChangeText={setName}
-                placeholder="Your name"
+                value={username}
+                onChangeText={(t) => setUsername(t.replace(/\s/g, ""))}
+                placeholder="your_handle"
                 placeholderTextColor={C.textMuted}
-                autoCapitalize="words"
+                autoCapitalize="none"
+                autoCorrect={false}
               />
             </View>
           </View>
@@ -174,6 +212,7 @@ const styles = StyleSheet.create({
     borderColor: C.danger + "44",
   },
   errorText: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.danger, flex: 1 },
+  nameRow: { flexDirection: "row", gap: 12 },
   inputGroup: { gap: 6 },
   label: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary, marginLeft: 2 },
   inputWrap: {

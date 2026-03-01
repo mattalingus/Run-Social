@@ -50,12 +50,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/auth/register", async (req, res) => {
     try {
-      const { email, password, name } = req.body;
-      if (!email || !password || !name) return res.status(400).json({ message: "All fields required" });
+      const { email, password, firstName, lastName, username } = req.body;
+      if (!email || !password || !firstName || !lastName || !username) return res.status(400).json({ message: "All fields required" });
       if (password.length < 6) return res.status(400).json({ message: "Password must be at least 6 characters" });
+      if (!/^[a-zA-Z0-9_]+$/.test(username)) return res.status(400).json({ message: "Username can only contain letters, numbers, and underscores" });
       const existing = await storage.getUserByEmail(email);
       if (existing) return res.status(400).json({ message: "Email already in use" });
-      const user = await storage.createUser({ email, password, name });
+      const existingUsername = await storage.getUserByUsername(username);
+      if (existingUsername) return res.status(400).json({ message: "Username already taken" });
+      const name = `${firstName.trim()} ${lastName.trim()}`;
+      const user = await storage.createUser({ email, password, name, username });
       req.session.userId = user.id;
       const { password: _, ...safeUser } = user;
       res.json(safeUser);
@@ -66,9 +70,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/auth/login", async (req, res) => {
     try {
-      const { email, password } = req.body;
-      if (!email || !password) return res.status(400).json({ message: "Email and password required" });
-      const user = await storage.getUserByEmail(email);
+      const { identifier, password } = req.body;
+      if (!identifier || !password) return res.status(400).json({ message: "Username/email and password required" });
+      const user = await storage.getUserByEmailOrUsername(identifier.trim());
       if (!user) return res.status(401).json({ message: "Invalid credentials" });
       const valid = await storage.verifyPassword(password, user.password);
       if (!valid) return res.status(401).json({ message: "Invalid credentials" });

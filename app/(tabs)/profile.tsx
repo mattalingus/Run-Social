@@ -984,7 +984,7 @@ const styles = StyleSheet.create({
 
   statsGrid: { flexDirection: "row", gap: 10, flexWrap: "wrap" },
   statCard: {
-    flex: 1, minWidth: "40%", backgroundColor: C.card, borderRadius: 14, padding: 16,
+    flex: 1, minWidth: "40%", backgroundColor: C.surface, borderRadius: 14, padding: 16,
     borderWidth: 1, borderColor: C.border, alignItems: "center", gap: 4,
   },
   statNum: { fontFamily: "Outfit_700Bold", fontSize: 24, color: C.primary },
@@ -997,7 +997,7 @@ const styles = StyleSheet.create({
   editBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.primary },
 
   statsRow: {
-    flexDirection: "row", gap: 16, backgroundColor: C.card,
+    flexDirection: "row", gap: 16, backgroundColor: C.surface,
     borderRadius: 14, padding: 16, borderWidth: 1, borderColor: C.border,
   },
   statsItem: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
@@ -1005,7 +1005,7 @@ const styles = StyleSheet.create({
   statsLabel: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textSecondary },
 
   goalCard: {
-    backgroundColor: C.card, borderRadius: 14, padding: 16,
+    backgroundColor: C.surface, borderRadius: 14, padding: 16,
     borderWidth: 1, borderColor: C.border, gap: 10,
   },
   goalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
@@ -1014,7 +1014,7 @@ const styles = StyleSheet.create({
   goalRemain: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted },
 
   unlockCard: {
-    backgroundColor: C.card, borderRadius: 14, padding: 16,
+    backgroundColor: C.surface, borderRadius: 14, padding: 16,
     borderWidth: 1, borderColor: C.border, gap: 8,
   },
   unlockRow: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -1031,12 +1031,12 @@ const styles = StyleSheet.create({
     gap: 6, borderWidth: 1,
   },
   badgeEarned: { backgroundColor: C.primaryMuted, borderColor: C.primary + "55" },
-  badgeLocked: { backgroundColor: C.card, borderColor: C.border },
+  badgeLocked: { backgroundColor: C.surface, borderColor: C.border },
   badgeLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 11, textAlign: "center" },
   badgeMiles: { fontFamily: "Outfit_700Bold", fontSize: 14 },
 
   nextMilestoneCard: {
-    backgroundColor: C.card, borderRadius: 14, padding: 16,
+    backgroundColor: C.surface, borderRadius: 14, padding: 16,
     borderWidth: 1, borderColor: C.border, gap: 10,
   },
   nextLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.textSecondary },
@@ -1045,7 +1045,7 @@ const styles = StyleSheet.create({
   nextRemain: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted },
 
   historyCard: {
-    flexDirection: "row", alignItems: "center", backgroundColor: C.card,
+    flexDirection: "row", alignItems: "center", backgroundColor: C.surface,
     borderRadius: 12, padding: 12, borderWidth: 1, borderColor: C.border,
     marginBottom: 8, gap: 12,
   },
@@ -1127,7 +1127,7 @@ const styles = StyleSheet.create({
   fqRow: { flexDirection: "row", gap: 10, alignItems: "stretch" },
   fqCard: {
     flex: 1, minWidth: "40%",
-    backgroundColor: C.card, borderRadius: 14, padding: 16,
+    backgroundColor: C.surface, borderRadius: 14, padding: 16,
     borderWidth: 1, borderColor: C.border,
     alignItems: "center", justifyContent: "center", gap: 6,
   },
@@ -1146,7 +1146,7 @@ const styles = StyleSheet.create({
   searchHintTxt: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textMuted },
   friendsSection: { gap: 10 },
   friendsSectionTitle: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.textSecondary, textTransform: "uppercase" as const, letterSpacing: 0.8, marginBottom: 2 },
-  friendCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: C.card, borderRadius: 14, padding: 12, borderWidth: 1, borderColor: C.border },
+  friendCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: C.surface, borderRadius: 14, padding: 12, borderWidth: 1, borderColor: C.border },
   friendAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.primaryMuted, borderWidth: 1, borderColor: C.primary + "33", alignItems: "center", justifyContent: "center", overflow: "hidden" },
   friendAvatarImg: { width: 44, height: 44, borderRadius: 22 },
   friendAvatarTxt: { fontFamily: "Outfit_700Bold", fontSize: 18, color: C.primary },
@@ -1173,7 +1173,7 @@ const styles = StyleSheet.create({
   },
   achInlineIcon: { fontSize: 18 },
   achOuterCard: {
-    backgroundColor: C.card, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12,
+    backgroundColor: C.surface, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12,
     borderWidth: 1, borderColor: C.border, overflow: "hidden" as const,
   },
   achCardHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -1229,7 +1229,7 @@ const devStyles = StyleSheet.create({
   versionWrap: { alignItems: "center", paddingVertical: 8 },
   versionText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted },
   devPanel: {
-    backgroundColor: C.card, borderRadius: 14, padding: 20,
+    backgroundColor: C.surface, borderRadius: 14, padding: 20,
     borderWidth: 1, borderColor: C.border, gap: 12,
   },
   devTitle: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.text },

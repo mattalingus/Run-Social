@@ -30,8 +30,8 @@ interface User {
 interface AuthContextValue {
   user: User | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, name: string) => Promise<void>;
+  login: (identifier: string, password: string) => Promise<void>;
+  register: (email: string, password: string, firstName: string, lastName: string, username: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   updateUser: (updates: Partial<User>) => void;
@@ -64,14 +64,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function login(email: string, password: string) {
-    const res = await apiRequest("POST", "/api/auth/login", { email, password });
+  async function login(identifier: string, password: string) {
+    const res = await apiRequest("POST", "/api/auth/login", { identifier, password });
     const data = await res.json();
     setUser(data);
   }
 
-  async function register(email: string, password: string, name: string) {
-    const res = await apiRequest("POST", "/api/auth/register", { email, password, name });
+  async function register(email: string, password: string, firstName: string, lastName: string, username: string) {
+    const res = await apiRequest("POST", "/api/auth/register", { email, password, firstName, lastName, username });
     const data = await res.json();
     setUser(data);
   }

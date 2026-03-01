@@ -31,6 +31,7 @@ export async function initDb() {
       email TEXT NOT NULL UNIQUE,
       password TEXT NOT NULL,
       name TEXT NOT NULL,
+      username TEXT UNIQUE,
       photo_url TEXT,
       avg_pace REAL DEFAULT 10,
       avg_distance REAL DEFAULT 3,
@@ -91,6 +92,7 @@ export async function initDb() {
       created_at TIMESTAMP DEFAULT NOW()
     );
 
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT DEFAULT NULL;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS marker_icon TEXT DEFAULT NULL;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS pace_goal REAL DEFAULT NULL;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS distance_goal REAL DEFAULT 100;
@@ -173,11 +175,22 @@ export async function initDb() {
   `);
 }
 
-export async function createUser(data: { email: string; password: string; name: string }) {
+export async function getUserByUsername(username: string) {
+  const res = await pool.query(`SELECT * FROM users WHERE LOWER(username) = LOWER($1)`, [username]);
+  return res.rows[0] || null;
+}
+
+export async function getUserByEmailOrUsername(identifier: string) {
+  const byEmail = await getUserByEmail(identifier);
+  if (byEmail) return byEmail;
+  return getUserByUsername(identifier);
+}
+
+export async function createUser(data: { email: string; password: string; name: string; username?: string }) {
   const hashedPassword = await bcrypt.hash(data.password, 10);
   const result = await pool.query(
-    `INSERT INTO users (email, password, name) VALUES ($1, $2, $3) RETURNING *`,
-    [data.email.toLowerCase(), hashedPassword, data.name]
+    `INSERT INTO users (email, password, name, username) VALUES ($1, $2, $3, $4) RETURNING *`,
+    [data.email.toLowerCase(), hashedPassword, data.name, data.username?.toLowerCase() ?? null]
   );
   return result.rows[0];
 }

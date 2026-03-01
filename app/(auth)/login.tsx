@@ -20,21 +20,21 @@ import C from "@/constants/colors";
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const { login } = useAuth();
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   async function handleLogin() {
-    if (!email.trim() || !password) {
+    if (!identifier.trim() || !password) {
       setError("Please fill in all fields");
       return;
     }
     setError("");
     setLoading(true);
     try {
-      await login(email.trim(), password);
+      await login(identifier.trim(), password);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace("/(tabs)");
     } catch (e: any) {
@@ -69,17 +69,16 @@ export default function LoginScreen() {
           ) : null}
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Email</Text>
+            <Text style={styles.label}>Username or Email</Text>
             <View style={styles.inputWrap}>
-              <Feather name="mail" size={16} color={C.textMuted} style={styles.inputIcon} />
+              <Feather name="user" size={16} color={C.textMuted} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                value={email}
-                onChangeText={setEmail}
-                placeholder="you@example.com"
+                value={identifier}
+                onChangeText={setIdentifier}
+                placeholder="username or you@example.com"
                 placeholderTextColor={C.textMuted}
                 autoCapitalize="none"
-                keyboardType="email-address"
                 autoCorrect={false}
               />
             </View>
