@@ -3,6 +3,15 @@ import bcrypt from "bcryptjs";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 export async function initDb() {
   await pool.query(`
     DO $$ BEGIN
@@ -125,6 +134,24 @@ export async function initDb() {
     ALTER TABLE runs ADD COLUMN IF NOT EXISTS invite_password TEXT DEFAULT NULL;
 
     ALTER TABLE achievements ADD COLUMN IF NOT EXISTS slug VARCHAR DEFAULT NULL;
+
+    ALTER TABLE runs ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT false;
+    ALTER TABLE runs ADD COLUMN IF NOT EXISTS started_at TIMESTAMP;
+    ALTER TABLE run_participants ADD COLUMN IF NOT EXISTS is_present BOOLEAN DEFAULT false;
+    ALTER TABLE run_participants ADD COLUMN IF NOT EXISTS final_distance REAL;
+    ALTER TABLE run_participants ADD COLUMN IF NOT EXISTS final_pace REAL;
+    ALTER TABLE run_participants ADD COLUMN IF NOT EXISTS final_rank INTEGER;
+
+    CREATE TABLE IF NOT EXISTS run_tracking_points (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      run_id VARCHAR NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      latitude REAL NOT NULL,
+      longitude REAL NOT NULL,
+      cumulative_distance REAL DEFAULT 0,
+      pace REAL DEFAULT 0,
+      recorded_at TIMESTAMP DEFAULT NOW()
+    );
 
     CREATE TABLE IF NOT EXISTS achievements (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -566,6 +593,130 @@ export async function confirmRunCompletion(runId: string, userId: string, milesL
   }
   await checkHostUnlock(userId);
   return { success: true };
+}
+
+// ─── Live Group Run ───────────────────────────────────────────────────────────
+
+export async function startGroupRun(runId: string, hostId: string) {
+  const runRes = await pool.query(`SELECT * FROM runs WHERE id = $1`, [runId]);
+  if (!runRes.rows.length) throw new Error("Run not found");
+  const run = runRes.rows[0];
+  if (run.host_id !== hostId) throw new Error("Only the host can start the run");
+  if (run.is_active) throw new Error("Run already started");
+
+  await pool.query(`UPDATE runs SET is_active = true, started_at = NOW() WHERE id = $1`, [runId]);
+
+  const latestPings = await pool.query(
+    `SELECT DISTINCT ON (user_id) user_id, latitude, longitude
+     FROM run_tracking_points WHERE run_id = $1 ORDER BY user_id, recorded_at DESC`,
+    [runId]
+  );
+  for (const ping of latestPings.rows) {
+    const dist = haversineKm(ping.latitude, ping.longitude, run.location_lat, run.location_lng);
+    if (dist <= 1.0) {
+      await pool.query(
+        `UPDATE run_participants SET is_present = true WHERE run_id = $1 AND user_id = $2 AND status != 'cancelled'`,
+        [runId, ping.user_id]
+      );
+    }
+  }
+  return getRunById(runId);
+}
+
+export async function pingRunLocation(
+  runId: string, userId: string,
+  latitude: number, longitude: number,
+  cumulativeDistance: number, pace: number
+) {
+  await pool.query(
+    `INSERT INTO run_tracking_points (run_id, user_id, latitude, longitude, cumulative_distance, pace)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [runId, userId, latitude, longitude, cumulativeDistance, pace]
+  );
+
+  const runRes = await pool.query(`SELECT location_lat, location_lng, is_active FROM runs WHERE id = $1`, [runId]);
+  if (!runRes.rows.length) return { isPresent: false, isActive: false };
+  const run = runRes.rows[0];
+
+  let isPresent = false;
+  if (run.is_active) {
+    const dist = haversineKm(latitude, longitude, run.location_lat, run.location_lng);
+    if (dist <= 1.0) {
+      await pool.query(
+        `UPDATE run_participants SET is_present = true WHERE run_id = $1 AND user_id = $2 AND status != 'cancelled'`,
+        [runId, userId]
+      );
+      isPresent = true;
+    } else {
+      const pRes = await pool.query(
+        `SELECT is_present FROM run_participants WHERE run_id = $1 AND user_id = $2 AND status != 'cancelled'`,
+        [runId, userId]
+      );
+      isPresent = pRes.rows[0]?.is_present || false;
+    }
+  }
+  return { isPresent, isActive: run.is_active };
+}
+
+export async function getLiveRunState(runId: string) {
+  const runRes = await pool.query(`SELECT * FROM runs WHERE id = $1`, [runId]);
+  if (!runRes.rows.length) return null;
+  const run = runRes.rows[0];
+
+  const participantsRes = await pool.query(
+    `SELECT rp.user_id, u.name, u.photo_url, rp.is_present, rp.final_distance, rp.final_pace, rp.final_rank,
+       tp.latitude, tp.longitude, tp.cumulative_distance, tp.pace as current_pace, tp.recorded_at
+     FROM run_participants rp
+     JOIN users u ON u.id = rp.user_id
+     LEFT JOIN LATERAL (
+       SELECT * FROM run_tracking_points
+       WHERE run_id = $1 AND user_id = rp.user_id
+       ORDER BY recorded_at DESC LIMIT 1
+     ) tp ON true
+     WHERE rp.run_id = $1 AND rp.status != 'cancelled'
+     ORDER BY rp.joined_at ASC`,
+    [runId]
+  );
+
+  const presentCount = participantsRes.rows.filter((r: any) => r.is_present).length;
+  return {
+    isActive: run.is_active,
+    isCompleted: run.is_completed,
+    startedAt: run.started_at,
+    presentCount,
+    participants: participantsRes.rows,
+  };
+}
+
+export async function finishRunnerRun(runId: string, userId: string, finalDistance: number, finalPace: number) {
+  await pool.query(
+    `UPDATE run_participants SET final_distance = $3, final_pace = $4 WHERE run_id = $1 AND user_id = $2`,
+    [runId, userId, finalDistance, finalPace]
+  );
+  const finishedRes = await pool.query(
+    `SELECT user_id, final_pace FROM run_participants
+     WHERE run_id = $1 AND final_pace IS NOT NULL ORDER BY final_pace ASC`,
+    [runId]
+  );
+  for (let i = 0; i < finishedRes.rows.length; i++) {
+    await pool.query(
+      `UPDATE run_participants SET final_rank = $3 WHERE run_id = $1 AND user_id = $2`,
+      [runId, finishedRes.rows[i].user_id, i + 1]
+    );
+  }
+  return { success: true };
+}
+
+export async function getRunResults(runId: string) {
+  const result = await pool.query(
+    `SELECT rp.user_id, u.name, u.photo_url, rp.final_distance, rp.final_pace, rp.final_rank, rp.is_present
+     FROM run_participants rp
+     JOIN users u ON u.id = rp.user_id
+     WHERE rp.run_id = $1 AND rp.is_present = true
+     ORDER BY rp.final_rank ASC NULLS LAST, rp.joined_at ASC`,
+    [runId]
+  );
+  return result.rows;
 }
 
 export async function checkHostUnlock(userId: string) {

@@ -509,6 +509,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ─── Live Group Run ──────────────────────────────────────────────────────────
+
+  app.post("/api/runs/:id/start", requireAuth, async (req, res) => {
+    try {
+      const run = await storage.startGroupRun(req.params.id, req.session.userId!);
+      res.json(run);
+    } catch (e: any) {
+      const status = e.message === "Only the host can start the run" ? 403
+        : e.message === "Run already started" ? 409 : 500;
+      res.status(status).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/runs/:id/ping", requireAuth, async (req, res) => {
+    try {
+      const { latitude, longitude, cumulativeDistance = 0, pace = 0 } = req.body;
+      if (latitude == null || longitude == null) return res.status(400).json({ message: "latitude and longitude required" });
+      const result = await storage.pingRunLocation(
+        req.params.id, req.session.userId!,
+        parseFloat(latitude), parseFloat(longitude),
+        parseFloat(cumulativeDistance), parseFloat(pace)
+      );
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/runs/:id/live", async (req, res) => {
+    try {
+      const state = await storage.getLiveRunState(req.params.id);
+      if (!state) return res.status(404).json({ message: "Run not found" });
+      res.json(state);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/runs/:id/runner-finish", requireAuth, async (req, res) => {
+    try {
+      const { finalDistance, finalPace } = req.body;
+      if (finalDistance == null || finalPace == null) return res.status(400).json({ message: "finalDistance and finalPace required" });
+      const result = await storage.finishRunnerRun(
+        req.params.id, req.session.userId!,
+        parseFloat(finalDistance), parseFloat(finalPace)
+      );
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/runs/:id/results", async (req, res) => {
+    try {
+      const results = await storage.getRunResults(req.params.id);
+      res.json(results);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.post("/api/admin/seed-runs", async (req, res) => {
     try {
       const { count = 20 } = req.body;

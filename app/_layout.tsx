@@ -62,6 +62,14 @@ function RootLayoutNav() {
           name="run-tracking"
           options={{ headerShown: false }}
         />
+        <Stack.Screen
+          name="run-live/[id]"
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="run-results/[id]"
+          options={{ presentation: "modal", headerShown: false }}
+        />
       </Stack>
     </>
   );

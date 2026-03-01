@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -8,16 +8,27 @@ import {
   ActivityIndicator,
   Alert,
   TextInput,
+  Platform,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import * as Location from "expo-location";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/query-client";
 import C from "@/constants/colors";
 import { formatDistance } from "@/lib/formatDistance";
+
+function haversineKmDetail(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 const RUN_TAG_ICONS: Record<string, string> = {
   Talkative: "message-circle",
@@ -50,6 +61,8 @@ export default function RunDetailScreen() {
   const qc = useQueryClient();
   const [joining, setJoining] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [hostDist, setHostDist] = useState<number | null>(null);
   const [passwordInput, setPasswordInput] = useState("");
   const [tokenInput, setTokenInput] = useState(token || "");
   const [accessError, setAccessError] = useState("");
@@ -118,6 +131,40 @@ export default function RunDetailScreen() {
   const isPastRun = run ? new Date(run.date) < new Date() : false;
   const canRate = isPastRun && isParticipant && !isHost && !myRating;
   const hasConfirmed = myParticipation?.status === "confirmed";
+  const isLive = !!run?.is_active && !run?.is_completed;
+
+  useEffect(() => {
+    if (!isHost || !run || Platform.OS === "web") return;
+    Location.getForegroundPermissionsAsync().then(async (perm) => {
+      try {
+        let granted = perm.granted;
+        if (!granted) {
+          const req = await Location.requestForegroundPermissionsAsync();
+          granted = req.granted;
+        }
+        if (!granted) return;
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        const d = haversineKmDetail(loc.coords.latitude, loc.coords.longitude, run.location_lat, run.location_lng);
+        setHostDist(d);
+      } catch { setHostDist(null); }
+    });
+  }, [isHost, run?.id]);
+
+  async function handleStartRun() {
+    if (!user) return;
+    setStarting(true);
+    try {
+      await apiRequest("POST", `/api/runs/${id}/start`);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      qc.invalidateQueries({ queryKey: ["/api/runs", id] });
+      router.push(`/run-live/${id}`);
+    } catch (e: any) {
+      Alert.alert("Can't Start Run", e.message || "Failed to start run");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setStarting(false);
+    }
+  }
 
   async function handleJoin() {
     if (!user) return router.push("/(auth)/login");
@@ -408,7 +455,60 @@ export default function RunDetailScreen() {
       </ScrollView>
 
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
-        {!isHost && !isPastRun && !isParticipant && (
+        {isHost && !isPastRun && !run.is_completed && (
+          isLive ? (
+            <Pressable
+              style={({ pressed }) => [styles.liveBtn, { opacity: pressed ? 0.85 : 1 }]}
+              onPress={() => router.push(`/run-live/${id}`)}
+            >
+              <View style={styles.liveDot} />
+              <Text style={styles.liveBtnText}>View Live Run</Text>
+            </Pressable>
+          ) : (
+            <>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.primaryBtn,
+                  (hostDist === null || hostDist > 1) && styles.btnDisabled,
+                  { opacity: pressed || starting ? 0.85 : 1 },
+                ]}
+                onPress={handleStartRun}
+                disabled={starting || hostDist === null || hostDist > 1}
+              >
+                {starting ? <ActivityIndicator color={C.bg} /> : (
+                  <>
+                    <Feather name="play" size={18} color={C.bg} />
+                    <Text style={styles.primaryBtnText}>Start Run</Text>
+                  </>
+                )}
+              </Pressable>
+              {hostDist !== null && hostDist > 1 && (
+                <View style={styles.proximityWarn}>
+                  <Feather name="map-pin" size={13} color={C.textSecondary} />
+                  <Text style={styles.proximityText}>
+                    Move within 1 km of the start pin ({hostDist.toFixed(1)} km away)
+                  </Text>
+                </View>
+              )}
+              {hostDist === null && Platform.OS !== "web" && (
+                <View style={styles.proximityWarn}>
+                  <Feather name="map-pin" size={13} color={C.textSecondary} />
+                  <Text style={styles.proximityText}>Checking your location…</Text>
+                </View>
+              )}
+            </>
+          )
+        )}
+        {!isHost && !isPastRun && isLive && isParticipant && (
+          <Pressable
+            style={({ pressed }) => [styles.liveBtn, { opacity: pressed ? 0.85 : 1 }]}
+            onPress={() => router.push(`/run-live/${id}`)}
+          >
+            <View style={styles.liveDot} />
+            <Text style={styles.liveBtnText}>Join Live Run</Text>
+          </Pressable>
+        )}
+        {!isHost && !isPastRun && !isLive && !isParticipant && (
           <Pressable
             style={({ pressed }) => [styles.primaryBtn, { opacity: pressed || joining ? 0.85 : 1 }]}
             onPress={handleJoin}
@@ -422,7 +522,7 @@ export default function RunDetailScreen() {
             )}
           </Pressable>
         )}
-        {!isHost && !isPastRun && isParticipant && (
+        {!isHost && !isPastRun && !isLive && isParticipant && (
           <Pressable
             style={({ pressed }) => [styles.secondaryBtn, { opacity: pressed ? 0.8 : 1 }]}
             onPress={handleLeave}
@@ -459,7 +559,7 @@ export default function RunDetailScreen() {
             <Text style={styles.ratedText}>You rated this host {myRating.stars}/5</Text>
           </View>
         )}
-        {isParticipant && !isPastRun && (
+        {isParticipant && !isPastRun && !isLive && (
           <View style={styles.joinedBanner}>
             <Feather name="check" size={14} color={C.primary} />
             <Text style={styles.joinedText}>You're registered for this run</Text>
@@ -529,6 +629,12 @@ const styles = StyleSheet.create({
   ratedText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary },
   joinedBanner: { flexDirection: "row", alignItems: "center", gap: 8, justifyContent: "center", padding: 8 },
   joinedText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.primary },
+  liveBtn: { backgroundColor: "#0A3A1F", borderRadius: 14, height: 52, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, borderWidth: 1.5, borderColor: C.primary },
+  liveBtnText: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.primary },
+  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.primary },
+  btnDisabled: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
+  proximityWarn: { flexDirection: "row", alignItems: "center", gap: 6, justifyContent: "center", paddingTop: 4 },
+  proximityText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary, flex: 1 },
   errorText: { fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text },
   backLink: { marginTop: 16 },
   backLinkText: { fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.primary },

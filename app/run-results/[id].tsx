@@ -1,0 +1,283 @@
+import React from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  Platform,
+} from "react-native";
+import { router, useLocalSearchParams } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Feather, Ionicons } from "@expo/vector-icons";
+import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/AuthContext";
+import { apiRequest } from "@/lib/query-client";
+import C from "@/constants/colors";
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function formatPace(pace: number | null): string {
+  if (!pace || pace <= 0) return "--:--";
+  const m = Math.floor(pace);
+  const s = Math.round((pace - m) * 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+function formatDist(dist: number | null): string {
+  if (!dist || dist <= 0) return "0.00";
+  return dist.toFixed(2);
+}
+
+const RANK_COLORS: Record<number, string> = {
+  1: "#FFD700",
+  2: "#C0C0C0",
+  3: "#CD7F32",
+};
+
+// ─── Screen ──────────────────────────────────────────────────────────────────
+
+export default function RunResultsScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+
+  const { data: results = [], isLoading } = useQuery<any[]>({
+    queryKey: ["/api/runs", id, "results"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/runs/${id}/results`);
+      return res.json();
+    },
+    refetchInterval: 10000,
+    staleTime: 0,
+  });
+
+  const { data: run } = useQuery<any>({
+    queryKey: ["/api/runs", id],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/runs/${id}`);
+      return res.json();
+    },
+  });
+
+  const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
+  const botPad = insets.bottom + (Platform.OS === "web" ? 34 : 0);
+
+  // Participants still running (present but no final data)
+  const stillRunning = results.filter((r) => r.is_present && r.final_rank == null);
+  const finished = results.filter((r) => r.final_rank != null).sort((a, b) => a.final_rank - b.final_rank);
+
+  return (
+    <View style={s.container}>
+      {/* Header */}
+      <View style={[s.header, { paddingTop: topPad + 12 }]}>
+        <Pressable onPress={() => router.back()} style={s.backBtn} hitSlop={12}>
+          <Feather name="arrow-left" size={20} color={C.text} />
+        </Pressable>
+        <View style={s.headerCenter}>
+          <Text style={s.headerTitle}>Run Results</Text>
+          {run?.title && <Text style={s.headerSub}>{run.title}</Text>}
+        </View>
+        <Pressable
+          style={s.doneBtn}
+          onPress={() => router.push(`/run/${id}`)}
+        >
+          <Text style={s.doneBtnText}>Done</Text>
+        </Pressable>
+      </View>
+
+      {isLoading ? (
+        <View style={s.loadingWrap}>
+          <ActivityIndicator color={C.primary} size="large" />
+          <Text style={s.loadingText}>Loading results…</Text>
+        </View>
+      ) : (
+        <ScrollView
+          contentContainerStyle={[s.content, { paddingBottom: botPad + 24 }]}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Summary */}
+          <View style={s.summaryCard}>
+            <View style={s.summaryItem}>
+              <Feather name="users" size={18} color={C.primary} />
+              <Text style={s.summaryValue}>{results.length}</Text>
+              <Text style={s.summaryLabel}>Runners</Text>
+            </View>
+            <View style={s.summaryDivider} />
+            <View style={s.summaryItem}>
+              <Feather name="check-circle" size={18} color={C.primary} />
+              <Text style={s.summaryValue}>{finished.length}</Text>
+              <Text style={s.summaryLabel}>Finished</Text>
+            </View>
+            <View style={s.summaryDivider} />
+            <View style={s.summaryItem}>
+              <Feather name="activity" size={18} color={stillRunning.length > 0 ? C.primary : C.textSecondary} />
+              <Text style={[s.summaryValue, { color: stillRunning.length > 0 ? C.primary : C.textSecondary }]}>
+                {stillRunning.length}
+              </Text>
+              <Text style={s.summaryLabel}>Still running</Text>
+            </View>
+          </View>
+
+          {/* Leaderboard */}
+          {finished.length > 0 && (
+            <View style={s.section}>
+              <Text style={s.sectionTitle}>Leaderboard</Text>
+              {finished.map((runner, idx) => {
+                const isMe = runner.user_id === user?.id;
+                const rankColor = RANK_COLORS[runner.final_rank] ?? C.textSecondary;
+                return (
+                  <View
+                    key={runner.user_id}
+                    style={[s.runnerCard, isMe && s.runnerCardMe]}
+                  >
+                    {/* Rank badge */}
+                    <View style={[s.rankBadge, { borderColor: rankColor + "66" }]}>
+                      {runner.final_rank <= 3 ? (
+                        <Ionicons name="trophy" size={14} color={rankColor} />
+                      ) : (
+                        <Text style={[s.rankNumber, { color: rankColor }]}>#{runner.final_rank}</Text>
+                      )}
+                    </View>
+                    {/* Avatar */}
+                    <View style={[s.avatar, isMe && s.avatarMe]}>
+                      <Text style={[s.avatarText, isMe && s.avatarTextMe]}>
+                        {runner.name?.[0]?.toUpperCase() ?? "?"}
+                      </Text>
+                    </View>
+                    {/* Info */}
+                    <View style={s.runnerInfo}>
+                      <Text style={[s.runnerName, isMe && s.runnerNameMe]}>
+                        {runner.name}{isMe ? " (you)" : ""}
+                      </Text>
+                      <View style={s.runnerStats}>
+                        <Text style={s.runnerStatText}>{formatDist(runner.final_distance)} mi</Text>
+                        <Text style={s.runnerStatDot}>·</Text>
+                        <Text style={s.runnerStatText}>{formatPace(runner.final_pace)} /mi</Text>
+                      </View>
+                    </View>
+                    {/* Rank label */}
+                    {runner.final_rank <= 3 && (
+                      <Text style={[s.rankLabel, { color: rankColor }]}>
+                        {runner.final_rank === 1 ? "1st" : runner.final_rank === 2 ? "2nd" : "3rd"}
+                      </Text>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          {/* Still running */}
+          {stillRunning.length > 0 && (
+            <View style={s.section}>
+              <View style={s.sectionTitleRow}>
+                <View style={s.liveDot} />
+                <Text style={s.sectionTitle}>Still Running</Text>
+              </View>
+              {stillRunning.map((runner) => {
+                const isMe = runner.user_id === user?.id;
+                return (
+                  <View key={runner.user_id} style={[s.runnerCard, isMe && s.runnerCardMe]}>
+                    <View style={s.stillRunningIcon}>
+                      <ActivityIndicator size="small" color={C.primary} />
+                    </View>
+                    <View style={[s.avatar, isMe && s.avatarMe]}>
+                      <Text style={[s.avatarText, isMe && s.avatarTextMe]}>
+                        {runner.name?.[0]?.toUpperCase() ?? "?"}
+                      </Text>
+                    </View>
+                    <View style={s.runnerInfo}>
+                      <Text style={[s.runnerName, isMe && s.runnerNameMe]}>
+                        {runner.name}{isMe ? " (you)" : ""}
+                      </Text>
+                      <Text style={s.runnerStatText}>In progress…</Text>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          {results.length === 0 && (
+            <View style={s.emptyWrap}>
+              <Feather name="flag" size={40} color={C.border} />
+              <Text style={s.emptyTitle}>No results yet</Text>
+              <Text style={s.emptyText}>Runners haven't finished yet. Results will appear here as they cross the finish line.</Text>
+            </View>
+          )}
+        </ScrollView>
+      )}
+    </View>
+  );
+}
+
+// ─── Styles ──────────────────────────────────────────────────────────────────
+
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: C.bg },
+  header: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 16, paddingBottom: 14,
+    borderBottomWidth: 1, borderBottomColor: C.border,
+  },
+  backBtn: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
+    alignItems: "center", justifyContent: "center",
+  },
+  headerCenter: { flex: 1, alignItems: "center", gap: 2 },
+  headerTitle: { fontFamily: "Outfit_700Bold", fontSize: 17, color: C.text },
+  headerSub: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary },
+  doneBtn: {
+    backgroundColor: C.surface, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8,
+    borderWidth: 1, borderColor: C.border,
+  },
+  doneBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text },
+  loadingWrap: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
+  loadingText: { fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textSecondary },
+  content: { paddingHorizontal: 16, paddingTop: 16, gap: 20 },
+  summaryCard: {
+    flexDirection: "row", backgroundColor: C.card, borderRadius: 16,
+    padding: 16, borderWidth: 1, borderColor: C.border, alignItems: "center",
+  },
+  summaryItem: { flex: 1, alignItems: "center", gap: 4 },
+  summaryValue: { fontFamily: "Outfit_700Bold", fontSize: 20, color: C.text },
+  summaryLabel: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textSecondary },
+  summaryDivider: { width: 1, height: 40, backgroundColor: C.border },
+  section: { gap: 10 },
+  sectionTitle: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.text },
+  sectionTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.primary },
+  runnerCard: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: C.card, borderRadius: 14, padding: 14,
+    borderWidth: 1, borderColor: C.border,
+  },
+  runnerCardMe: { borderColor: C.primary + "66", backgroundColor: C.primaryMuted },
+  rankBadge: {
+    width: 32, height: 32, borderRadius: 8, borderWidth: 1.5,
+    alignItems: "center", justifyContent: "center",
+  },
+  rankNumber: { fontFamily: "Outfit_700Bold", fontSize: 13 },
+  avatar: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: C.surface, alignItems: "center", justifyContent: "center",
+    borderWidth: 1, borderColor: C.border,
+  },
+  avatarMe: { backgroundColor: C.primaryMuted, borderColor: C.primary + "55" },
+  avatarText: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.textSecondary },
+  avatarTextMe: { color: C.primary },
+  runnerInfo: { flex: 1, gap: 3 },
+  runnerName: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text },
+  runnerNameMe: { color: C.primary },
+  runnerStats: { flexDirection: "row", alignItems: "center", gap: 4 },
+  runnerStatText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary },
+  runnerStatDot: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.border },
+  rankLabel: { fontFamily: "Outfit_700Bold", fontSize: 14 },
+  stillRunningIcon: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
+  emptyWrap: { alignItems: "center", paddingVertical: 48, gap: 12 },
+  emptyTitle: { fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text },
+  emptyText: { fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textSecondary, textAlign: "center", lineHeight: 20 },
+});

@@ -35,7 +35,11 @@ app/
     solo.tsx           - Solo running: goal tracker, performance rankings, plan runs + local notifications
     profile.tsx        - User profile, goals, achievements, history
   run/
-    [id].tsx           - Run detail screen (join, leave, complete, rate)
+    [id].tsx           - Run detail screen (join, leave, complete, rate, host start/view live)
+  run-live/
+    [id].tsx           - Live group run screen (GPS tracking, live participant dots on map, present toast)
+  run-results/
+    [id].tsx           - Post-run leaderboard (ranked by pace, gold/silver/bronze badges)
   create-run/
     index.tsx          - Create run form (host only)
   rate/
@@ -63,7 +67,7 @@ shared/
 
 ## Key Features
 1. **Auth** - Email/password login & registration with session persistence
-2. **Map Discovery** - Interactive map with run pins (react-native-maps)
+2. **Map Discovery** - Interactive map with run pins (react-native-maps); LIVE badge + green ring on active runs
 3. **Run Discovery** - Searchable list with tag filtering
 4. **Join Runs** - Eligibility checks based on pace & distance
 5. **Host Unlock** - Requires 3 runs with 2+ different hosts
@@ -73,6 +77,14 @@ shared/
 9. **Host Ratings** - 1-5 stars + feedback tags
 10. **Mileage Goals** - Monthly & yearly goals with progress bars
 11. **Solo Tab** - Personal run tracking: pace/distance goals, performance rankings by distance category (1mi/2mi/5K/5mi/10K), plan future runs with local push notifications
+12. **Live Group Run Mode** - Host starts run (must be within 1km of pin), runners auto-marked present via GPS ping, live participant dots on shared map (polling every 5s), own path polyline + stats; "Finish My Run" saves final pace & distance, triggers leaderboard ranking
+
+## Live Run DB Schema
+- `runs.is_active` — run has been started by host
+- `runs.started_at` — timestamp when host started the run
+- `run_participants.is_present` — auto-set when participant pings within 1km of pin while run is active
+- `run_participants.final_distance, final_pace, final_rank` — set when runner finishes
+- `run_tracking_points` — GPS pings (run_id, user_id, lat/lng, cumulative_distance, pace, recorded_at)
 
 ## API Routes
 - `POST /api/auth/register` - Register new user
@@ -98,6 +110,11 @@ shared/
 - `PUT /api/solo-runs/:id` - Update a solo run
 - `DELETE /api/solo-runs/:id` - Delete a solo run
 - `PUT /api/users/me/solo-goals` - Update pace/distance goals + goal period
+- `POST /api/runs/:id/start` - Host starts the live run (marks nearby participants present, sets is_active=true)
+- `POST /api/runs/:id/ping` - Runner posts GPS location during live run (marks present if within 1km, stores tracking point)
+- `GET /api/runs/:id/live` - Get live run state (is_active, present participants + their latest positions)
+- `POST /api/runs/:id/runner-finish` - Runner ends their run (stores final_distance, final_pace, recomputes ranks)
+- `GET /api/runs/:id/results` - Get leaderboard for completed run (ranked by pace)
 
 ## Future Integrations (Structured)
 Database columns exist for: `strava_id`, `apple_health_id`, `garmin_id`

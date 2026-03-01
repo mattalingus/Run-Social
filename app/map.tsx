@@ -67,6 +67,7 @@ interface Run {
   max_participants: number;
   is_locked?: boolean;
   privacy?: string;
+  is_active?: boolean;
 }
 
 interface Bounds {
@@ -160,6 +161,7 @@ function RunMarker({ run, isSelected, onPress }: { run: Run; isSelected: boolean
     >
       <Animated.View style={[mk.wrap, { transform: [{ scale }] }]}>
         {soon && <View style={mk.glow} />}
+        {run.is_active && <View style={mk.liveRing} />}
         <View style={[mk.circle, isSelected && mk.circleSelected]}>
           {isEmojiIcon ? (
             <Text style={mk.emoji}>{icon}</Text>
@@ -172,6 +174,11 @@ function RunMarker({ run, isSelected, onPress }: { run: Run; isSelected: boolean
           )}
         </View>
         <View style={mk.pin} />
+        {run.is_active && (
+          <View style={mk.liveBadge}>
+            <Text style={mk.liveBadgeText}>LIVE</Text>
+          </View>
+        )}
       </Animated.View>
     </Marker>
   );
@@ -206,6 +213,18 @@ const mk = StyleSheet.create({
     elevation: 3,
   },
   pinGray: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#555", marginTop: 3 },
+  liveRing: {
+    position: "absolute", top: -5,
+    width: 62, height: 62, borderRadius: 31,
+    borderWidth: 2, borderColor: C.primary,
+    opacity: 0.8,
+  },
+  liveBadge: {
+    position: "absolute", top: -8, right: -6,
+    backgroundColor: C.primary, borderRadius: 6,
+    paddingHorizontal: 5, paddingVertical: 2,
+  },
+  liveBadgeText: { fontFamily: "Outfit_700Bold", fontSize: 8, color: C.bg, letterSpacing: 0.5 },
 });
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
@@ -556,9 +575,17 @@ export default function MapScreen() {
                     {formatDistance(selectedRun.min_distance)}–{formatDistance(selectedRun.max_distance)} mi
                   </Text>
                 </View>
-                <View style={s.chip}>
-                  <Feather name="users" size={11} color={C.textSecondary} />
-                  <Text style={s.chipTxt}>{selectedRun.participant_count}/{selectedRun.max_participants}</Text>
+                <View style={[s.chip, selectedRun.is_active && s.chipLive]}>
+                  {selectedRun.is_active ? (
+                    <View style={s.chipLiveDot} />
+                  ) : (
+                    <Feather name="users" size={11} color={C.textSecondary} />
+                  )}
+                  <Text style={[s.chipTxt, selectedRun.is_active && { color: C.primary }]}>
+                    {selectedRun.is_active
+                      ? `${selectedRun.participant_count} live now`
+                      : `${selectedRun.participant_count}/${selectedRun.max_participants}`}
+                  </Text>
                 </View>
                 {selectedRun.tags?.[0] && (
                   <View style={[s.chip, s.chipTag]}>
@@ -801,6 +828,8 @@ const s = StyleSheet.create({
   },
   chipTag: { borderColor: C.primary + "44", backgroundColor: C.primaryMuted },
   chipTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.text },
+  chipLive: { borderColor: C.primary + "55", backgroundColor: C.primaryMuted },
+  chipLiveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.primary },
   cardAvatarLocked: {
     width: 48, height: 48, borderRadius: 24,
     backgroundColor: "#1C1C1C", alignItems: "center", justifyContent: "center",
