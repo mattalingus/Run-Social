@@ -369,62 +369,14 @@ export default function MapScreen() {
 
   return (
     <View style={s.container}>
-      {/* ─── Map card (rounded, like host location picker) ───────────────── */}
-      <View style={[s.mapCard, { top: topPad + (Platform.OS === "web" ? 67 : 0) + 58 }]}>
-
-      {/* ─── Map ─────────────────────────────────────────────────────────── */}
-      <MapView
-        ref={mapRef}
-        style={{ flex: 1 }}
-        initialRegion={HOUSTON}
-        mapType="mutedStandard"
-        customMapStyle={MAP_STYLE}
-        showsUserLocation={!!userLoc}
-        showsMyLocationButton={false}
-        showsCompass={false}
-        showsScale={false}
-        showsTraffic={false}
-        showsBuildings={false}
-        showsIndoors={false}
-        showsPointsOfInterest={false}
-        toolbarEnabled={false}
-        userInterfaceStyle="dark"
-        rotateEnabled={false}
-        pitchEnabled={false}
-        onRegionChangeComplete={onRegionChange}
-        onPress={() => { if (selectedRun) closeCard(); }}
-      >
-        {runs.map((run) => (
-          <RunMarker
-            key={run.id}
-            run={run}
-            isSelected={selectedRun?.id === run.id}
-            onPress={() => openCard(run)}
-          />
-        ))}
-      </MapView>
-
-      {/* ─── Dim overlay ─────────────────────────────────────────────────── */}
-      <View style={s.mapDim} pointerEvents="none" />
-
-      {/* ─── Bottom gradient ─────────────────────────────────────────────── */}
-      <View style={s.gradBottom} pointerEvents="none">
-        {[0.04, 0.14, 0.32, 0.60, 0.84].map((op, i) => (
-          <View key={i} style={[s.gradLayer, { opacity: op, height: [12, 18, 24, 32, 52][i] }]} />
-        ))}
-      </View>
-
-      </View>{/* ── end mapCard ─────────────────────────────────────────────── */}
 
       {/* ─── Header ──────────────────────────────────────────────────────── */}
-      <View style={s.header}>
-        {/* Opaque strip — just status bar + buttons, nothing extra */}
-        <View style={[s.headerRow, { paddingTop: topPad + (Platform.OS === "web" ? 67 : 0) }]}>
+      <View style={[s.header, { paddingTop: topPad + (Platform.OS === "web" ? 67 : 0) }]}>
+        <View style={s.headerRow}>
           <Pressable style={s.backBtn} onPress={() => router.back()}>
             <Feather name="arrow-left" size={16} color={C.textSecondary} />
             <Text style={s.backTxt}>Discover</Text>
           </Pressable>
-
           <View style={s.headerRight}>
             {isFetching && <ActivityIndicator size="small" color={C.primary} style={{ marginRight: 6 }} />}
             <Pressable
@@ -436,48 +388,87 @@ export default function MapScreen() {
             </Pressable>
           </View>
         </View>
-        {/* Fade — now transparent parent lets this actually fade */}
-        <View pointerEvents="none" style={s.headerFade}>
-          {[0.96, 0.72, 0.42, 0.18, 0.05].map((op, i) => (
-            <View key={i} style={[s.gradLayer, { opacity: op, height: [20, 14, 11, 9, 7][i] }]} />
+      </View>
+
+      {/* ─── Map card ────────────────────────────────────────────────────── */}
+      <View style={s.mapCard}>
+
+        {/* Map */}
+        <MapView
+          ref={mapRef}
+          style={StyleSheet.absoluteFillObject}
+          initialRegion={HOUSTON}
+          mapType="mutedStandard"
+          customMapStyle={MAP_STYLE}
+          showsUserLocation={!!userLoc}
+          showsMyLocationButton={false}
+          showsCompass={false}
+          showsScale={false}
+          showsTraffic={false}
+          showsBuildings={false}
+          showsIndoors={false}
+          showsPointsOfInterest={false}
+          toolbarEnabled={false}
+          userInterfaceStyle="dark"
+          rotateEnabled={false}
+          pitchEnabled={false}
+          onRegionChangeComplete={onRegionChange}
+          onPress={() => { if (selectedRun) closeCard(); }}
+        >
+          {runs.map((run) => (
+            <RunMarker
+              key={run.id}
+              run={run}
+              isSelected={selectedRun?.id === run.id}
+              onPress={() => openCard(run)}
+            />
+          ))}
+        </MapView>
+
+        {/* Dim overlay */}
+        <View style={s.mapDim} pointerEvents="none" />
+
+        {/* Bottom gradient */}
+        <View style={s.gradBottom} pointerEvents="none">
+          {[0.04, 0.14, 0.32, 0.60, 0.84].map((op, i) => (
+            <View key={i} style={[s.gradLayer, { opacity: op, height: [12, 18, 24, 32, 52][i] }]} />
           ))}
         </View>
-      </View>
 
-      {/* ─── Sidebar ─────────────────────────────────────────────────────── */}
-      <View style={[s.sideBar, { top: topPad + (Platform.OS === "web" ? 67 : 0) + 70 }]}>
-        {userLoc && (
-          <Pressable
-            style={s.sideBtn}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              mapRef.current?.animateToRegion(
-                { ...userLoc, latitudeDelta: 0.06, longitudeDelta: 0.06 },
-                800
-              );
-            }}
-          >
-            <Feather name="navigation" size={18} color={C.primary} />
-          </Pressable>
-        )}
-        {user && (
-          <Pressable
-            style={[s.sideBtn, s.sideBtnGreen]}
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); router.push("/create-run"); }}
-          >
-            <Feather name="plus" size={20} color={C.bg} />
-          </Pressable>
-        )}
-      </View>
+        {/* ─── Sidebar (inside map card) ────────────────────────────────── */}
+        <View style={s.sideBar}>
+          {userLoc && (
+            <Pressable
+              style={s.sideBtn}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                mapRef.current?.animateToRegion(
+                  { ...userLoc, latitudeDelta: 0.06, longitudeDelta: 0.06 },
+                  800
+                );
+              }}
+            >
+              <Feather name="navigation" size={18} color={C.primary} />
+            </Pressable>
+          )}
+          {user && (
+            <Pressable
+              style={[s.sideBtn, s.sideBtnGreen]}
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); router.push("/create-run"); }}
+            >
+              <Feather name="plus" size={20} color={C.bg} />
+            </Pressable>
+          )}
+        </View>
 
-      {/* ─── Run card ────────────────────────────────────────────────────── */}
-      {selectedRun && (
-        <Animated.View
-          style={[
-            s.card,
-            { bottom: insets.bottom + 16, opacity: cardOpacity, transform: [{ translateY: slideAnim }] },
-          ]}
-        >
+        {/* ─── Run card (inside map card) ───────────────────────────────── */}
+        {selectedRun && (
+          <Animated.View
+            style={[
+              s.card,
+              { bottom: 16, opacity: cardOpacity, transform: [{ translateY: slideAnim }] },
+            ]}
+          >
           {selectedRun.is_locked ? (
             <>
               <View style={s.cardTop}>
@@ -576,12 +567,14 @@ export default function MapScreen() {
               </Pressable>
             </>
           )}
-        </Animated.View>
-      )}
+          </Animated.View>
+        )}
 
-      {/* ─── Insights strip ──────────────────────────────────────────────── */}
-      {!selectedRun && insights.length > 0 && (
-        <View style={[s.insightStrip, { bottom: insets.bottom + 16 }]}>
+      </View>{/* ── end mapCard ──────────────────────────────────────────────── */}
+
+      {/* ─── Insights strip (below map card) ─────────────────────────────── */}
+      {insights.length > 0 && (
+        <View style={[s.insightStrip, { paddingBottom: insets.bottom + 10 }]}>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -697,11 +690,22 @@ export default function MapScreen() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: C.bg },
+  container: { flex: 1, flexDirection: "column", backgroundColor: C.bg },
+
+  header: {
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+    backgroundColor: C.bg,
+  },
+  headerRow: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    height: 44,
+  },
 
   mapCard: {
-    position: "absolute",
-    left: 10, right: 10, bottom: 10,
+    flex: 1,
+    marginHorizontal: 10,
+    marginBottom: 0,
     borderRadius: 20,
     overflow: "hidden",
     borderWidth: 1,
@@ -711,16 +715,6 @@ const s = StyleSheet.create({
   mapDim: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.13)" },
   gradBottom: { position: "absolute", bottom: 0, left: 0, right: 0 },
   gradLayer: { width: "100%", backgroundColor: C.bg },
-
-  header: {
-    position: "absolute", top: 0, left: 0, right: 0,
-  },
-  headerRow: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 20, paddingBottom: 12,
-    backgroundColor: C.bg,
-  },
-  headerFade: { width: "100%" },
 
   backBtn: {
     flexDirection: "row",
@@ -752,7 +746,7 @@ const s = StyleSheet.create({
     position: "absolute", top: 5, right: 5,
   },
 
-  sideBar: { position: "absolute", right: 16, gap: 10 },
+  sideBar: { position: "absolute", right: 12, top: 12, gap: 10 },
   sideBtn: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: C.surface, alignItems: "center", justifyContent: "center",
@@ -839,7 +833,7 @@ const s = StyleSheet.create({
   applyBtn: { flex: 2, height: 52, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: C.primary },
   applyTxt: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.bg },
 
-  insightStrip: { position: "absolute", left: 0, right: 0 },
+  insightStrip: { paddingTop: 10 },
   insightScroll: { paddingHorizontal: 16, gap: 8 },
   insightPill: {
     flexDirection: "row", alignItems: "center", gap: 6,
