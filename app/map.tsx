@@ -243,6 +243,51 @@ export default function MapScreen() {
     staleTime: 30_000,
   });
 
+  const insights = useMemo(() => {
+    if (runs.length === 0) return [];
+    const now = Date.now();
+    const result: Array<{ icon: string; lib: "feather" | "ion"; text: string; color: string }> = [];
+
+    result.push({ icon: "map-pin", lib: "feather", text: `${runs.length} run${runs.length !== 1 ? "s" : ""} on map`, color: C.primary });
+
+    const upcoming = runs
+      .filter((r) => new Date(r.date).getTime() > now)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    if (upcoming.length > 0) {
+      const diffMin = Math.round((new Date(upcoming[0].date).getTime() - now) / 60000);
+      if (diffMin <= 60) {
+        result.push({ icon: "clock", lib: "feather", text: `Starts in ${diffMin}m`, color: C.orange });
+      } else if (diffMin < 1440) {
+        const h = Math.floor(diffMin / 60); const m = diffMin % 60;
+        result.push({ icon: "clock", lib: "feather", text: m > 0 ? `Next in ${h}h ${m}m` : `Next in ${h}h`, color: C.textSecondary });
+      }
+    }
+
+    const totalOpen = runs.reduce((acc, r) => acc + Math.max(0, r.max_participants - r.participant_count), 0);
+    if (totalOpen > 0) result.push({ icon: "users", lib: "feather", text: `${totalOpen} open spot${totalOpen !== 1 ? "s" : ""}`, color: C.blue });
+
+    const fastest = runs.reduce((a, b) => a.min_pace < b.min_pace ? a : b);
+    result.push({ icon: "zap", lib: "feather", text: `${formatPace(fastest.min_pace)}/mi fastest`, color: "#F4C542" });
+
+    if (runs.length > 1) {
+      const minD = Math.min(...runs.map((r) => r.min_distance));
+      const maxD = Math.max(...runs.map((r) => r.max_distance));
+      result.push({ icon: "target", lib: "feather", text: `${formatDistance(minD)}–${formatDistance(maxD)} mi range`, color: C.textSecondary });
+    }
+
+    const totalRunners = runs.reduce((acc, r) => acc + r.participant_count, 0);
+    if (totalRunners > 0) result.push({ icon: "walk", lib: "ion", text: `${totalRunners} runner${totalRunners !== 1 ? "s" : ""} signed up`, color: C.primary });
+
+    const fiveK = upcoming.filter((r) => r.min_distance <= 3.3 && r.max_distance >= 2.8);
+    if (fiveK.length > 0) {
+      const diffMin = Math.round((new Date(fiveK[0].date).getTime() - now) / 60000);
+      if (diffMin < 1440) result.push({ icon: "flag", lib: "feather", text: `5K in ${diffMin < 60 ? diffMin + "m" : Math.floor(diffMin / 60) + "h"}`, color: C.orange });
+    }
+
+    return result;
+  }, [runs]);
+
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -351,9 +396,9 @@ export default function MapScreen() {
       </View>
 
       {/* ─── Header ──────────────────────────────────────────────────────── */}
-      <View style={[s.header, { paddingTop: topPad + (Platform.OS === "web" ? 67 : 8) }]}>
-        <View style={s.headerRow}>
-          {/* Back button */}
+      <View style={s.header}>
+        {/* Opaque strip — just status bar + buttons, nothing extra */}
+        <View style={[s.headerRow, { paddingTop: topPad + (Platform.OS === "web" ? 67 : 0) }]}>
           <Pressable style={s.backBtn} onPress={() => router.back()}>
             <Feather name="arrow-left" size={16} color={C.textSecondary} />
             <Text style={s.backTxt}>Discover</Text>
@@ -370,16 +415,16 @@ export default function MapScreen() {
             </Pressable>
           </View>
         </View>
-        {/* Header bottom fade */}
+        {/* Fade — now transparent parent lets this actually fade */}
         <View pointerEvents="none" style={s.headerFade}>
-          {[0.92, 0.60, 0.28, 0.10, 0.03].map((op, i) => (
-            <View key={i} style={[s.gradLayer, { opacity: op, height: [24, 16, 12, 10, 8][i] }]} />
+          {[0.96, 0.72, 0.42, 0.18, 0.05].map((op, i) => (
+            <View key={i} style={[s.gradLayer, { opacity: op, height: [20, 14, 11, 9, 7][i] }]} />
           ))}
         </View>
       </View>
 
       {/* ─── Sidebar ─────────────────────────────────────────────────────── */}
-      <View style={[s.sideBar, { top: topPad + 70 }]}>
+      <View style={[s.sideBar, { top: topPad + 58 }]}>
         {userLoc && (
           <Pressable
             style={s.sideBtn}
@@ -471,6 +516,26 @@ export default function MapScreen() {
             <Feather name="arrow-right" size={16} color={C.bg} />
           </Pressable>
         </Animated.View>
+      )}
+
+      {/* ─── Insights strip ──────────────────────────────────────────────── */}
+      {!selectedRun && insights.length > 0 && (
+        <View style={[s.insightStrip, { bottom: insets.bottom + 16 }]}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={s.insightScroll}
+          >
+            {insights.map((item, i) => (
+              <View key={i} style={s.insightPill}>
+                {item.lib === "ion"
+                  ? <Ionicons name={item.icon as any} size={12} color={item.color} />
+                  : <Feather name={item.icon as any} size={12} color={item.color} />}
+                <Text style={[s.insightTxt, { color: item.color }]}>{item.text}</Text>
+              </View>
+            ))}
+          </ScrollView>
+        </View>
       )}
 
       {/* ─── Filter sheet ────────────────────────────────────────────────── */}
@@ -579,11 +644,11 @@ const s = StyleSheet.create({
 
   header: {
     position: "absolute", top: 0, left: 0, right: 0,
-    backgroundColor: C.bg,
   },
   headerRow: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     paddingHorizontal: 20, paddingBottom: 12,
+    backgroundColor: C.bg,
   },
   headerFade: { width: "100%" },
 
@@ -695,4 +760,14 @@ const s = StyleSheet.create({
   resetTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.textSecondary },
   applyBtn: { flex: 2, height: 52, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: C.primary },
   applyTxt: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.bg },
+
+  insightStrip: { position: "absolute", left: 0, right: 0 },
+  insightScroll: { paddingHorizontal: 16, gap: 8 },
+  insightPill: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    backgroundColor: C.surface + "F2",
+    borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7,
+    borderWidth: 1, borderColor: C.border,
+  },
+  insightTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 12 },
 });
