@@ -397,11 +397,11 @@ export default function ProfileScreen() {
             </ScrollView>
 
             {/* 5-per-row grid — chunked into explicit rows so flex works on web */}
-            <View style={{ gap: 4 }}>
+            <View style={{ gap: 4, alignSelf: "stretch" }}>
               {Array.from({ length: Math.ceil(filteredAchievements.length / 5) }, (_, rowIdx) => {
                 const row = filteredAchievements.slice(rowIdx * 5, rowIdx * 5 + 5);
                 return (
-                  <View key={rowIdx} style={{ flexDirection: "row" }}>
+                  <View key={rowIdx} style={{ flexDirection: "row", alignSelf: "stretch" }}>
                     {row.map((ach) => {
                       const earned = earnedSlugs.has(ach.slug);
                       const isSelected = selectedAchievement?.slug === ach.slug;
@@ -1190,9 +1190,9 @@ const iconStyles = StyleSheet.create({
   },
   achInlineIcon: { fontSize: 18 },
   achEarnedLabel: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted },
-  achCard: { alignItems: "stretch", flex: undefined, paddingVertical: 12 },
-  achCardHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
-  achExpandedInCard: { gap: 14, marginTop: 14 },
+  achCard: { alignItems: "stretch", alignSelf: "stretch", flex: undefined, paddingVertical: 12 },
+  achCardHeader: { flexDirection: "row", alignItems: "center", gap: 8, alignSelf: "stretch" },
+  achExpandedInCard: { gap: 14, marginTop: 14, alignSelf: "stretch" },
   achDivider: { height: 1, backgroundColor: C.border },
 
   achGrid: { flexDirection: "row", flexWrap: "wrap" },
