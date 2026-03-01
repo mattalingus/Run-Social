@@ -21,6 +21,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/query-client";
 import C from "@/constants/colors";
 import { formatDistance } from "@/lib/formatDistance";
+import MAP_STYLE from "@/lib/mapStyle";
+import MapView, { Polyline } from "react-native-maps";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -35,7 +37,50 @@ interface SoloRun {
   completed: boolean;
   planned: boolean;
   notes: string | null;
+  route_path: Array<{ latitude: number; longitude: number }> | null;
   created_at: string;
+}
+
+type RoutePoint = { latitude: number; longitude: number };
+
+function MiniRouteMap({ path }: { path: RoutePoint[] }) {
+  const lats = path.map((p) => p.latitude);
+  const lngs = path.map((p) => p.longitude);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs);
+  const maxLng = Math.max(...lngs);
+  const latDelta = Math.max((maxLat - minLat) * 1.6, 0.006);
+  const lngDelta = Math.max((maxLng - minLng) * 1.6, 0.006);
+
+  return (
+    <MapView
+      style={{ height: 130, borderRadius: 14, marginTop: 12, overflow: "hidden" }}
+      initialRegion={{
+        latitude: (minLat + maxLat) / 2,
+        longitude: (minLng + maxLng) / 2,
+        latitudeDelta: latDelta,
+        longitudeDelta: lngDelta,
+      }}
+      customMapStyle={MAP_STYLE}
+      mapType="mutedStandard"
+      scrollEnabled={false}
+      zoomEnabled={false}
+      rotateEnabled={false}
+      pitchEnabled={false}
+      showsUserLocation={false}
+      showsCompass={false}
+      showsScale={false}
+      showsTraffic={false}
+      showsBuildings={false}
+      showsPointsOfInterest={false}
+      userInterfaceStyle="dark"
+      toolbarEnabled={false}
+      pointerEvents="none"
+    >
+      <Polyline coordinates={path} strokeColor={C.primary} strokeWidth={3} lineCap="round" lineJoin="round" />
+    </MapView>
+  );
 }
 
 interface RankingCategory {
@@ -460,35 +505,40 @@ export default function SoloScreen() {
                   style={({ pressed }) => [s.historyCard, { opacity: pressed ? 0.85 : 1 }]}
                   onLongPress={() => confirmDelete(run.id)}
                 >
-                  <View style={s.historyLeft}>
-                    <View style={[
-                      s.historyStatus,
-                      { backgroundColor: run.completed ? C.primary + "22" : run.planned ? C.blue + "22" : C.border },
-                    ]}>
-                      <Feather
-                        name={run.completed ? "check" : run.planned ? "calendar" : "circle"}
-                        size={12}
-                        color={run.completed ? C.primary : run.planned ? C.blue : C.textMuted}
-                      />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <View style={s.historyTitleRow}>
-                        <Text style={s.historyTitle} numberOfLines={1}>{label}</Text>
-                        {badge && (
-                          <Text style={s.historyBadge}>{RANK_EMOJI[badge.rank - 1]}</Text>
-                        )}
+                  <View style={s.historyRow}>
+                    <View style={s.historyLeft}>
+                      <View style={[
+                        s.historyStatus,
+                        { backgroundColor: run.completed ? C.primary + "22" : run.planned ? C.blue + "22" : C.border },
+                      ]}>
+                        <Feather
+                          name={run.completed ? "check" : run.planned ? "calendar" : "circle"}
+                          size={12}
+                          color={run.completed ? C.primary : run.planned ? C.blue : C.textMuted}
+                        />
                       </View>
-                      <Text style={s.historyMeta}>
-                        {formatDisplayDate(run.date)}
-                        {run.pace_min_per_mile ? ` · ${formatPace(run.pace_min_per_mile)}/mi` : ""}
-                        {run.duration_seconds ? ` · ${formatDuration(run.duration_seconds)}` : ""}
-                      </Text>
+                      <View style={{ flex: 1 }}>
+                        <View style={s.historyTitleRow}>
+                          <Text style={s.historyTitle} numberOfLines={1}>{label}</Text>
+                          {badge && (
+                            <Text style={s.historyBadge}>{RANK_EMOJI[badge.rank - 1]}</Text>
+                          )}
+                        </View>
+                        <Text style={s.historyMeta}>
+                          {formatDisplayDate(run.date)}
+                          {run.pace_min_per_mile ? ` · ${formatPace(run.pace_min_per_mile)}/mi` : ""}
+                          {run.duration_seconds ? ` · ${formatDuration(run.duration_seconds)}` : ""}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={s.historyRight}>
+                      <Text style={s.historyDist}>{formatDistance(run.distance_miles)}</Text>
+                      <Text style={s.historyDistUnit}>mi</Text>
                     </View>
                   </View>
-                  <View style={s.historyRight}>
-                    <Text style={s.historyDist}>{formatDistance(run.distance_miles)}</Text>
-                    <Text style={s.historyDistUnit}>mi</Text>
-                  </View>
+                  {run.route_path && run.route_path.length > 1 && Platform.OS !== "web" && (
+                    <MiniRouteMap path={run.route_path} />
+                  )}
                 </Pressable>
               );
             })
@@ -773,6 +823,9 @@ const s = StyleSheet.create({
     marginBottom: 8,
     borderWidth: 1,
     borderColor: C.border,
+    flexDirection: "column",
+  },
+  historyRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",

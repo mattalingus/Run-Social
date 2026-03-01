@@ -101,6 +101,8 @@ export async function initDb() {
       created_at TIMESTAMP DEFAULT NOW()
     );
 
+    ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS route_path JSONB DEFAULT NULL;
+
     CREATE TABLE IF NOT EXISTS achievements (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id VARCHAR NOT NULL REFERENCES users(id),
@@ -195,10 +197,11 @@ export async function createSoloRun(data: {
   completed?: boolean;
   planned?: boolean;
   notes?: string;
+  routePath?: Array<{ latitude: number; longitude: number }> | null;
 }) {
   const result = await pool.query(
-    `INSERT INTO solo_runs (user_id, title, date, distance_miles, pace_min_per_mile, duration_seconds, completed, planned, notes)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+    `INSERT INTO solo_runs (user_id, title, date, distance_miles, pace_min_per_mile, duration_seconds, completed, planned, notes, route_path)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
     [
       data.userId,
       data.title ?? null,
@@ -209,13 +212,14 @@ export async function createSoloRun(data: {
       data.completed ?? false,
       data.planned ?? false,
       data.notes ?? null,
+      data.routePath ? JSON.stringify(data.routePath) : null,
     ]
   );
   return result.rows[0];
 }
 
 export async function updateSoloRun(id: string, userId: string, updates: Record<string, any>) {
-  const allowed = ["title", "date", "distance_miles", "pace_min_per_mile", "duration_seconds", "completed", "planned", "notes"];
+  const allowed = ["title", "date", "distance_miles", "pace_min_per_mile", "duration_seconds", "completed", "planned", "notes", "route_path"];
   const entries = Object.entries(updates).filter(([k]) => allowed.includes(k));
   if (!entries.length) return null;
   const fields = entries.map(([k], i) => `${k} = $${i + 3}`).join(", ");

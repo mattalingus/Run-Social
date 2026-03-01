@@ -32,29 +32,7 @@ const HOUSTON: Region = {
   longitudeDelta: 0.09,
 };
 
-const MAP_STYLE = [
-  { elementType: "geometry",           stylers: [{ color: "#0c1810" }] },
-  { elementType: "labels.text.fill",   stylers: [{ color: "#4a6957" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#080f0c" }] },
-  { elementType: "labels.icon",        stylers: [{ visibility: "off" }] },
-  { featureType: "administrative",     elementType: "geometry.stroke", stylers: [{ color: "#1a2e21" }] },
-  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#5a8a6a" }] },
-  { featureType: "administrative.neighborhood", stylers: [{ visibility: "off" }] },
-  { featureType: "poi",                stylers: [{ visibility: "off" }] },
-  { featureType: "poi.park",           elementType: "geometry", stylers: [{ color: "#0f1f15" }] },
-  { featureType: "poi.park",           elementType: "labels", stylers: [{ visibility: "off" }] },
-  { featureType: "road",               elementType: "geometry", stylers: [{ color: "#152418" }] },
-  { featureType: "road",               elementType: "geometry.stroke", stylers: [{ color: "#0c1810" }] },
-  { featureType: "road",               elementType: "labels.text.fill", stylers: [{ color: "#3a5a47" }] },
-  { featureType: "road",               elementType: "labels.icon", stylers: [{ visibility: "off" }] },
-  { featureType: "road.arterial",      elementType: "geometry", stylers: [{ color: "#18291e" }] },
-  { featureType: "road.highway",       elementType: "geometry", stylers: [{ color: "#1e3328" }] },
-  { featureType: "road.highway",       elementType: "geometry.stroke", stylers: [{ color: "#152418" }] },
-  { featureType: "road.local",         elementType: "labels", stylers: [{ visibility: "off" }] },
-  { featureType: "transit",            stylers: [{ visibility: "off" }] },
-  { featureType: "water",              elementType: "geometry", stylers: [{ color: "#08140f" }] },
-  { featureType: "water",             elementType: "labels.text.fill", stylers: [{ color: "#1e3328" }] },
-];
+import MAP_STYLE from "@/lib/mapStyle";
 
 const RUN_STYLES = ["Talkative", "Quiet", "Motivational", "Training", "Ministry", "Recovery"];
 
@@ -581,14 +559,14 @@ export default function MapScreen() {
               </View>
               <Text style={s.sectionValue}>{fmtDist(draft.distMin)} – {fmtDist(draft.distMax)}</Text>
               <RangeSlider
-                min={1} max={20} step={0.5}
+                min={1} max={200} step={1}
                 low={draft.distMin} high={draft.distMax}
                 onLowChange={(v) => setDraft((p) => ({ ...p, distMin: v }))}
                 onHighChange={(v) => setDraft((p) => ({ ...p, distMax: v }))}
               />
               <View style={s.edgeRow}>
                 <Text style={s.edgeLabel}>{unit === "km" ? "1.6 km" : "1 mi"}</Text>
-                <Text style={s.edgeLabel}>{unit === "km" ? "32.2 km" : "20 mi"}</Text>
+                <Text style={s.edgeLabel}>{unit === "km" ? "321.9 km" : "200 mi"}</Text>
               </View>
             </View>
 

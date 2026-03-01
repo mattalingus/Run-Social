@@ -69,6 +69,7 @@ export default function RunTrackingScreen() {
   const webWatchIdRef = useRef<number | null>(null);
   const lastCoordRef = useRef<{ latitude: number; longitude: number } | null>(null);
   const totalDistRef = useRef(0);
+  const routePathRef = useRef<Array<{ latitude: number; longitude: number }>>([]);
 
   // ─── Timer ─────────────────────────────────────────────────────────────────
 
@@ -93,6 +94,7 @@ export default function RunTrackingScreen() {
   }, [phase]);
 
   function handleCoord(latitude: number, longitude: number) {
+    routePathRef.current.push({ latitude, longitude });
     if (lastCoordRef.current) {
       const d = haversine(
         lastCoordRef.current.latitude,
@@ -161,6 +163,7 @@ export default function RunTrackingScreen() {
     }
     lastCoordRef.current = null;
     totalDistRef.current = 0;
+    routePathRef.current = [];
     setDisplayDist(0);
     setElapsed(0);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -214,6 +217,7 @@ export default function RunTrackingScreen() {
         durationSeconds: elapsed,
         completed: true,
         planned: false,
+        routePath: routePathRef.current.length > 1 ? routePathRef.current : null,
       });
       qc.invalidateQueries({ queryKey: ["/api/solo-runs"] });
       qc.invalidateQueries({ queryKey: ["/api/runs/mine"] });

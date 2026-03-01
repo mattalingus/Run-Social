@@ -1,0 +1,25 @@
+const MAP_STYLE = [
+  { elementType: "geometry",           stylers: [{ color: "#0c1810" }] },
+  { elementType: "labels.text.fill",   stylers: [{ color: "#4a6957" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#080f0c" }] },
+  { elementType: "labels.icon",        stylers: [{ visibility: "off" }] },
+  { featureType: "administrative",     elementType: "geometry.stroke", stylers: [{ color: "#1a2e21" }] },
+  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#5a8a6a" }] },
+  { featureType: "administrative.neighborhood", stylers: [{ visibility: "off" }] },
+  { featureType: "poi",                stylers: [{ visibility: "off" }] },
+  { featureType: "poi.park",           elementType: "geometry", stylers: [{ color: "#0f1f15" }] },
+  { featureType: "poi.park",           elementType: "labels", stylers: [{ visibility: "off" }] },
+  { featureType: "road",               elementType: "geometry", stylers: [{ color: "#152418" }] },
+  { featureType: "road",               elementType: "geometry.stroke", stylers: [{ color: "#0c1810" }] },
+  { featureType: "road",               elementType: "labels.text.fill", stylers: [{ color: "#3a5a47" }] },
+  { featureType: "road",               elementType: "labels.icon", stylers: [{ visibility: "off" }] },
+  { featureType: "road.arterial",      elementType: "geometry", stylers: [{ color: "#18291e" }] },
+  { featureType: "road.highway",       elementType: "geometry", stylers: [{ color: "#1e3328" }] },
+  { featureType: "road.highway",       elementType: "geometry.stroke", stylers: [{ color: "#152418" }] },
+  { featureType: "road.local",         elementType: "labels", stylers: [{ visibility: "off" }] },
+  { featureType: "transit",            stylers: [{ visibility: "off" }] },
+  { featureType: "water",              elementType: "geometry", stylers: [{ color: "#08140f" }] },
+  { featureType: "water",              elementType: "labels.text.fill", stylers: [{ color: "#1e3328" }] },
+];
+
+export default MAP_STYLE;
