@@ -384,10 +384,14 @@ function RunCard({
   run,
   onPress,
   distanceMi,
+  isBookmarked,
+  onBookmark,
 }: {
   run: Run;
   onPress: () => void;
   distanceMi?: number;
+  isBookmarked?: boolean;
+  onBookmark?: () => void;
 }) {
   const spotsLeft = run.max_participants - run.participant_count;
   return (
@@ -399,11 +403,22 @@ function RunCard({
       <View style={s.cardTop}>
         <View style={s.cardTitleRow}>
           <Text style={s.cardTitle} numberOfLines={1}>{run.title}</Text>
-          {spotsLeft <= 3 && spotsLeft > 0 && (
-            <View style={s.urgentBadge}>
-              <Text style={s.urgentText}>{spotsLeft} left</Text>
-            </View>
-          )}
+          <View style={s.cardTitleRight}>
+            {spotsLeft <= 3 && spotsLeft > 0 && (
+              <View style={s.urgentBadge}>
+                <Text style={s.urgentText}>{spotsLeft} left</Text>
+              </View>
+            )}
+            {onBookmark && (
+              <Pressable onPress={(e) => { e.stopPropagation?.(); onBookmark(); }} hitSlop={8} style={s.cardBookmarkBtn}>
+                <Ionicons
+                  name={isBookmarked ? "bookmark" : "bookmark-outline"}
+                  size={16}
+                  color={isBookmarked ? C.primary : C.textMuted}
+                />
+              </Pressable>
+            )}
+          </View>
         </View>
         <Text style={s.hostLine}>
           {run.host_name}
@@ -689,6 +704,21 @@ export default function DiscoverScreen() {
     enabled: !!user,
   });
 
+  const { data: bookmarkedRuns = [] } = useQuery<Run[]>({
+    queryKey: ["/api/runs/bookmarked"],
+    staleTime: 30_000,
+    enabled: !!user,
+  });
+
+  const bookmarkedIds = useMemo(() => new Set(bookmarkedRuns.map((r) => r.id)), [bookmarkedRuns]);
+
+  const bookmarkMutation = useMutation({
+    mutationFn: (runId: string) => apiRequest("POST", `/api/runs/${runId}/bookmark`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/runs/bookmarked"] });
+    },
+  });
+
   const friendIdSet = useMemo(
     () => new Set(friends.map((f) => f.id)),
     [friends]
@@ -906,10 +936,53 @@ export default function DiscoverScreen() {
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={C.primary} />
           }
+          ListHeaderComponent={
+            user && bookmarkedRuns.length > 0 ? (
+              <View style={s.savedSection}>
+                <Text style={s.savedSectionTitle}>Saved Runs</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={s.savedScroll}
+                >
+                  {bookmarkedRuns.map((r) => (
+                    <Pressable
+                      key={r.id}
+                      style={s.savedCard}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        router.push(`/run/${r.id}`);
+                      }}
+                    >
+                      <View style={s.savedCardTop}>
+                        <Text style={s.savedCardTitle} numberOfLines={2}>{r.title}</Text>
+                        <Pressable
+                          hitSlop={8}
+                          onPress={() => bookmarkMutation.mutate(r.id)}
+                        >
+                          <Ionicons name="bookmark" size={15} color={C.primary} />
+                        </Pressable>
+                      </View>
+                      <View style={s.savedCardMeta}>
+                        <Feather name="calendar" size={11} color={C.textMuted} />
+                        <Text style={s.savedCardMetaTxt}>{formatDate(r.date)}</Text>
+                      </View>
+                      <View style={s.savedCardMeta}>
+                        <Feather name="map-pin" size={11} color={C.textMuted} />
+                        <Text style={s.savedCardMetaTxt} numberOfLines={1}>{r.location_name}</Text>
+                      </View>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
+            ) : null
+          }
           renderItem={({ item }) => (
             <RunCard
               run={item}
               distanceMi={userLocation ? distanceMap[item.id] : undefined}
+              isBookmarked={bookmarkedIds.has(item.id)}
+              onBookmark={user ? () => bookmarkMutation.mutate(item.id) : undefined}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 setShowSort(false);
@@ -1414,6 +1487,24 @@ const s = StyleSheet.create({
   cardTop: { gap: 3 },
   cardTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   cardTitle: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.text, flex: 1 },
+  cardTitleRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+  cardBookmarkBtn: { padding: 2 },
+  savedSection: { marginBottom: 16 },
+  savedSectionTitle: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.text, marginBottom: 10 },
+  savedScroll: { gap: 10, paddingRight: 4 },
+  savedCard: {
+    width: 160,
+    backgroundColor: C.card,
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+    gap: 6,
+  },
+  savedCardTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 6 },
+  savedCardTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.text, flex: 1, lineHeight: 18 },
+  savedCardMeta: { flexDirection: "row", alignItems: "center", gap: 5 },
+  savedCardMetaTxt: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textSecondary, flex: 1 },
   urgentBadge: {
     backgroundColor: C.orange + "20",
     borderRadius: 5,

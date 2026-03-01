@@ -164,6 +164,22 @@ export async function initDb() {
       created_at TIMESTAMP DEFAULT NOW()
     );
 
+    CREATE TABLE IF NOT EXISTS bookmarked_runs (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      run_id VARCHAR NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+      created_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(user_id, run_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS planned_runs (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      run_id VARCHAR NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+      created_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(user_id, run_id)
+    );
+
     CREATE TABLE IF NOT EXISTS achievements (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id VARCHAR NOT NULL REFERENCES users(id),
@@ -531,7 +547,8 @@ export async function getPublicRuns(filters?: {
 export async function getRunById(id: string) {
   const result = await pool.query(
     `SELECT r.*, u.name as host_name, u.avg_rating as host_rating, u.photo_url as host_photo, u.avg_pace as host_avg_pace,
-      (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled') as participant_count
+      (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled') as participant_count,
+      (SELECT COUNT(*) FROM planned_runs pr WHERE pr.run_id = r.id) as plan_count
      FROM runs r JOIN users u ON u.id = r.host_id WHERE r.id = $1`,
     [id]
   );
@@ -1084,4 +1101,67 @@ export async function deleteSavedPath(id: string, userId: string) {
   );
   if (!res.rows.length) throw new Error("Not found or not authorized");
   return { success: true };
+}
+
+// ─── Bookmarks & Plans ─────────────────────────────────────────────────────────
+
+export async function toggleBookmark(userId: string, runId: string) {
+  const existing = await pool.query(
+    `SELECT id FROM bookmarked_runs WHERE user_id = $1 AND run_id = $2`,
+    [userId, runId]
+  );
+  if (existing.rows.length > 0) {
+    await pool.query(`DELETE FROM bookmarked_runs WHERE user_id = $1 AND run_id = $2`, [userId, runId]);
+    return { bookmarked: false };
+  } else {
+    await pool.query(
+      `INSERT INTO bookmarked_runs (user_id, run_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [userId, runId]
+    );
+    return { bookmarked: true };
+  }
+}
+
+export async function togglePlan(userId: string, runId: string) {
+  const existing = await pool.query(
+    `SELECT id FROM planned_runs WHERE user_id = $1 AND run_id = $2`,
+    [userId, runId]
+  );
+  if (existing.rows.length > 0) {
+    await pool.query(`DELETE FROM planned_runs WHERE user_id = $1 AND run_id = $2`, [userId, runId]);
+    return { planned: false };
+  } else {
+    await pool.query(
+      `INSERT INTO planned_runs (user_id, run_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [userId, runId]
+    );
+    return { planned: true };
+  }
+}
+
+export async function getRunStatus(userId: string, runId: string) {
+  const [bRes, pRes] = await Promise.all([
+    pool.query(`SELECT id FROM bookmarked_runs WHERE user_id = $1 AND run_id = $2`, [userId, runId]),
+    pool.query(`SELECT id FROM planned_runs WHERE user_id = $1 AND run_id = $2`, [userId, runId]),
+  ]);
+  return {
+    is_bookmarked: bRes.rows.length > 0,
+    is_planned: pRes.rows.length > 0,
+  };
+}
+
+export async function getBookmarkedRuns(userId: string) {
+  const result = await pool.query(
+    `SELECT r.*, u.name as host_name, u.avg_rating as host_rating, u.photo_url as host_photo,
+      u.marker_icon as host_marker_icon,
+      (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled') as participant_count,
+      b.created_at as bookmarked_at
+     FROM bookmarked_runs b
+     JOIN runs r ON r.id = b.run_id
+     JOIN users u ON u.id = r.host_id
+     WHERE b.user_id = $1
+     ORDER BY b.created_at DESC`,
+    [userId]
+  );
+  return result.rows;
 }

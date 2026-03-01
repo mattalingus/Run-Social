@@ -324,6 +324,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ─── Bookmarks & Plans ─────────────────────────────────────────────────────
+
+  app.get("/api/runs/bookmarked", requireAuth, async (req, res) => {
+    try {
+      const runs = await storage.getBookmarkedRuns(req.session.userId!);
+      res.json(runs);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/runs/:id/status", requireAuth, async (req, res) => {
+    try {
+      const status = await storage.getRunStatus(req.session.userId!, req.params.id);
+      res.json(status);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/runs/:id/bookmark", requireAuth, async (req, res) => {
+    try {
+      const run = await storage.getRunById(req.params.id);
+      if (!run) return res.status(404).json({ message: "Run not found" });
+      const result = await storage.toggleBookmark(req.session.userId!, req.params.id);
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/runs/:id/plan", requireAuth, async (req, res) => {
+    try {
+      const run = await storage.getRunById(req.params.id);
+      if (!run) return res.status(404).json({ message: "Run not found" });
+      if (run.host_id === req.session.userId) return res.status(400).json({ message: "You are the host" });
+      const result = await storage.togglePlan(req.session.userId!, req.params.id);
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.get("/api/runs/:id", async (req, res) => {
     try {
       const run = await storage.getRunById(req.params.id);

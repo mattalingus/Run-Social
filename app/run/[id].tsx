@@ -126,6 +126,36 @@ export default function RunDetailScreen() {
     enabled: !!user && !!id,
   });
 
+  const { data: runStatus } = useQuery<{ is_bookmarked: boolean; is_planned: boolean }>({
+    queryKey: ["/api/runs", id, "status"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/runs/${id}/status`);
+      return res.json();
+    },
+    enabled: !!user && !!id,
+  });
+
+  const bookmarkMutation = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/runs/${id}/bookmark`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/runs", id, "status"] });
+      qc.invalidateQueries({ queryKey: ["/api/runs/bookmarked"] });
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    },
+  });
+
+  const planMutation = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/runs/${id}/plan`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/runs", id, "status"] });
+      qc.invalidateQueries({ queryKey: ["/api/runs", id] });
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    },
+  });
+
+  const isBookmarked = runStatus?.is_bookmarked ?? false;
+  const isPlanned = runStatus?.is_planned ?? false;
+
   const isHost = run?.host_id === user?.id;
   const isParticipant = participants.some((p) => p.id === user?.id);
   const myParticipation = participants.find((p) => p.id === user?.id);
@@ -321,11 +351,26 @@ export default function RunDetailScreen() {
           <Pressable onPress={() => router.back()} style={styles.backBtn}>
             <Feather name="x" size={20} color={C.text} />
           </Pressable>
-          <View style={[styles.privacyBadge, { backgroundColor: run.privacy === "public" ? C.primaryMuted : C.border }]}>
-            <Feather name={run.privacy === "public" ? "globe" : run.privacy === "private" ? "lock" : "user"} size={12} color={run.privacy === "public" ? C.primary : C.textSecondary} />
-            <Text style={[styles.privacyText, { color: run.privacy === "public" ? C.primary : C.textSecondary }]}>
-              {run.privacy.charAt(0).toUpperCase() + run.privacy.slice(1)}
-            </Text>
+          <View style={styles.topBarRight}>
+            <View style={[styles.privacyBadge, { backgroundColor: run.privacy === "public" ? C.primaryMuted : C.border }]}>
+              <Feather name={run.privacy === "public" ? "globe" : run.privacy === "private" ? "lock" : "user"} size={12} color={run.privacy === "public" ? C.primary : C.textSecondary} />
+              <Text style={[styles.privacyText, { color: run.privacy === "public" ? C.primary : C.textSecondary }]}>
+                {run.privacy.charAt(0).toUpperCase() + run.privacy.slice(1)}
+              </Text>
+            </View>
+            {user && (
+              <Pressable
+                style={[styles.bookmarkBtn, isBookmarked && styles.bookmarkBtnActive]}
+                onPress={() => bookmarkMutation.mutate()}
+                hitSlop={8}
+              >
+                <Ionicons
+                  name={isBookmarked ? "bookmark" : "bookmark-outline"}
+                  size={20}
+                  color={isBookmarked ? C.primary : C.textSecondary}
+                />
+              </Pressable>
+            )}
           </View>
         </View>
 
@@ -388,6 +433,12 @@ export default function RunDetailScreen() {
               <Text style={styles.reqLabel}>Participants</Text>
             </View>
           </View>
+          {parseInt(run.plan_count) > 0 && (
+            <View style={styles.planCountRow}>
+              <Feather name="calendar" size={13} color={C.textMuted} />
+              <Text style={styles.planCountText}>{run.plan_count} {parseInt(run.plan_count) === 1 ? "person" : "people"} planning to attend</Text>
+            </View>
+          )}
           {user && (
             <View style={[styles.eligibilityRow, {
               backgroundColor: (user.avg_pace >= run.min_pace && user.avg_pace <= run.max_pace && user.avg_distance >= run.min_distance) ? C.primaryMuted : C.danger + "22",
@@ -560,6 +611,26 @@ export default function RunDetailScreen() {
             <Text style={styles.ratedText}>You rated this host {myRating.stars}/5</Text>
           </View>
         )}
+        {!isHost && !isParticipant && !isPastRun && !isLive && user && (
+          <Pressable
+            style={({ pressed }) => [
+              styles.planBtn,
+              isPlanned && styles.planBtnActive,
+              { opacity: pressed || planMutation.isPending ? 0.8 : 1 },
+            ]}
+            onPress={() => planMutation.mutate()}
+            disabled={planMutation.isPending}
+          >
+            <Ionicons
+              name={isPlanned ? "calendar" : "calendar-outline"}
+              size={16}
+              color={isPlanned ? C.primary : C.textSecondary}
+            />
+            <Text style={[styles.planBtnText, isPlanned && styles.planBtnTextActive]}>
+              {isPlanned ? "Planning to attend — tap to remove" : "I'm planning to attend"}
+            </Text>
+          </Pressable>
+        )}
         {isParticipant && !isPastRun && !isLive && (
           <View style={styles.joinedBanner}>
             <Feather name="check" size={14} color={C.primary} />
@@ -575,9 +646,22 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   content: { paddingHorizontal: 20 },
   topBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 20 },
+  topBarRight: { flexDirection: "row", alignItems: "center", gap: 8 },
   backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, alignItems: "center", justifyContent: "center" },
   privacyBadge: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: "transparent" },
   privacyText: { fontFamily: "Outfit_600SemiBold", fontSize: 12 },
+  bookmarkBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, alignItems: "center", justifyContent: "center" },
+  bookmarkBtnActive: { backgroundColor: C.primaryMuted, borderColor: C.primary + "55" },
+  planCountRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  planCountText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted },
+  planBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16,
+    backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
+  },
+  planBtnActive: { backgroundColor: C.primaryMuted, borderColor: C.primary + "55" },
+  planBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary },
+  planBtnTextActive: { color: C.primary },
   title: { fontFamily: "Outfit_700Bold", fontSize: 26, color: C.text, marginBottom: 16, lineHeight: 32 },
   hostCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: C.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.border, marginBottom: 16 },
   hostAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.primaryMuted, borderWidth: 1, borderColor: C.primary + "44", alignItems: "center", justifyContent: "center" },
