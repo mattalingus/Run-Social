@@ -260,14 +260,26 @@ export default function MapScreen() {
     placeholderData: (prev) => prev,
   });
 
+  // Only runs whose pins are currently visible in the map viewport
+  const visibleRuns = useMemo(() => {
+    if (!bounds) return [];
+    return runs.filter(
+      (r) =>
+        r.location_lat >= bounds.swLat &&
+        r.location_lat <= bounds.neLat &&
+        r.location_lng >= bounds.swLng &&
+        r.location_lng <= bounds.neLng
+    );
+  }, [runs, bounds]);
+
   const insights = useMemo(() => {
-    if (runs.length === 0) return [];
+    if (visibleRuns.length === 0) return [];
     const now = Date.now();
     const result: Array<{ icon: string; lib: "feather" | "ion"; text: string; color: string }> = [];
 
-    result.push({ icon: "map-pin", lib: "feather", text: `${runs.length} run${runs.length !== 1 ? "s" : ""} on map`, color: C.primary });
+    result.push({ icon: "map-pin", lib: "feather", text: `${visibleRuns.length} run${visibleRuns.length !== 1 ? "s" : ""} on map`, color: C.primary });
 
-    const upcoming = runs
+    const upcoming = visibleRuns
       .filter((r) => new Date(r.date).getTime() > now)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
@@ -281,19 +293,19 @@ export default function MapScreen() {
       }
     }
 
-    const totalOpen = runs.reduce((acc, r) => acc + Math.max(0, r.max_participants - r.participant_count), 0);
+    const totalOpen = visibleRuns.reduce((acc, r) => acc + Math.max(0, r.max_participants - r.participant_count), 0);
     if (totalOpen > 0) result.push({ icon: "users", lib: "feather", text: `${totalOpen} open spot${totalOpen !== 1 ? "s" : ""}`, color: C.blue });
 
-    const fastest = runs.reduce((a, b) => a.min_pace < b.min_pace ? a : b);
+    const fastest = visibleRuns.reduce((a, b) => a.min_pace < b.min_pace ? a : b);
     result.push({ icon: "zap", lib: "feather", text: `${formatPace(fastest.min_pace)}/mi fastest`, color: "#F4C542" });
 
-    if (runs.length > 1) {
-      const minD = Math.min(...runs.map((r) => r.min_distance));
-      const maxD = Math.max(...runs.map((r) => r.max_distance));
+    if (visibleRuns.length > 1) {
+      const minD = Math.min(...visibleRuns.map((r) => r.min_distance));
+      const maxD = Math.max(...visibleRuns.map((r) => r.max_distance));
       result.push({ icon: "target", lib: "feather", text: `${formatDistance(minD)}–${formatDistance(maxD)} mi range`, color: C.textSecondary });
     }
 
-    const totalRunners = runs.reduce((acc, r) => acc + r.participant_count, 0);
+    const totalRunners = visibleRuns.reduce((acc, r) => acc + r.participant_count, 0);
     if (totalRunners > 0) result.push({ icon: "walk", lib: "ion", text: `${totalRunners} runner${totalRunners !== 1 ? "s" : ""} signed up`, color: C.primary });
 
     const fiveK = upcoming.filter((r) => r.min_distance <= 3.3 && r.max_distance >= 2.8);
@@ -303,7 +315,7 @@ export default function MapScreen() {
     }
 
     return result;
-  }, [runs]);
+  }, [visibleRuns]);
 
   useEffect(() => {
     (async () => {
