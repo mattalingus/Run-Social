@@ -371,7 +371,7 @@ export default function ProfileScreen() {
           style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
           onPress={() => { setShowAchievements((v) => !v); setSelectedAchievement(null); setAchFilter("All"); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
         >
-          <Text style={styles.goalLabel}>🏆 Achievements</Text>
+          <Text style={[styles.goalLabel, { fontSize: 17 }]}>🏆 Achievements</Text>
           <Text style={styles.statName}>{earnedCount}/{ACHIEVEMENTS.length} earned</Text>
           <View style={{ flex: 1 }} />
           <Feather name={showAchievements ? "chevron-up" : "chevron-down"} size={16} color={C.textMuted} />
@@ -392,7 +392,7 @@ export default function ProfileScreen() {
                     style={[styles.achFilterChip, active && styles.achFilterChipActive]}
                     onPress={() => { setAchFilter(cat); setSelectedAchievement(null); }}
                   >
-                    <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: active ? C.primary : C.text }}>{cat}</Text>
+                    <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 14, color: active ? C.primary : C.text }}>{cat}</Text>
                   </Pressable>
                 );
               })}
