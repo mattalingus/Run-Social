@@ -97,6 +97,7 @@ export default function ProfileScreen() {
   const [uploadingPin, setUploadingPin] = useState(false);
   const [profileTab, setProfileTab] = useState<"profile" | "friends">("profile");
   const [friendSearch, setFriendSearch] = useState("");
+  const [showAddFriend, setShowAddFriend] = useState(false);
 
   // ─── Handlers ──────────────────────────────────────────────────────────────
 
@@ -343,85 +344,121 @@ export default function ProfileScreen() {
 
       {profileTab === "friends" ? (
         <View style={styles.friendsTab}>
-          {/* Search */}
-          <View style={styles.searchBox}>
-            <Feather name="search" size={16} color={C.textMuted} />
-            <TextInput
-              style={styles.searchInput}
-              value={friendSearch}
-              onChangeText={setFriendSearch}
-              placeholder="Search runners by name..."
-              placeholderTextColor={C.textMuted}
-              autoCapitalize="words"
-            />
-            {friendSearch.length > 0 && (
-              <Pressable onPress={() => setFriendSearch("")} hitSlop={8}>
-                <Feather name="x" size={14} color={C.textMuted} />
+
+          {/* ── Friends counter + Add button ─────────────────────────────── */}
+          <View style={styles.friendsHeader}>
+            <View>
+              <Text style={styles.friendsCountNum}>{friendsList.length}</Text>
+              <Text style={styles.friendsCountLabel}>{friendsList.length === 1 ? "Friend" : "Friends"}</Text>
+            </View>
+            {showAddFriend ? (
+              <Pressable
+                style={styles.addFriendBtnActive}
+                onPress={() => { setShowAddFriend(false); setFriendSearch(""); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+              >
+                <Feather name="x" size={15} color={C.textSecondary} />
+                <Text style={styles.addFriendBtnTxtActive}>Cancel</Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                style={styles.addFriendBtn}
+                onPress={() => { setShowAddFriend(true); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+              >
+                <Feather name="user-plus" size={15} color={C.bg} />
+                <Text style={styles.addFriendBtnTxt}>Add Friend</Text>
               </Pressable>
             )}
           </View>
 
-          {friendSearch.length >= 2 && searchResults.length > 0 && (
-            <View style={styles.friendsSection}>
-              <Text style={styles.friendsSectionTitle}>Search Results</Text>
-              {searchResults.map((u: any) => {
-                const isAlreadyFriend = friendIds.has(u.id);
-                const hasSent = sentIds.has(u.id);
-                const hasIncoming = incomingRequests.some((r: any) => r.id === u.id);
-                return (
-                  <View key={u.id} style={styles.friendCard}>
-                    <View style={styles.friendAvatar}>
-                      {u.photo_url ? (
-                        <Image source={{ uri: u.photo_url }} style={styles.friendAvatarImg} />
-                      ) : (
-                        <Text style={styles.friendAvatarTxt}>{u.name.charAt(0).toUpperCase()}</Text>
-                      )}
-                    </View>
-                    <View style={styles.friendInfo}>
-                      <Text style={styles.friendName}>{u.name}</Text>
-                      <Text style={styles.friendStat}>{u.completed_runs} runs · {formatDistance(u.total_miles)} mi</Text>
-                    </View>
-                    {isAlreadyFriend ? (
-                      <View style={styles.friendStatusBadge}>
-                        <Feather name="check" size={12} color={C.primary} />
-                        <Text style={styles.friendStatusTxt}>Friends</Text>
+          {/* ── Search panel (visible when Add Friend is active) ─────────── */}
+          {showAddFriend && (
+            <View style={styles.searchPanel}>
+              <View style={styles.searchBox}>
+                <Feather name="search" size={16} color={C.textMuted} />
+                <TextInput
+                  style={[styles.searchInput, { color: C.text }]}
+                  value={friendSearch}
+                  onChangeText={setFriendSearch}
+                  placeholder="Search runners by name..."
+                  placeholderTextColor={C.textMuted}
+                  autoCapitalize="words"
+                />
+                {friendSearch.length > 0 && (
+                  <Pressable onPress={() => setFriendSearch("")} hitSlop={8}>
+                    <Feather name="x" size={14} color={C.textMuted} />
+                  </Pressable>
+                )}
+              </View>
+
+              {friendSearch.length >= 2 && searchResults.length > 0 && (
+                <View style={styles.friendsSection}>
+                  <Text style={styles.friendsSectionTitle}>Results</Text>
+                  {searchResults.map((u: any) => {
+                    const isAlreadyFriend = friendIds.has(u.id);
+                    const hasSent = sentIds.has(u.id);
+                    const hasIncoming = incomingRequests.some((r: any) => r.id === u.id);
+                    return (
+                      <View key={u.id} style={styles.friendCard}>
+                        <View style={styles.friendAvatar}>
+                          {u.photo_url ? (
+                            <Image source={{ uri: u.photo_url }} style={styles.friendAvatarImg} />
+                          ) : (
+                            <Text style={styles.friendAvatarTxt}>{u.name.charAt(0).toUpperCase()}</Text>
+                          )}
+                        </View>
+                        <View style={styles.friendInfo}>
+                          <Text style={styles.friendName}>{u.name}</Text>
+                          <Text style={styles.friendStat}>{u.completed_runs} runs · {formatDistance(u.total_miles)} mi</Text>
+                        </View>
+                        {isAlreadyFriend ? (
+                          <View style={styles.friendStatusBadge}>
+                            <Feather name="check" size={12} color={C.primary} />
+                            <Text style={styles.friendStatusTxt}>Friends</Text>
+                          </View>
+                        ) : hasSent ? (
+                          <View style={styles.friendStatusBadge}>
+                            <Text style={styles.friendStatusTxt}>Sent</Text>
+                          </View>
+                        ) : hasIncoming ? (
+                          <Pressable
+                            style={styles.friendAcceptBtn}
+                            onPress={() => { const r = incomingRequests.find((req: any) => req.id === u.id); if (r) acceptMutation.mutate(r.friendship_id); }}
+                          >
+                            <Text style={styles.friendAcceptTxt}>Accept</Text>
+                          </Pressable>
+                        ) : (
+                          <Pressable
+                            style={styles.friendAddBtn}
+                            onPress={() => sendRequestMutation.mutate(u.id)}
+                            disabled={sendRequestMutation.isPending}
+                          >
+                            <Feather name="user-plus" size={14} color={C.bg} />
+                          </Pressable>
+                        )}
                       </View>
-                    ) : hasSent ? (
-                      <View style={styles.friendStatusBadge}>
-                        <Text style={styles.friendStatusTxt}>Sent</Text>
-                      </View>
-                    ) : hasIncoming ? (
-                      <Pressable
-                        style={styles.friendAcceptBtn}
-                        onPress={() => { const r = incomingRequests.find((req: any) => req.id === u.id); if (r) acceptMutation.mutate(r.friendship_id); }}
-                      >
-                        <Text style={styles.friendAcceptTxt}>Accept</Text>
-                      </Pressable>
-                    ) : (
-                      <Pressable
-                        style={styles.friendAddBtn}
-                        onPress={() => sendRequestMutation.mutate(u.id)}
-                        disabled={sendRequestMutation.isPending}
-                      >
-                        <Feather name="user-plus" size={14} color={C.bg} />
-                      </Pressable>
-                    )}
-                  </View>
-                );
-              })}
+                    );
+                  })}
+                </View>
+              )}
+
+              {friendSearch.length >= 2 && searchResults.length === 0 && (
+                <View style={styles.searchEmpty}>
+                  <Text style={styles.searchEmptyTxt}>No runners found for "{friendSearch}"</Text>
+                </View>
+              )}
+
+              {friendSearch.length < 2 && (
+                <View style={styles.searchHint}>
+                  <Text style={styles.searchHintTxt}>Type at least 2 characters to search</Text>
+                </View>
+              )}
             </View>
           )}
 
-          {friendSearch.length >= 2 && searchResults.length === 0 && (
-            <View style={styles.emptyState}>
-              <Feather name="search" size={28} color={C.textMuted} />
-              <Text style={styles.emptyStateTxt}>No runners found for "{friendSearch}"</Text>
-            </View>
-          )}
-
-          {incomingRequests.length > 0 && friendSearch.length < 2 && (
+          {/* ── Incoming requests ────────────────────────────────────────── */}
+          {incomingRequests.length > 0 && !showAddFriend && (
             <View style={styles.friendsSection}>
-              <Text style={styles.friendsSectionTitle}>Requests ({incomingRequests.length})</Text>
+              <Text style={styles.friendsSectionTitle}>Pending Requests</Text>
               {incomingRequests.map((req: any) => (
                 <View key={req.friendship_id} style={styles.friendCard}>
                   <View style={styles.friendAvatar}>
@@ -433,19 +470,13 @@ export default function ProfileScreen() {
                   </View>
                   <View style={styles.friendInfo}>
                     <Text style={styles.friendName}>{req.name}</Text>
-                    <Text style={styles.friendStat}>Wants to be friends</Text>
+                    <Text style={styles.friendStat}>Wants to connect</Text>
                   </View>
                   <View style={styles.requestActions}>
-                    <Pressable
-                      style={styles.friendAcceptBtn}
-                      onPress={() => acceptMutation.mutate(req.friendship_id)}
-                    >
+                    <Pressable style={styles.friendAcceptBtn} onPress={() => acceptMutation.mutate(req.friendship_id)}>
                       <Text style={styles.friendAcceptTxt}>Accept</Text>
                     </Pressable>
-                    <Pressable
-                      style={styles.friendDeclineBtn}
-                      onPress={() => removeFriendMutation.mutate(req.friendship_id)}
-                    >
+                    <Pressable style={styles.friendDeclineBtn} onPress={() => removeFriendMutation.mutate(req.friendship_id)}>
                       <Text style={styles.friendDeclineTxt}>Decline</Text>
                     </Pressable>
                   </View>
@@ -454,9 +485,10 @@ export default function ProfileScreen() {
             </View>
           )}
 
-          {friendsList.length > 0 && friendSearch.length < 2 && (
+          {/* ── Friends list ─────────────────────────────────────────────── */}
+          {friendsList.length > 0 && !showAddFriend && (
             <View style={styles.friendsSection}>
-              <Text style={styles.friendsSectionTitle}>Friends ({friendsList.length})</Text>
+              <Text style={styles.friendsSectionTitle}>Your Friends</Text>
               {friendsList.map((f: any) => (
                 <View key={f.friendship_id} style={styles.friendCard}>
                   <View style={styles.friendAvatar}>
@@ -484,11 +516,12 @@ export default function ProfileScreen() {
             </View>
           )}
 
-          {friendsList.length === 0 && incomingRequests.length === 0 && friendSearch.length < 2 && (
+          {/* ── Empty state ──────────────────────────────────────────────── */}
+          {friendsList.length === 0 && incomingRequests.length === 0 && !showAddFriend && (
             <View style={styles.emptyState}>
               <Feather name="users" size={36} color={C.textMuted} />
               <Text style={styles.emptyStateTitle}>No friends yet</Text>
-              <Text style={styles.emptyStateTxt}>Search by name to find other runners and add them as friends.</Text>
+              <Text style={styles.emptyStateTxt}>Tap Add Friend to find other runners.</Text>
             </View>
           )}
         </View>
@@ -1064,11 +1097,23 @@ const iconStyles = StyleSheet.create({
   tabBtnTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.textSecondary },
   tabBtnTxtActive: { color: C.primary },
   tabDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: C.orange, position: "absolute", top: 6, right: 10 },
-  friendsTab: { gap: 20 },
-  searchBox: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: C.surface, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: C.border },
+  friendsTab: { gap: 16 },
+  friendsHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: C.card, borderRadius: 16, padding: 18, borderWidth: 1, borderColor: C.border },
+  friendsCountNum: { fontFamily: "Outfit_700Bold", fontSize: 36, color: C.primary, lineHeight: 40 },
+  friendsCountLabel: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary, marginTop: 2 },
+  addFriendBtn: { flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: C.primary, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10 },
+  addFriendBtnActive: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
+  addFriendBtnTxt: { fontFamily: "Outfit_700Bold", fontSize: 14, color: C.bg },
+  addFriendBtnTxtActive: { color: C.textSecondary },
+  searchPanel: { gap: 14, backgroundColor: C.surface, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: C.border },
+  searchBox: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: C.card, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: C.border },
   searchInput: { flex: 1, fontFamily: "Outfit_400Regular", fontSize: 15, color: C.text },
+  searchEmpty: { alignItems: "center", paddingVertical: 20 },
+  searchEmptyTxt: { fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textMuted, textAlign: "center" },
+  searchHint: { alignItems: "center", paddingVertical: 12 },
+  searchHintTxt: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textMuted },
   friendsSection: { gap: 10 },
-  friendsSectionTitle: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.text },
+  friendsSectionTitle: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.textSecondary, textTransform: "uppercase" as const, letterSpacing: 0.8, marginBottom: 2 },
   friendCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: C.card, borderRadius: 14, padding: 12, borderWidth: 1, borderColor: C.border },
   friendAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.primaryMuted, borderWidth: 1, borderColor: C.primary + "33", alignItems: "center", justifyContent: "center", overflow: "hidden" },
   friendAvatarImg: { width: 44, height: 44, borderRadius: 22 },
