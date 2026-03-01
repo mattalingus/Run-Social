@@ -6,6 +6,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import C from "@/constants/colors";
 
+const TAB_BG      = "#0B1A16";
+const ACTIVE_TINT = "#4EB082";
+const MUTED_TINT  = "#3A5847";
+
+function SolidTabBarBackground() {
+  return <View style={styles.tabBarBg} />;
+}
+
 function NativeTabLayout() {
   return (
     <NativeTabs>
@@ -25,35 +33,36 @@ function NativeTabLayout() {
   );
 }
 
-function TabBarBackground() {
-  return <View style={styles.tabBarBg} />;
-}
-
 function ClassicTabLayout() {
-  const insets = useSafeAreaInsets();
-  const isWeb = Platform.OS === "web";
+  const insets  = useSafeAreaInsets();
+  const isWeb   = Platform.OS === "web";
   const tabBarHeight = (isWeb ? 50 : 56) + insets.bottom;
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: C.primary,
-        tabBarInactiveTintColor: C.tabIconDefault,
+        tabBarActiveTintColor:   ACTIVE_TINT,
+        tabBarInactiveTintColor: MUTED_TINT,
         tabBarStyle: {
-          position: "absolute",
-          backgroundColor: "transparent",
-          borderTopWidth: 0,
-          height: tabBarHeight,
-          elevation: 0,
+          position:        "absolute",
+          backgroundColor: TAB_BG,
+          borderTopWidth:  0,
+          height:          tabBarHeight,
+          elevation:       0,
+          shadowColor:     "transparent",
+          shadowOpacity:   0,
+          shadowRadius:    0,
+          shadowOffset:    { width: 0, height: 0 },
         },
-        tabBarBackground: () => <TabBarBackground />,
+        tabBarBackground: () => <SolidTabBarBackground />,
         tabBarLabelStyle: {
           fontFamily: "Outfit_600SemiBold",
-          fontSize: 11,
+          fontSize:   11,
           marginBottom: 2,
         },
-        tabBarIconStyle: { marginTop: 4 },
+        tabBarIconStyle:  { marginTop: 4 },
+        tabBarItemStyle:  { paddingTop: 0, paddingBottom: 0 },
       }}
     >
       <Tabs.Screen
@@ -61,7 +70,7 @@ function ClassicTabLayout() {
         options={{
           title: "Discover",
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "search" : "search-outline"} size={24} color={color} />
+            <Ionicons name={focused ? "search" : "search-outline"} size={23} color={color} />
           ),
         }}
       />
@@ -70,7 +79,7 @@ function ClassicTabLayout() {
         options={{
           title: "Solo",
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "stopwatch" : "stopwatch-outline"} size={24} color={color} />
+            <Ionicons name={focused ? "stopwatch" : "stopwatch-outline"} size={23} color={color} />
           ),
         }}
       />
@@ -79,7 +88,7 @@ function ClassicTabLayout() {
         options={{
           title: "Profile",
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "person" : "person-outline"} size={24} color={color} />
+            <Ionicons name={focused ? "person" : "person-outline"} size={23} color={color} />
           ),
         }}
       />
@@ -96,18 +105,9 @@ export default function TabLayout() {
 
 const styles = StyleSheet.create({
   tabBarBg: {
-    flex: 1,
-    backgroundColor: C.surface,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    borderTopWidth: 1,
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
-    borderColor: C.borderLight,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 18,
-    elevation: 24,
+    flex:            1,
+    backgroundColor: TAB_BG,
+    borderTopWidth:  1,
+    borderTopColor:  "#162820",
   },
 });
