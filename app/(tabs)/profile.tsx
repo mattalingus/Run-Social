@@ -365,11 +365,11 @@ export default function ProfileScreen() {
         </Pressable>
       </View>
 
-      {/* ── Achievements Card + Inline List ───────────────────────────────── */}
-      <View>
+      {/* ── Achievements Card ─────────────────────────────────────────────── */}
+      <View style={[styles.statCard, styles.achCard]}>
         <Pressable
-          style={({ pressed }) => [styles.statCard, styles.achInlineCard, { opacity: pressed ? 0.85 : 1 }]}
-          onPress={() => { setShowAchievements((v) => !v); setSelectedAchievement(null); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+          style={styles.achCardHeader}
+          onPress={() => { setShowAchievements((v) => !v); setSelectedAchievement(null); setAchFilter("All"); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
         >
           <Text style={styles.achInlineIcon}>🏆</Text>
           <View style={{ flex: 1 }}>
@@ -380,60 +380,76 @@ export default function ProfileScreen() {
         </Pressable>
 
         {showAchievements && (
-          <View style={styles.achExpandedContainer}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.achFilterRow} contentContainerStyle={{ gap: 8, paddingHorizontal: 2 }}>
+          <View style={styles.achExpandedInCard}>
+            {/* Divider */}
+            <View style={styles.achDivider} />
+
+            {/* Category filter */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
               {["All", "Beginner", "Consistency", "Mileage", "Social", "Speed", "Lifestyle"].map((cat) => (
                 <Pressable
                   key={cat}
                   style={[styles.achFilterChip, achFilter === cat && styles.achFilterChipActive]}
-                  onPress={() => setAchFilter(cat)}
+                  onPress={() => { setAchFilter(cat); setSelectedAchievement(null); }}
                 >
                   <Text style={[styles.achFilterTxt, achFilter === cat && styles.achFilterTxtActive]}>{cat}</Text>
                 </Pressable>
               ))}
             </ScrollView>
 
-            {filteredAchievements.map((ach) => {
+            {/* 5-per-row grid */}
+            <View style={styles.achGrid}>
+              {filteredAchievements.map((ach) => {
+                const earned = earnedSlugs.has(ach.slug);
+                const isSelected = selectedAchievement?.slug === ach.slug;
+                return (
+                  <Pressable
+                    key={ach.slug}
+                    style={[styles.achGridCell, isSelected && styles.achGridCellSelected]}
+                    onPress={() => setSelectedAchievement(isSelected ? null : ach)}
+                  >
+                    <Text style={[styles.achGridIcon, !earned && styles.achItemIconLocked]}>{ach.icon}</Text>
+                    {earned && <View style={styles.achGridDot} />}
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {/* Selected achievement detail */}
+            {selectedAchievement && (() => {
+              const ach = selectedAchievement;
               const earned = earnedSlugs.has(ach.slug);
               const current = ach.progressKey ? Math.min(achStats[ach.progressKey] ?? 0, ach.progressTarget ?? 1) : 0;
               const target = ach.progressTarget ?? 1;
               const pct = Math.min(current / target, 1);
-              const isSelected = selectedAchievement?.slug === ach.slug;
               return (
-                <Pressable key={ach.slug} style={styles.achItem} onPress={() => setSelectedAchievement(isSelected ? null : ach)}>
-                  <Text style={[styles.achItemIcon, !earned && styles.achItemIconLocked]}>{ach.icon}</Text>
-                  <View style={{ flex: 1, gap: 4 }}>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                      <Text style={[styles.achItemName, !earned && styles.achItemNameLocked]}>{ach.name}</Text>
-                      {earned && <Feather name="check-circle" size={13} color={C.primary} />}
+                <View style={styles.achDetailPanel}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Text style={styles.achDetailPanelIcon}>{ach.icon}</Text>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                        <Text style={styles.achItemName}>{ach.name}</Text>
+                        {earned && <Feather name="check-circle" size={13} color={C.primary} />}
+                      </View>
+                      <Text style={styles.achDetailCategory}>{ach.category} · Difficulty {ach.difficulty}/6</Text>
                     </View>
-                    <Text style={styles.achItemDesc}>{ach.desc}</Text>
-                    {isSelected && (
-                      <View style={styles.achDetail}>
-                        <Text style={styles.achDetailCategory}>{ach.category} · Difficulty {ach.difficulty}/6</Text>
-                        {ach.progressTarget && (
-                          <View style={styles.achDetailProgress}>
-                            <View style={styles.achProgressTrack}>
-                              <View style={[styles.achProgressFill, { width: `${Math.round(pct * 100)}%` as any, backgroundColor: earned ? C.primary : C.primaryDark }]} />
-                            </View>
-                            <Text style={styles.achProgressTxt}>
-                              {ach.progressKey === "max_single_run_miles_x10"
-                                ? `${(current / 10).toFixed(1)} / ${(target / 10).toFixed(1)} mi`
-                                : `${Math.round(current)} / ${target} ${ach.progressLabel ?? ""}`}
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-                    )}
-                    {!isSelected && ach.progressTarget && !earned && (
-                      <View style={styles.achProgressTrackSmall}>
-                        <View style={[styles.achProgressFillSmall, { width: `${Math.round(pct * 100)}%` as any }]} />
-                      </View>
-                    )}
                   </View>
-                </Pressable>
+                  <Text style={styles.achItemDesc}>{ach.desc}</Text>
+                  {ach.progressTarget && (
+                    <View style={styles.achDetailProgress}>
+                      <View style={styles.achProgressTrack}>
+                        <View style={[styles.achProgressFill, { width: `${Math.round(pct * 100)}%` as any, backgroundColor: earned ? C.primary : C.primaryDark }]} />
+                      </View>
+                      <Text style={styles.achProgressTxt}>
+                        {ach.progressKey === "max_single_run_miles_x10"
+                          ? `${(current / 10).toFixed(1)} / ${(target / 10).toFixed(1)} mi`
+                          : `${Math.round(current)} / ${target} ${ach.progressLabel ?? ""}`}
+                      </Text>
+                    </View>
+                  )}
+                </View>
               );
-            })}
+            })()}
           </View>
         )}
       </View>
@@ -1163,14 +1179,30 @@ const iconStyles = StyleSheet.create({
     backgroundColor: C.primaryMuted, paddingHorizontal: 8, paddingVertical: 2,
     borderRadius: 10, overflow: "hidden" as const,
   },
-  achInlineCard: { flexDirection: "row", alignItems: "center", gap: 12 },
   achInlineIcon: { fontSize: 22 },
-  achExpandedContainer: {
-    backgroundColor: C.card, borderRadius: 14, padding: 16, marginTop: 8,
-    borderWidth: 1, borderColor: C.border, gap: 0,
-  },
+  achCard: { alignItems: "stretch", flex: undefined },
+  achCardHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
+  achExpandedInCard: { gap: 14, marginTop: 14 },
+  achDivider: { height: 1, backgroundColor: C.border },
 
-  achFilterRow: { flexShrink: 0, marginBottom: 8 },
+  achGrid: { flexDirection: "row", flexWrap: "wrap" },
+  achGridCell: {
+    width: "20%" as any, alignItems: "center", justifyContent: "center",
+    paddingVertical: 10, borderRadius: 10,
+  },
+  achGridCellSelected: { backgroundColor: C.primaryMuted },
+  achGridIcon: { fontSize: 32 },
+  achGridDot: {
+    width: 5, height: 5, borderRadius: 3,
+    backgroundColor: C.primary, marginTop: 3,
+  },
+  achDetailPanel: {
+    backgroundColor: C.surface, borderRadius: 12, padding: 14,
+    borderWidth: 1, borderColor: C.border, gap: 8,
+  },
+  achDetailPanelIcon: { fontSize: 28 },
+
+  achFilterRow: { flexShrink: 0, marginBottom: 0 },
   achFilterChip: {
     paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
