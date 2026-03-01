@@ -369,10 +369,13 @@ export default function MapScreen() {
 
   return (
     <View style={s.container}>
+      {/* ─── Map card (rounded, like host location picker) ───────────────── */}
+      <View style={[s.mapCard, { top: topPad + (Platform.OS === "web" ? 67 : 0) + 58 }]}>
+
       {/* ─── Map ─────────────────────────────────────────────────────────── */}
       <MapView
         ref={mapRef}
-        style={StyleSheet.absoluteFill}
+        style={{ flex: 1 }}
         initialRegion={HOUSTON}
         mapType="mutedStandard"
         customMapStyle={MAP_STYLE}
@@ -411,6 +414,8 @@ export default function MapScreen() {
         ))}
       </View>
 
+      </View>{/* ── end mapCard ─────────────────────────────────────────────── */}
+
       {/* ─── Header ──────────────────────────────────────────────────────── */}
       <View style={s.header}>
         {/* Opaque strip — just status bar + buttons, nothing extra */}
@@ -440,7 +445,7 @@ export default function MapScreen() {
       </View>
 
       {/* ─── Sidebar ─────────────────────────────────────────────────────── */}
-      <View style={[s.sideBar, { top: topPad + 58 }]}>
+      <View style={[s.sideBar, { top: topPad + (Platform.OS === "web" ? 67 : 0) + 70 }]}>
         {userLoc && (
           <Pressable
             style={s.sideBtn}
@@ -693,6 +698,15 @@ export default function MapScreen() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
+
+  mapCard: {
+    position: "absolute",
+    left: 10, right: 10, bottom: 10,
+    borderRadius: 20,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: C.border,
+  },
 
   mapDim: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.13)" },
   gradBottom: { position: "absolute", bottom: 0, left: 0, right: 0 },

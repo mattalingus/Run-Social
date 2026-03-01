@@ -500,13 +500,41 @@ export default function DiscoverScreen() {
   const [hostPage, setHostPage] = useState<"form" | "location">("form");
   const [pinCoord, setPinCoord] = useState<{ latitude: number; longitude: number } | null>(null);
   const [isGeocodingPin, setIsGeocodingPin] = useState(false);
-  // (showLocationModal removed — location picker is now embedded in the host modal)
+  const [hAmPm, setHAmPm] = useState<"AM" | "PM">("AM");
 
   function resetHostForm() {
     setHTitle(""); setHLocation(""); setHDate(""); setHTime("");
     setHPrivacy("public"); setHPassword(""); setHMaxParticipants(20);
     setHTags([]); setHMinDist("3"); setHMaxDist("6"); setHMinPace(8); setHMaxPace(12);
     setHLocationLat(null); setHLocationLng(null); setPinCoord(null); setHostPage("form");
+    setHAmPm("AM");
+  }
+
+  function handleDateChange(text: string) {
+    const digits = text.replace(/\D/g, "").slice(0, 6);
+    let formatted = digits;
+    if (digits.length > 2) formatted = digits.slice(0, 2) + "/" + digits.slice(2);
+    if (digits.length > 4) formatted = digits.slice(0, 2) + "/" + digits.slice(2, 4) + "/" + digits.slice(4);
+    setHDate(formatted);
+  }
+
+  function autoFormatTime(digits: string): string {
+    if (digits.length <= 1) return digits;
+    if (digits.length === 2) {
+      if (parseInt(digits[0], 10) > 1) return digits[0] + ":" + digits[1];
+      return digits;
+    }
+    if (digits.length === 3) {
+      if (parseInt(digits[0], 10) > 1) return digits[0] + ":" + digits.slice(1);
+      return digits.slice(0, 2) + ":" + digits[2];
+    }
+    if (parseInt(digits[0], 10) > 1) return digits[0] + ":" + digits.slice(1, 3);
+    return digits.slice(0, 2) + ":" + digits.slice(2, 4);
+  }
+
+  function handleTimeChange(text: string) {
+    const digits = text.replace(/\D/g, "").slice(0, 4);
+    setHTime(autoFormatTime(digits));
   }
 
   // ─── Date / Time parse helpers ─────────────────────────────────────────────
@@ -519,12 +547,11 @@ export default function DiscoverScreen() {
     return isNaN(date.getTime()) ? null : date;
   }
 
-  function parseHHMMAMPM(raw: string): { hours: number; minutes: number } | null {
-    const match = raw.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)$/i);
+  function parseHHMMAMPM(raw: string, ampm: "AM" | "PM"): { hours: number; minutes: number } | null {
+    const match = raw.trim().match(/^(\d{1,2}):(\d{2})$/);
     if (!match) return null;
     let hours = parseInt(match[1], 10);
     const minutes = parseInt(match[2], 10);
-    const ampm = match[3].toUpperCase();
     if (ampm === "PM" && hours !== 12) hours += 12;
     if (ampm === "AM" && hours === 12) hours = 0;
     if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
@@ -595,8 +622,8 @@ export default function DiscoverScreen() {
       if (!hDate.trim() || !hTime.trim()) throw new Error("Date and time are required");
       const parsedDate = parseDMY(hDate.trim());
       if (!parsedDate) throw new Error("Invalid date — use DD/MM/YY (e.g. 25/06/25)");
-      const parsedTime = parseHHMMAMPM(hTime.trim());
-      if (!parsedTime) throw new Error("Invalid time — use HH:MM AM/PM (e.g. 7:30 AM)");
+      const parsedTime = parseHHMMAMPM(hTime.trim(), hAmPm);
+      if (!parsedTime) throw new Error("Invalid time — use H:MM (e.g. 7:30)");
       parsedDate.setHours(parsedTime.hours, parsedTime.minutes, 0, 0);
       if (isNaN(parsedDate.getTime())) throw new Error("Invalid date or time");
       const res = await apiRequest("POST", "/api/runs", {
@@ -970,7 +997,7 @@ export default function DiscoverScreen() {
               </Text>
               {Platform.OS !== "web" && pinCoord ? (
                 <MapView
-                  style={{ height: 280, borderRadius: 14, overflow: "hidden" }}
+                  style={{ height: 360, borderRadius: 14, overflow: "hidden" }}
                   initialRegion={{
                     latitude: pinCoord.latitude,
                     longitude: pinCoord.longitude,
@@ -1042,19 +1069,34 @@ export default function DiscoverScreen() {
               <TextInput
                 style={[s.hInput, { flex: 1 }]}
                 value={hDate}
-                onChangeText={setHDate}
+                onChangeText={handleDateChange}
                 placeholder="DD/MM/YY"
                 placeholderTextColor={C.textMuted}
-                keyboardType="numbers-and-punctuation"
+                keyboardType="number-pad"
+                maxLength={8}
               />
-              <TextInput
-                style={[s.hInput, { flex: 1 }]}
-                value={hTime}
-                onChangeText={setHTime}
-                placeholder="7:30 AM"
-                placeholderTextColor={C.textMuted}
-                keyboardType="numbers-and-punctuation"
-              />
+              <View style={{ flex: 1, flexDirection: "row", gap: 6 }}>
+                <TextInput
+                  style={[s.hInput, { flex: 1 }]}
+                  value={hTime}
+                  onChangeText={handleTimeChange}
+                  placeholder="7:30"
+                  placeholderTextColor={C.textMuted}
+                  keyboardType="number-pad"
+                  maxLength={5}
+                />
+                <View style={{ flexDirection: "column", gap: 4 }}>
+                  {(["AM", "PM"] as const).map((period) => (
+                    <Pressable
+                      key={period}
+                      style={{ flex: 1, paddingHorizontal: 10, borderRadius: 9, borderWidth: 1, alignItems: "center", justifyContent: "center", backgroundColor: hAmPm === period ? C.primaryMuted : C.card, borderColor: hAmPm === period ? C.primary : C.border }}
+                      onPress={() => { setHAmPm(period); Haptics.selectionAsync(); }}
+                    >
+                      <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: hAmPm === period ? C.primary : C.textSecondary }}>{period}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
             </View>
 
             {/* Privacy */}
