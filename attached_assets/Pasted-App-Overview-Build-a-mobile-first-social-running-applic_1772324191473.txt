@@ -1,0 +1,330 @@
+App Overview
+
+Build a mobile-first social running application that allows users to:
+
+Discover local runs on a map
+
+Join runs that match their pace and distance ability
+
+Host their own runs (after unlocking host privileges)
+
+Track run history and total mileage
+
+Set mileage goals
+
+Earn achievements based on miles completed
+
+Rate hosts after completed runs
+
+The app must be scalable and structured with a clean backend database.
+
+Core Features
+1. Authentication
+
+Email + password signup
+
+Google login
+
+Secure user sessions
+
+User profile creation on signup
+
+2. User Profile
+
+Each user profile must include:
+
+Name
+
+Profile photo
+
+Average pace (minutes per mile)
+
+Average distance (miles)
+
+Total lifetime miles
+
+Miles this year
+
+Miles this month
+
+Monthly mileage goal
+
+Yearly mileage goal
+
+Completed runs count
+
+Hosted runs count
+
+Host unlocked (boolean)
+
+Role: runner or host
+
+Achievement badges earned
+
+3. Hosting Unlock Logic
+
+Users cannot host runs until:
+
+They complete at least 3 runs
+
+With at least 2 different hosts
+
+Once conditions are met:
+
+Role changes to “host”
+
+host_unlocked = true
+
+Display unlock progress on profile.
+
+4. Create Run (Host Only)
+
+Hosts can create:
+
+Public runs
+
+Private runs (invite-only)
+
+Solo runs
+
+Run fields:
+
+Date and time
+
+Location (map coordinates)
+
+Distance range (min/max)
+
+Pace range (min/max)
+
+Run style tags:
+
+Talkative
+
+Quiet
+
+Motivational
+
+Training
+
+Ministry
+
+Recovery
+
+5. Map-Based Run Discovery
+
+Main home screen must be a map.
+
+Map shows:
+
+Pins for upcoming public runs
+
+Clicking pin opens run detail screen
+
+Filters:
+
+Location radius
+
+Pace range
+
+Distance range
+
+Run style
+
+6. Join Run Logic
+
+Users can join a run only if:
+
+Their average pace meets host pace requirement
+
+Their average distance meets host distance requirement
+
+If not eligible:
+
+Show clear message explaining why
+
+When joining:
+
+Create RunParticipant record
+
+Add user to participant list
+
+7. Run Completion Tracking
+
+After run time passes:
+
+Mark run as completed
+
+Participants can confirm completion
+
+Update:
+
+Completed runs count
+
+Total miles
+
+Monthly miles
+
+Yearly miles
+
+8. Run History
+
+Users can view:
+
+List of past runs
+
+Distance
+
+Pace
+
+Date
+
+Whether hosted or joined
+
+9. Mileage Goals
+
+Users can:
+
+Set monthly mileage goal
+
+Set yearly mileage goal
+
+Display:
+
+Progress bar
+
+Remaining miles needed
+
+10. Achievements System
+
+Award achievement badges at:
+
+25 miles
+
+100 miles
+
+250 miles
+
+500 miles
+
+1000 miles
+
+Achievements are digital badges.
+
+Include support for real-world rewards eligibility tracking, but do not automate shipping.
+
+11. Host Ratings
+
+After completed run:
+
+Participants can rate host:
+
+1–5 stars
+
+Select feedback tags:
+
+Kept advertised pace
+
+Well organized
+
+Welcoming
+
+Clear communication
+
+Only participants of completed runs can rate.
+
+Host rating is average of all ratings.
+
+12. Notifications
+
+Push notifications for:
+
+Upcoming run reminders (1 hour + 10 minutes before)
+
+When a run matches user’s pace/distance filters
+
+When hosting unlocks
+
+Notifications must be toggleable in settings.
+
+Required Data Models
+
+Create structured database models for:
+
+Users
+
+Runs
+
+RunParticipants
+
+HostRatings
+
+Achievements
+
+Notifications
+
+Goals
+
+Relationships must be properly structured for scalability.
+
+UI Requirements
+
+Clean modern UI
+
+Mobile-first
+
+Map-centered homepage
+
+Simple, intuitive navigation
+
+Focus on clarity over complexity
+
+Technical Requirements
+
+Structured backend database
+
+Role-based access control
+
+Conditional logic for join eligibility
+
+Secure authentication
+
+Scalable architecture
+
+Clean, maintainable code
+
+Future-Ready Integrations (Structure Only)
+
+Prepare architecture for future integration with:
+
+Strava
+
+Apple Health
+
+Garmin
+
+Do not implement integration yet, but structure database to support it.
+
+Build Goal
+
+Produce a functional MVP with:
+
+Working authentication
+
+Run creation
+
+Map discovery
+
+Join logic
+
+Run completion tracking
+
+Mileage tracking
+
+Goals
+
+Achievements
+
+Ratings
+
+App must be clean, scalable, and production-ready structure.
