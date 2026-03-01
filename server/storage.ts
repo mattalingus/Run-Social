@@ -160,7 +160,18 @@ export async function updateMarkerIcon(userId: string, icon: string | null) {
   await pool.query(`UPDATE users SET marker_icon = $2 WHERE id = $1`, [userId, icon]);
 }
 
-export async function getPublicRuns(filters?: { minPace?: number; maxPace?: number; minDistance?: number; maxDistance?: number; tag?: string }) {
+export async function getPublicRuns(filters?: {
+  minPace?: number;
+  maxPace?: number;
+  minDistance?: number;
+  maxDistance?: number;
+  tag?: string;
+  styles?: string[];
+  swLat?: number;
+  swLng?: number;
+  neLat?: number;
+  neLng?: number;
+}) {
   let query = `SELECT r.*, u.name as host_name, u.avg_rating as host_rating, u.photo_url as host_photo, u.marker_icon as host_marker_icon,
     (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled') as participant_count
     FROM runs r JOIN users u ON u.id = r.host_id
@@ -172,7 +183,19 @@ export async function getPublicRuns(filters?: { minPace?: number; maxPace?: numb
   if (filters?.minDistance !== undefined) { query += ` AND r.max_distance >= $${idx++}`; params.push(filters.minDistance); }
   if (filters?.maxDistance !== undefined) { query += ` AND r.min_distance <= $${idx++}`; params.push(filters.maxDistance); }
   if (filters?.tag) { query += ` AND $${idx++} = ANY(r.tags)`; params.push(filters.tag); }
-  query += ` ORDER BY r.date ASC LIMIT 100`;
+  if (filters?.styles && filters.styles.length > 0) {
+    query += ` AND r.tags && $${idx++}`;
+    params.push(filters.styles);
+  }
+  if (filters?.swLat !== undefined && filters.neLat !== undefined) {
+    query += ` AND r.location_lat BETWEEN $${idx++} AND $${idx++}`;
+    params.push(filters.swLat, filters.neLat);
+  }
+  if (filters?.swLng !== undefined && filters.neLng !== undefined) {
+    query += ` AND r.location_lng BETWEEN $${idx++} AND $${idx++}`;
+    params.push(filters.swLng, filters.neLng);
+  }
+  query += ` ORDER BY r.date ASC LIMIT 200`;
   const result = await pool.query(query, params);
   return result.rows;
 }

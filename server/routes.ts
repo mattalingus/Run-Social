@@ -134,6 +134,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (req.query.minDistance) filters.minDistance = parseFloat(req.query.minDistance as string);
       if (req.query.maxDistance) filters.maxDistance = parseFloat(req.query.maxDistance as string);
       if (req.query.tag) filters.tag = req.query.tag as string;
+      if (req.query.styles) {
+        const raw = req.query.styles as string;
+        filters.styles = raw.split(",").map(s => s.trim()).filter(Boolean);
+      }
+      if (req.query.swLat) filters.swLat = parseFloat(req.query.swLat as string);
+      if (req.query.swLng) filters.swLng = parseFloat(req.query.swLng as string);
+      if (req.query.neLat) filters.neLat = parseFloat(req.query.neLat as string);
+      if (req.query.neLng) filters.neLng = parseFloat(req.query.neLng as string);
       const runs = await storage.getPublicRuns(filters);
       res.json(runs);
     } catch (e: any) {

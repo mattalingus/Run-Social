@@ -1,5 +1,6 @@
 # PaceUp — Social Running App
 
+
 ## Overview
 A mobile-first social running application built with Expo React Native and a Node.js/PostgreSQL backend.
 

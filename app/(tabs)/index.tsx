@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Modal,
   Image,
   ScrollView,
+  Platform,
 } from "react-native";
 import { PaceMapView as MapView, PaceMarker as Marker } from "@/components/MapComponents";
 import { router } from "expo-router";
@@ -19,9 +20,22 @@ import * as Haptics from "expo-haptics";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import C from "@/constants/colors";
+import RangeSlider from "@/components/RangeSlider";
 
 const HOUSTON = { latitude: 29.7604, longitude: -95.3698, latitudeDelta: 0.09, longitudeDelta: 0.09 };
-const RUN_TAGS = ["Talkative", "Quiet", "Motivational", "Training", "Ministry", "Recovery"];
+const RUN_STYLES = ["Talkative", "Quiet", "Motivational", "Training", "Ministry", "Recovery"];
+
+const DEFAULT_FILTERS = {
+  paceMin: 6.0,
+  paceMax: 12.0,
+  distMin: 1,
+  distMax: 20,
+  styles: [] as string[],
+};
+
+interface Bounds {
+  swLat: number; swLng: number; neLat: number; neLng: number;
+}
 
 interface Run {
   id: string;
@@ -149,18 +163,8 @@ const mStyles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 8,
   },
-  emojiCircle: {
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: C.surface,
-  },
-  circleSelected: {
-    borderColor: "#FFFFFF",
-    borderWidth: 3,
-    shadowColor: C.primary,
-    shadowOpacity: 0.9,
-    shadowRadius: 12,
-  },
+  emojiCircle: { alignItems: "center", justifyContent: "center", backgroundColor: C.surface },
+  circleSelected: { borderColor: "#FFFFFF", borderWidth: 3, shadowColor: C.primary, shadowOpacity: 0.9, shadowRadius: 12 },
   img: { width: "100%", height: "100%" },
   emoji: { fontSize: 26 },
   callout: { marginTop: -2 },
@@ -170,16 +174,48 @@ export default function MapScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const mapRef = useRef<any>(null);
+
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locatedOnce, setLocatedOnce] = useState(false);
   const [selectedRun, setSelectedRun] = useState<Run | null>(null);
-  const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState<{ tag?: string }>({});
+  const [bounds, setBounds] = useState<Bounds | null>(null);
+  const boundsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [showFilter, setShowFilter] = useState(false);
+  const [unit, setUnit] = useState<"mi" | "km">("mi");
+
+  const [draft, setDraft] = useState({ ...DEFAULT_FILTERS });
+  const [applied, setApplied] = useState({ ...DEFAULT_FILTERS });
+
   const slideAnim = useRef(new Animated.Value(300)).current;
   const cardOpacity = useRef(new Animated.Value(0)).current;
 
-  const { data: runs = [], isLoading } = useQuery<Run[]>({
-    queryKey: ["/api/runs"],
+  const isFiltered =
+    applied.paceMin !== DEFAULT_FILTERS.paceMin ||
+    applied.paceMax !== DEFAULT_FILTERS.paceMax ||
+    applied.distMin !== DEFAULT_FILTERS.distMin ||
+    applied.distMax !== DEFAULT_FILTERS.distMax ||
+    applied.styles.length > 0;
+
+  const queryUrl = useMemo(() => {
+    const p = new URLSearchParams();
+    p.set("paceMin", applied.paceMin.toString());
+    p.set("paceMax", applied.paceMax.toString());
+    p.set("distMin", applied.distMin.toString());
+    p.set("distMax", applied.distMax.toString());
+    if (applied.styles.length > 0) p.set("styles", applied.styles.join(","));
+    if (bounds) {
+      p.set("swLat", bounds.swLat.toString());
+      p.set("swLng", bounds.swLng.toString());
+      p.set("neLat", bounds.neLat.toString());
+      p.set("neLng", bounds.neLng.toString());
+    }
+    return `/api/runs?${p.toString()}`;
+  }, [applied, bounds]);
+
+  const { data: runs = [], isFetching } = useQuery<Run[]>({
+    queryKey: [queryUrl],
+    staleTime: 30_000,
   });
 
   useEffect(() => {
@@ -187,8 +223,7 @@ export default function MapScreen() {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status === "granted") {
         const loc = await Location.getCurrentPositionAsync({});
-        const coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
-        setLocation(coords);
+        setLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
       }
     })();
   }, []);
@@ -197,19 +232,31 @@ export default function MapScreen() {
     if (location && !locatedOnce && mapRef.current) {
       setLocatedOnce(true);
       mapRef.current.animateToRegion(
-        { ...location, latitudeDelta: 0.09, longitudeDelta: 0.09 },
+        { ...location, latitudeDelta: 0.065, longitudeDelta: 0.065 },
         1200
       );
     }
   }, [location, locatedOnce]);
 
+  function handleRegionChangeComplete(region: {
+    latitude: number; longitude: number;
+    latitudeDelta: number; longitudeDelta: number;
+  }) {
+    if (boundsTimer.current) clearTimeout(boundsTimer.current);
+    boundsTimer.current = setTimeout(() => {
+      setBounds({
+        swLat: region.latitude - region.latitudeDelta / 2,
+        neLat: region.latitude + region.latitudeDelta / 2,
+        swLng: region.longitude - region.longitudeDelta / 2,
+        neLng: region.longitude + region.longitudeDelta / 2,
+      });
+    }, 300);
+  }
+
   function locateMe() {
     if (!location) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    mapRef.current?.animateToRegion(
-      { ...location, latitudeDelta: 0.06, longitudeDelta: 0.06 },
-      800
-    );
+    mapRef.current?.animateToRegion({ ...location, latitudeDelta: 0.06, longitudeDelta: 0.06 }, 800);
   }
 
   function openRun(run: Run) {
@@ -229,7 +276,34 @@ export default function MapScreen() {
     ]).start(() => setSelectedRun(null));
   }
 
-  const filteredRuns = filters.tag ? runs.filter((r) => r.tags?.includes(filters.tag!)) : runs;
+  function applyFilters() {
+    setApplied({ ...draft });
+    setShowFilter(false);
+  }
+
+  function resetFilters() {
+    const reset = { ...DEFAULT_FILTERS };
+    setDraft(reset);
+  }
+
+  function openFilterSheet() {
+    setDraft({ ...applied });
+    setShowFilter(true);
+  }
+
+  function toggleStyle(s: string) {
+    setDraft((prev) => {
+      const has = prev.styles.includes(s);
+      return { ...prev, styles: has ? prev.styles.filter((x) => x !== s) : [...prev.styles, s] };
+    });
+  }
+
+  function fmtDist(miles: number) {
+    if (unit === "km") return `${(miles * 1.60934).toFixed(1)} km`;
+    return `${miles.toFixed(1)} mi`;
+  }
+
+  const topPad = Platform.OS === "web" ? 67 : insets.top;
 
   return (
     <View style={styles.container}>
@@ -248,8 +322,9 @@ export default function MapScreen() {
         pitchEnabled={false}
         zoomEnabled={true}
         scrollEnabled={true}
+        onRegionChangeComplete={handleRegionChangeComplete}
       >
-        {filteredRuns.map((run) => (
+        {runs.map((run) => (
           <CustomMarker
             key={run.id}
             run={run}
@@ -259,18 +334,22 @@ export default function MapScreen() {
         ))}
       </MapView>
 
-      <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
+      <View style={[styles.topBar, { paddingTop: topPad + 10 }]}>
         <Text style={styles.appName}>PaceUp</Text>
         <View style={styles.topRight}>
-          {isLoading && <ActivityIndicator size="small" color={C.primary} style={{ marginRight: 8 }} />}
-          <Pressable style={styles.iconBtn} onPress={() => setShowFilters(true)}>
-            <Feather name="sliders" size={18} color={C.text} />
-            {filters.tag && <View style={styles.filterDot} />}
+          {isFetching && <ActivityIndicator size="small" color={C.primary} style={{ marginRight: 8 }} />}
+          <Pressable
+            style={[styles.filterBtn, isFiltered && styles.filterBtnActive]}
+            onPress={openFilterSheet}
+          >
+            <Feather name="sliders" size={15} color={isFiltered ? C.primary : C.text} />
+            <Text style={[styles.filterBtnText, isFiltered && { color: C.primary }]}>Filter</Text>
+            {isFiltered && <View style={styles.filterDot} />}
           </Pressable>
         </View>
       </View>
 
-      <View style={[styles.rightButtons, { top: insets.top + 72 }]}>
+      <View style={[styles.rightButtons, { top: topPad + 72 }]}>
         {location && (
           <Pressable style={styles.mapBtn} onPress={locateMe}>
             <Feather name="navigation" size={18} color={C.primary} />
@@ -293,7 +372,7 @@ export default function MapScreen() {
         <Animated.View
           style={[
             styles.runCard,
-            { bottom: insets.bottom + 16, opacity: cardOpacity, transform: [{ translateY: slideAnim }] },
+            { bottom: (Platform.OS === "web" ? 34 : insets.bottom) + 16, opacity: cardOpacity, transform: [{ translateY: slideAnim }] },
           ]}
         >
           <View style={styles.cardHostRow}>
@@ -351,45 +430,129 @@ export default function MapScreen() {
             style={({ pressed }) => [styles.joinBtn, { opacity: pressed ? 0.85 : 1 }]}
             onPress={() => { closeRun(); router.push(`/run/${selectedRun.id}`); }}
           >
-            <Text style={styles.joinBtnText}>View & Join Run</Text>
+            <Text style={styles.joinBtnText}>View &amp; Join Run</Text>
             <Feather name="arrow-right" size={16} color={C.bg} />
           </Pressable>
         </Animated.View>
       )}
 
-      <Modal visible={showFilters} transparent animationType="slide" onRequestClose={() => setShowFilters(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setShowFilters(false)} />
-        <View style={[styles.filterSheet, { paddingBottom: insets.bottom + 24 }]}>
+      <Modal
+        visible={showFilter}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowFilter(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowFilter(false)} />
+        <View style={[styles.filterSheet, { paddingBottom: (Platform.OS === "web" ? 34 : insets.bottom) + 24 }]}>
+          <View style={styles.filterHandle} />
+
           <View style={styles.filterHeader}>
-            <Text style={styles.filterTitle}>Filter Runs</Text>
-            <Pressable onPress={() => setShowFilters(false)}>
-              <Feather name="x" size={20} color={C.textSecondary} />
+            <Text style={styles.filterTitle}>Filters</Text>
+            <Pressable onPress={() => setShowFilter(false)} hitSlop={12}>
+              <Feather name="x" size={22} color={C.textSecondary} />
             </Pressable>
           </View>
-          <Text style={styles.filterLabel}>Run Style</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
-            <View style={styles.filterTagRow}>
-              <Pressable
-                style={[styles.filterTag, !filters.tag && styles.filterTagActive]}
-                onPress={() => { setFilters({}); setShowFilters(false); }}
-              >
-                <Text style={[styles.filterTagText, !filters.tag && styles.filterTagTextActive]}>All</Text>
-              </Pressable>
-              {RUN_TAGS.map((t) => (
-                <Pressable
-                  key={t}
-                  style={[styles.filterTag, filters.tag === t && styles.filterTagActive]}
-                  onPress={() => { setFilters({ tag: t }); setShowFilters(false); }}
-                >
-                  <Text style={[styles.filterTagText, filters.tag === t && styles.filterTagTextActive]}>{t}</Text>
-                </Pressable>
-              ))}
+
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
+            <View style={styles.filterSection}>
+              <View style={styles.filterSectionHeader}>
+                <Text style={styles.filterSectionTitle}>Pace</Text>
+                <Text style={styles.filterSectionValue}>
+                  {formatPace(draft.paceMin)} – {formatPace(draft.paceMax)} /mi
+                </Text>
+              </View>
+              <RangeSlider
+                min={6}
+                max={12}
+                step={0.5}
+                low={draft.paceMin}
+                high={draft.paceMax}
+                onLowChange={(v) => setDraft((p) => ({ ...p, paceMin: v }))}
+                onHighChange={(v) => setDraft((p) => ({ ...p, paceMax: v }))}
+              />
+              <View style={styles.sliderEdgeLabels}>
+                <Text style={styles.sliderEdgeText}>6:00</Text>
+                <Text style={styles.sliderEdgeText}>12:00</Text>
+              </View>
+            </View>
+
+            <View style={styles.filterSection}>
+              <View style={styles.filterSectionHeader}>
+                <Text style={styles.filterSectionTitle}>Distance</Text>
+                <View style={styles.unitToggle}>
+                  {(["mi", "km"] as const).map((u) => (
+                    <Pressable
+                      key={u}
+                      style={[styles.unitBtn, unit === u && styles.unitBtnActive]}
+                      onPress={() => setUnit(u)}
+                    >
+                      <Text style={[styles.unitBtnText, unit === u && styles.unitBtnTextActive]}>{u}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+              <Text style={styles.filterSectionValue}>
+                {fmtDist(draft.distMin)} – {fmtDist(draft.distMax)}
+              </Text>
+              <View style={{ height: 8 }} />
+              <RangeSlider
+                min={1}
+                max={20}
+                step={0.5}
+                low={draft.distMin}
+                high={draft.distMax}
+                onLowChange={(v) => setDraft((p) => ({ ...p, distMin: v }))}
+                onHighChange={(v) => setDraft((p) => ({ ...p, distMax: v }))}
+              />
+              <View style={styles.sliderEdgeLabels}>
+                <Text style={styles.sliderEdgeText}>{unit === "km" ? "1.6 km" : "1 mi"}</Text>
+                <Text style={styles.sliderEdgeText}>{unit === "km" ? "32.2 km" : "20 mi"}</Text>
+              </View>
+            </View>
+
+            <View style={styles.filterSection}>
+              <Text style={styles.filterSectionTitle}>Host Style</Text>
+              <View style={{ height: 12 }} />
+              <View style={styles.styleGrid}>
+                {RUN_STYLES.map((s) => {
+                  const active = draft.styles.includes(s);
+                  return (
+                    <Pressable
+                      key={s}
+                      style={[styles.styleChip, active && styles.styleChipActive]}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        toggleStyle(s);
+                      }}
+                    >
+                      {active && <Feather name="check" size={13} color={C.primary} style={{ marginRight: 4 }} />}
+                      <Text style={[styles.styleChipText, active && styles.styleChipTextActive]}>{s}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
             </View>
           </ScrollView>
-          <View style={styles.filterStats}>
-            <Text style={styles.filterStatText}>
-              {filteredRuns.length} {filteredRuns.length === 1 ? "run" : "runs"} near Houston
-            </Text>
+
+          <View style={styles.filterFooter}>
+            <Pressable
+              style={styles.resetBtn}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                resetFilters();
+              }}
+            >
+              <Text style={styles.resetBtnText}>Reset</Text>
+            </Pressable>
+            <Pressable
+              style={styles.applyBtn}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                applyFilters();
+              }}
+            >
+              <Text style={styles.applyBtnText}>Apply Filters</Text>
+            </Pressable>
           </View>
         </View>
       </Modal>
@@ -399,6 +562,7 @@ export default function MapScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
+
   topBar: {
     position: "absolute",
     top: 0,
@@ -411,31 +575,34 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   appName: { fontFamily: "Outfit_700Bold", fontSize: 22, color: C.text },
-  topRight: { flexDirection: "row", alignItems: "center" },
-  iconBtn: {
-    width: 40,
-    height: 40,
+  topRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+  filterBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderRadius: 20,
     backgroundColor: C.surface + "F0",
-    alignItems: "center",
-    justifyContent: "center",
     borderWidth: 1,
     borderColor: C.border,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4,
   },
+  filterBtnActive: { borderColor: C.primary, backgroundColor: C.primaryMuted + "EE" },
+  filterBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text },
   filterDot: {
-    position: "absolute",
-    top: 7,
-    right: 7,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
     backgroundColor: C.primary,
+    marginLeft: -2,
   },
-  rightButtons: {
-    position: "absolute",
-    right: 16,
-    gap: 10,
-  },
+
+  rightButtons: { position: "absolute", right: 16, gap: 10 },
   mapBtn: {
     width: 44,
     height: 44,
@@ -451,10 +618,8 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 4,
   },
-  mapBtnPrimary: {
-    backgroundColor: C.primary,
-    borderColor: C.primary,
-  },
+  mapBtnPrimary: { backgroundColor: C.primary, borderColor: C.primary },
+
   calloutDot: {
     width: 8,
     height: 8,
@@ -464,10 +629,8 @@ const styles = StyleSheet.create({
     borderColor: "#fff",
     marginTop: 2,
   },
-  calloutDotSelected: {
-    backgroundColor: "#fff",
-    borderColor: C.primary,
-  },
+  calloutDotSelected: { backgroundColor: "#fff", borderColor: C.primary },
+
   runCard: {
     position: "absolute",
     left: 16,
@@ -523,30 +686,115 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   joinBtnText: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.bg },
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)" },
+
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)" },
   filterSheet: {
     backgroundColor: C.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingTop: 12,
+    paddingHorizontal: 24,
+    borderTopWidth: 1,
+    borderColor: C.border,
+    maxHeight: "85%",
+  },
+  filterHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: C.border,
+    alignSelf: "center",
+    marginBottom: 16,
+  },
+  filterHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 20,
+  },
+  filterTitle: { fontFamily: "Outfit_700Bold", fontSize: 22, color: C.text },
+
+  filterSection: {
+    marginBottom: 28,
+  },
+  filterSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 14,
+  },
+  filterSectionTitle: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.text },
+  filterSectionValue: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 14,
+    color: C.primary,
+    marginBottom: 14,
+  },
+  sliderEdgeLabels: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 10,
+    paddingHorizontal: 2,
+  },
+  sliderEdgeText: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted },
+
+  unitToggle: {
+    flexDirection: "row",
+    borderRadius: 10,
+    overflow: "hidden",
     borderWidth: 1,
     borderColor: C.border,
   },
-  filterHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 20 },
-  filterTitle: { fontFamily: "Outfit_700Bold", fontSize: 20, color: C.text },
-  filterLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary, marginBottom: 10 },
-  filterTagRow: { flexDirection: "row", gap: 8, paddingBottom: 4 },
-  filterTag: {
+  unitBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    backgroundColor: C.card,
+  },
+  unitBtnActive: { backgroundColor: C.primaryMuted },
+  unitBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.textSecondary },
+  unitBtnTextActive: { color: C.primary },
+
+  styleGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  styleChip: {
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: 9,
     borderRadius: 20,
     backgroundColor: C.card,
     borderWidth: 1,
     borderColor: C.border,
   },
-  filterTagActive: { backgroundColor: C.primaryMuted, borderColor: C.primary },
-  filterTagText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary },
-  filterTagTextActive: { color: C.primary },
-  filterStats: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: C.border },
-  filterStatText: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textMuted, textAlign: "center" },
+  styleChipActive: { backgroundColor: C.primaryMuted, borderColor: C.primary },
+  styleChipText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary },
+  styleChipTextActive: { color: C.primary },
+
+  filterFooter: {
+    flexDirection: "row",
+    gap: 12,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+    marginTop: 8,
+  },
+  resetBtn: {
+    flex: 1,
+    height: 52,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: C.card,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  resetBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.textSecondary },
+  applyBtn: {
+    flex: 2,
+    height: 52,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: C.primary,
+  },
+  applyBtnText: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.bg },
 });

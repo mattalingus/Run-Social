@@ -1,0 +1,181 @@
+Update the Home screen to improve Map functionality and filtering.
+
+1. Replace Top Style Pills With Filter Panel
+
+Remove the horizontal style filter pills (All, Talkative, Quiet, etc.).
+
+Replace them with a single “Filter” button in the top right of the map screen.
+
+When tapped, open a slide-up bottom sheet filter panel.
+
+2. Filter Panel UI Requirements
+
+The filter panel must include:
+
+A. Pace Slider
+
+Range slider
+
+Min: 6:00 min/mi
+
+Max: 12:00 min/mi
+
+Two handles (min and max)
+
+Show selected pace range live
+
+B. Distance Slider
+
+Range slider
+
+Min: 1 mile
+
+Max: 20 miles
+
+Two handles (min and max)
+
+Add unit toggle:
+
+Miles
+
+Kilometers
+
+Convert values dynamically if user switches units
+
+C. Host Style Multi-Select
+
+Checkbox list:
+
+Talkative
+
+Quiet
+
+Motivational
+
+Training
+
+Ministry
+
+Recovery
+
+Users can select multiple styles.
+
+D. Apply + Reset Buttons
+
+Apply filters → closes panel and refreshes runs
+
+Reset filters → clears all filters
+
+3. Map Behavior
+A. User Location
+
+On app load, request geolocation permission.
+
+If granted:
+
+Center map on user location.
+
+Zoom level: 13.
+
+If denied:
+
+Fallback to Houston, TX.
+
+Zoom level: 12.
+
+B. Dynamic Run Loading
+
+When map loads → fetch runs within visible bounds.
+
+When user pans or zooms → debounce 300ms → fetch runs in new bounds.
+
+Use map bounds:
+
+NorthEast lat/lng
+
+SouthWest lat/lng
+
+Only return runs inside bounding box.
+
+C. Filtering Logic
+
+When fetching runs, also apply:
+
+paceMin <= user selected paceMax
+
+paceMax >= user selected paceMin
+
+distanceMin <= selected distanceMax
+
+distanceMax >= selected distanceMin
+
+style must match one of selected styles (if any selected)
+
+Filtering must happen server-side for scalability.
+
+4. Marker Rendering
+
+Use circular custom markers.
+
+44px circle
+
+3px green border
+
+Drop shadow
+
+Host profile image if available
+
+Default run logo if not
+
+If run is within next 24 hours:
+
+Add subtle green glow ring.
+
+5. Marker Interaction
+
+On marker click:
+
+Open animated bottom sheet card.
+
+Show:
+
+Run title
+
+Host name
+
+Date/time
+
+Pace range
+
+Distance range
+
+Style tag
+
+Join button
+
+Do NOT navigate to a new page.
+Keep experience map-first like Uber/Airbnb.
+
+6. Performance
+
+Debounce map movement events.
+
+Clear old markers before rendering new ones.
+
+Do not recreate map instance on re-render.
+
+Maintain filter state globally.
+
+Goal
+
+Home screen must feel like:
+
+Airbnb-style map discovery
+
+Professional filtering experience
+
+Smooth and modern
+
+Clean and scalable
+
+Return updated Home component code and any backend query modifications required.
