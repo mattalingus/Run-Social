@@ -573,7 +573,7 @@ export default function DiscoverScreen() {
               onPress={openFilter}
               testID="filter-button"
             >
-              <Feather name="sliders" size={16} color={isFiltered ? C.primary : C.textSecondary} />
+              <Feather name="sliders" size={16} color={C.primary} />
               {isFiltered && <View style={s.dot} />}
             </Pressable>
 
@@ -584,17 +584,17 @@ export default function DiscoverScreen() {
               testID="sort-button"
             >
               {isNonDefaultSort && <View style={s.dot} />}
-              <Text style={[s.hBtnTxt, showSort && { color: C.text }]}>Sort by</Text>
+              <Text style={s.hBtnTxt}>Sort by</Text>
               <Feather
                 name={showSort ? "chevron-up" : "chevron-down"}
                 size={13}
-                color={showSort ? C.text : C.textMuted}
+                color={C.primary}
               />
             </Pressable>
 
             {/* Map */}
             <Pressable style={s.hBtnRow} onPress={goToMap} testID="map-button">
-              <Feather name="map" size={15} color={C.textSecondary} />
+              <Feather name="map" size={15} color={C.primary} />
               <Text style={s.hBtnTxt}>Map</Text>
             </Pressable>
           </View>
@@ -726,9 +726,9 @@ const s = StyleSheet.create({
     width: 38,
     height: 36,
     borderRadius: 10,
-    backgroundColor: C.surface,
-    borderWidth: 1,
-    borderColor: C.border,
+    backgroundColor: C.primaryMuted,
+    borderWidth: 1.5,
+    borderColor: C.primary + "66",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -739,12 +739,12 @@ const s = StyleSheet.create({
     height: 36,
     paddingHorizontal: 11,
     borderRadius: 10,
-    backgroundColor: C.surface,
-    borderWidth: 1,
-    borderColor: C.border,
+    backgroundColor: C.primaryMuted,
+    borderWidth: 1.5,
+    borderColor: C.primary + "66",
   },
-  hBtnActive: { borderColor: C.primary + "55", backgroundColor: C.primaryMuted + "AA" },
-  hBtnTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary },
+  hBtnActive: { borderColor: C.primary, backgroundColor: C.primaryMuted },
+  hBtnTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.text },
   dot: {
     width: 6,
     height: 6,
@@ -760,8 +760,8 @@ const s = StyleSheet.create({
     alignItems: "center",
     backgroundColor: C.surface,
     borderRadius: 11,
-    borderWidth: 1,
-    borderColor: C.border,
+    borderWidth: 1.5,
+    borderColor: C.primary + "33",
     paddingHorizontal: 13,
     height: 44,
     gap: 10,
@@ -776,10 +776,10 @@ const s = StyleSheet.create({
     position: "absolute",
     right: 16,
     zIndex: 11,
-    backgroundColor: C.surface,
+    backgroundColor: C.card,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: C.border,
+    borderWidth: 1.5,
+    borderColor: C.primary + "55",
     minWidth: 200,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 6 },
@@ -797,9 +797,9 @@ const s = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: C.border,
   },
-  sortItemActive: { backgroundColor: C.card },
+  sortItemActive: { backgroundColor: C.primaryMuted },
   sortItemTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.textSecondary },
-  sortItemTxtActive: { color: C.text },
+  sortItemTxtActive: { color: C.primary },
 
   list: { paddingHorizontal: 16, paddingTop: 10, gap: 10 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
