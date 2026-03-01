@@ -373,14 +373,8 @@ export default function MapScreen() {
         ))}
       </MapView>
 
-      {/* ─── Top gradient ────────────────────────────────────────────────── */}
-      <View style={s.gradTop} pointerEvents="none">
-        <View style={[s.gradLayer, { opacity: 0.82, height: 64 }]} />
-        <View style={[s.gradLayer, { opacity: 0.55, height: 34 }]} />
-        <View style={[s.gradLayer, { opacity: 0.30, height: 22 }]} />
-        <View style={[s.gradLayer, { opacity: 0.12, height: 16 }]} />
-        <View style={[s.gradLayer, { opacity: 0.04, height: 12 }]} />
-      </View>
+      {/* ─── Map dim overlay ─────────────────────────────────────────────── */}
+      <View style={s.mapDim} pointerEvents="none" />
 
       {/* ─── Bottom gradient ─────────────────────────────────────────────── */}
       <View style={s.gradBottom} pointerEvents="none">
@@ -391,26 +385,36 @@ export default function MapScreen() {
         <View style={[s.gradLayer, { opacity: 0.84, height: 52 }]} />
       </View>
 
-      {/* ─── Top bar ─────────────────────────────────────────────────────── */}
-      <View style={[s.topBar, { paddingTop: topPad + 12 }]}>
-        <Text style={s.appTitle}>PaceUp</Text>
-        <View style={s.topRight}>
-          {isFetching && (
-            <ActivityIndicator size="small" color={C.primary} style={{ marginRight: 8 }} />
-          )}
-          <Pressable
-            style={[s.filterBtn, isFiltered && s.filterBtnActive]}
-            onPress={() => { setDraft({ ...applied }); setShowFilter(true); }}
-          >
-            <Feather name="sliders" size={15} color={isFiltered ? C.primary : C.text} />
-            <Text style={[s.filterBtnText, isFiltered && { color: C.primary }]}>Filter</Text>
-            {isFiltered && <View style={s.filterDot} />}
-          </Pressable>
+      {/* ─── Solid header ────────────────────────────────────────────────── */}
+      <View style={[s.header, { paddingTop: topPad + 8 }]}>
+        <View style={s.headerRow}>
+          <Text style={s.appTitle}>PaceUp</Text>
+          <View style={s.topRight}>
+            {isFetching && (
+              <ActivityIndicator size="small" color={C.primary} style={{ marginRight: 8 }} />
+            )}
+            <Pressable
+              style={[s.filterBtn, isFiltered && s.filterBtnActive]}
+              onPress={() => { setDraft({ ...applied }); setShowFilter(true); }}
+            >
+              <Feather name="sliders" size={15} color={isFiltered ? C.primary : C.text} />
+              <Text style={[s.filterBtnText, isFiltered && { color: C.primary }]}>Filter</Text>
+              {isFiltered && <View style={s.filterDot} />}
+            </Pressable>
+          </View>
+        </View>
+        {/* Header bottom fade into map */}
+        <View pointerEvents="none" style={s.headerFade}>
+          <View style={[s.gradLayer, { opacity: 0.95, height: 28 }]} />
+          <View style={[s.gradLayer, { opacity: 0.65, height: 18 }]} />
+          <View style={[s.gradLayer, { opacity: 0.30, height: 14 }]} />
+          <View style={[s.gradLayer, { opacity: 0.10, height: 12 }]} />
+          <View style={[s.gradLayer, { opacity: 0.03, height: 10 }]} />
         </View>
       </View>
 
       {/* ─── Right sidebar ───────────────────────────────────────────────── */}
-      <View style={[s.sideBar, { top: topPad + 76 }]}>
+      <View style={[s.sideBar, { top: topPad + 108 }]}>
         {userLoc && (
           <Pressable
             style={s.mapBtn}
@@ -626,12 +630,32 @@ export default function MapScreen() {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
 
-  gradTop: {
+  mapDim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.13)",
+  },
+
+  header: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
+    backgroundColor: C.bg,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 14,
+    elevation: 16,
   },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingBottom: 14,
+  },
+  headerFade: { width: "100%" },
+
   gradBottom: {
     position: "absolute",
     bottom: 0,
@@ -643,35 +667,36 @@ const s = StyleSheet.create({
     backgroundColor: C.bg,
   },
 
-  topBar: {
-    position: "absolute",
-    top: 0, left: 0, right: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingBottom: 10,
+  appTitle: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 28,
+    color: C.text,
+    letterSpacing: -0.5,
   },
-  appTitle: { fontFamily: "Outfit_700Bold", fontSize: 22, color: C.text },
   topRight: { flexDirection: "row", alignItems: "center" },
 
   filterBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: C.surface + "F4",
-    borderWidth: 1,
-    borderColor: C.border,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+    borderRadius: 24,
+    backgroundColor: C.surface,
+    borderWidth: 1.5,
+    borderColor: C.primary + "40",
+    shadowColor: C.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
     elevation: 4,
   },
-  filterBtnActive: { borderColor: C.primary, backgroundColor: C.primaryMuted + "EE" },
+  filterBtnActive: {
+    borderColor: C.primary,
+    backgroundColor: C.card,
+    shadowOpacity: 0.5,
+    shadowRadius: 12,
+  },
   filterBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text },
   filterDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: C.primary, marginLeft: -2 },
 
@@ -679,18 +704,24 @@ const s = StyleSheet.create({
   mapBtn: {
     width: 44, height: 44,
     borderRadius: 22,
-    backgroundColor: C.surface + "F4",
+    backgroundColor: C.surface,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: C.border,
+    borderWidth: 1.5,
+    borderColor: C.borderLight,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 8,
   },
-  mapBtnGreen: { backgroundColor: C.primary, borderColor: C.primary },
+  mapBtnGreen: {
+    backgroundColor: C.primary,
+    borderColor: C.primary,
+    shadowColor: C.primary,
+    shadowOpacity: 0.5,
+    shadowRadius: 12,
+  },
 
   card: {
     position: "absolute",

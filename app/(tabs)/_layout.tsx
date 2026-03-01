@@ -1,7 +1,6 @@
 import { isLiquidGlassAvailable } from "expo-glass-effect";
 import { Tabs } from "expo-router";
 import { NativeTabs, Icon, Label } from "expo-router/unstable-native-tabs";
-import { BlurView } from "expo-blur";
 import { Platform, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -26,10 +25,16 @@ function NativeTabLayout() {
   );
 }
 
+function TabBarBackground() {
+  return (
+    <View style={styles.tabBarBg} />
+  );
+}
+
 function ClassicTabLayout() {
   const insets = useSafeAreaInsets();
   const isWeb = Platform.OS === "web";
-  const isIOS = Platform.OS === "ios";
+  const tabBarHeight = (isWeb ? 50 : 56) + insets.bottom;
 
   return (
     <Tabs
@@ -39,21 +44,19 @@ function ClassicTabLayout() {
         tabBarInactiveTintColor: C.tabIconDefault,
         tabBarStyle: {
           position: "absolute",
-          backgroundColor: isIOS ? "transparent" : C.bg,
-          borderTopWidth: isWeb ? 1 : 0,
-          borderTopColor: C.border,
+          backgroundColor: "transparent",
+          borderTopWidth: 0,
+          height: tabBarHeight,
           elevation: 0,
-          ...(isWeb ? { height: 84 } : {}),
         },
-        tabBarBackground: () =>
-          isIOS ? (
-            <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
-          ) : isWeb ? (
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: C.bg }]} />
-          ) : null,
+        tabBarBackground: () => <TabBarBackground />,
         tabBarLabelStyle: {
           fontFamily: "Outfit_600SemiBold",
           fontSize: 11,
+          marginBottom: 2,
+        },
+        tabBarIconStyle: {
+          marginTop: 4,
         },
       }}
     >
@@ -61,21 +64,27 @@ function ClassicTabLayout() {
         name="index"
         options={{
           title: "Map",
-          tabBarIcon: ({ color, size }) => <Ionicons name="map" size={size} color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? "map" : "map-outline"} size={24} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="discover"
         options={{
           title: "Discover",
-          tabBarIcon: ({ color, size }) => <Ionicons name="search" size={size} color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? "search" : "search-outline"} size={24} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: "Profile",
-          tabBarIcon: ({ color, size }) => <Ionicons name="person" size={size} color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? "person" : "person-outline"} size={24} color={color} />
+          ),
         }}
       />
     </Tabs>
@@ -88,3 +97,21 @@ export default function TabLayout() {
   }
   return <ClassicTabLayout />;
 }
+
+const styles = StyleSheet.create({
+  tabBarBg: {
+    flex: 1,
+    backgroundColor: C.surface,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: C.borderLight,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 18,
+    elevation: 24,
+  },
+});
