@@ -368,11 +368,10 @@ export default function ProfileScreen() {
       {/* ── Achievements Card ─────────────────────────────────────────────── */}
       <View style={styles.achOuterCard}>
         <Pressable
-          style={styles.achCardHeader}
+          style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
           onPress={() => { setShowAchievements((v) => !v); setSelectedAchievement(null); setAchFilter("All"); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
         >
-          <Text style={styles.achInlineIcon}>🏆</Text>
-          <Text style={styles.goalLabel}>Achievements</Text>
+          <Text style={styles.goalLabel}>🏆 Achievements</Text>
           <Text style={styles.statName}>{earnedCount}/{ACHIEVEMENTS.length} earned</Text>
           <View style={{ flex: 1 }} />
           <Feather name={showAchievements ? "chevron-up" : "chevron-down"} size={16} color={C.textMuted} />
