@@ -21,6 +21,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/query-client";
 import C from "@/constants/colors";
 import { MARKER_ICONS } from "@/constants/markerIcons";
+import { ACHIEVEMENTS, type AchievementDef } from "@/constants/achievements";
 import { formatDistance } from "@/lib/formatDistance";
 import { pickAndUploadImage } from "@/lib/uploadImage";
 
@@ -98,6 +99,9 @@ export default function ProfileScreen() {
   const [friendSearch, setFriendSearch] = useState("");
   const [showAddFriend, setShowAddFriend] = useState(false);
   const [showFriendList, setShowFriendList] = useState(false);
+  const [showAchievements, setShowAchievements] = useState(false);
+  const [selectedAchievement, setSelectedAchievement] = useState<AchievementDef | null>(null);
+  const [achFilter, setAchFilter] = useState("All");
 
   // ─── Handlers ──────────────────────────────────────────────────────────────
 
@@ -167,6 +171,11 @@ export default function ProfileScreen() {
 
   const { data: achievements = [] } = useQuery<any[]>({
     queryKey: ["/api/users/me/achievements"],
+    enabled: !!user,
+  });
+
+  const { data: achData } = useQuery<{ earned_slugs: string[]; stats: Record<string, number> }>({
+    queryKey: ["/api/users/me/achievement-stats"],
     enabled: !!user,
   });
 
@@ -250,6 +259,13 @@ export default function ProfileScreen() {
 
   const milestones = [25, 100, 250, 500, 1000];
   const earnedIds = new Set(achievements.map((a: any) => a.milestone));
+  const earnedSlugs = new Set<string>(achData?.earned_slugs ?? []);
+  const achStats = achData?.stats ?? {};
+  const earnedCount = ACHIEVEMENTS.filter((a) => earnedSlugs.has(a.slug)).length;
+
+  const filteredAchievements = (achFilter === "All" ? ACHIEVEMENTS : ACHIEVEMENTS.filter((a) => a.category === achFilter))
+    .slice()
+    .sort((a, b) => a.difficulty - b.difficulty);
 
   if (!user) return <View style={styles.container}><ActivityIndicator color={C.primary} /></View>;
 
@@ -348,6 +364,30 @@ export default function ProfileScreen() {
           <Text style={styles.goalLabel}>{"+ Add Friends"}</Text>
         </Pressable>
       </View>
+
+      {/* ── Achievements Card ─────────────────────────────────────────────── */}
+      <Pressable
+        style={({ pressed }) => [styles.achCard, { opacity: pressed ? 0.8 : 1 }]}
+        onPress={() => { setShowAchievements(true); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+      >
+        <View style={styles.achCardLeft}>
+          <Text style={styles.achCardIcon}>🏆</Text>
+          <View>
+            <Text style={styles.goalLabel}>Achievements</Text>
+            <Text style={styles.statName}>{earnedCount} / {ACHIEVEMENTS.length} earned</Text>
+          </View>
+        </View>
+        <View style={styles.achCardRight}>
+          <View style={styles.achMiniGrid}>
+            {ACHIEVEMENTS.slice(0, 6).map((a) => (
+              <Text key={a.slug} style={[styles.achMiniIcon, !earnedSlugs.has(a.slug) && styles.achMiniIconLocked]}>
+                {a.icon}
+              </Text>
+            ))}
+          </View>
+          <Feather name="chevron-right" size={16} color={C.textMuted} />
+        </View>
+      </Pressable>
 
       {/* ── Stats Grid ────────────────────────────────────────────────────── */}
       <View style={styles.statsGrid}>
@@ -863,6 +903,83 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
+      {/* ── Achievements Modal ────────────────────────────────────────────── */}
+      <Modal visible={showAchievements} transparent animationType="slide" onRequestClose={() => { setShowAchievements(false); setSelectedAchievement(null); setAchFilter("All"); }}>
+        <Pressable style={styles.modalOverlay} onPress={() => { setShowAchievements(false); setSelectedAchievement(null); setAchFilter("All"); }} />
+        <View style={[styles.modalSheet, styles.achModal, { paddingBottom: insets.bottom + 16 }]}>
+          <View style={styles.modalTitleRow}>
+            <Text style={styles.modalTitle}>Achievements</Text>
+            <Pressable onPress={() => { setShowAchievements(false); setSelectedAchievement(null); setAchFilter("All"); }} hitSlop={12}>
+              <Feather name="x" size={20} color={C.textMuted} />
+            </Pressable>
+          </View>
+
+          <Text style={styles.achSubtitle}>{earnedCount} of {ACHIEVEMENTS.length} earned</Text>
+
+          {/* Category filter */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.achFilterRow} contentContainerStyle={{ gap: 8, paddingHorizontal: 2 }}>
+            {["All", "Beginner", "Consistency", "Mileage", "Social", "Speed", "Lifestyle"].map((cat) => (
+              <Pressable
+                key={cat}
+                style={[styles.achFilterChip, achFilter === cat && styles.achFilterChipActive]}
+                onPress={() => setAchFilter(cat)}
+              >
+                <Text style={[styles.achFilterTxt, achFilter === cat && styles.achFilterTxtActive]}>{cat}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+
+          <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+            {filteredAchievements.map((ach) => {
+              const earned = earnedSlugs.has(ach.slug);
+              const current = ach.progressKey ? Math.min(achStats[ach.progressKey] ?? 0, ach.progressTarget ?? 1) : 0;
+              const target = ach.progressTarget ?? 1;
+              const pct = Math.min(current / target, 1);
+              const isSelected = selectedAchievement?.slug === ach.slug;
+
+              return (
+                <Pressable
+                  key={ach.slug}
+                  style={[styles.achItem, earned && styles.achItemEarned]}
+                  onPress={() => setSelectedAchievement(isSelected ? null : ach)}
+                >
+                  <Text style={[styles.achItemIcon, !earned && styles.achItemIconLocked]}>{ach.icon}</Text>
+                  <View style={{ flex: 1, gap: 4 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                      <Text style={[styles.achItemName, !earned && styles.achItemNameLocked]}>{ach.name}</Text>
+                      {earned && <Feather name="check-circle" size={13} color={C.primary} />}
+                    </View>
+                    <Text style={styles.achItemDesc}>{ach.desc}</Text>
+                    {isSelected && (
+                      <View style={styles.achDetail}>
+                        <Text style={styles.achDetailCategory}>{ach.category} · Difficulty {ach.difficulty}/6</Text>
+                        {ach.progressTarget && (
+                          <View style={styles.achDetailProgress}>
+                            <View style={styles.achProgressTrack}>
+                              <View style={[styles.achProgressFill, { width: `${Math.round(pct * 100)}%` as any, backgroundColor: earned ? C.primary : C.primaryDark }]} />
+                            </View>
+                            <Text style={styles.achProgressTxt}>
+                              {ach.progressKey === "max_single_run_miles_x10"
+                                ? `${(current / 10).toFixed(1)} / ${(target / 10).toFixed(1)} mi`
+                                : `${Math.round(current)} / ${target} ${ach.progressLabel ?? ""}`}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    )}
+                    {!isSelected && ach.progressTarget && !earned && (
+                      <View style={styles.achProgressTrackSmall}>
+                        <View style={[styles.achProgressFillSmall, { width: `${Math.round(pct * 100)}%` as any }]} />
+                      </View>
+                    )}
+                  </View>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      </Modal>
+
     </ScrollView>
   );
 }
@@ -1096,6 +1213,48 @@ const iconStyles = StyleSheet.create({
   emptyState: { alignItems: "center", justifyContent: "center", paddingVertical: 48, gap: 12 },
   emptyStateTitle: { fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text },
   emptyStateTxt: { fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textSecondary, textAlign: "center" },
+
+  achCard: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    backgroundColor: C.card, borderRadius: 14, padding: 16,
+    borderWidth: 1, borderColor: C.border,
+  },
+  achCardLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
+  achCardIcon: { fontSize: 28 },
+  achCardRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+  achMiniGrid: { flexDirection: "row", gap: 4 },
+  achMiniIcon: { fontSize: 18 },
+  achMiniIconLocked: { opacity: 0.25 },
+
+  achModal: { height: "85%" as const, gap: 12 },
+  achSubtitle: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary },
+  achFilterRow: { flexShrink: 0 },
+  achFilterChip: {
+    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
+    backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
+  },
+  achFilterChipActive: { backgroundColor: C.primaryMuted, borderColor: C.primary },
+  achFilterTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.textSecondary },
+  achFilterTxtActive: { color: C.primary },
+
+  achItem: {
+    flexDirection: "row", alignItems: "flex-start", gap: 14,
+    paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.border,
+  },
+  achItemEarned: { },
+  achItemIcon: { fontSize: 28, lineHeight: 34 },
+  achItemIconLocked: { opacity: 0.22 },
+  achItemName: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.text },
+  achItemNameLocked: { color: C.textMuted },
+  achItemDesc: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary },
+  achDetail: { gap: 6, marginTop: 4 },
+  achDetailCategory: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted, textTransform: "uppercase" as const, letterSpacing: 0.5 },
+  achDetailProgress: { gap: 4 },
+  achProgressTrack: { height: 6, backgroundColor: C.border, borderRadius: 3, overflow: "hidden" as const },
+  achProgressFill: { height: 6, borderRadius: 3 },
+  achProgressTxt: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary },
+  achProgressTrackSmall: { height: 3, backgroundColor: C.border, borderRadius: 2, overflow: "hidden" as const, marginTop: 2 },
+  achProgressFillSmall: { height: 3, borderRadius: 2, backgroundColor: C.primaryDark },
 });
 
 const devStyles = StyleSheet.create({

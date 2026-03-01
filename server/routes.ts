@@ -125,6 +125,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(achievements);
   });
 
+  app.get("/api/users/me/achievement-stats", requireAuth, async (req, res) => {
+    try {
+      const [earnedRows, stats] = await Promise.all([
+        storage.getUserAchievements(req.session.userId!),
+        storage.getAchievementStats(req.session.userId!),
+      ]);
+      const earned_slugs = earnedRows.map((r: any) => r.slug).filter(Boolean);
+      res.json({ earned_slugs, stats });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.get("/api/users/me/unlock-progress", requireAuth, async (req, res) => {
     const progress = await storage.getHostUnlockProgress(req.session.userId!);
     res.json(progress);
@@ -179,6 +192,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const friendship = await storage.acceptFriendRequest(req.params.id, req.session.userId!);
       if (!friendship) return res.status(404).json({ message: "Request not found" });
+      storage.checkFriendAchievements(req.session.userId!).catch(() => {});
+      if (friendship.requester_id) {
+        storage.checkFriendAchievements(friendship.requester_id).catch(() => {});
+      }
       res.json(friendship);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
