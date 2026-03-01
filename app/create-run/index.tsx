@@ -12,7 +12,7 @@ import {
   Share,
 } from "react-native";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -33,15 +33,16 @@ export default function CreateRunScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const qc = useQueryClient();
+  const params = useLocalSearchParams<{ pathLat?: string; pathLng?: string; pathName?: string; pathDistance?: string }>();
 
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(params.pathName ? `Run on ${params.pathName}` : "");
   const [description, setDescription] = useState("");
   const [privacy, setPrivacy] = useState("public");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
-  const [locationName, setLocationName] = useState("");
-  const [locationLat, setLocationLat] = useState("37.7749");
-  const [locationLng, setLocationLng] = useState("-122.4194");
+  const [locationName, setLocationName] = useState(params.pathName ?? "");
+  const [locationLat, setLocationLat] = useState(params.pathLat ?? "37.7749");
+  const [locationLng, setLocationLng] = useState(params.pathLng ?? "-122.4194");
   const [minDistance, setMinDistance] = useState("3");
   const [maxDistance, setMaxDistance] = useState("6");
   const [minPace, setMinPace] = useState("8");

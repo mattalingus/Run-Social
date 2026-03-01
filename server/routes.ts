@@ -638,7 +638,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "name and routePath are required" });
       }
       const path = await storage.createSavedPath(req.session.userId!, { name, routePath, distanceMiles });
+      storage.matchCommunityPath(req.session.userId!, path.id, routePath, distanceMiles ?? null).catch(console.error);
       res.json(path);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/community-paths", async (req, res) => {
+    try {
+      const bounds = req.query.swLat
+        ? {
+            swLat: parseFloat(req.query.swLat as string),
+            neLat: parseFloat(req.query.neLat as string),
+            swLng: parseFloat(req.query.swLng as string),
+            neLng: parseFloat(req.query.neLng as string),
+          }
+        : undefined;
+      const paths = await storage.getCommunityPaths(bounds);
+      res.json(paths);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }

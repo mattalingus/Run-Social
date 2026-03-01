@@ -188,6 +188,29 @@ export async function initDb() {
       reward_eligible BOOLEAN DEFAULT true,
       reward_claimed BOOLEAN DEFAULT false
     );
+
+    CREATE TABLE IF NOT EXISTS community_paths (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      name TEXT NOT NULL,
+      route_path JSONB NOT NULL,
+      distance_miles REAL,
+      contributor_count INTEGER DEFAULT 1,
+      start_lat REAL NOT NULL,
+      start_lng REAL NOT NULL,
+      end_lat REAL NOT NULL,
+      end_lng REAL NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS path_contributions (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      community_path_id VARCHAR NOT NULL REFERENCES community_paths(id) ON DELETE CASCADE,
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      saved_path_id VARCHAR REFERENCES saved_paths(id) ON DELETE SET NULL,
+      created_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(community_path_id, user_id)
+    );
   `);
 }
 
@@ -1101,6 +1124,74 @@ export async function deleteSavedPath(id: string, userId: string) {
   );
   if (!res.rows.length) throw new Error("Not found or not authorized");
   return { success: true };
+}
+
+// ─── Community Paths ───────────────────────────────────────────────────────────
+
+export async function getCommunityPaths(bounds?: { swLat: number; neLat: number; swLng: number; neLng: number }) {
+  let query = `SELECT * FROM community_paths WHERE contributor_count >= 3`;
+  const params: any[] = [];
+  if (bounds) {
+    params.push(bounds.swLat, bounds.neLat, bounds.swLng, bounds.neLng);
+    query += ` AND start_lat >= $1 AND start_lat <= $2 AND start_lng >= $3 AND start_lng <= $4`;
+  }
+  query += ` ORDER BY contributor_count DESC, updated_at DESC LIMIT 50`;
+  const res = await pool.query(query, params);
+  return res.rows;
+}
+
+export async function matchCommunityPath(
+  userId: string,
+  savedPathId: string,
+  routePath: Array<{ latitude: number; longitude: number }>,
+  distanceMiles: number | null
+) {
+  if (routePath.length < 2) return;
+
+  const start = routePath[0];
+  const end = routePath[routePath.length - 1];
+  const dist = distanceMiles ?? 0;
+
+  const existing = await pool.query(
+    `SELECT cp.*,
+       (SELECT COUNT(*) FROM path_contributions pc WHERE pc.community_path_id = cp.id AND pc.user_id = $1) as already_contributed
+     FROM community_paths cp
+     WHERE ABS(cp.start_lat - $2) < 0.005
+       AND ABS(cp.start_lng - $3) < 0.005
+       AND ABS(cp.end_lat - $4) < 0.005
+       AND ABS(cp.end_lng - $5) < 0.005
+       AND ($6 = 0 OR cp.distance_miles IS NULL OR ABS(cp.distance_miles - $6) / GREATEST($6, 0.1) < 0.35)
+     ORDER BY cp.contributor_count DESC LIMIT 1`,
+    [userId, start.latitude, start.longitude, end.latitude, end.longitude, dist]
+  );
+
+  if (existing.rows.length > 0) {
+    const cp = existing.rows[0];
+    if (parseInt(cp.already_contributed) > 0) return;
+    await pool.query(
+      `INSERT INTO path_contributions (community_path_id, user_id, saved_path_id)
+       VALUES ($1, $2, $3) ON CONFLICT (community_path_id, user_id) DO NOTHING`,
+      [cp.id, userId, savedPathId]
+    );
+    await pool.query(
+      `UPDATE community_paths
+       SET contributor_count = (SELECT COUNT(DISTINCT user_id) FROM path_contributions WHERE community_path_id = $1),
+           updated_at = NOW()
+       WHERE id = $1`,
+      [cp.id]
+    );
+  } else {
+    const distLabel = dist > 0 ? `${dist.toFixed(1)} mi Route` : "Running Route";
+    const cpRes = await pool.query(
+      `INSERT INTO community_paths (name, route_path, distance_miles, contributor_count, start_lat, start_lng, end_lat, end_lng)
+       VALUES ($1, $2, $3, 1, $4, $5, $6, $7) RETURNING id`,
+      [distLabel, JSON.stringify(routePath), distanceMiles ?? null, start.latitude, start.longitude, end.latitude, end.longitude]
+    );
+    await pool.query(
+      `INSERT INTO path_contributions (community_path_id, user_id, saved_path_id) VALUES ($1, $2, $3)`,
+      [cpRes.rows[0].id, userId, savedPathId]
+    );
+  }
 }
 
 // ─── Bookmarks & Plans ─────────────────────────────────────────────────────────

@@ -78,6 +78,25 @@ shared/
 10. **Mileage Goals** - Monthly & yearly goals with progress bars
 11. **Solo Tab** - Personal run tracking: pace/distance goals, performance rankings by distance category (1mi/2mi/5K/5mi/10K), plan future runs with local push notifications
 12. **Live Group Run Mode** - Host starts run (must be within 1km of pin), runners auto-marked present via GPS ping, live participant dots on shared map (polling every 5s), own path polyline + stats; "Finish My Run" saves final pace & distance, triggers leaderboard ranking
+13. **Saved Paths** - After a solo GPS run, save the route as a named path. Saved paths appear in Solo tab with mini-map previews. When starting a new solo run, select a saved path to show as a faint ghost overlay on the live map.
+14. **Bookmark & Plan** - Bookmark any run from the map, detail page, or discover list. "Plan to Attend" signals soft interest in future runs. Discover tab shows "Saved Runs" horizontal scroll section. Plan count shown on run detail.
+15. **Community Paths** - When 3+ different users save the same GPS route (matched by start/end within ~0.5km + similar distance), it automatically becomes a Community Path. Purple polylines appear on the world map; tapping opens a details card with "Schedule a Run Here" button that pre-fills the create-run form with that location.
+
+## Database Tables
+- `users` - Auth, profile, goals, stats
+- `runs` - Group runs with location, pace, distance requirements
+- `run_participants` - Who joined each run
+- `run_completions` - Confirmed attendance log
+- `host_ratings` - Star ratings + feedback for run hosts  
+- `solo_runs` - GPS-tracked personal runs with route_path JSONB
+- `saved_paths` - Named GPS routes saved by users for future reference
+- `community_paths` - Auto-aggregated popular routes (3+ unique contributors)
+- `path_contributions` - Junction: links users/saved_paths to community_paths
+- `bookmarked_runs` - User run bookmarks
+- `planned_runs` - Soft "planning to attend" commitments
+- `achievements` - Milestone badges (25/100/250/500/1000 miles)
+- `friends` - Bidirectional friendship graph
+- `live_pings` - GPS coords during live group run
 
 ## Live Run DB Schema
 - `runs.is_active` — run has been started by host

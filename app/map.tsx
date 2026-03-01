@@ -13,7 +13,7 @@ import {
   TextInput,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
-import MapView, { Marker, Region } from "react-native-maps";
+import MapView, { Marker, Polyline, Region } from "react-native-maps";
 import * as Location from "expo-location";
 import * as Haptics from "expo-haptics";
 import { Feather, Ionicons } from "@expo/vector-icons";
@@ -69,6 +69,18 @@ interface Run {
   is_locked?: boolean;
   privacy?: string;
   is_active?: boolean;
+}
+
+interface CommunityPath {
+  id: string;
+  name: string;
+  route_path: Array<{ latitude: number; longitude: number }>;
+  distance_miles: number | null;
+  contributor_count: number;
+  start_lat: number;
+  start_lng: number;
+  end_lat: number;
+  end_lng: number;
 }
 
 interface Bounds {
@@ -239,8 +251,12 @@ export default function MapScreen() {
   const [userLoc, setUserLoc] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locatedOnce, setLocatedOnce] = useState(false);
   const [selectedRun, setSelectedRun] = useState<Run | null>(null);
+  const [selectedCommunityPath, setSelectedCommunityPath] = useState<CommunityPath | null>(null);
   const [bounds, setBounds] = useState<Bounds | null>(null);
   const boundsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const pathSlideAnim = useRef(new Animated.Value(400)).current;
+  const pathCardOpacity = useRef(new Animated.Value(0)).current;
 
   const [showFilter, setShowFilter] = useState(false);
 
@@ -277,6 +293,22 @@ export default function MapScreen() {
   const { data: runs = [], isFetching } = useQuery<Run[]>({
     queryKey: [queryUrl],
     staleTime: 60_000,
+    placeholderData: (prev) => prev,
+  });
+
+  const communityPathsUrl = useMemo(() => {
+    if (!bounds) return "/api/community-paths";
+    const p = new URLSearchParams();
+    p.set("swLat", bounds.swLat.toString());
+    p.set("neLat", bounds.neLat.toString());
+    p.set("swLng", bounds.swLng.toString());
+    p.set("neLng", bounds.neLng.toString());
+    return `/api/community-paths?${p.toString()}`;
+  }, [bounds]);
+
+  const { data: communityPaths = [] } = useQuery<CommunityPath[]>({
+    queryKey: [communityPathsUrl],
+    staleTime: 120_000,
     placeholderData: (prev) => prev,
   });
 
@@ -369,6 +401,7 @@ export default function MapScreen() {
   }
 
   function openCard(run: Run) {
+    if (selectedCommunityPath) closePathCard();
     setSelectedRun(run);
     cardOpacity.setValue(0);
     slideAnim.setValue(400);
@@ -383,6 +416,24 @@ export default function MapScreen() {
       Animated.spring(slideAnim, { toValue: 400, useNativeDriver: true, damping: 22 }),
       Animated.timing(cardOpacity, { toValue: 0, duration: 140, useNativeDriver: true }),
     ]).start(() => setSelectedRun(null));
+  }
+
+  function openPathCard(path: CommunityPath) {
+    if (selectedRun) closeCard();
+    setSelectedCommunityPath(path);
+    pathCardOpacity.setValue(0);
+    pathSlideAnim.setValue(400);
+    Animated.parallel([
+      Animated.spring(pathSlideAnim, { toValue: 0, useNativeDriver: true, damping: 18, stiffness: 200 }),
+      Animated.timing(pathCardOpacity, { toValue: 1, duration: 180, useNativeDriver: true }),
+    ]).start();
+  }
+
+  function closePathCard() {
+    Animated.parallel([
+      Animated.spring(pathSlideAnim, { toValue: 400, useNativeDriver: true, damping: 22 }),
+      Animated.timing(pathCardOpacity, { toValue: 0, duration: 140, useNativeDriver: true }),
+    ]).start(() => setSelectedCommunityPath(null));
   }
 
   function toggleStyle(st: string) {
@@ -442,8 +493,22 @@ export default function MapScreen() {
           rotateEnabled={false}
           pitchEnabled={false}
           onRegionChangeComplete={onRegionChange}
-          onPress={() => { if (selectedRun) closeCard(); }}
+          onPress={() => { if (selectedRun) closeCard(); if (selectedCommunityPath) closePathCard(); }}
         >
+          {communityPaths.map((path) => (
+            <Polyline
+              key={path.id}
+              coordinates={path.route_path}
+              strokeColor={selectedCommunityPath?.id === path.id ? "#A78BFA" : "#7C3AED"}
+              strokeWidth={selectedCommunityPath?.id === path.id ? 5 : 3.5}
+              strokeOpacity={0.75}
+              tappable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                openPathCard(path);
+              }}
+            />
+          ))}
           {runs.map((run) => (
             <RunMarker
               key={run.id}
@@ -604,6 +669,70 @@ export default function MapScreen() {
               </Pressable>
             </>
           )}
+          </Animated.View>
+        )}
+
+        {/* ─── Community Path Card ──────────────────────────────────────── */}
+        {selectedCommunityPath && (
+          <Animated.View
+            style={[
+              s.card,
+              { bottom: 16, opacity: pathCardOpacity, transform: [{ translateY: pathSlideAnim }] },
+            ]}
+          >
+            <View style={s.cardTop}>
+              <View style={s.pathIcon}>
+                <Ionicons name="trail-sign-outline" size={22} color="#A78BFA" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.cardTitle} numberOfLines={1}>{selectedCommunityPath.name}</Text>
+                <Text style={s.cardHost}>
+                  {selectedCommunityPath.contributor_count} runner{selectedCommunityPath.contributor_count !== 1 ? "s" : ""} run this path
+                </Text>
+              </View>
+              <Pressable onPress={closePathCard} hitSlop={12}>
+                <Feather name="x" size={18} color={C.textSecondary} />
+              </Pressable>
+            </View>
+
+            <View style={s.chips}>
+              {selectedCommunityPath.distance_miles != null && (
+                <View style={s.chip}>
+                  <Feather name="map" size={11} color="#A78BFA" />
+                  <Text style={[s.chipTxt, { color: "#A78BFA" }]}>
+                    {formatDistance(selectedCommunityPath.distance_miles)} mi
+                  </Text>
+                </View>
+              )}
+              <View style={s.chip}>
+                <Ionicons name="people-outline" size={11} color={C.textSecondary} />
+                <Text style={s.chipTxt}>{selectedCommunityPath.contributor_count} contributors</Text>
+              </View>
+              <View style={[s.chip, s.chipCommunity]}>
+                <Ionicons name="star-outline" size={11} color="#A78BFA" />
+                <Text style={[s.chipTxt, { color: "#A78BFA" }]}>Community Path</Text>
+              </View>
+            </View>
+
+            <Pressable
+              style={({ pressed }) => [s.joinBtn, s.joinBtnPurple, { opacity: pressed ? 0.85 : 1 }]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                closePathCard();
+                router.push({
+                  pathname: "/create-run",
+                  params: {
+                    pathLat: selectedCommunityPath.start_lat.toString(),
+                    pathLng: selectedCommunityPath.start_lng.toString(),
+                    pathName: selectedCommunityPath.name,
+                    pathDistance: selectedCommunityPath.distance_miles?.toFixed(2) ?? "",
+                  },
+                });
+              }}
+            >
+              <Ionicons name="add-circle-outline" size={16} color="#fff" />
+              <Text style={s.joinTxt}>Schedule a Run Here</Text>
+            </Pressable>
           </Animated.View>
         )}
 
@@ -845,6 +974,13 @@ const s = StyleSheet.create({
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
   },
   joinBtnGray: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
+  joinBtnPurple: { backgroundColor: "#7C3AED" },
+  pathIcon: {
+    width: 48, height: 48, borderRadius: 24,
+    backgroundColor: "#7C3AED22", alignItems: "center", justifyContent: "center",
+    borderWidth: 2, borderColor: "#7C3AED66",
+  },
+  chipCommunity: { borderColor: "#7C3AED55", backgroundColor: "#7C3AED15" },
   joinTxt: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.bg },
 
   overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)" },
