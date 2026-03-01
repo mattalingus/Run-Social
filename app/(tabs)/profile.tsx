@@ -372,10 +372,9 @@ export default function ProfileScreen() {
           onPress={() => { setShowAchievements((v) => !v); setSelectedAchievement(null); setAchFilter("All"); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
         >
           <Text style={styles.achInlineIcon}>🏆</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.goalLabel}>Achievements</Text>
-            <Text style={styles.statName}>{earnedCount} / {ACHIEVEMENTS.length} earned</Text>
-          </View>
+          <Text style={styles.goalLabel}>Achievements</Text>
+          <Text style={styles.achEarnedLabel}>{earnedCount}/{ACHIEVEMENTS.length} earned</Text>
+          <View style={{ flex: 1 }} />
           <Feather name={showAchievements ? "chevron-up" : "chevron-down"} size={16} color={C.textMuted} />
         </Pressable>
 
@@ -1179,9 +1178,10 @@ const iconStyles = StyleSheet.create({
     backgroundColor: C.primaryMuted, paddingHorizontal: 8, paddingVertical: 2,
     borderRadius: 10, overflow: "hidden" as const,
   },
-  achInlineIcon: { fontSize: 22 },
-  achCard: { alignItems: "stretch", flex: undefined },
-  achCardHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
+  achInlineIcon: { fontSize: 18 },
+  achEarnedLabel: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted },
+  achCard: { alignItems: "stretch", flex: undefined, paddingVertical: 12 },
+  achCardHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
   achExpandedInCard: { gap: 14, marginTop: 14 },
   achDivider: { height: 1, backgroundColor: C.border },
 
