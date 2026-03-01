@@ -153,6 +153,15 @@ export async function initDb() {
       recorded_at TIMESTAMP DEFAULT NOW()
     );
 
+    CREATE TABLE IF NOT EXISTS saved_paths (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      route_path JSONB NOT NULL,
+      distance_miles REAL,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
     CREATE TABLE IF NOT EXISTS achievements (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id VARCHAR NOT NULL REFERENCES users(id),
@@ -1031,4 +1040,35 @@ export async function updateGoals(userId: string, monthlyGoal?: number, yearlyGo
   if (yearlyGoal !== undefined) { updates.push(`yearly_goal = $${values.length + 1}`); values.push(yearlyGoal); }
   if (!updates.length) return;
   await pool.query(`UPDATE users SET ${updates.join(", ")} WHERE id = $1`, values);
+}
+
+// ─── Saved Paths ───────────────────────────────────────────────────────────────
+
+export async function getSavedPaths(userId: string) {
+  const res = await pool.query(
+    `SELECT * FROM saved_paths WHERE user_id = $1 ORDER BY created_at DESC`,
+    [userId]
+  );
+  return res.rows;
+}
+
+export async function createSavedPath(
+  userId: string,
+  data: { name: string; routePath: Array<{ latitude: number; longitude: number }>; distanceMiles?: number }
+) {
+  const res = await pool.query(
+    `INSERT INTO saved_paths (user_id, name, route_path, distance_miles)
+     VALUES ($1, $2, $3, $4) RETURNING *`,
+    [userId, data.name, JSON.stringify(data.routePath), data.distanceMiles ?? null]
+  );
+  return res.rows[0];
+}
+
+export async function deleteSavedPath(id: string, userId: string) {
+  const res = await pool.query(
+    `DELETE FROM saved_paths WHERE id = $1 AND user_id = $2 RETURNING id`,
+    [id, userId]
+  );
+  if (!res.rows.length) throw new Error("Not found or not authorized");
+  return { success: true };
 }

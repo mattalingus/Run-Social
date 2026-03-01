@@ -570,6 +570,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ─── Saved Paths ─────────────────────────────────────────────────────────────
+
+  app.get("/api/saved-paths", requireAuth, async (req, res) => {
+    try {
+      const paths = await storage.getSavedPaths(req.session.userId!);
+      res.json(paths);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/saved-paths", requireAuth, async (req, res) => {
+    try {
+      const { name, routePath, distanceMiles } = req.body;
+      if (!name || !routePath || !Array.isArray(routePath)) {
+        return res.status(400).json({ message: "name and routePath are required" });
+      }
+      const path = await storage.createSavedPath(req.session.userId!, { name, routePath, distanceMiles });
+      res.json(path);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.delete("/api/saved-paths/:id", requireAuth, async (req, res) => {
+    try {
+      const result = await storage.deleteSavedPath(req.params.id, req.session.userId!);
+      res.json(result);
+    } catch (e: any) {
+      const status = e.message.includes("Not found") ? 404 : 500;
+      res.status(status).json({ message: e.message });
+    }
+  });
+
   app.post("/api/admin/seed-runs", async (req, res) => {
     try {
       const { count = 20 } = req.body;

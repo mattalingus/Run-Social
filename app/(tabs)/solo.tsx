@@ -41,6 +41,14 @@ interface SoloRun {
   created_at: string;
 }
 
+interface SavedPath {
+  id: string;
+  name: string;
+  route_path: Array<{ latitude: number; longitude: number }>;
+  distance_miles: number | null;
+  created_at: string;
+}
+
 type RoutePoint = { latitude: number; longitude: number };
 
 function MiniRouteMap({ path }: { path: RoutePoint[] }) {
@@ -215,6 +223,19 @@ export default function SoloScreen() {
     staleTime: 30_000,
   });
 
+  const { data: savedPaths = [] } = useQuery<SavedPath[]>({
+    queryKey: ["/api/saved-paths"],
+    enabled: !!user,
+    staleTime: 30_000,
+  });
+
+  const deletePathMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/saved-paths/${id}`);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/saved-paths"] }),
+  });
+
   const saveMutation = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiRequest("POST", "/api/solo-runs", data);
@@ -324,6 +345,13 @@ export default function SoloScreen() {
     Alert.alert("Delete Run", "Remove this run from your history?", [
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: () => deleteMutation.mutate(id) },
+    ]);
+  }
+
+  function confirmDeletePath(id: string) {
+    Alert.alert("Delete Path", "Remove this saved path?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: () => deletePathMutation.mutate(id) },
     ]);
   }
 
@@ -482,6 +510,40 @@ export default function SoloScreen() {
           <Ionicons name="play-circle" size={22} color={C.bg} />
           <Text style={s.runSoloBtnTxt}>Run Solo</Text>
         </Pressable>
+
+        {/* ─── Saved Paths ─────────────────────────────────────────────── */}
+        {savedPaths.length > 0 && (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Saved Paths</Text>
+            {savedPaths.map((path) => (
+              <View key={path.id} style={s.pathCard}>
+                <View style={s.pathCardRow}>
+                  <View style={s.pathIconWrap}>
+                    <Feather name="bookmark" size={15} color={C.primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.pathName} numberOfLines={1}>{path.name}</Text>
+                    <Text style={s.pathMeta}>
+                      {path.distance_miles != null ? `${formatDistance(path.distance_miles)} mi` : ""}
+                      {path.distance_miles != null ? " · " : ""}
+                      Saved {new Date(path.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </Text>
+                  </View>
+                  <Pressable
+                    onPress={() => confirmDeletePath(path.id)}
+                    hitSlop={12}
+                    style={{ paddingLeft: 8 }}
+                  >
+                    <Feather name="trash-2" size={16} color={C.textMuted} />
+                  </Pressable>
+                </View>
+                {path.route_path && path.route_path.length > 1 && Platform.OS !== "web" && (
+                  <MiniRouteMap path={path.route_path} />
+                )}
+              </View>
+            ))}
+          </View>
+        )}
 
         {/* ─── Run History ─────────────────────────────────────────────── */}
         <View style={s.section}>
@@ -921,4 +983,39 @@ const s = StyleSheet.create({
   resetTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.textSecondary },
   applyBtn: { flex: 2, height: 52, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: C.primary },
   applyTxt: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.bg },
+
+  pathCard: {
+    backgroundColor: C.surface,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  pathCardRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  pathIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: C.primaryMuted,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  pathName: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 14,
+    color: C.text,
+  },
+  pathMeta: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 11,
+    color: C.textSecondary,
+    marginTop: 2,
+  },
 });

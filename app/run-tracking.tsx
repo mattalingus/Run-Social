@@ -7,13 +7,16 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  Modal,
+  TextInput,
+  ScrollView,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
 import { router } from "expo-router";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/query-client";
 import C from "@/constants/colors";
 import { formatDistance } from "@/lib/formatDistance";
@@ -78,6 +81,19 @@ export default function RunTrackingScreen() {
   const [displayDist, setDisplayDist] = useState(0);
   const [saving, setSaving] = useState(false);
   const [routeState, setRouteState] = useState<Coord[]>([]);
+
+  // Saved paths state
+  const [selectedPath, setSelectedPath] = useState<any | null>(null);
+  const [showPathPicker, setShowPathPicker] = useState(false);
+  const [showSaveNameModal, setShowSaveNameModal] = useState(false);
+  const [pathName, setPathName] = useState("");
+  const [savingPath, setSavingPath] = useState(false);
+  const [pathSaved, setPathSaved] = useState(false);
+
+  const { data: savedPaths = [] } = useQuery<any[]>({
+    queryKey: ["/api/saved-paths"],
+    staleTime: 60_000,
+  });
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const locationSubRef = useRef<Location.LocationSubscription | null>(null);
@@ -194,8 +210,31 @@ export default function RunTrackingScreen() {
     setRouteState([]);
     setDisplayDist(0);
     setElapsed(0);
+    setPathSaved(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setPhase("active");
+  }
+
+  async function handleSavePath() {
+    const name = pathName.trim();
+    if (!name) { Alert.alert("Name required", "Enter a name for this path"); return; }
+    setSavingPath(true);
+    try {
+      await apiRequest("POST", "/api/saved-paths", {
+        name,
+        routePath: routePathRef.current,
+        distanceMiles: totalDistRef.current,
+      });
+      qc.invalidateQueries({ queryKey: ["/api/saved-paths"] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setPathSaved(true);
+      setShowSaveNameModal(false);
+      setPathName("");
+    } catch (e: any) {
+      Alert.alert("Error", e.message || "Failed to save path");
+    } finally {
+      setSavingPath(false);
+    }
   }
 
   function handlePause() {
@@ -344,6 +383,26 @@ export default function RunTrackingScreen() {
             )}
           </Pressable>
 
+          {routePathRef.current.length > 1 && (
+            pathSaved ? (
+              <View style={t.pathSavedRow}>
+                <Feather name="check-circle" size={15} color={C.primary} />
+                <Text style={t.pathSavedTxt}>Path saved</Text>
+              </View>
+            ) : (
+              <Pressable
+                style={t.savePathBtn}
+                onPress={() => {
+                  setPathName(`My Route – ${formatDistance(totalDistRef.current)} mi`);
+                  setShowSaveNameModal(true);
+                }}
+              >
+                <Feather name="bookmark" size={15} color={C.primary} />
+                <Text style={t.savePathBtnTxt}>Save this path</Text>
+              </Pressable>
+            )
+          )}
+
           <Pressable
             style={t.discardBtn}
             onPress={() => { stopWatching(); router.back(); }}
@@ -351,6 +410,39 @@ export default function RunTrackingScreen() {
             <Text style={t.discardTxt}>Discard</Text>
           </Pressable>
         </View>
+
+        {/* ─── Save path name modal ─────────────────────────────────────────── */}
+        {showSaveNameModal && (
+          <Modal visible transparent animationType="fade" onRequestClose={() => setShowSaveNameModal(false)}>
+            <Pressable style={t.modalOverlay} onPress={() => setShowSaveNameModal(false)} />
+            <View style={[t.nameModal, { marginBottom: insets.bottom + 32 }]}>
+              <View style={t.nameModalHandle} />
+              <Text style={t.nameModalTitle}>Name this path</Text>
+              <TextInput
+                style={t.nameInput}
+                value={pathName}
+                onChangeText={setPathName}
+                placeholder="e.g. Riverside Loop"
+                placeholderTextColor={C.textMuted}
+                autoFocus
+                returnKeyType="done"
+                onSubmitEditing={handleSavePath}
+              />
+              <Pressable
+                style={[t.nameModalSaveBtn, savingPath && { opacity: 0.6 }]}
+                onPress={handleSavePath}
+                disabled={savingPath}
+              >
+                {savingPath
+                  ? <ActivityIndicator color={C.bg} />
+                  : <Text style={t.nameModalSaveTxt}>Save Path</Text>}
+              </Pressable>
+              <Pressable style={t.nameModalCancelBtn} onPress={() => setShowSaveNameModal(false)}>
+                <Text style={t.nameModalCancelTxt}>Cancel</Text>
+              </Pressable>
+            </View>
+          </Modal>
+        )}
       </View>
     );
   }
@@ -388,6 +480,15 @@ export default function RunTrackingScreen() {
             showsCompass={false}
             toolbarEnabled={false}
           >
+            {selectedPath?.route_path?.length > 1 && (
+              <Polyline
+                coordinates={selectedPath.route_path}
+                strokeColor="#ffffff"
+                strokeWidth={2}
+                lineDashPattern={[8, 6]}
+                strokeOpacity={0.28}
+              />
+            )}
             {routeState.length > 1 && (
               <Polyline
                 coordinates={routeState}
@@ -488,9 +589,61 @@ export default function RunTrackingScreen() {
         </View>
 
         {phase === "idle" && (
-          <Text style={t.hintTxt}>GPS will track your distance automatically</Text>
+          <View style={{ alignItems: "center", gap: 10 }}>
+            <Text style={t.hintTxt}>GPS will track your distance automatically</Text>
+            {selectedPath ? (
+              <Pressable
+                style={t.ghostPathChip}
+                onPress={() => setSelectedPath(null)}
+              >
+                <Feather name="map" size={13} color={C.primary} />
+                <Text style={t.ghostPathChipTxt} numberOfLines={1}>{selectedPath.name}</Text>
+                <Feather name="x" size={13} color={C.textMuted} />
+              </Pressable>
+            ) : (
+              <Pressable onPress={() => setShowPathPicker(true)}>
+                <Text style={t.followPathLink}>+ Follow a saved path</Text>
+              </Pressable>
+            )}
+          </View>
         )}
       </View>
+
+      {/* ─── Path picker modal ────────────────────────────────────────────── */}
+      {showPathPicker && (
+        <Modal visible transparent animationType="slide" onRequestClose={() => setShowPathPicker(false)}>
+          <Pressable style={t.modalOverlay} onPress={() => setShowPathPicker(false)} />
+          <View style={[t.pickerSheet, { paddingBottom: insets.bottom + 16 }]}>
+            <View style={t.nameModalHandle} />
+            <Text style={t.nameModalTitle}>Follow a saved path</Text>
+            {savedPaths.length === 0 ? (
+              <Text style={t.pickerEmpty}>No saved paths yet. Complete a run and save its path first.</Text>
+            ) : (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {savedPaths.map((p: any) => (
+                  <Pressable
+                    key={p.id}
+                    style={t.pickerRow}
+                    onPress={() => {
+                      setSelectedPath(p);
+                      setShowPathPicker(false);
+                    }}
+                  >
+                    <Feather name="map" size={16} color={C.primary} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={t.pickerRowName}>{p.name}</Text>
+                      {p.distance_miles != null && (
+                        <Text style={t.pickerRowMeta}>{formatDistance(p.distance_miles)} mi</Text>
+                      )}
+                    </View>
+                    <Feather name="chevron-right" size={16} color={C.textMuted} />
+                  </Pressable>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -761,5 +914,165 @@ const t = StyleSheet.create({
     fontFamily: "Outfit_400Regular",
     fontSize: 14,
     color: C.textMuted,
+  },
+
+  // ─── Save path button ───────────────────────────────────────────────────
+  savePathBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: C.primary + "66",
+    borderRadius: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    alignSelf: "stretch",
+    marginHorizontal: 4,
+    backgroundColor: C.primaryMuted,
+  },
+  savePathBtnTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 15,
+    color: C.primary,
+    flex: 1,
+    textAlign: "center",
+  },
+  pathSavedRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    paddingVertical: 10,
+  },
+  pathSavedTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 14,
+    color: C.primary,
+  },
+
+  // ─── Follow a saved path (idle) ────────────────────────────────────────
+  followPathLink: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 13,
+    color: C.primary,
+    textDecorationLine: "underline",
+  },
+  ghostPathChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: C.primaryMuted,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: C.primary + "44",
+    maxWidth: 220,
+  },
+  ghostPathChipTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 13,
+    color: C.primary,
+    flex: 1,
+  },
+
+  // ─── Modals ─────────────────────────────────────────────────────────────
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+  },
+  nameModal: {
+    backgroundColor: C.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderColor: C.border,
+  },
+  nameModalHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: C.border,
+    alignSelf: "center",
+    marginBottom: 18,
+  },
+  nameModalTitle: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 20,
+    color: C.text,
+    marginBottom: 16,
+  },
+  nameInput: {
+    backgroundColor: C.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    fontFamily: "Outfit_400Regular",
+    fontSize: 15,
+    color: C.text,
+    marginBottom: 16,
+  },
+  nameModalSaveBtn: {
+    backgroundColor: C.primary,
+    borderRadius: 14,
+    paddingVertical: 15,
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  nameModalSaveTxt: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 16,
+    color: C.bg,
+  },
+  nameModalCancelBtn: {
+    paddingVertical: 10,
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  nameModalCancelTxt: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 14,
+    color: C.textMuted,
+  },
+
+  pickerSheet: {
+    backgroundColor: C.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderColor: C.border,
+    maxHeight: "60%",
+  },
+  pickerEmpty: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 14,
+    color: C.textSecondary,
+    textAlign: "center",
+    paddingVertical: 24,
+  },
+  pickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border + "88",
+  },
+  pickerRowName: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 15,
+    color: C.text,
+  },
+  pickerRowMeta: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 12,
+    color: C.textSecondary,
+    marginTop: 2,
   },
 });
