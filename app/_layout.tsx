@@ -58,6 +58,10 @@ function RootLayoutNav() {
           name="map"
           options={{ headerShown: false }}
         />
+        <Stack.Screen
+          name="run-tracking"
+          options={{ headerShown: false }}
+        />
       </Stack>
     </>
   );

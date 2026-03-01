@@ -429,6 +429,18 @@ export default function SoloScreen() {
           </View>
         )}
 
+        {/* ─── Run Solo CTA ────────────────────────────────────────────── */}
+        <View style={s.runSoloCTA}>
+          <Pressable
+            style={({ pressed }) => [s.runSoloBtn, { opacity: pressed ? 0.88 : 1 }]}
+            onPress={() => router.push("/run-tracking" as any)}
+          >
+            <Ionicons name="play-circle" size={22} color={C.bg} />
+            <Text style={s.runSoloBtnTxt}>Run Solo</Text>
+          </Pressable>
+          <Text style={s.runSoloSub}>GPS-tracked · Saves to history</Text>
+        </View>
+
         {/* ─── Run History ─────────────────────────────────────────────── */}
         <View style={s.section}>
           <Text style={s.sectionTitle}>Run History</Text>
@@ -677,6 +689,19 @@ const s = StyleSheet.create({
     elevation: 6,
   },
   planBtnTxt: { fontFamily: "Outfit_700Bold", fontSize: 14, color: C.bg },
+
+  runSoloCTA: { alignItems: "center", gap: 8, marginVertical: 4 },
+  runSoloBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: C.primary,
+    borderRadius: 16,
+    paddingVertical: 15,
+    paddingHorizontal: 40,
+  },
+  runSoloBtnTxt: { fontFamily: "Outfit_700Bold", fontSize: 17, color: C.bg },
+  runSoloSub: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted },
 
   goalCard: {
     backgroundColor: C.surface,
