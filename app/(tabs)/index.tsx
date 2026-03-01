@@ -29,6 +29,30 @@ const HOUSTON: Region = {
   longitudeDelta: 0.09,
 };
 
+const MAP_STYLE = [
+  { elementType: "geometry",           stylers: [{ color: "#0c1810" }] },
+  { elementType: "labels.text.fill",   stylers: [{ color: "#4a6957" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#080f0c" }] },
+  { elementType: "labels.icon",        stylers: [{ visibility: "off" }] },
+  { featureType: "administrative",     elementType: "geometry.stroke", stylers: [{ color: "#1a2e21" }] },
+  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#5a8a6a" }] },
+  { featureType: "administrative.neighborhood", stylers: [{ visibility: "off" }] },
+  { featureType: "poi",                stylers: [{ visibility: "off" }] },
+  { featureType: "poi.park",           elementType: "geometry", stylers: [{ color: "#0f1f15" }] },
+  { featureType: "poi.park",           elementType: "labels", stylers: [{ visibility: "off" }] },
+  { featureType: "road",               elementType: "geometry", stylers: [{ color: "#152418" }] },
+  { featureType: "road",               elementType: "geometry.stroke", stylers: [{ color: "#0c1810" }] },
+  { featureType: "road",               elementType: "labels.text.fill", stylers: [{ color: "#3a5a47" }] },
+  { featureType: "road",               elementType: "labels.icon", stylers: [{ visibility: "off" }] },
+  { featureType: "road.arterial",      elementType: "geometry", stylers: [{ color: "#18291e" }] },
+  { featureType: "road.highway",       elementType: "geometry", stylers: [{ color: "#1e3328" }] },
+  { featureType: "road.highway",       elementType: "geometry.stroke", stylers: [{ color: "#152418" }] },
+  { featureType: "road.local",         elementType: "labels", stylers: [{ visibility: "off" }] },
+  { featureType: "transit",            stylers: [{ visibility: "off" }] },
+  { featureType: "water",              elementType: "geometry", stylers: [{ color: "#08140f" }] },
+  { featureType: "water",              elementType: "labels.text.fill", stylers: [{ color: "#1e3328" }] },
+];
+
 const RUN_STYLES = ["Talkative", "Quiet", "Motivational", "Training", "Ministry", "Recovery"];
 
 const DEFAULT_FILTERS = {
@@ -133,56 +157,56 @@ function RunMarker({ run, isSelected, onPress }: MarkerProps) {
 }
 
 const mk = StyleSheet.create({
-  wrap: { alignItems: "center", width: 56, height: 62 },
+  wrap: { alignItems: "center", width: 62, height: 66 },
   glow: {
     position: "absolute",
-    top: 0,
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    borderWidth: 2,
+    top: -3,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    borderWidth: 2.5,
     borderColor: C.primary,
-    opacity: 0.5,
+    opacity: 0.55,
     shadowColor: C.primary,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 1,
-    shadowRadius: 10,
+    shadowRadius: 14,
   },
   circle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     borderWidth: 3,
     borderColor: C.primary,
     overflow: "hidden",
     backgroundColor: C.card,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 6,
-    elevation: 8,
+    shadowColor: C.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 10,
   },
   circleSelected: {
     borderColor: "#FFFFFF",
     shadowColor: C.primary,
-    shadowOpacity: 0.9,
-    shadowRadius: 12,
+    shadowOpacity: 1,
+    shadowRadius: 16,
   },
   img: { width: "100%", height: "100%" },
-  emoji: { fontSize: 24 },
+  emoji: { fontSize: 26 },
   pin: {
     width: 6,
     height: 6,
     borderRadius: 3,
     backgroundColor: C.primary,
-    marginTop: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
-    shadowRadius: 2,
-    elevation: 2,
+    marginTop: 3,
+    shadowColor: C.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+    elevation: 3,
   },
 });
 
@@ -319,10 +343,17 @@ export default function MapScreen() {
         ref={mapRef}
         style={StyleSheet.absoluteFill}
         initialRegion={HOUSTON}
+        mapType="mutedStandard"
+        customMapStyle={MAP_STYLE}
         showsUserLocation={!!userLoc}
         showsMyLocationButton={false}
         showsCompass={false}
         showsScale={false}
+        showsTraffic={false}
+        showsBuildings={false}
+        showsIndoors={false}
+        showsPointsOfInterest={false}
+        toolbarEnabled={false}
         userInterfaceStyle="dark"
         rotateEnabled={false}
         pitchEnabled={false}
@@ -338,6 +369,24 @@ export default function MapScreen() {
           />
         ))}
       </MapView>
+
+      {/* ─── Top gradient ────────────────────────────────────────────────── */}
+      <View style={s.gradTop} pointerEvents="none">
+        <View style={[s.gradLayer, { opacity: 0.82, height: 64 }]} />
+        <View style={[s.gradLayer, { opacity: 0.55, height: 34 }]} />
+        <View style={[s.gradLayer, { opacity: 0.30, height: 22 }]} />
+        <View style={[s.gradLayer, { opacity: 0.12, height: 16 }]} />
+        <View style={[s.gradLayer, { opacity: 0.04, height: 12 }]} />
+      </View>
+
+      {/* ─── Bottom gradient ─────────────────────────────────────────────── */}
+      <View style={s.gradBottom} pointerEvents="none">
+        <View style={[s.gradLayer, { opacity: 0.04, height: 12 }]} />
+        <View style={[s.gradLayer, { opacity: 0.14, height: 18 }]} />
+        <View style={[s.gradLayer, { opacity: 0.32, height: 24 }]} />
+        <View style={[s.gradLayer, { opacity: 0.60, height: 32 }]} />
+        <View style={[s.gradLayer, { opacity: 0.84, height: 52 }]} />
+      </View>
 
       {/* ─── Top bar ─────────────────────────────────────────────────────── */}
       <View style={[s.topBar, { paddingTop: topPad + 12 }]}>
@@ -573,6 +622,23 @@ export default function MapScreen() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
+
+  gradTop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+  },
+  gradBottom: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
+  gradLayer: {
+    width: "100%",
+    backgroundColor: C.bg,
+  },
 
   topBar: {
     position: "absolute",
