@@ -10,15 +10,17 @@ import {
   Modal,
   TextInput,
   ScrollView,
+  Image,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
+import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/query-client";
+import { apiRequest, getApiUrl } from "@/lib/query-client";
 import C from "@/constants/colors";
 import { formatDistance } from "@/lib/formatDistance";
 
@@ -90,6 +92,11 @@ export default function RunTrackingScreen() {
   const [pathName, setPathName] = useState("");
   const [savingPath, setSavingPath] = useState(false);
   const [pathSaved, setPathSaved] = useState(false);
+
+  // Post-run photo state
+  const [savedRunId, setSavedRunId] = useState<string | null>(null);
+  const [runPhotos, setRunPhotos] = useState<any[]>([]);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   const { data: savedPaths = [] } = useQuery<any[]>({
     queryKey: ["/api/saved-paths"],
@@ -277,7 +284,7 @@ export default function RunTrackingScreen() {
     const pace = distance > 0.01 ? (elapsed / 60) / distance : null;
     setSaving(true);
     try {
-      await apiRequest("POST", "/api/solo-runs", {
+      const res = await apiRequest("POST", "/api/solo-runs", {
         title: `${formatDistance(distance)} mi solo run`,
         date: new Date().toISOString(),
         distanceMiles: Math.max(distance, 0.001),
@@ -287,14 +294,52 @@ export default function RunTrackingScreen() {
         planned: false,
         routePath: routePathRef.current.length > 1 ? routePathRef.current : null,
       });
+      const saved = await res.json();
+      setSavedRunId(saved.id);
       qc.invalidateQueries({ queryKey: ["/api/solo-runs"] });
       qc.invalidateQueries({ queryKey: ["/api/runs/mine"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.replace("/(tabs)/solo" as any);
     } catch (e: any) {
       Alert.alert("Save Failed", e.message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  function finishAndNavigate() {
+    router.replace("/(tabs)/solo" as any);
+  }
+
+  async function pickAndUploadSoloPhoto() {
+    if (!savedRunId) return;
+    if (Platform.OS !== "web") {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission needed", "Please allow photo library access to upload run photos.");
+        return;
+      }
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    const asset = result.assets[0];
+    const formData = new FormData();
+    formData.append("photo", { uri: asset.uri, type: asset.mimeType || "image/jpeg", name: "photo.jpg" } as any);
+    setUploadingPhoto(true);
+    try {
+      const url = new URL(`/api/solo-runs/${savedRunId}/photos`, getApiUrl()).toString();
+      const response = await fetch(url, { method: "POST", body: formData, credentials: "include" });
+      if (!response.ok) throw new Error("Upload failed");
+      const photo = await response.json();
+      setRunPhotos((prev) => [...prev, photo]);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e: any) {
+      Alert.alert("Upload failed", e.message);
+    } finally {
+      setUploadingPhoto(false);
     }
   }
 
@@ -372,44 +417,80 @@ export default function RunTrackingScreen() {
             </View>
           </View>
 
-          <Pressable
-            style={[t.saveBtn, saving && { opacity: 0.6 }]}
-            onPress={saveRun}
-            disabled={saving}
-          >
-            {saving ? (
-              <ActivityIndicator color={C.bg} />
-            ) : (
-              <Text style={t.saveBtnTxt}>Save Run</Text>
-            )}
-          </Pressable>
-
-          {routePathRef.current.length > 1 && (
-            pathSaved ? (
-              <View style={t.pathSavedRow}>
-                <Feather name="check-circle" size={15} color={C.primary} />
-                <Text style={t.pathSavedTxt}>Path saved</Text>
+          {savedRunId ? (
+            <>
+              {/* ─── Photo section ─────────────────────────────────────── */}
+              <View style={t.photoSection}>
+                <Text style={t.photoSectionTitle}>Add a photo</Text>
+                {runPhotos.length > 0 && (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={t.photoScroll}>
+                    {runPhotos.map((p: any) => (
+                      <Image key={p.id} source={{ uri: p.photo_url }} style={t.photoThumb} />
+                    ))}
+                  </ScrollView>
+                )}
+                <Pressable
+                  style={[t.photoAddBtn, uploadingPhoto && { opacity: 0.6 }]}
+                  onPress={pickAndUploadSoloPhoto}
+                  disabled={uploadingPhoto}
+                >
+                  {uploadingPhoto ? (
+                    <ActivityIndicator color={C.primary} size="small" />
+                  ) : (
+                    <>
+                      <Feather name="camera" size={16} color={C.primary} />
+                      <Text style={t.photoAddTxt}>{runPhotos.length > 0 ? "Add another" : "Add photo"}</Text>
+                    </>
+                  )}
+                </Pressable>
               </View>
-            ) : (
-              <Pressable
-                style={t.savePathBtn}
-                onPress={() => {
-                  setPathName(`My Route – ${formatDistance(totalDistRef.current)} mi`);
-                  setShowSaveNameModal(true);
-                }}
-              >
-                <Feather name="bookmark" size={15} color={C.primary} />
-                <Text style={t.savePathBtnTxt}>Save this path</Text>
-              </Pressable>
-            )
-          )}
 
-          <Pressable
-            style={t.discardBtn}
-            onPress={() => { stopWatching(); router.back(); }}
-          >
-            <Text style={t.discardTxt}>Discard</Text>
-          </Pressable>
+              {routePathRef.current.length > 1 && (
+                pathSaved ? (
+                  <View style={t.pathSavedRow}>
+                    <Feather name="check-circle" size={15} color={C.primary} />
+                    <Text style={t.pathSavedTxt}>Path saved</Text>
+                  </View>
+                ) : (
+                  <Pressable
+                    style={t.savePathBtn}
+                    onPress={() => {
+                      setPathName(`My Route – ${formatDistance(totalDistRef.current)} mi`);
+                      setShowSaveNameModal(true);
+                    }}
+                  >
+                    <Feather name="bookmark" size={15} color={C.primary} />
+                    <Text style={t.savePathBtnTxt}>Save this path</Text>
+                  </Pressable>
+                )
+              )}
+
+              <Pressable style={t.saveBtn} onPress={finishAndNavigate}>
+                <Text style={t.saveBtnTxt}>Done</Text>
+              </Pressable>
+            </>
+          ) : (
+            <>
+              <Pressable
+                style={[t.saveBtn, saving && { opacity: 0.6 }]}
+                onPress={saveRun}
+                disabled={saving}
+              >
+                {saving ? (
+                  <ActivityIndicator color={C.bg} />
+                ) : (
+                  <Text style={t.saveBtnTxt}>Save Run</Text>
+                )}
+              </Pressable>
+
+              <Pressable
+                style={t.discardBtn}
+                onPress={() => { stopWatching(); router.back(); }}
+              >
+                <Text style={t.discardTxt}>Discard</Text>
+              </Pressable>
+            </>
+          )}
         </View>
 
         {/* ─── Save path name modal ─────────────────────────────────────────── */}
@@ -917,6 +998,46 @@ const t = StyleSheet.create({
     fontFamily: "Outfit_400Regular",
     fontSize: 14,
     color: C.textMuted,
+  },
+
+  // ─── Post-run photos ────────────────────────────────────────────────────
+  photoSection: {
+    alignSelf: "stretch",
+    gap: 10,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 14,
+    padding: 14,
+    backgroundColor: C.surface,
+  },
+  photoSectionTitle: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 14,
+    color: C.textSecondary,
+  },
+  photoScroll: { marginBottom: 4 },
+  photoThumb: {
+    width: 80,
+    height: 80,
+    borderRadius: 10,
+    marginRight: 8,
+    backgroundColor: C.card,
+  },
+  photoAddBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: C.primary + "55",
+    borderRadius: 12,
+    paddingVertical: 10,
+    backgroundColor: C.primaryMuted,
+  },
+  photoAddTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 14,
+    color: C.primary,
   },
 
   // ─── Save path button ───────────────────────────────────────────────────

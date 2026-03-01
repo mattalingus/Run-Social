@@ -672,6 +672,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ─── Run Photos ──────────────────────────────────────────────────────────────
+
+  app.get("/api/runs/:id/photos", async (req: any, res) => {
+    try {
+      const photos = await storage.getRunPhotos(req.params.id);
+      res.json(photos);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/runs/:id/photos", requireAuth, upload.single("photo"), async (req: any, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ message: "No photo provided" });
+      const run = await storage.getRunById(req.params.id);
+      if (!run) return res.status(404).json({ message: "Run not found" });
+      const participants = await storage.getRunParticipants(req.params.id);
+      const isParticipant = participants.some((p: any) => p.id === req.session.userId);
+      const isHost = run.host_id === req.session.userId;
+      if (!isParticipant && !isHost) return res.status(403).json({ message: "Not a participant" });
+      const ext = (req.file.originalname.split(".").pop() || "jpg").toLowerCase();
+      const filename = `run-${req.params.id}-${req.session.userId}-${Date.now()}.${ext}`;
+      const url = await uploadPhotoBuffer(req.file.buffer, filename, req.file.mimetype);
+      const photo = await storage.addRunPhoto(req.params.id, req.session.userId!, url);
+      res.status(201).json(photo);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.delete("/api/runs/:id/photos/:photoId", requireAuth, async (req: any, res) => {
+    try {
+      await storage.deleteRunPhoto(req.params.photoId, req.session.userId!);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  // ─── Solo Run Photos ──────────────────────────────────────────────────────────
+
+  app.get("/api/solo-runs/:id/photos", requireAuth, async (req: any, res) => {
+    try {
+      const photos = await storage.getSoloRunPhotos(req.params.id, req.session.userId!);
+      res.json(photos);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/solo-runs/:id/photos", requireAuth, upload.single("photo"), async (req: any, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ message: "No photo provided" });
+      const ext = (req.file.originalname.split(".").pop() || "jpg").toLowerCase();
+      const filename = `solo-${req.params.id}-${Date.now()}.${ext}`;
+      const url = await uploadPhotoBuffer(req.file.buffer, filename, req.file.mimetype);
+      const photo = await storage.addSoloRunPhoto(req.params.id, req.session.userId!, url);
+      res.status(201).json(photo);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.delete("/api/solo-runs/:id/photos/:photoId", requireAuth, async (req: any, res) => {
+    try {
+      await storage.deleteSoloRunPhoto(req.params.photoId, req.session.userId!);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.post("/api/admin/seed-runs", async (req, res) => {
     try {
       const { count = 20 } = req.body;

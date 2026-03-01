@@ -10,16 +10,18 @@ import {
   Modal,
   ActivityIndicator,
   Platform,
+  Image,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Notifications from "expo-notifications";
+import * as ImagePicker from "expo-image-picker";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
-import { apiRequest } from "@/lib/query-client";
+import { apiRequest, getApiUrl } from "@/lib/query-client";
 import C from "@/constants/colors";
 import { formatDistance } from "@/lib/formatDistance";
 import MAP_STYLE from "@/lib/mapStyle";
@@ -91,6 +93,110 @@ function MiniRouteMap({ path }: { path: RoutePoint[] }) {
     </MapView>
   );
 }
+
+// ─── Solo Run Photo Section ───────────────────────────────────────────────────
+
+function SoloRunPhotos({ runId }: { runId: string }) {
+  const [uploading, setUploading] = useState(false);
+
+  const { data: photos = [], refetch } = useQuery<any[]>({
+    queryKey: ["/api/solo-runs", runId, "photos"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/solo-runs/${runId}/photos`);
+      return res.json();
+    },
+    staleTime: 30_000,
+  });
+
+  async function pickAndUpload() {
+    if (Platform.OS !== "web") {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission needed", "Please allow photo library access to upload run photos.");
+        return;
+      }
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    const asset = result.assets[0];
+    const formData = new FormData();
+    formData.append("photo", { uri: asset.uri, type: asset.mimeType || "image/jpeg", name: "photo.jpg" } as any);
+    setUploading(true);
+    try {
+      const url = new URL(`/api/solo-runs/${runId}/photos`, getApiUrl()).toString();
+      const response = await fetch(url, { method: "POST", body: formData, credentials: "include" });
+      if (!response.ok) throw new Error("Upload failed");
+      refetch();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e: any) {
+      Alert.alert("Upload failed", e.message);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <View style={soloPhotoStyles.container}>
+      <View style={soloPhotoStyles.header}>
+        <Text style={soloPhotoStyles.title}>
+          {photos.length > 0 ? `Photos (${photos.length})` : "Photos"}
+        </Text>
+        <Pressable
+          style={[soloPhotoStyles.addBtn, uploading && { opacity: 0.6 }]}
+          onPress={pickAndUpload}
+          disabled={uploading}
+        >
+          {uploading ? (
+            <ActivityIndicator size="small" color={C.primary} />
+          ) : (
+            <>
+              <Feather name="camera" size={13} color={C.primary} />
+              <Text style={soloPhotoStyles.addBtnTxt}>Add</Text>
+            </>
+          )}
+        </Pressable>
+      </View>
+      {photos.length === 0 ? (
+        <Text style={soloPhotoStyles.emptyTxt}>No photos yet — tap Add to upload one</Text>
+      ) : (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
+          {photos.map((p: any) => (
+            <Image key={p.id} source={{ uri: p.photo_url }} style={soloPhotoStyles.thumb} />
+          ))}
+        </ScrollView>
+      )}
+    </View>
+  );
+}
+
+const soloPhotoStyles = StyleSheet.create({
+  container: {
+    marginTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+    paddingTop: 12,
+  },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  title: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary },
+  addBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: C.primaryMuted,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: C.primary + "44",
+  },
+  addBtnTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.primary },
+  emptyTxt: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, marginTop: 8 },
+  thumb: { width: 75, height: 75, borderRadius: 9, marginRight: 7, backgroundColor: C.card },
+});
 
 interface RankingCategory {
   label: string;
@@ -203,6 +309,7 @@ export default function SoloScreen() {
 
   const [showGoals, setShowGoals] = useState(false);
   const [showPlan, setShowPlan] = useState(false);
+  const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
 
   // Goals form state
   const [gPace, setGPace] = useState("");
@@ -562,10 +669,12 @@ export default function SoloScreen() {
             soloRuns.map((run) => {
               const badge = runBadges[run.id];
               const label = run.title || `${formatDistance(run.distance_miles)} mi run`;
+              const isExpanded = expandedRunId === run.id;
               return (
                 <Pressable
                   key={run.id}
                   style={({ pressed }) => [s.historyCard, { opacity: pressed ? 0.85 : 1 }]}
+                  onPress={() => run.completed && setExpandedRunId(isExpanded ? null : run.id)}
                   onLongPress={() => confirmDelete(run.id)}
                 >
                   <View style={s.historyRow}>
@@ -597,11 +706,15 @@ export default function SoloScreen() {
                     <View style={s.historyRight}>
                       <Text style={s.historyDist}>{formatDistance(run.distance_miles)}</Text>
                       <Text style={s.historyDistUnit}>mi</Text>
+                      {run.completed && (
+                        <Feather name={isExpanded ? "chevron-up" : "image"} size={14} color={C.textMuted} />
+                      )}
                     </View>
                   </View>
                   {run.route_path && run.route_path.length > 1 && Platform.OS !== "web" && (
                     <MiniRouteMap path={run.route_path} />
                   )}
+                  {isExpanded && <SoloRunPhotos runId={run.id} />}
                 </Pressable>
               );
             })

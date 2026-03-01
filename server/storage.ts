@@ -211,6 +211,21 @@ export async function initDb() {
       created_at TIMESTAMP DEFAULT NOW(),
       UNIQUE(community_path_id, user_id)
     );
+
+    CREATE TABLE IF NOT EXISTS run_photos (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      run_id VARCHAR NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      photo_url TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS solo_run_photos (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      solo_run_id VARCHAR NOT NULL REFERENCES solo_runs(id) ON DELETE CASCADE,
+      photo_url TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
   `);
 }
 
@@ -1255,4 +1270,61 @@ export async function getBookmarkedRuns(userId: string) {
     [userId]
   );
   return result.rows;
+}
+
+// ─── Run Photos ───────────────────────────────────────────────────────────────
+
+export async function getRunPhotos(runId: string) {
+  const res = await pool.query(
+    `SELECT rp.*, u.name as uploader_name, u.photo_url as uploader_avatar
+     FROM run_photos rp
+     JOIN users u ON u.id = rp.user_id
+     WHERE rp.run_id = $1
+     ORDER BY rp.created_at ASC`,
+    [runId]
+  );
+  return res.rows;
+}
+
+export async function addRunPhoto(runId: string, userId: string, photoUrl: string) {
+  const res = await pool.query(
+    `INSERT INTO run_photos (run_id, user_id, photo_url) VALUES ($1, $2, $3) RETURNING *`,
+    [runId, userId, photoUrl]
+  );
+  return res.rows[0];
+}
+
+export async function deleteRunPhoto(photoId: string, userId: string) {
+  await pool.query(`DELETE FROM run_photos WHERE id = $1 AND user_id = $2`, [photoId, userId]);
+}
+
+// ─── Solo Run Photos ──────────────────────────────────────────────────────────
+
+export async function getSoloRunPhotos(soloRunId: string, userId: string) {
+  const res = await pool.query(
+    `SELECT srp.* FROM solo_run_photos srp
+     JOIN solo_runs sr ON sr.id = srp.solo_run_id
+     WHERE srp.solo_run_id = $1 AND sr.user_id = $2
+     ORDER BY srp.created_at ASC`,
+    [soloRunId, userId]
+  );
+  return res.rows;
+}
+
+export async function addSoloRunPhoto(soloRunId: string, userId: string, photoUrl: string) {
+  const check = await pool.query(`SELECT id FROM solo_runs WHERE id = $1 AND user_id = $2`, [soloRunId, userId]);
+  if (!check.rows[0]) throw new Error("Solo run not found");
+  const res = await pool.query(
+    `INSERT INTO solo_run_photos (solo_run_id, photo_url) VALUES ($1, $2) RETURNING *`,
+    [soloRunId, photoUrl]
+  );
+  return res.rows[0];
+}
+
+export async function deleteSoloRunPhoto(photoId: string, userId: string) {
+  await pool.query(
+    `DELETE FROM solo_run_photos WHERE id = $1
+     AND solo_run_id IN (SELECT id FROM solo_runs WHERE user_id = $2)`,
+    [photoId, userId]
+  );
 }

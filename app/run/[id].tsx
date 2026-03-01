@@ -9,6 +9,7 @@ import {
   Alert,
   TextInput,
   Platform,
+  Image,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { router, useLocalSearchParams } from "expo-router";
@@ -16,9 +17,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
+import * as ImagePicker from "expo-image-picker";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
-import { apiRequest } from "@/lib/query-client";
+import { apiRequest, getApiUrl } from "@/lib/query-client";
 import C from "@/constants/colors";
 import { formatDistance } from "@/lib/formatDistance";
 
@@ -68,6 +70,8 @@ export default function RunDetailScreen() {
   const [tokenInput, setTokenInput] = useState(token || "");
   const [accessError, setAccessError] = useState("");
   const [unlocking, setUnlocking] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
 
   const { data: run, isLoading, refetch } = useQuery<any>({
     queryKey: ["/api/runs", id],
@@ -155,6 +159,49 @@ export default function RunDetailScreen() {
 
   const isBookmarked = runStatus?.is_bookmarked ?? false;
   const isPlanned = runStatus?.is_planned ?? false;
+
+  const { data: runPhotos = [], refetch: refetchPhotos } = useQuery<any[]>({
+    queryKey: ["/api/runs", id, "photos"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/runs/${id}/photos`);
+      return res.json();
+    },
+    enabled: !!id,
+  });
+
+  async function pickAndUploadPhoto() {
+    if (Platform.OS !== "web") {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission needed", "Please allow photo library access to upload run photos.");
+        return;
+      }
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    const asset = result.assets[0];
+    const formData = new FormData();
+    formData.append("photo", { uri: asset.uri, type: asset.mimeType || "image/jpeg", name: "photo.jpg" } as any);
+    setUploadingPhoto(true);
+    try {
+      const url = new URL(`/api/runs/${id}/photos`, getApiUrl()).toString();
+      const response = await fetch(url, { method: "POST", body: formData, credentials: "include" });
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.message || "Upload failed");
+      }
+      await refetchPhotos();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e: any) {
+      Alert.alert("Upload failed", e.message);
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
 
   const isHost = run?.host_id === user?.id;
   const isParticipant = participants.some((p) => p.id === user?.id);
@@ -504,7 +551,61 @@ export default function RunDetailScreen() {
             </View>
           </View>
         )}
+
+        {/* ─── Run Photos ──────────────────────────────────────────────────── */}
+        {isPastRun && (
+          <View style={styles.photosSection}>
+            <View style={styles.photosSectionHeader}>
+              <Text style={styles.sectionTitle}>
+                Run Photos {runPhotos.length > 0 ? `(${runPhotos.length})` : ""}
+              </Text>
+              {(isHost || isParticipant) && (
+                <Pressable
+                  style={[styles.addPhotoBtn, uploadingPhoto && { opacity: 0.6 }]}
+                  onPress={pickAndUploadPhoto}
+                  disabled={uploadingPhoto}
+                >
+                  {uploadingPhoto ? (
+                    <ActivityIndicator color={C.primary} size="small" />
+                  ) : (
+                    <>
+                      <Feather name="camera" size={14} color={C.primary} />
+                      <Text style={styles.addPhotoBtnTxt}>Add</Text>
+                    </>
+                  )}
+                </Pressable>
+              )}
+            </View>
+            {runPhotos.length === 0 ? (
+              <View style={styles.photosEmpty}>
+                <Feather name="image" size={22} color={C.textMuted} />
+                <Text style={styles.photosEmptyTxt}>No photos yet</Text>
+                {(isHost || isParticipant) && (
+                  <Text style={styles.photosEmptyHint}>Be the first to add a photo from this run</Text>
+                )}
+              </View>
+            ) : (
+              <View style={styles.photosGrid}>
+                {runPhotos.map((p: any) => (
+                  <Pressable key={p.id} onPress={() => setViewingPhoto(p.photo_url)}>
+                    <Image source={{ uri: p.photo_url }} style={styles.photoGridImg} />
+                  </Pressable>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
       </ScrollView>
+
+      {/* ─── Full-screen photo viewer ─────────────────────────────────────── */}
+      {viewingPhoto && (
+        <Pressable style={styles.photoViewer} onPress={() => setViewingPhoto(null)}>
+          <Image source={{ uri: viewingPhoto }} style={styles.photoViewerImg} resizeMode="contain" />
+          <Pressable style={[styles.photoViewerClose, { top: insets.top + 16 }]} onPress={() => setViewingPhoto(null)}>
+            <Feather name="x" size={22} color="#fff" />
+          </Pressable>
+        </Pressable>
+      )}
 
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
         {isHost && !isPastRun && !run.is_completed && (
@@ -737,4 +838,35 @@ const styles = StyleSheet.create({
   lockError: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: "#FF6B6B", textAlign: "center" },
   lockUnlockBtn: { backgroundColor: C.primary, borderRadius: 14, height: 52, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 32, width: "100%" },
   lockUnlockTxt: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.bg },
+
+  // ─── Run Photos ───────────────────────────────────────────────────────────
+  photosSection: { marginTop: 24, marginBottom: 16 },
+  photosSectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
+  addPhotoBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: C.primaryMuted,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: C.primary + "44",
+  },
+  addPhotoBtnTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.primary },
+  photosEmpty: { alignItems: "center", paddingVertical: 20, gap: 6 },
+  photosEmptyTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.textMuted },
+  photosEmptyHint: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, textAlign: "center" },
+  photosGrid: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  photoGridImg: { width: 105, height: 105, borderRadius: 10, backgroundColor: C.card },
+  photoViewer: {
+    position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.95)", alignItems: "center", justifyContent: "center", zIndex: 999,
+  },
+  photoViewerImg: { width: "100%", height: "80%" },
+  photoViewerClose: {
+    position: "absolute", right: 20,
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center",
+  },
 });

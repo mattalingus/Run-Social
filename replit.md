@@ -81,6 +81,7 @@ shared/
 13. **Saved Paths** - After a solo GPS run, save the route as a named path. Saved paths appear in Solo tab with mini-map previews. When starting a new solo run, select a saved path to show as a faint ghost overlay on the live map.
 14. **Bookmark & Plan** - Bookmark any run from the map, detail page, or discover list. "Plan to Attend" signals soft interest in future runs. Discover tab shows "Saved Runs" horizontal scroll section. Plan count shown on run detail.
 15. **Community Paths** - When 3+ different users save the same GPS route (matched by start/end within ~0.5km + similar distance), it automatically becomes a Community Path. Purple polylines appear on the world map; tapping opens a details card with "Schedule a Run Here" button that pre-fills the create-run form with that location.
+16. **Run Photos** - After completing a solo run (save → optionally add photo before navigating away), or anytime on a past group run detail page. Group run photos are visible to all; solo run photos accessible by tapping any completed run in history. Photos stored in object storage (GCS).
 
 ## Database Tables
 - `users` - Auth, profile, goals, stats
@@ -97,6 +98,8 @@ shared/
 - `achievements` - Milestone badges (25/100/250/500/1000 miles)
 - `friends` - Bidirectional friendship graph
 - `live_pings` - GPS coords during live group run
+- `run_photos` - Photos attached to group runs (user uploaded, multiple per run)
+- `solo_run_photos` - Photos attached to solo runs
 
 ## Live Run DB Schema
 - `runs.is_active` — run has been started by host
@@ -134,6 +137,12 @@ shared/
 - `GET /api/runs/:id/live` - Get live run state (is_active, present participants + their latest positions)
 - `POST /api/runs/:id/runner-finish` - Runner ends their run (stores final_distance, final_pace, recomputes ranks)
 - `GET /api/runs/:id/results` - Get leaderboard for completed run (ranked by pace)
+- `GET /api/runs/:id/photos` - Get all photos for a group run
+- `POST /api/runs/:id/photos` - Upload a photo to a group run (host or participant only, multipart/form-data)
+- `DELETE /api/runs/:id/photos/:photoId` - Delete a photo (owner only)
+- `GET /api/solo-runs/:id/photos` - Get photos for a solo run (auth required, owner only)
+- `POST /api/solo-runs/:id/photos` - Upload a photo to a solo run (auth required, multipart/form-data)
+- `DELETE /api/solo-runs/:id/photos/:photoId` - Delete a solo run photo (owner only)
 
 ## Future Integrations (Structured)
 Database columns exist for: `strava_id`, `apple_health_id`, `garmin_id`
