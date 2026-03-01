@@ -351,36 +351,35 @@ export default function MapScreen() {
       </View>
 
       {/* ─── Header ──────────────────────────────────────────────────────── */}
-      <View style={[s.header, { paddingTop: topPad + 8 }]}>
+      <View style={[s.header, { paddingTop: topPad + (Platform.OS === "web" ? 67 : 8) }]}>
         <View style={s.headerRow}>
           {/* Back button */}
           <Pressable style={s.backBtn} onPress={() => router.back()}>
-            <Feather name="arrow-left" size={18} color={C.text} />
+            <Feather name="arrow-left" size={16} color={C.textSecondary} />
             <Text style={s.backTxt}>Discover</Text>
           </Pressable>
 
           <View style={s.headerRight}>
-            {isFetching && <ActivityIndicator size="small" color={C.primary} style={{ marginRight: 8 }} />}
+            {isFetching && <ActivityIndicator size="small" color={C.primary} style={{ marginRight: 6 }} />}
             <Pressable
               style={[s.filterBtn, isFiltered && s.filterBtnActive]}
               onPress={() => { setDraft({ ...applied }); setShowFilter(true); }}
             >
-              <Feather name="sliders" size={15} color={isFiltered ? C.primary : C.text} />
-              <Text style={[s.filterBtnText, isFiltered && { color: C.primary }]}>Filter</Text>
+              <Feather name="sliders" size={16} color={isFiltered ? C.primary : C.textSecondary} />
               {isFiltered && <View style={s.filterDot} />}
             </Pressable>
           </View>
         </View>
         {/* Header bottom fade */}
         <View pointerEvents="none" style={s.headerFade}>
-          {[0.95, 0.65, 0.30, 0.10, 0.03].map((op, i) => (
-            <View key={i} style={[s.gradLayer, { opacity: op, height: [28, 18, 14, 12, 10][i] }]} />
+          {[0.92, 0.60, 0.28, 0.10, 0.03].map((op, i) => (
+            <View key={i} style={[s.gradLayer, { opacity: op, height: [24, 16, 12, 10, 8][i] }]} />
           ))}
         </View>
       </View>
 
       {/* ─── Sidebar ─────────────────────────────────────────────────────── */}
-      <View style={[s.sideBar, { top: topPad + 100 }]}>
+      <View style={[s.sideBar, { top: topPad + 70 }]}>
         {userLoc && (
           <Pressable
             style={s.sideBtn}
@@ -581,39 +580,42 @@ const s = StyleSheet.create({
   header: {
     position: "absolute", top: 0, left: 0, right: 0,
     backgroundColor: C.bg,
-    shadowColor: "#000", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.45, shadowRadius: 14,
-    elevation: 16,
   },
   headerRow: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 20, paddingBottom: 14,
+    paddingHorizontal: 20, paddingBottom: 12,
   },
   headerFade: { width: "100%" },
 
   backBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
+    gap: 5,
+    height: 36,
+    paddingHorizontal: 11,
+    borderRadius: 10,
     backgroundColor: C.surface,
     borderWidth: 1,
     borderColor: C.border,
   },
-  backTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text },
+  backTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary },
 
   headerRight: { flexDirection: "row", alignItems: "center" },
   filterBtn: {
-    flexDirection: "row", alignItems: "center", gap: 6,
-    paddingHorizontal: 16, paddingVertical: 11, borderRadius: 24,
-    backgroundColor: C.surface, borderWidth: 1.5, borderColor: C.primary + "40",
-    shadowColor: C.primary, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.18, shadowRadius: 8,
-    elevation: 4,
+    width: 38, height: 36,
+    borderRadius: 10,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
   },
-  filterBtnActive: { borderColor: C.primary, backgroundColor: C.card, shadowOpacity: 0.5, shadowRadius: 12 },
-  filterBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text },
-  filterDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: C.primary, marginLeft: -2 },
+  filterBtnActive: { borderColor: C.primary + "55", backgroundColor: C.primaryMuted + "AA" },
+  filterDot: {
+    width: 6, height: 6, borderRadius: 3, backgroundColor: C.primary,
+    position: "absolute", top: 5, right: 5,
+  },
 
   sideBar: { position: "absolute", right: 16, gap: 10 },
   sideBtn: {
