@@ -28,10 +28,11 @@ app/
     login.tsx          - Login screen
     register.tsx       - Register screen
   (tabs)/
-    _layout.tsx        - Tab bar (Map, Discover, Profile) with liquid glass
+    _layout.tsx        - Tab bar (Map, Discover, Solo, Profile) with liquid glass
     index.tsx          - Map home screen (Houston default, circular profile markers, glow ring, bounce animation)
     index.web.tsx      - Web fallback (list view, no maps)
     discover.tsx       - Run discovery with search & filter
+    solo.tsx           - Solo running: goal tracker, performance rankings, plan runs + local notifications
     profile.tsx        - User profile, goals, achievements, history
   run/
     [id].tsx           - Run detail screen (join, leave, complete, rate)
@@ -71,6 +72,7 @@ shared/
 8. **Achievements** - Badges at 25, 100, 250, 500, 1000 miles
 9. **Host Ratings** - 1-5 stars + feedback tags
 10. **Mileage Goals** - Monthly & yearly goals with progress bars
+11. **Solo Tab** - Personal run tracking: pace/distance goals, performance rankings by distance category (1mi/2mi/5K/5mi/10K), plan future runs with local push notifications
 
 ## API Routes
 - `POST /api/auth/register` - Register new user
@@ -91,6 +93,11 @@ shared/
 - `POST /api/runs/:id/complete` - Log run completion
 - `POST /api/runs/:id/rate` - Rate host
 - `GET /api/runs/:id/my-rating` - Get user's rating for this run
+- `GET /api/solo-runs` - Get user's solo run history (auth required)
+- `POST /api/solo-runs` - Create a solo run (planned or completed)
+- `PUT /api/solo-runs/:id` - Update a solo run
+- `DELETE /api/solo-runs/:id` - Delete a solo run
+- `PUT /api/users/me/solo-goals` - Update pace/distance goals + goal period
 
 ## Future Integrations (Structured)
 Database columns exist for: `strava_id`, `apple_health_id`, `garmin_id`

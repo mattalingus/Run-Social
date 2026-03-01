@@ -17,6 +17,10 @@ function NativeTabLayout() {
         <Icon sf={{ default: "magnifyingglass", selected: "magnifyingglass" }} />
         <Label>Discover</Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="solo">
+        <Icon sf={{ default: "stopwatch", selected: "stopwatch.fill" }} />
+        <Label>Solo</Label>
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="profile">
         <Icon sf={{ default: "person", selected: "person.fill" }} />
         <Label>Profile</Label>
@@ -75,6 +79,15 @@ function ClassicTabLayout() {
           title: "Discover",
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? "search" : "search-outline"} size={24} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="solo"
+        options={{
+          title: "Solo",
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? "stopwatch" : "stopwatch-outline"} size={24} color={color} />
           ),
         }}
       />

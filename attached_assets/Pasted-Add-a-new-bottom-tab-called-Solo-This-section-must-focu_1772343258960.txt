@@ -1,0 +1,172 @@
+Add a new bottom tab called “Solo”.
+
+This section must focus on personal running history, performance tracking, goals, and planned solo runs.
+
+1. Bottom Tab Update
+
+Add new tab labeled “Solo”.
+
+Icon should represent individual running (not group).
+
+Keep styling consistent with Map, Discover, Profile tabs.
+
+2. Solo Screen Layout
+
+The Solo screen must contain:
+
+A. Goal Tracker (Top Section)
+
+At the top of the screen:
+
+User sets:
+
+Target average pace goal (e.g., 7:30 min/mi)
+
+Target total distance goal (e.g., 100 miles this month or year)
+
+Display:
+
+Current average pace
+
+Current total miles
+
+Progress bar toward distance goal
+
+Show:
+
+Percentage complete
+
+Remaining miles to goal
+
+This should be visually clean and prominent.
+
+B. Performance Rankings Section
+
+Below goal tracker, show performance insights such as:
+
+“2nd fastest 5K”
+
+“Fastest 1 mile”
+
+“3rd fastest 10K”
+
+“Longest run”
+
+“Most consistent pace”
+
+Logic requirements:
+
+Compare past runs grouped by distance markers:
+
+1 mile
+
+2 mile
+
+5K (3.1 mi)
+
+5 mile
+
+10K (6.2 mi)
+
+Rank runs by pace for that distance category.
+
+Show ranking badge next to qualifying runs.
+
+C. Run History List
+
+Display all previous runs in list format:
+
+Each item must show:
+
+Date
+
+Distance (rounded properly)
+
+Average pace
+
+Time
+
+Whether it was Solo or Public
+
+Ranking badge if applicable
+
+Runs sorted by most recent first.
+
+D. Plan a Solo Run
+
+Include button:
+“Plan Solo Run”
+
+When tapped:
+
+Allow user to:
+
+Select date
+
+Select time
+
+Select target distance
+
+Optional target pace
+
+Save as scheduled solo run
+
+Set local push notification reminder:
+
+1 hour before
+
+10 minutes before
+
+Notification should trigger even if app is closed.
+
+3. Data Structure Updates
+
+Ensure database supports:
+
+userGoals:
+
+paceGoal
+
+distanceGoal
+
+goalPeriod (monthly/yearly)
+
+soloRuns:
+
+date
+
+distance
+
+pace
+
+time
+
+completed (boolean)
+
+performanceMetrics:
+
+calculated ranking per distance category
+
+Do not break existing public run structure.
+
+4. UI Design
+
+Dark theme consistent with Map.
+
+Clean card layout.
+
+Goal tracker visually prominent.
+
+Ranking badges should be subtle but noticeable.
+
+Avoid Apple default styling.
+
+5. Performance Considerations
+
+Ranking calculations should be memoized or cached.
+
+Do not recalculate full history on every render.
+
+Use efficient sorting logic.
+
+Return updated tab configuration and Solo screen component code.

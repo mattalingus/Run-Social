@@ -248,6 +248,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/solo-runs", requireAuth, async (req, res) => {
+    try {
+      const runs = await storage.getSoloRuns(req.session.userId!);
+      res.json(runs);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/solo-runs", requireAuth, async (req, res) => {
+    try {
+      const { title, date, distanceMiles, paceMinPerMile, durationSeconds, completed, planned, notes } = req.body;
+      if (!date || !distanceMiles) return res.status(400).json({ message: "date and distanceMiles required" });
+      const run = await storage.createSoloRun({
+        userId: req.session.userId!,
+        title,
+        date,
+        distanceMiles: parseFloat(distanceMiles),
+        paceMinPerMile: paceMinPerMile ? parseFloat(paceMinPerMile) : null,
+        durationSeconds: durationSeconds ? parseInt(durationSeconds) : null,
+        completed: !!completed,
+        planned: !!planned,
+        notes,
+      });
+      res.status(201).json(run);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.put("/api/solo-runs/:id", requireAuth, async (req, res) => {
+    try {
+      const run = await storage.updateSoloRun(req.params.id, req.session.userId!, req.body);
+      if (!run) return res.status(404).json({ message: "Run not found" });
+      res.json(run);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.delete("/api/solo-runs/:id", requireAuth, async (req, res) => {
+    try {
+      await storage.deleteSoloRun(req.params.id, req.session.userId!);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.put("/api/users/me/solo-goals", requireAuth, async (req, res) => {
+    try {
+      const { paceGoal, distanceGoal, goalPeriod } = req.body;
+      await storage.updateSoloGoals(
+        req.session.userId!,
+        paceGoal != null ? parseFloat(paceGoal) : null,
+        parseFloat(distanceGoal) || 100,
+        goalPeriod || "monthly"
+      );
+      const user = await storage.getUserById(req.session.userId!);
+      const { password: _, ...safeUser } = user;
+      res.json(safeUser);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.post("/api/admin/seed-runs", async (req, res) => {
     try {
       const { count = 20 } = req.body;

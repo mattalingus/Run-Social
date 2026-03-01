@@ -22,6 +22,9 @@ interface User {
   rating_count: number;
   notifications_enabled: boolean;
   marker_icon?: string | null;
+  pace_goal?: number | null;
+  distance_goal?: number;
+  goal_period?: string;
 }
 
 interface AuthContextValue {

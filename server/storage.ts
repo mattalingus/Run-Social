@@ -83,6 +83,23 @@ export async function initDb() {
     );
 
     ALTER TABLE users ADD COLUMN IF NOT EXISTS marker_icon TEXT DEFAULT NULL;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS pace_goal REAL DEFAULT NULL;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS distance_goal REAL DEFAULT 100;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS goal_period VARCHAR DEFAULT 'monthly';
+
+    CREATE TABLE IF NOT EXISTS solo_runs (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      title TEXT,
+      date TIMESTAMP NOT NULL,
+      distance_miles REAL NOT NULL,
+      pace_min_per_mile REAL,
+      duration_seconds INTEGER,
+      completed BOOLEAN DEFAULT false,
+      planned BOOLEAN DEFAULT false,
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
 
     CREATE TABLE IF NOT EXISTS achievements (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -158,6 +175,72 @@ export async function createRun(data: {
 
 export async function updateMarkerIcon(userId: string, icon: string | null) {
   await pool.query(`UPDATE users SET marker_icon = $2 WHERE id = $1`, [userId, icon]);
+}
+
+export async function getSoloRuns(userId: string) {
+  const result = await pool.query(
+    `SELECT * FROM solo_runs WHERE user_id = $1 ORDER BY date DESC`,
+    [userId]
+  );
+  return result.rows;
+}
+
+export async function createSoloRun(data: {
+  userId: string;
+  title?: string;
+  date: string;
+  distanceMiles: number;
+  paceMinPerMile?: number | null;
+  durationSeconds?: number | null;
+  completed?: boolean;
+  planned?: boolean;
+  notes?: string;
+}) {
+  const result = await pool.query(
+    `INSERT INTO solo_runs (user_id, title, date, distance_miles, pace_min_per_mile, duration_seconds, completed, planned, notes)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+    [
+      data.userId,
+      data.title ?? null,
+      data.date,
+      data.distanceMiles,
+      data.paceMinPerMile ?? null,
+      data.durationSeconds ?? null,
+      data.completed ?? false,
+      data.planned ?? false,
+      data.notes ?? null,
+    ]
+  );
+  return result.rows[0];
+}
+
+export async function updateSoloRun(id: string, userId: string, updates: Record<string, any>) {
+  const allowed = ["title", "date", "distance_miles", "pace_min_per_mile", "duration_seconds", "completed", "planned", "notes"];
+  const entries = Object.entries(updates).filter(([k]) => allowed.includes(k));
+  if (!entries.length) return null;
+  const fields = entries.map(([k], i) => `${k} = $${i + 3}`).join(", ");
+  const values = entries.map(([, v]) => v);
+  const result = await pool.query(
+    `UPDATE solo_runs SET ${fields} WHERE id = $1 AND user_id = $2 RETURNING *`,
+    [id, userId, ...values]
+  );
+  return result.rows[0] || null;
+}
+
+export async function deleteSoloRun(id: string, userId: string) {
+  await pool.query(`DELETE FROM solo_runs WHERE id = $1 AND user_id = $2`, [id, userId]);
+}
+
+export async function updateSoloGoals(
+  userId: string,
+  paceGoal: number | null,
+  distanceGoal: number,
+  goalPeriod: string
+) {
+  await pool.query(
+    `UPDATE users SET pace_goal = $2, distance_goal = $3, goal_period = $4 WHERE id = $1`,
+    [userId, paceGoal, distanceGoal, goalPeriod]
+  );
 }
 
 export async function getPublicRuns(filters?: {
