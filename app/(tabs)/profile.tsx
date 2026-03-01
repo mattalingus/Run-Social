@@ -324,24 +324,26 @@ export default function ProfileScreen() {
       {/* ── Friends Quick-Access Row ───────────────────────────────────────── */}
       <View style={styles.friendsQuickRow}>
         <Pressable
-          style={({ pressed }) => [styles.statCard, styles.friendsQuickCard, { opacity: pressed ? 0.8 : 1 }]}
+          style={({ pressed }) => [styles.statCard, { opacity: pressed ? 0.8 : 1 }]}
           onPress={() => { setShowFriendList(true); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
         >
-          <Feather name="users" size={16} color={C.primary} />
-          <Text style={styles.friendsQuickTxt}>
-            Friends: <Text style={styles.friendsQuickCount}>{friendsList.length}</Text>
-          </Text>
-          {incomingRequests.length > 0 && (
-            <View style={styles.friendsQuickDot}>
-              <Text style={styles.friendsQuickDotTxt}>{incomingRequests.length}</Text>
-            </View>
-          )}
+          <Feather name="users" size={18} color={C.primary} />
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+            <Text style={styles.friendsQuickTxt}>
+              Friends: <Text style={styles.friendsQuickCount}>{friendsList.length}</Text>
+            </Text>
+            {incomingRequests.length > 0 && (
+              <View style={styles.friendsQuickDot}>
+                <Text style={styles.friendsQuickDotTxt}>{incomingRequests.length}</Text>
+              </View>
+            )}
+          </View>
         </Pressable>
         <Pressable
-          style={({ pressed }) => [styles.statCard, styles.friendsQuickCard, { opacity: pressed ? 0.8 : 1 }]}
+          style={({ pressed }) => [styles.statCard, { opacity: pressed ? 0.8 : 1 }]}
           onPress={() => { setShowAddFriend(true); setFriendSearch(""); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
         >
-          <Feather name="user-plus" size={16} color={C.primary} />
+          <Feather name="user-plus" size={18} color={C.primary} />
           <Text style={styles.friendsQuickTxt}>+ Add Friends</Text>
         </Pressable>
       </View>
@@ -1057,9 +1059,8 @@ const iconStyles = StyleSheet.create({
   iconInitial: { fontFamily: "Outfit_700Bold", fontSize: 22, color: C.primary },
   iconEmoji: { fontSize: 26 },
   iconLabel: { fontFamily: "Outfit_400Regular", fontSize: 9, color: C.textSecondary },
-  friendsQuickRow: { flexDirection: "row", gap: 12 },
-  friendsQuickCard: { flexDirection: "row", alignItems: "center", gap: 8, minWidth: 0 },
-  friendsQuickTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.text, flexShrink: 1 },
+  friendsQuickRow: { flexDirection: "row", gap: 10, flexWrap: "wrap" },
+  friendsQuickTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text },
   friendsQuickCount: { color: C.primary },
   friendsQuickDot: { marginLeft: "auto" as const, backgroundColor: C.orange, borderRadius: 10, minWidth: 18, height: 18, alignItems: "center", justifyContent: "center", paddingHorizontal: 4 },
   friendsQuickDotTxt: { fontFamily: "Outfit_700Bold", fontSize: 10, color: C.bg },
