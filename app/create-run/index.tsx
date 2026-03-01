@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   Pressable,
   TextInput,
   ActivityIndicator,
@@ -12,6 +11,7 @@ import {
   Modal,
   Share,
 } from "react-native";
+import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
@@ -122,10 +122,10 @@ export default function CreateRunScreen() {
         </Pressable>
       </View>
 
-      <ScrollView
+      <KeyboardAwareScrollViewCompat
         contentContainerStyle={[styles.form, { paddingBottom: insets.bottom + 40 }]}
         showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
+        bottomOffset={20}
       >
         <View style={styles.field}>
           <Text style={styles.label}>Run Title *</Text>
@@ -332,7 +332,7 @@ export default function CreateRunScreen() {
             ))}
           </View>
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollViewCompat>
 
       {inviteModal && (
         <Modal transparent animationType="fade">

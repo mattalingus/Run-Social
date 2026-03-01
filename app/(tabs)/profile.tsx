@@ -12,6 +12,7 @@ import {
   TextInput,
   Image,
 } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -642,6 +643,7 @@ export default function ProfileScreen() {
       {/* ── Modals ────────────────────────────────────────────────────────── */}
 
       <Modal visible={showGoals} transparent animationType="slide" onRequestClose={() => setShowGoals(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <Pressable style={styles.modalOverlay} onPress={() => setShowGoals(false)} />
         <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 24 }]}>
           <Text style={styles.modalTitle}>Set Mileage Goals</Text>
@@ -673,9 +675,11 @@ export default function ProfileScreen() {
             {goalsMutation.isPending ? <ActivityIndicator color={C.bg} /> : <Text style={styles.modalBtnText}>Save Goals</Text>}
           </Pressable>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal visible={showPace} transparent animationType="slide" onRequestClose={() => setShowPace(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <Pressable style={styles.modalOverlay} onPress={() => setShowPace(false)} />
         <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 24 }]}>
           <Text style={styles.modalTitle}>Update Your Stats</Text>
@@ -707,6 +711,7 @@ export default function ProfileScreen() {
             {paceMutation.isPending ? <ActivityIndicator color={C.bg} /> : <Text style={styles.modalBtnText}>Save Stats</Text>}
           </Pressable>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ── Map Pin Picker Modal ───────────────────────────────────────────── */}
@@ -855,6 +860,7 @@ export default function ProfileScreen() {
 
       {/* ── Add Friend Modal ───────────────────────────────────────────────── */}
       <Modal visible={showAddFriend} transparent animationType="slide" onRequestClose={() => { setShowAddFriend(false); setFriendSearch(""); }}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <Pressable style={styles.modalOverlay} onPress={() => { setShowAddFriend(false); setFriendSearch(""); }} />
         <View style={[styles.modalSheet, styles.friendModalSheet, { paddingBottom: insets.bottom + 24 }]}>
           <View style={styles.modalTitleRow}>
@@ -923,6 +929,7 @@ export default function ProfileScreen() {
           )}
 
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
     </ScrollView>

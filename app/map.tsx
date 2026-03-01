@@ -12,6 +12,7 @@ import {
   Platform,
   TextInput,
 } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import MapView, { Marker, Region } from "react-native-maps";
 import * as Location from "expo-location";
 import * as Haptics from "expo-haptics";
@@ -630,6 +631,7 @@ export default function MapScreen() {
 
       {/* ─── Filter sheet ────────────────────────────────────────────────── */}
       <Modal visible={showFilter} transparent animationType="slide" onRequestClose={() => setShowFilter(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <Pressable style={s.overlay} onPress={() => setShowFilter(false)} />
         <View style={[s.sheet, { paddingBottom: insets.bottom + 24 }]}>
           <View style={s.sheetHandle} />
@@ -730,6 +732,7 @@ export default function MapScreen() {
             </Pressable>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

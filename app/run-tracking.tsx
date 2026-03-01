@@ -11,6 +11,7 @@ import {
   TextInput,
   ScrollView,
 } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -414,8 +415,9 @@ export default function RunTrackingScreen() {
         {/* ─── Save path name modal ─────────────────────────────────────────── */}
         {showSaveNameModal && (
           <Modal visible transparent animationType="fade" onRequestClose={() => setShowSaveNameModal(false)}>
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
             <Pressable style={t.modalOverlay} onPress={() => setShowSaveNameModal(false)} />
-            <View style={[t.nameModal, { marginBottom: insets.bottom + 32 }]}>
+            <View style={[t.nameModal, { paddingBottom: insets.bottom + 24 }]}>
               <View style={t.nameModalHandle} />
               <Text style={t.nameModalTitle}>Name this path</Text>
               <TextInput
@@ -441,6 +443,7 @@ export default function RunTrackingScreen() {
                 <Text style={t.nameModalCancelTxt}>Cancel</Text>
               </Pressable>
             </View>
+            </KeyboardAvoidingView>
           </Modal>
         )}
       </View>

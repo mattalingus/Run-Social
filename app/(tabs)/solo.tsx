@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Platform,
 } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -610,6 +611,7 @@ export default function SoloScreen() {
 
       {/* ─── Edit Goals Modal ─────────────────────────────────────────── */}
       <Modal visible={showGoals} transparent animationType="slide" onRequestClose={() => setShowGoals(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <Pressable style={s.overlay} onPress={() => setShowGoals(false)} />
         <View style={[s.sheet, { paddingBottom: insets.bottom + 24 }]}>
           <View style={s.sheetHandle} />
@@ -670,10 +672,12 @@ export default function SoloScreen() {
             </Pressable>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ─── Plan Run Modal ───────────────────────────────────────────── */}
       <Modal visible={showPlan} transparent animationType="slide" onRequestClose={() => setShowPlan(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <Pressable style={s.overlay} onPress={() => setShowPlan(false)} />
         <View style={[s.sheet, { paddingBottom: insets.bottom + 24 }]}>
           <View style={s.sheetHandle} />
@@ -764,6 +768,7 @@ export default function SoloScreen() {
             </View>
           </ScrollView>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

@@ -14,6 +14,7 @@ import {
   Switch,
   Alert,
 } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons } from "@expo/vector-icons";
@@ -943,7 +944,7 @@ export default function DiscoverScreen() {
 
       {/* ── Host Run Modal ───────────────────────────────────────────────────── */}
       <Modal visible={showHostModal} transparent animationType="slide" onRequestClose={() => setShowHostModal(false)}>
-        <View style={s.modalWrap}>
+        <KeyboardAvoidingView style={s.modalWrap} behavior="padding">
         <Pressable style={s.modalOverlay} onPress={() => setShowHostModal(false)} />
         <View style={[s.modalSheet, { paddingBottom: insets.bottom + 24 }]}>
 
@@ -1226,7 +1227,7 @@ export default function DiscoverScreen() {
           </ScrollView>
           )}
         </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ── Community Rules Modal ──────────────────────────────────────────────

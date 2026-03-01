@@ -10,6 +10,7 @@ import {
   TextInput,
   Platform,
 } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons } from "@expo/vector-icons";
@@ -250,7 +251,7 @@ export default function RunDetailScreen() {
 
   if (run.isPrivate) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20, paddingHorizontal: 28 }]}>
+      <KeyboardAvoidingView behavior="padding" style={[styles.container, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20, paddingHorizontal: 28 }]}>
         <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={12}>
           <Feather name="arrow-left" size={20} color={C.textSecondary} />
         </Pressable>
@@ -306,7 +307,7 @@ export default function RunDetailScreen() {
             )}
           </Pressable>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     );
   }
 
