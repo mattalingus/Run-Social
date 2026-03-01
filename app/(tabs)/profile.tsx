@@ -76,6 +76,29 @@ export default function ProfileScreen() {
   const [yearlyGoal, setYearlyGoal] = useState(user?.yearly_goal?.toString() || "500");
   const [avgPace, setAvgPace] = useState(user?.avg_pace?.toString() || "10");
   const [avgDistance, setAvgDistance] = useState(user?.avg_distance?.toString() || "3");
+  const [devTaps, setDevTaps] = useState(0);
+  const [showDevMode, setShowDevMode] = useState(false);
+
+  function handleVersionTap() {
+    const next = devTaps + 1;
+    setDevTaps(next);
+    if (next >= 5) {
+      setShowDevMode(true);
+      setDevTaps(0);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  }
+
+  const seedMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/admin/seed-runs", { count: 20 });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/runs"] });
+      Alert.alert("Done", "Generated 20 fresh runs on the map.");
+    },
+    onError: (e: any) => Alert.alert("Error", e.message),
+  });
 
   const { data: achievements = [] } = useQuery<any[]>({
     queryKey: ["/api/users/me/achievements"],
@@ -317,6 +340,32 @@ export default function ProfileScreen() {
         )}
       </View>
 
+      <Pressable onPress={handleVersionTap} style={devStyles.versionWrap}>
+        <Text style={devStyles.versionText}>PaceUp v1.0</Text>
+      </Pressable>
+
+      {showDevMode && (
+        <View style={devStyles.devPanel}>
+          <Text style={devStyles.devTitle}>Dev Mode</Text>
+          <Pressable
+            style={({ pressed }) => [devStyles.devBtn, { opacity: pressed ? 0.8 : 1 }]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              seedMutation.mutate();
+            }}
+            disabled={seedMutation.isPending}
+          >
+            {seedMutation.isPending
+              ? <ActivityIndicator color={C.primary} />
+              : <Text style={devStyles.devBtnText}>Generate 20 Random Runs</Text>
+            }
+          </Pressable>
+          <Pressable onPress={() => setShowDevMode(false)} style={devStyles.devClose}>
+            <Text style={devStyles.devCloseText}>Close Dev Mode</Text>
+          </Pressable>
+        </View>
+      )}
+
       <Modal visible={showGoals} transparent animationType="slide" onRequestClose={() => setShowGoals(false)}>
         <Pressable style={styles.modalOverlay} onPress={() => setShowGoals(false)} />
         <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 24 }]}>
@@ -541,4 +590,30 @@ const styles = StyleSheet.create({
   },
   modalBtn: { backgroundColor: C.primary, borderRadius: 14, height: 52, alignItems: "center", justifyContent: "center" },
   modalBtnText: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.bg },
+});
+
+const devStyles = StyleSheet.create({
+  versionWrap: { alignItems: "center", paddingVertical: 16 },
+  versionText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted },
+  devPanel: {
+    backgroundColor: C.card,
+    borderRadius: 16,
+    padding: 20,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  devTitle: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.text },
+  devBtn: {
+    backgroundColor: C.primaryMuted,
+    borderRadius: 12,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: C.primary + "55",
+  },
+  devBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.primary },
+  devClose: { alignItems: "center", paddingVertical: 8 },
+  devCloseText: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textMuted },
 });

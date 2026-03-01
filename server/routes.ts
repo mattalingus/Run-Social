@@ -4,6 +4,7 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { Pool } from "pg";
 import * as storage from "./storage";
+import { generateDummyRuns, clearAndReseedRuns, getRunCount } from "./seed";
 
 declare module "express-session" {
   interface SessionData {
@@ -21,6 +22,12 @@ function requireAuth(req: Request, res: Response, next: Function) {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   await storage.initDb();
+
+  const runCount = await getRunCount();
+  if (runCount === 0) {
+    await generateDummyRuns(15);
+    console.log("[seed] Inserted 15 dummy runs for Houston");
+  }
 
   app.use(
     session({
@@ -219,6 +226,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(result);
     } catch (e: any) {
       if (e.message === "Already rated this run") return res.status(400).json({ message: e.message });
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/admin/seed-runs", async (req, res) => {
+    try {
+      const { count = 20 } = req.body;
+      await clearAndReseedRuns(count);
+      res.json({ success: true, message: `Generated ${count} runs` });
+    } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
   });

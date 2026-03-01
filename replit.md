@@ -16,6 +16,7 @@ A mobile-first social running application built with Expo React Native and a Nod
 - **Database**: PostgreSQL via `pg` pool (raw SQL, no ORM)
 - **Auth**: express-session with connect-pg-simple store, bcryptjs for password hashing
 - **Port**: 5000
+- **Seed data**: `server/seed.ts` — auto-seeds 15 Houston runs on startup if DB is empty; `POST /api/admin/seed-runs` regenerates 20 runs
 
 ## App Structure
 ```
@@ -27,7 +28,8 @@ app/
     register.tsx       - Register screen
   (tabs)/
     _layout.tsx        - Tab bar (Map, Discover, Profile) with liquid glass
-    index.tsx          - Map home screen with run pins
+    index.tsx          - Map home screen (Houston default, circular profile markers, glow ring, bounce animation)
+    index.web.tsx      - Web fallback (list view, no maps)
     discover.tsx       - Run discovery with search & filter
     profile.tsx        - User profile, goals, achievements, history
   run/

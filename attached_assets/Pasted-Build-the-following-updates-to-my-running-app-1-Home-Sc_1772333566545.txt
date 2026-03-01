@@ -1,0 +1,135 @@
+Build the following updates to my running app:
+
+1. Home Screen Map Upgrade
+
+Replace the current home screen with a full-screen Google Map view.
+
+Requirements:
+
+Map should center on Houston, TX by default
+
+Latitude: 29.7604
+
+Longitude: -95.3698
+
+Zoom level: 12
+
+Remove “No runs found” empty state.
+
+The map should always load.
+
+2. Create Dummy Run Data (Seed Data)
+
+Create a function called generateDummyRuns() that inserts 15 fake runs into the database.
+
+Each run must include:
+
+id
+
+title
+
+hostName
+
+hostPfp (use random Unsplash profile-style images)
+
+latitude (randomized within ±0.03 of Houston center)
+
+longitude (randomized within ±0.03 of Houston center)
+
+paceMin (random between 6.5 and 9.5)
+
+paceMax (paceMin + random 0.5–1.5)
+
+distanceMin (random between 3 and 6)
+
+distanceMax (distanceMin + random 2–4)
+
+style (random from: Talkative, Quiet, Motivational, Training, Ministry, Recovery)
+
+dateTime (random future date within next 7 days)
+
+If no runs exist in database on app load, automatically call generateDummyRuns() once.
+
+3. Map Markers — Circular Profile Pins
+
+Replace default map markers with custom circular profile image markers.
+
+Requirements:
+
+Marker must display hostPfp image.
+
+Marker should:
+
+Be circular
+
+44px width and height
+
+Have 3px green border
+
+Slight drop shadow
+
+When tapped:
+
+Show small bottom card with:
+
+Run title
+
+Host name
+
+Pace range
+
+Distance range
+
+Style tag
+
+Join button
+
+Use custom marker rendering (not default Google pin).
+
+4. Demo Mode Button
+
+Add a hidden “Dev Mode” button in profile screen.
+
+When tapped:
+
+Show button: “Generate 20 Random Runs”
+
+Calling it should:
+
+Clear existing runs
+
+Insert 20 new random runs
+
+Refresh map automatically
+
+5. Make It Feel Alive
+
+Add the following polish:
+
+Subtle marker bounce animation when tapped.
+
+Green glow ring around markers for runs within next 24 hours.
+
+Smooth fade-in animation for bottom info card.
+
+6. Keep Architecture Clean
+
+Separate dummy data logic from production logic.
+
+Use clean modular functions.
+
+Do not break existing authentication or profile system.
+
+Goal
+
+When app loads:
+
+Map is visible.
+
+Multiple circular profile markers are visible across Houston.
+
+Tapping marker opens run info card.
+
+It feels like a real, populated social running app.
+
+Build cleanly and explain where the dummy data logic is stored.
