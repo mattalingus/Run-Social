@@ -39,7 +39,7 @@ export default function WebFAB({ onPress }: Props) {
       "display:flex",
       "align-items:center",
       "justify-content:center",
-      "box-shadow:0 4px 12px rgba(0,217,126,0.5)",
+      "box-shadow:none",
       "line-height:56px",
     ].join(";");
     btn.textContent = "+";

@@ -863,6 +863,7 @@ export default function DiscoverScreen() {
 
       {/* ── Host Run Modal ───────────────────────────────────────────────────── */}
       <Modal visible={showHostModal} transparent animationType="slide" onRequestClose={() => setShowHostModal(false)}>
+        <View style={s.modalWrap}>
         <Pressable style={s.modalOverlay} onPress={() => setShowHostModal(false)} />
         <View style={[s.modalSheet, { paddingBottom: insets.bottom + 24 }]}>
 
@@ -1059,10 +1060,12 @@ export default function DiscoverScreen() {
             </View>
           </ScrollView>
         </View>
+        </View>
       </Modal>
 
       {/* ── Community Rules Modal ────────────────────────────────────────────── */}
       <Modal visible={showRulesModal} transparent animationType="slide" onRequestClose={() => setShowRulesModal(false)}>
+        <View style={s.modalWrap}>
         <Pressable style={s.modalOverlay} onPress={() => setShowRulesModal(false)} />
         <View style={[s.modalSheet, { paddingBottom: insets.bottom + 24 }]}>
           <View style={s.sheetHandle} />
@@ -1111,6 +1114,7 @@ export default function DiscoverScreen() {
               <Text style={s.rulesAgreeTxt}>I Agree — Continue</Text>
             </Pressable>
           </View>
+        </View>
         </View>
       </Modal>
 
@@ -1303,18 +1307,17 @@ const s = StyleSheet.create({
     backgroundColor: C.primary,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: C.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.45,
-    shadowRadius: 10,
-    elevation: 8,
     zIndex: 9999,
   },
 
   // ─── Host Modal ──────────────────────────────────────────────────────────
   modalOverlay: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.55)",
+  },
+  modalWrap: {
+    flex: 1,
+    justifyContent: "flex-end",
   },
   modalSheet: {
     backgroundColor: C.surface,
@@ -1323,7 +1326,7 @@ const s = StyleSheet.create({
     borderTopWidth: 1.5,
     borderTopColor: C.primary + "33",
     maxHeight: "90%",
-    flex: 0,
+    flex: 1,
   },
   sheetHandle: {
     width: 40,
@@ -1355,6 +1358,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 14,
     width: "auto",
   },
+  sheetTitle: { fontFamily: "Outfit_700Bold", fontSize: 17, color: C.text },
   sheetForm: {
     paddingHorizontal: 20,
     paddingTop: 18,
