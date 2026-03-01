@@ -1316,7 +1316,7 @@ const s = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 12,
   },
-  title: { fontFamily: "Outfit_700Bold", fontSize: 26, color: C.text, letterSpacing: -0.5 },
+  title: { fontFamily: "Outfit_700Bold", fontSize: 36, color: C.text, letterSpacing: -0.5 },
 
   headerBtns: { flexDirection: "row", alignItems: "center", gap: 6 },
 
