@@ -322,15 +322,16 @@ export default function ProfileScreen() {
       </View>
 
       {/* ── Friends Quick-Access Row ───────────────────────────────────────── */}
-      <View style={{ flexDirection: "row", gap: 10 }}>
+      <View style={styles.statsGrid}>
         <Pressable
-          style={({ pressed }) => [styles.fqCard, { opacity: pressed ? 0.8 : 1 }]}
+          style={({ pressed }) => [styles.statCard, { opacity: pressed ? 0.8 : 1 }]}
           onPress={() => { setShowFriendList(true); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
         >
           <Feather name="users" size={18} color={C.primary} />
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-            <Text style={styles.fqLabel}>
-              Friends: <Text style={{ color: C.primary }}>{friendsList.length}</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+            <Text style={styles.goalLabel}>
+              {"Friends: "}
+              <Text style={styles.editBtnText}>{friendsList.length}</Text>
             </Text>
             {incomingRequests.length > 0 && (
               <View style={styles.friendsQuickDot}>
@@ -340,11 +341,11 @@ export default function ProfileScreen() {
           </View>
         </Pressable>
         <Pressable
-          style={({ pressed }) => [styles.fqCard, { opacity: pressed ? 0.8 : 1 }]}
+          style={({ pressed }) => [styles.statCard, { opacity: pressed ? 0.8 : 1 }]}
           onPress={() => { setShowAddFriend(true); setFriendSearch(""); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
         >
           <Feather name="user-plus" size={18} color={C.primary} />
-          <Text style={styles.fqLabel}>+ Add Friends</Text>
+          <Text style={styles.goalLabel}>{"+ Add Friends"}</Text>
         </Pressable>
       </View>
 
@@ -1059,13 +1060,15 @@ const iconStyles = StyleSheet.create({
   iconInitial: { fontFamily: "Outfit_700Bold", fontSize: 22, color: C.primary },
   iconEmoji: { fontSize: 26 },
   iconLabel: { fontFamily: "Outfit_400Regular", fontSize: 9, color: C.textSecondary },
+  fqRow: { flexDirection: "row", gap: 10, alignItems: "stretch" },
   fqCard: {
-    flex: 1,
+    flex: 1, minWidth: "40%",
     backgroundColor: C.card, borderRadius: 14, padding: 16,
     borderWidth: 1, borderColor: C.border,
-    alignItems: "center", gap: 4,
+    alignItems: "center", justifyContent: "center", gap: 6,
   },
   fqLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text },
+  fqCount: { fontFamily: "Outfit_700Bold", fontSize: 14, color: C.primary },
   friendsQuickDot: { marginLeft: "auto" as const, backgroundColor: C.orange, borderRadius: 10, minWidth: 18, height: 18, alignItems: "center", justifyContent: "center", paddingHorizontal: 4 },
   friendsQuickDotTxt: { fontFamily: "Outfit_700Bold", fontSize: 10, color: C.bg },
   modalTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
