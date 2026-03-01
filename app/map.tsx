@@ -256,7 +256,8 @@ export default function MapScreen() {
 
   const { data: runs = [], isFetching } = useQuery<Run[]>({
     queryKey: [queryUrl],
-    staleTime: 30_000,
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
   });
 
   const insights = useMemo(() => {
@@ -332,7 +333,7 @@ export default function MapScreen() {
         swLng: r.longitude - r.longitudeDelta / 2,
         neLng: r.longitude + r.longitudeDelta / 2,
       });
-    }, 300);
+    }, 900);
   }
 
   function openCard(run: Run) {
@@ -572,9 +573,9 @@ export default function MapScreen() {
 
       </View>{/* ── end mapCard ──────────────────────────────────────────────── */}
 
-      {/* ─── Insights strip (below map card) ─────────────────────────────── */}
-      {insights.length > 0 && (
-        <View style={[s.insightStrip, { paddingBottom: insets.bottom + 10 }]}>
+      {/* ─── Insights strip (below map card, fixed height so map never jumps) */}
+      <View style={[s.insightArea, { paddingBottom: insets.bottom + 4 }]}>
+        {insights.length > 0 && (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -589,8 +590,8 @@ export default function MapScreen() {
               </View>
             ))}
           </ScrollView>
-        </View>
-      )}
+        )}
+      </View>
 
       {/* ─── Filter sheet ────────────────────────────────────────────────── */}
       <Modal visible={showFilter} transparent animationType="slide" onRequestClose={() => setShowFilter(false)}>
@@ -833,8 +834,8 @@ const s = StyleSheet.create({
   applyBtn: { flex: 2, height: 52, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: C.primary },
   applyTxt: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.bg },
 
-  insightStrip: { paddingTop: 10 },
-  insightScroll: { paddingHorizontal: 16, gap: 8 },
+  insightArea: { height: 54, justifyContent: "center" },
+  insightScroll: { paddingHorizontal: 16, gap: 8, alignItems: "center" },
   insightPill: {
     flexDirection: "row", alignItems: "center", gap: 6,
     backgroundColor: C.surface + "F2",
