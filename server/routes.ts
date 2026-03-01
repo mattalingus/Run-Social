@@ -127,10 +127,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/users/me/achievement-stats", requireAuth, async (req, res) => {
     try {
-      const [earnedRows, stats] = await Promise.all([
-        storage.getUserAchievements(req.session.userId!),
-        storage.getAchievementStats(req.session.userId!),
+      const userId = req.session.userId!;
+      const stats = await storage.getAchievementStats(userId);
+      await Promise.all([
+        storage.checkAndAwardAchievements(userId, stats.total_miles ?? 0),
+        storage.checkFriendAchievements(userId),
       ]);
+      const earnedRows = await storage.getUserAchievements(userId);
       const earned_slugs = earnedRows.map((r: any) => r.slug).filter(Boolean);
       res.json({ earned_slugs, stats });
     } catch (e: any) {
