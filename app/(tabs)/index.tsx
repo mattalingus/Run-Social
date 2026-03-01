@@ -50,6 +50,7 @@ interface FilterState {
   distMax: number;
   maxDistFromMe: number | null;
   styles: string[];
+  visibility: "all" | "public" | "friends";
 }
 
 const DEFAULT_FILTERS: FilterState = {
@@ -59,6 +60,7 @@ const DEFAULT_FILTERS: FilterState = {
   distMax: 20,
   maxDistFromMe: null,
   styles: [],
+  visibility: "all",
 };
 
 // ─── Run interface ────────────────────────────────────────────────────────────
@@ -66,6 +68,7 @@ const DEFAULT_FILTERS: FilterState = {
 interface Run {
   id: string;
   title: string;
+  host_id: string;
   host_name: string;
   host_rating: number;
   date: string;
@@ -79,6 +82,7 @@ interface Run {
   tags: string[];
   participant_count: number;
   max_participants: number;
+  privacy: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -281,7 +285,34 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
 
           <View style={fm.divider} />
 
-          {/* ── E. Future-Proof (structure only) ────────────────────────── */}
+          {/* ── E. Visibility ────────────────────────────────────────────── */}
+          <View style={fm.section}>
+            <Text style={fm.sectionTitle}>Visibility</Text>
+            <View style={fm.proxRow}>
+              {(["all", "public", "friends"] as const).map((opt) => {
+                const labels = { all: "All", public: "Public", friends: "Friends" };
+                const active = draft.visibility === opt;
+                return (
+                  <Pressable
+                    key={opt}
+                    style={[fm.proxChip, active && fm.proxChipActive]}
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      setDraft((p) => ({ ...p, visibility: opt }));
+                    }}
+                  >
+                    <Text style={[fm.proxChipTxt, active && fm.proxChipTxtActive]}>
+                      {labels[opt]}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={fm.divider} />
+
+          {/* ── F. Future-Proof (structure only) ────────────────────────── */}
           <View style={[fm.section, fm.futureSection]}>
             <View style={fm.sectionHead}>
               <Text style={[fm.sectionTitle, fm.futureTxt]}>More Filters</Text>
@@ -562,6 +593,17 @@ export default function DiscoverScreen() {
     staleTime: 30_000,
   });
 
+  const { data: friends = [] } = useQuery<{ id: string }[]>({
+    queryKey: ["/api/friends"],
+    staleTime: 60_000,
+    enabled: !!user,
+  });
+
+  const friendIdSet = useMemo(
+    () => new Set(friends.map((f) => f.id)),
+    [friends]
+  );
+
   // ─── Distance map ──────────────────────────────────────────────────────────
 
   const distanceMap = useMemo<Record<string, number>>(() => {
@@ -596,8 +638,13 @@ export default function DiscoverScreen() {
       // Host style
       const matchStyle = applied.styles.length === 0 ||
         r.tags?.some((t) => applied.styles.includes(t));
+      // Visibility
+      const matchVisibility =
+        applied.visibility === "all" ||
+        (applied.visibility === "public" && r.privacy === "public") ||
+        (applied.visibility === "friends" && friendIdSet.has(r.host_id));
 
-      return matchSearch && matchPace && matchDist && matchProx && matchStyle;
+      return matchSearch && matchPace && matchDist && matchProx && matchStyle && matchVisibility;
     });
 
     switch (sortOption) {
@@ -619,7 +666,7 @@ export default function DiscoverScreen() {
         break;
     }
     return list;
-  }, [runs, search, applied, sortOption, distanceMap, userLocation]);
+  }, [runs, search, applied, sortOption, distanceMap, userLocation, friendIdSet]);
 
   // ─── Filter state helpers ──────────────────────────────────────────────────
 
@@ -629,7 +676,8 @@ export default function DiscoverScreen() {
     applied.distMin !== DEFAULT_FILTERS.distMin ||
     applied.distMax !== DEFAULT_FILTERS.distMax ||
     applied.maxDistFromMe !== null ||
-    applied.styles.length > 0;
+    applied.styles.length > 0 ||
+    applied.visibility !== "all";
 
   const isNonDefaultSort = sortOption !== "nearest";
 
