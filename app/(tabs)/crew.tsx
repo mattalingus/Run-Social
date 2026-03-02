@@ -18,6 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
+import { useAuth } from "@/contexts/AuthContext";
 import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 
@@ -754,9 +755,7 @@ export default function CrewScreen() {
   const isSearching = searchText.trim().length > 0 || friendsOnly;
   const searchUrl = `/api/crews/search?q=${encodeURIComponent(searchText.trim())}&friends=${friendsOnly}`;
 
-  const { data: currentUser } = useQuery<{ id: string; name: string }>({
-    queryKey: ["/api/me"],
-  });
+  const { user: currentUser } = useAuth();
 
   const { data: crews = [], isLoading } = useQuery<Crew[]>({
     queryKey: ["/api/crews"],
