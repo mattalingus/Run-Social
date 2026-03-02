@@ -308,11 +308,11 @@ export default function RunLiveScreen() {
             showsUserLocation
             showsMyLocationButton={false}
           >
-            {/* 1km presence circle around pin */}
+            {/* 500ft presence circle around pin */}
             {runPin && (
               <Circle
                 center={runPin}
-                radius={1000}
+                radius={152}
                 strokeColor={C.primary + "55"}
                 fillColor={C.primary + "0A"}
                 strokeWidth={1.5}

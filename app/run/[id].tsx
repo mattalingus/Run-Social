@@ -288,7 +288,7 @@ export default function RunDetailScreen() {
           { accuracy: Location.Accuracy.Balanced, distanceInterval: 50 },
           (loc) => {
             const d = haversineKmDetail(loc.coords.latitude, loc.coords.longitude, run.location_lat, run.location_lng);
-            if (d <= 1) {
+            if (d <= 0.1524) {
               setProximityTriggered(true);
               setShowRulesModal(true);
               sub?.remove();

@@ -848,7 +848,7 @@ export async function startGroupRun(runId: string, hostId: string) {
   );
   for (const ping of latestPings.rows) {
     const dist = haversineKm(ping.latitude, ping.longitude, run.location_lat, run.location_lng);
-    if (dist <= 1.0) {
+    if (dist <= 0.1524) {
       await pool.query(
         `UPDATE run_participants SET is_present = true WHERE run_id = $1 AND user_id = $2 AND status != 'cancelled'`,
         [runId, ping.user_id]
@@ -876,7 +876,7 @@ export async function pingRunLocation(
   let isPresent = false;
   if (run.is_active) {
     const dist = haversineKm(latitude, longitude, run.location_lat, run.location_lng);
-    if (dist <= 1.0) {
+    if (dist <= 0.1524) {
       await pool.query(
         `UPDATE run_participants SET is_present = true WHERE run_id = $1 AND user_id = $2 AND status != 'cancelled'`,
         [runId, userId]
