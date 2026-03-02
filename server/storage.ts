@@ -99,6 +99,8 @@ export async function initDb() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS goal_period VARCHAR DEFAULT 'monthly';
     ALTER TABLE users ADD COLUMN IF NOT EXISTS push_token TEXT DEFAULT NULL;
     ALTER TABLE runs ADD COLUMN IF NOT EXISTS is_strict BOOLEAN DEFAULT false;
+    ALTER TABLE users ALTER COLUMN avg_pace SET DEFAULT NULL;
+    ALTER TABLE users ALTER COLUMN avg_distance SET DEFAULT NULL;
 
     CREATE TABLE IF NOT EXISTS solo_runs (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -245,7 +247,7 @@ export async function getUserByEmailOrUsername(identifier: string) {
 export async function createUser(data: { email: string; password: string; name: string; username?: string }) {
   const hashedPassword = await bcrypt.hash(data.password, 10);
   const result = await pool.query(
-    `INSERT INTO users (email, password, name, username) VALUES ($1, $2, $3, $4) RETURNING *`,
+    `INSERT INTO users (email, password, name, username, avg_pace, avg_distance) VALUES ($1, $2, $3, $4, NULL, NULL) RETURNING *`,
     [data.email.toLowerCase(), hashedPassword, data.name, data.username?.toLowerCase() ?? null]
   );
   return result.rows[0];
@@ -1424,4 +1426,26 @@ export async function getFriendshipStatus(currentUserId: string, targetUserId: s
   if (row.status === "accepted") return { status: "friends" as const, friendshipId: row.id };
   if (row.requester_id === currentUserId) return { status: "pending_sent" as const, friendshipId: row.id };
   return { status: "pending_received" as const, friendshipId: row.id };
+}
+
+export async function getUserRunRecords(userId: string) {
+  const longestRes = await pool.query(
+    `SELECT MAX(dist) as longest FROM (
+       SELECT distance_miles as dist FROM solo_runs WHERE user_id = $1 AND completed = true
+       UNION ALL
+       SELECT final_distance as dist FROM run_participants WHERE user_id = $1 AND final_distance IS NOT NULL
+     ) combined`,
+    [userId]
+  );
+
+  const fastestRes = await pool.query(
+    `SELECT MIN(pace_min_per_mile) as fastest_pace FROM solo_runs
+     WHERE user_id = $1 AND completed = true AND pace_min_per_mile IS NOT NULL AND pace_min_per_mile > 0`,
+    [userId]
+  );
+
+  return {
+    longest_run: longestRes.rows[0]?.longest ? parseFloat(longestRes.rows[0].longest) : null,
+    fastest_pace: fastestRes.rows[0]?.fastest_pace ? parseFloat(fastestRes.rows[0].fastest_pace) : null,
+  };
 }

@@ -183,7 +183,7 @@ export default function HostProfileSheet({ hostId, onClose }: Props) {
               <View style={styles.statDivider} />
               <View style={styles.statBox}>
                 <Text style={styles.statVal}>
-                  {profile.avg_distance?.toFixed(1)} mi
+                  {profile.avg_distance ? `${profile.avg_distance.toFixed(1)} mi` : "—"}
                 </Text>
                 <Text style={styles.statLabel}>Avg Distance</Text>
               </View>

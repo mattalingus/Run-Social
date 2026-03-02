@@ -144,6 +144,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/users/me/run-records", requireAuth, async (req, res) => {
+    try {
+      const records = await storage.getUserRunRecords(req.session.userId!);
+      res.json(records);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.get("/api/users/me/achievements", requireAuth, async (req, res) => {
     const achievements = await storage.getUserAchievements(req.session.userId!);
     res.json(achievements);

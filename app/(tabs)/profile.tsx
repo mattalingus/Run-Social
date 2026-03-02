@@ -226,6 +226,11 @@ export default function ProfileScreen() {
     enabled: !!user && friendSearch.length >= 2,
   });
 
+  const { data: runRecords } = useQuery<{ longest_run: number | null; fastest_pace: number | null }>({
+    queryKey: ["/api/users/me/run-records"],
+    enabled: !!user,
+  });
+
   const sendRequestMutation = useMutation({
     mutationFn: async (userId: string) => {
       const res = await apiRequest("POST", "/api/friends/request", { userId });
@@ -475,6 +480,20 @@ export default function ProfileScreen() {
             <Text style={styles.statName}>Rating</Text>
           </View>
         )}
+        <View style={styles.statCard}>
+          <Text style={styles.statNum}>
+            {runRecords?.longest_run ? `${formatDistance(runRecords.longest_run)} mi` : "—"}
+          </Text>
+          <Text style={styles.statName}>Longest Run</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statNum}>
+            {runRecords?.fastest_pace
+              ? `${Math.floor(runRecords.fastest_pace)}:${Math.round((runRecords.fastest_pace % 1) * 60).toString().padStart(2, "0")}`
+              : "—"}
+          </Text>
+          <Text style={styles.statName}>Fastest Pace</Text>
+        </View>
       </View>
 
       {/* ── My Stats ──────────────────────────────────────────────────────── */}
@@ -491,7 +510,9 @@ export default function ProfileScreen() {
             <Ionicons name="walk" size={16} color={C.orange} />
             <View>
               <Text style={styles.statsVal}>
-                {Math.floor(user.avg_pace)}:{Math.round((user.avg_pace % 1) * 60).toString().padStart(2, "0")}/mi
+                {user.avg_pace
+                  ? `${Math.floor(user.avg_pace)}:${Math.round((user.avg_pace % 1) * 60).toString().padStart(2, "0")}/mi`
+                  : "—"}
               </Text>
               <Text style={styles.statsLabel}>Avg Pace</Text>
             </View>
@@ -499,7 +520,9 @@ export default function ProfileScreen() {
           <View style={styles.statsItem}>
             <Feather name="target" size={16} color={C.blue} />
             <View>
-              <Text style={styles.statsVal}>{formatDistance(user.avg_distance)} mi</Text>
+              <Text style={styles.statsVal}>
+                {user.avg_distance ? `${formatDistance(user.avg_distance)} mi` : "—"}
+              </Text>
               <Text style={styles.statsLabel}>Avg Distance</Text>
             </View>
           </View>
