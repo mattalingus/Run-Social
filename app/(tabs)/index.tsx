@@ -403,18 +403,20 @@ function RunCard({
   distanceMi,
   isBookmarked,
   onBookmark,
+  isFriend,
 }: {
   run: Run;
   onPress: () => void;
   distanceMi?: number;
   isBookmarked?: boolean;
   onBookmark?: () => void;
+  isFriend?: boolean;
 }) {
   const spotsLeft = run.max_participants - run.participant_count;
   const badge = getHostBadge(run.host_hosted_runs);
   return (
     <Pressable
-      style={({ pressed }) => [s.card, { opacity: pressed ? 0.85 : 1 }]}
+      style={({ pressed }) => [s.card, isFriend && s.cardFriend, { opacity: pressed ? 0.85 : 1 }]}
       onPress={onPress}
       testID={`run-card-${run.id}`}
     >
@@ -819,6 +821,12 @@ export default function DiscoverScreen() {
         list.sort((a, b) => b.min_distance - a.min_distance);
         break;
     }
+    // Float friend runs to the top, maintaining their relative order
+    list.sort((a, b) => {
+      const af = friendIdSet.has(a.host_id) ? 0 : 1;
+      const bf = friendIdSet.has(b.host_id) ? 0 : 1;
+      return af - bf;
+    });
     return list;
   }, [runs, search, applied, sortOption, distanceMap, userLocation, friendIdSet]);
 
@@ -1016,6 +1024,7 @@ export default function DiscoverScreen() {
               run={item}
               distanceMi={userLocation ? distanceMap[item.id] : undefined}
               isBookmarked={bookmarkedIds.has(item.id)}
+              isFriend={friendIdSet.has(item.host_id)}
               onBookmark={user ? () => bookmarkMutation.mutate(item.id) : undefined}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -1504,6 +1513,10 @@ const s = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: C.border,
+  },
+  cardFriend: {
+    backgroundColor: C.card,
+    borderColor: C.primary + "44",
   },
   cardBody: { flexDirection: "row", alignItems: "stretch", gap: 12 },
   hostColumn: { width: 66, alignItems: "center", gap: 4, paddingTop: 2 },
