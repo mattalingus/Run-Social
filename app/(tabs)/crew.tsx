@@ -1173,7 +1173,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 7,
     paddingVertical: 2,
     borderWidth: 1,
-    borderColor: C.borderLight,
+    borderColor: C.text + "40",
   },
   crewStyleChipTxt: {
     fontFamily: "Outfit_600SemiBold",
@@ -1186,7 +1186,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 7,
     paddingVertical: 2,
     borderWidth: 1,
-    borderColor: C.borderLight,
+    borderColor: C.text + "40",
   },
   crewVibeChipTxt: {
     fontFamily: "Outfit_600SemiBold",
