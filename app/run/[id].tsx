@@ -10,6 +10,7 @@ import {
   TextInput,
   Platform,
   Image,
+  Modal,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { router, useLocalSearchParams } from "expo-router";
@@ -74,6 +75,7 @@ export default function RunDetailScreen() {
   const qc = useQueryClient();
   const [joining, setJoining] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [showFirstRunModal, setShowFirstRunModal] = useState(false);
   const [starting, setStarting] = useState(false);
   const [hostDist, setHostDist] = useState<number | null>(null);
   const [passwordInput, setPasswordInput] = useState("");
@@ -263,8 +265,7 @@ export default function RunDetailScreen() {
     }
   }
 
-  async function handleJoin() {
-    if (!user) return router.push("/(auth)/login");
+  async function doJoin() {
     setJoining(true);
     try {
       await apiRequest("POST", `/api/runs/${id}/join`);
@@ -278,6 +279,15 @@ export default function RunDetailScreen() {
     } finally {
       setJoining(false);
     }
+  }
+
+  async function handleJoin() {
+    if (!user) return router.push("/(auth)/login");
+    if ((recentDistances ?? []).length === 0) {
+      setShowFirstRunModal(true);
+      return;
+    }
+    doJoin();
   }
 
   async function handleLeave() {
@@ -517,6 +527,15 @@ export default function RunDetailScreen() {
             </View>
           )}
           {user && (() => {
+            const hasHistory = (recentDistances ?? []).length > 0;
+            if (!hasHistory) {
+              return (
+                <View style={[styles.eligibilityRow, { backgroundColor: C.primaryMuted, borderColor: C.primary + "44" }]}>
+                  <Feather name="check-circle" size={14} color={C.primary} />
+                  <Text style={[styles.eligibilityText, { color: C.primary }]}>Open to all — log some runs to unlock full eligibility checks</Text>
+                </View>
+              );
+            }
             const paceOk = user.avg_pace >= run.min_pace && user.avg_pace <= run.max_pace;
             const distThreshold = run.is_strict ? 0.7 : 0.5;
             const distOk = (recentDistances ?? []).some((d) => d >= run.min_distance * distThreshold);
@@ -782,6 +801,53 @@ export default function RunDetailScreen() {
           </View>
         )}
       </View>
+
+      {/* ── First-run rules popup ─────────────────────────────────────────── */}
+      {showFirstRunModal && (
+        <Modal transparent animationType="slide" onRequestClose={() => setShowFirstRunModal(false)}>
+          <View style={styles.frModalWrap}>
+            <Pressable style={styles.frOverlay} onPress={() => setShowFirstRunModal(false)} />
+            <View style={[styles.frSheet, { paddingBottom: insets.bottom + 24 }]}>
+              <View style={styles.frHandle} />
+              <View style={styles.frHeader}>
+                <Text style={styles.frTitle}>Welcome, New Runner!</Text>
+                <Pressable onPress={() => setShowFirstRunModal(false)}>
+                  <Feather name="x" size={18} color={C.textSecondary} />
+                </Pressable>
+              </View>
+              <Text style={styles.frIntro}>
+                You're joining your first run on PaceUp — no run history needed. As you log more runs, eligibility checks will kick in automatically to help match you with the right groups.
+              </Text>
+              {[
+                { icon: "zap" as const,       title: "Non-strict runs",    body: "You qualify if your pace matches, OR if any of your last 10 runs covers 50%+ of the planned distance. Either one is enough." },
+                { icon: "shield" as const,     title: "Strict runs",        body: "Both criteria must pass — pace must be in range AND one of your last 10 runs must cover 70%+ of the planned distance." },
+                { icon: "trending-up" as const, title: "Growing into runs", body: "You can join runs longer than you've done before. Non-strict runs are designed to welcome runners pushing their limits." },
+                { icon: "star" as const,       title: "Log your runs",      body: "Every solo run and group run you complete builds your history and keeps your eligibility current." },
+              ].map((item) => (
+                <View key={item.title} style={styles.frRuleRow}>
+                  <View style={styles.frRuleIcon}>
+                    <Feather name={item.icon} size={15} color={C.primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.frRuleTitle}>{item.title}</Text>
+                    <Text style={styles.frRuleBody}>{item.body}</Text>
+                  </View>
+                </View>
+              ))}
+              <Pressable
+                style={[styles.primaryBtn, { marginTop: 20 }]}
+                onPress={() => {
+                  setShowFirstRunModal(false);
+                  doJoin();
+                }}
+              >
+                <Ionicons name="walk" size={18} color={C.text} />
+                <Text style={styles.primaryBtnText}>Got it — Join Run</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -915,4 +981,17 @@ const styles = StyleSheet.create({
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center",
   },
+
+  // ─── First-run modal ──────────────────────────────────────────────────────
+  frModalWrap: { flex: 1, justifyContent: "flex-end" },
+  frOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.55)" },
+  frSheet: { backgroundColor: C.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, gap: 0 },
+  frHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: C.border, alignSelf: "center", marginBottom: 16 },
+  frHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
+  frTitle: { fontFamily: "Outfit_700Bold", fontSize: 20, color: C.text },
+  frIntro: { fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textSecondary, lineHeight: 20, marginBottom: 16 },
+  frRuleRow: { flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 14 },
+  frRuleIcon: { width: 32, height: 32, borderRadius: 10, backgroundColor: C.primaryMuted, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: C.primary + "44" },
+  frRuleTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text, marginBottom: 2 },
+  frRuleBody: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary, lineHeight: 18 },
 });
