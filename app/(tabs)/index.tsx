@@ -1055,28 +1055,34 @@ export default function DiscoverScreen() {
                   {plannedRuns.map((r) => (
                     <Pressable
                       key={r.id}
-                      style={s.savedCard}
+                      style={({ pressed }) => [s.plannedCard, { opacity: pressed ? 0.85 : 1 }]}
                       onPress={() => {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                         router.push(`/run/${r.id}`);
                       }}
                     >
-                      <View style={s.savedCardTop}>
-                        <Text style={s.savedCardTitle} numberOfLines={2}>{r.title}</Text>
+                      <View style={s.plannedCardHeader}>
+                        <View style={s.plannedDot} />
+                        <Text style={s.plannedLabel}>Planning to run</Text>
                         <Pressable
-                          hitSlop={8}
-                          onPress={() => removePlanMutation.mutate(r.id)}
+                          hitSlop={10}
+                          onPress={(e) => { e.stopPropagation?.(); removePlanMutation.mutate(r.id); }}
                         >
-                          <Ionicons name="calendar" size={15} color={C.primary} />
+                          <Ionicons name="calendar" size={16} color={C.primary} />
                         </Pressable>
                       </View>
+                      <Text style={s.plannedCardTitle} numberOfLines={2}>{r.title}</Text>
                       <View style={s.savedCardMeta}>
-                        <Feather name="calendar" size={11} color={C.textMuted} />
+                        <Feather name="calendar" size={12} color={C.textMuted} />
                         <Text style={s.savedCardMetaTxt}>{formatDate(r.date)}</Text>
                       </View>
                       <View style={s.savedCardMeta}>
-                        <Feather name="map-pin" size={11} color={C.textMuted} />
+                        <Feather name="map-pin" size={12} color={C.textMuted} />
                         <Text style={s.savedCardMetaTxt} numberOfLines={1}>{r.location_name}</Text>
+                      </View>
+                      <View style={s.plannedPace}>
+                        <Ionicons name="walk" size={12} color={C.orange} />
+                        <Text style={s.plannedPaceTxt}>{formatPace(r.min_pace)}–{formatPace(r.max_pace)} /mi</Text>
                       </View>
                     </Pressable>
                   ))}
@@ -1624,6 +1630,21 @@ const s = StyleSheet.create({
   savedCardTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.text, flex: 1, lineHeight: 18 },
   savedCardMeta: { flexDirection: "row", alignItems: "center", gap: 5 },
   savedCardMetaTxt: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textSecondary, flex: 1 },
+  plannedCard: {
+    width: 210,
+    backgroundColor: C.card,
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: C.primary + "44",
+    gap: 8,
+  },
+  plannedCardHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
+  plannedDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: C.primary },
+  plannedLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.primary, flex: 1 },
+  plannedCardTitle: { fontFamily: "Outfit_700Bold", fontSize: 14, color: C.text, lineHeight: 19 },
+  plannedPace: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 2 },
+  plannedPaceTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.orange },
   urgentBadge: {
     backgroundColor: C.orange + "20",
     borderRadius: 5,

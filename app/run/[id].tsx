@@ -479,9 +479,13 @@ export default function RunDetailScreen() {
           style={({ pressed }) => [styles.hostCard, { opacity: pressed ? 0.8 : 1 }]}
           onPress={() => !isHost && setHostProfileId(run.host_id)}
         >
-          <View style={styles.hostAvatar}>
-            <Text style={styles.hostAvatarText}>{run.host_name?.charAt(0).toUpperCase()}</Text>
-          </View>
+          {run.host_photo ? (
+            <Image source={{ uri: run.host_photo }} style={[styles.hostAvatar, { borderWidth: 0 }]} />
+          ) : (
+            <View style={styles.hostAvatar}>
+              <Text style={styles.hostAvatarText}>{run.host_name?.charAt(0).toUpperCase()}</Text>
+            </View>
+          )}
           <View style={styles.hostInfo}>
             <Text style={styles.hostName}>{run.host_name}</Text>
             <View style={styles.hostMeta}>
