@@ -20,7 +20,6 @@ import * as Haptics from "expo-haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
-import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest } from "@/lib/query-client";
 import C from "@/constants/colors";
 import { MARKER_ICONS } from "@/constants/markerIcons";
@@ -130,8 +129,8 @@ interface SoloRunItem {
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { user, logout, refreshUser } = useAuth();
-  const { activityFilter } = useActivity();
   const qc = useQueryClient();
+  const [profileActivity, setProfileActivity] = useState<"run" | "ride">("run");
 
   const [showGoals, setShowGoals] = useState(false);
   const [showPace, setShowPace] = useState(false);
@@ -296,7 +295,7 @@ export default function ProfileScreen() {
   });
 
   const actStats = React.useMemo(() => {
-    const filtered = soloRuns.filter((r) => (r.activity_type ?? "run") === activityFilter && r.completed);
+    const filtered = soloRuns.filter((r) => (r.activity_type ?? "run") === profileActivity && r.completed);
     const now = new Date();
     const thisMonth = filtered.filter((r) => {
       const d = new Date(r.date);
@@ -311,7 +310,21 @@ export default function ProfileScreen() {
       ? withPace.reduce((s, r) => s + r.pace_min_per_mile!, 0) / withPace.length
       : null;
     return { totalMiles, monthMiles, yearMiles, count: filtered.length, avgPace };
-  }, [soloRuns, activityFilter]);
+  }, [soloRuns, profileActivity]);
+
+  const computedTopRuns = React.useMemo(() => {
+    const completed = soloRuns.filter((r) => (r.activity_type ?? "run") === profileActivity && r.completed);
+    const longest = [...completed]
+      .sort((a, b) => b.distance_miles - a.distance_miles)
+      .slice(0, 5)
+      .map((r) => ({ dist: r.distance_miles, pace: r.pace_min_per_mile, date: r.date, title: null, run_type: "solo" as const }));
+    const fastest = [...completed]
+      .filter((r) => r.pace_min_per_mile != null)
+      .sort((a, b) => (a.pace_min_per_mile ?? 99) - (b.pace_min_per_mile ?? 99))
+      .slice(0, 5)
+      .map((r) => ({ dist: r.distance_miles, pace: r.pace_min_per_mile, date: r.date, title: null, run_type: "solo" as const }));
+    return { longest, fastest };
+  }, [soloRuns, profileActivity]);
 
   const nameMutation = useMutation({
     mutationFn: async (name: string) => {
@@ -585,6 +598,24 @@ export default function ProfileScreen() {
         )}
       </View>
 
+      {/* ── Activity Toggle ────────────────────────────────────────────────── */}
+      <View style={styles.actToggleRow}>
+        <Pressable
+          style={[styles.actToggleBtn, profileActivity === "run" && styles.actToggleBtnActive]}
+          onPress={() => { setProfileActivity("run"); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+        >
+          <Ionicons name="walk" size={14} color={profileActivity === "run" ? C.primary : C.textMuted} />
+          <Text style={[styles.actToggleTxt, profileActivity === "run" && styles.actToggleTxtActive]}>Runs</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.actToggleBtn, profileActivity === "ride" && styles.actToggleBtnActive]}
+          onPress={() => { setProfileActivity("ride"); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+        >
+          <Ionicons name="bicycle" size={14} color={profileActivity === "ride" ? C.primary : C.textMuted} />
+          <Text style={[styles.actToggleTxt, profileActivity === "ride" && styles.actToggleTxtActive]}>Rides</Text>
+        </Pressable>
+      </View>
+
       {/* ── Stats Grid ────────────────────────────────────────────────────── */}
       <View style={styles.statsGrid}>
         <View style={styles.statCard}>
@@ -593,7 +624,7 @@ export default function ProfileScreen() {
         </View>
         <View style={styles.statCard}>
           <Text style={styles.statNum}>{actStats.count}</Text>
-          <Text style={styles.statName}>{activityFilter === "ride" ? "Rides Done" : "Runs Done"}</Text>
+          <Text style={styles.statName}>{profileActivity === "ride" ? "Rides Done" : "Runs Done"}</Text>
         </View>
         <View style={styles.statCard}>
           <Text style={styles.statNum}>{user.hosted_runs}</Text>
@@ -610,9 +641,9 @@ export default function ProfileScreen() {
           onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setTopRunsModal("longest"); }}
         >
           <Text style={styles.statNum}>
-            {runRecords?.longest_run ? `${formatDistance(runRecords.longest_run)} mi` : "—"}
+            {computedTopRuns.longest[0]?.dist != null ? `${formatDistance(computedTopRuns.longest[0].dist)} mi` : "—"}
           </Text>
-          <Text style={styles.statName}>Longest Run</Text>
+          <Text style={styles.statName}>{profileActivity === "ride" ? "Longest Ride" : "Longest Run"}</Text>
           <Feather name="chevron-right" size={10} color={C.textMuted} style={{ marginTop: 2 }} />
         </Pressable>
         <Pressable
@@ -620,9 +651,7 @@ export default function ProfileScreen() {
           onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setTopRunsModal("fastest"); }}
         >
           <Text style={styles.statNum}>
-            {runRecords?.fastest_pace
-              ? `${Math.floor(runRecords.fastest_pace)}:${Math.round((runRecords.fastest_pace % 1) * 60).toString().padStart(2, "0")}`
-              : "—"}
+            {computedTopRuns.fastest[0]?.pace != null ? fmtPace(computedTopRuns.fastest[0].pace) : "—"}
           </Text>
           <Text style={styles.statName}>Fastest Pace</Text>
           <Feather name="chevron-right" size={10} color={C.textMuted} style={{ marginTop: 2 }} />
@@ -640,7 +669,7 @@ export default function ProfileScreen() {
         </View>
         <View style={styles.statsRow}>
           <View style={styles.statsItem}>
-            <Ionicons name={activityFilter === "ride" ? "bicycle" : "walk"} size={16} color={C.orange} />
+            <Ionicons name={profileActivity === "ride" ? "bicycle" : "walk"} size={16} color={C.orange} />
             <View>
               <Text style={styles.statsVal}>
                 {actStats.avgPace != null
@@ -1174,7 +1203,9 @@ export default function ProfileScreen() {
           <View style={[styles.modalSheet, styles.friendModalSheet, { paddingBottom: insets.bottom + 24 }]}>
             <View style={styles.modalTitleRow}>
               <Text style={styles.modalTitle}>
-                {topRunsModal === "longest" ? "Top 5 Longest Runs" : "Top 5 Fastest Runs"}
+                {topRunsModal === "longest"
+                  ? (profileActivity === "ride" ? "Top 5 Longest Rides" : "Top 5 Longest Runs")
+                  : (profileActivity === "ride" ? "Top 5 Fastest Rides" : "Top 5 Fastest Runs")}
               </Text>
               <Pressable onPress={() => setTopRunsModal(null)} hitSlop={12}>
                 <Feather name="x" size={20} color={C.textMuted} />
@@ -1183,14 +1214,16 @@ export default function ProfileScreen() {
 
             {(() => {
               const list = topRunsModal === "longest"
-                ? (topRunsData?.longestRuns ?? [])
-                : (topRunsData?.fastestRuns ?? []);
+                ? computedTopRuns.longest
+                : computedTopRuns.fastest;
 
               if (list.length === 0) {
                 return (
                   <View style={styles.emptyState}>
                     <Feather name="activity" size={32} color={C.textMuted} />
-                    <Text style={styles.emptyStateTxt}>No completed runs yet</Text>
+                    <Text style={styles.emptyStateTxt}>
+                      {profileActivity === "ride" ? "No completed rides yet" : "No completed runs yet"}
+                    </Text>
                   </View>
                 );
               }
@@ -1241,6 +1274,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   content: { paddingHorizontal: 20, gap: 24 },
   profileHeader: { flexDirection: "row", alignItems: "center", gap: 14 },
+
+  actToggleRow: { flexDirection: "row", backgroundColor: C.surface, borderRadius: 10, padding: 3, gap: 3 },
+  actToggleBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 8, borderRadius: 8 },
+  actToggleBtnActive: { backgroundColor: C.card },
+  actToggleTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textMuted },
+  actToggleTxtActive: { color: C.primary },
 
   avatarWrap: { position: "relative" },
   avatar: {
