@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 const TAB_BG      = "#0B1A16";
 const ACTIVE_TINT = "#4EB082";
 const MUTED_TINT  = "#3A5847";
-const PILL_H      = 62;
+const PILL_H      = 64;
 const PILL_RADIUS = 30;
 const PILL_MX     = 40;
 
