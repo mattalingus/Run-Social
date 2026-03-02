@@ -1225,6 +1225,46 @@ const s = StyleSheet.create({
     fontFamily: "Outfit_400Regular",
     color: C.textMuted,
   },
+  fieldHint: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 12,
+    color: C.textMuted,
+    marginTop: -4,
+    marginBottom: 10,
+  },
+  chipsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 4,
+  },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  chipTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 13,
+    color: C.text,
+  },
+  chipStyleActive: {
+    backgroundColor: C.primary,
+    borderColor: C.primary,
+  },
+  chipStyleActiveTxt: {
+    color: C.bg,
+  },
+  chipVibeActive: {
+    backgroundColor: C.primaryMuted,
+    borderColor: C.primary,
+  },
+  chipVibeActiveTxt: {
+    color: C.primary,
+  },
   emojiRow: {
     flexDirection: "row",
     marginBottom: 4,
