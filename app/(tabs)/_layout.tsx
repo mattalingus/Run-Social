@@ -29,7 +29,7 @@ export default function TabLayout() {
           height:       PILL_H,
           left:         isWeb ? 140 : PILL_MX,
           right:        isWeb ? 140 : PILL_MX,
-          bottom:       insets.bottom + (isWeb ? 34 : 16),
+          bottom:       insets.bottom + (isWeb ? 34 : 8),
           borderRadius: PILL_RADIUS,
           borderTopWidth: 0,
           backgroundColor: "transparent",
