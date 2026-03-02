@@ -609,14 +609,14 @@ export default function RunDetailScreen() {
 
         {run.description ? (
           <View style={styles.descCard}>
-            <Text style={styles.descTitle}>About this run</Text>
+            <Text style={styles.descTitle}>{run.activity_type === "ride" ? "About this ride" : "About this run"}</Text>
             <Text style={styles.descText}>{run.description}</Text>
           </View>
         ) : null}
 
         {run.run_style && (
           <View style={styles.tagsSection}>
-            <Text style={styles.sectionTitle}>Run Style</Text>
+            <Text style={styles.sectionTitle}>{run.activity_type === "ride" ? "Ride Style" : "Run Style"}</Text>
             <View style={styles.runStyleBadgeRow}>
               <View style={styles.runStyleBadge}>
                 <Feather name="activity" size={14} color={C.bg} />

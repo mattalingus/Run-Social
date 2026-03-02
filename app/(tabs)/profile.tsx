@@ -78,6 +78,7 @@ interface RunHistoryItem {
   is_completed: boolean;
   my_status: string;
   host_name: string;
+  activity_type?: string;
 }
 
 function formatDate(s: string) {
@@ -762,18 +763,20 @@ export default function ProfileScreen() {
       </View>
 
 
-      {/* ── Run History ───────────────────────────────────────────────────── */}
+      {/* ── Run / Ride History ────────────────────────────────────────────── */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Run History</Text>
+        <Text style={styles.sectionTitle}>{profileActivity === "ride" ? "Ride History" : "Run History"}</Text>
         {runsLoading ? (
           <ActivityIndicator color={C.primary} />
-        ) : runs.length === 0 ? (
+        ) : runs.filter((r) => (r.activity_type ?? "run") === profileActivity).length === 0 ? (
           <View style={styles.emptyHistory}>
-            <Ionicons name="walk-outline" size={36} color={C.textMuted} />
-            <Text style={styles.emptyHistoryText}>No runs yet — discover one now</Text>
+            <Ionicons name={profileActivity === "ride" ? "bicycle-outline" : "walk-outline"} size={36} color={C.textMuted} />
+            <Text style={styles.emptyHistoryText}>
+              {profileActivity === "ride" ? "No rides yet — discover one now" : "No runs yet — discover one now"}
+            </Text>
           </View>
         ) : (
-          runs.slice(0, 10).map((run) => (
+          runs.filter((r) => (r.activity_type ?? "run") === profileActivity).slice(0, 10).map((run) => (
             <Pressable
               key={run.id}
               style={({ pressed }) => [styles.historyCard, { opacity: pressed ? 0.8 : 1 }]}
@@ -781,7 +784,12 @@ export default function ProfileScreen() {
             >
               <View style={styles.historyLeft}>
                 <View style={[styles.historyType, { backgroundColor: run.is_host ? C.gold + "22" : C.primaryMuted }]}>
-                  <Feather name={run.is_host ? "star" : "user"} size={12} color={run.is_host ? C.gold : C.primary} />
+                  {run.is_host
+                    ? <Feather name="star" size={12} color={C.gold} />
+                    : run.activity_type === "ride"
+                      ? <Ionicons name="bicycle-outline" size={12} color={C.primary} />
+                      : <Feather name="user" size={12} color={C.primary} />
+                  }
                 </View>
                 <View>
                   <Text style={styles.historyTitle} numberOfLines={1}>{run.title}</Text>

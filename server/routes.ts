@@ -477,7 +477,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const planner = await storage.getUserById(req.session.userId!);
             sendPushNotification(
               host.push_token,
-              "Someone plans to run with you 📅",
+              `Someone plans to ${run.activity_type === "ride" ? "ride" : "run"} with you 📅`,
               `${planner?.name ?? "Someone"} is planning to join "${run.title}"`,
               { runId: run.id }
             );
@@ -548,7 +548,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (host?.push_token) {
           sendPushNotification(
             host.push_token,
-            "Someone joined your run 🎉",
+            `Someone joined your ${run.activity_type === "ride" ? "ride" : "run"} 🎉`,
             `${user.name} joined "${run.title}"`,
             { runId: run.id }
           );

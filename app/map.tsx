@@ -687,7 +687,7 @@ export default function MapScreen() {
                 style={({ pressed }) => [s.joinBtn, { opacity: pressed ? 0.85 : 1 }]}
                 onPress={() => { closeCard(); router.push(`/run/${selectedRun.id}`); }}
               >
-                <Text style={s.joinTxt}>View Run</Text>
+                <Text style={s.joinTxt}>{selectedRun.activity_type === "ride" ? "View Ride" : "View Run"}</Text>
                 <Feather name="arrow-right" size={16} color={C.bg} />
               </Pressable>
             </>
@@ -755,7 +755,7 @@ export default function MapScreen() {
               }}
             >
               <Ionicons name="add-circle-outline" size={16} color="#fff" />
-              <Text style={s.joinTxt}>Schedule a Run Here</Text>
+              <Text style={s.joinTxt}>{activityFilter === "ride" ? "Schedule a Ride Here" : "Schedule a Run Here"}</Text>
             </Pressable>
           </Animated.View>
         )}
