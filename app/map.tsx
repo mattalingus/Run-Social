@@ -24,6 +24,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import C from "@/constants/colors";
 import RangeSlider from "@/components/RangeSlider";
 import { formatDistance } from "@/lib/formatDistance";
+import HostProfileSheet from "@/components/HostProfileSheet";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -252,6 +253,7 @@ export default function MapScreen() {
   const [locatedOnce, setLocatedOnce] = useState(false);
   const [selectedRun, setSelectedRun] = useState<Run | null>(null);
   const [selectedCommunityPath, setSelectedCommunityPath] = useState<CommunityPath | null>(null);
+  const [hostProfileId, setHostProfileId] = useState<string | null>(null);
   const [bounds, setBounds] = useState<Bounds | null>(null);
   const boundsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -596,23 +598,28 @@ export default function MapScreen() {
           ) : (
             <>
               <View style={s.cardTop}>
-                {selectedRun.host_marker_icon ? (
-                  <View style={s.cardAvatar}>
-                    <Text style={{ fontSize: 24 }}>{selectedRun.host_marker_icon}</Text>
+                <Pressable
+                  style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", flex: 1, gap: 10, opacity: pressed ? 0.75 : 1 }]}
+                  onPress={() => setHostProfileId(selectedRun.host_id)}
+                >
+                  {selectedRun.host_marker_icon ? (
+                    <View style={s.cardAvatar}>
+                      <Text style={{ fontSize: 24 }}>{selectedRun.host_marker_icon}</Text>
+                    </View>
+                  ) : (
+                    <Image
+                      source={{ uri: selectedRun.host_photo || avatarUrl(selectedRun.host_name) }}
+                      style={s.cardAvatarImg}
+                    />
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.cardTitle} numberOfLines={1}>{selectedRun.title}</Text>
+                    <Text style={s.cardHost}>
+                      {selectedRun.host_name}
+                      {selectedRun.host_rating > 0 ? `  ★ ${selectedRun.host_rating.toFixed(1)}` : ""}
+                    </Text>
                   </View>
-                ) : (
-                  <Image
-                    source={{ uri: selectedRun.host_photo || avatarUrl(selectedRun.host_name) }}
-                    style={s.cardAvatarImg}
-                  />
-                )}
-                <View style={{ flex: 1 }}>
-                  <Text style={s.cardTitle} numberOfLines={1}>{selectedRun.title}</Text>
-                  <Text style={s.cardHost}>
-                    {selectedRun.host_name}
-                    {selectedRun.host_rating > 0 ? `  ★ ${selectedRun.host_rating.toFixed(1)}` : ""}
-                  </Text>
-                </View>
+                </Pressable>
                 <Pressable onPress={closeCard} hitSlop={12}>
                   <Feather name="x" size={18} color={C.textSecondary} />
                 </Pressable>
@@ -857,6 +864,8 @@ export default function MapScreen() {
         </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <HostProfileSheet hostId={hostProfileId} onClose={() => setHostProfileId(null)} />
     </View>
   );
 }

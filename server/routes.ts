@@ -181,6 +181,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/users/:id/profile", requireAuth, async (req, res) => {
+    try {
+      const profile = await storage.getPublicUserProfile(req.params.id);
+      if (!profile) return res.status(404).json({ message: "User not found" });
+      res.json(profile);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/users/:id/friendship", requireAuth, async (req, res) => {
+    try {
+      if (req.params.id === req.session.userId) return res.json({ status: "self", friendshipId: null });
+      const status = await storage.getFriendshipStatus(req.session.userId!, req.params.id);
+      res.json(status);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.get("/api/friends", requireAuth, async (req, res) => {
     try {
       const friends = await storage.getFriends(req.session.userId!);

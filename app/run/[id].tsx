@@ -24,6 +24,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import C from "@/constants/colors";
 import { formatDistance } from "@/lib/formatDistance";
+import HostProfileSheet from "@/components/HostProfileSheet";
 
 function haversineKmDetail(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371;
@@ -84,6 +85,7 @@ export default function RunDetailScreen() {
   const [unlocking, setUnlocking] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
+  const [hostProfileId, setHostProfileId] = useState<string | null>(null);
 
   const { data: run, isLoading, refetch } = useQuery<any>({
     queryKey: ["/api/runs", id],
@@ -452,7 +454,10 @@ export default function RunDetailScreen() {
 
         <Text style={styles.title}>{run.title}</Text>
 
-        <View style={styles.hostCard}>
+        <Pressable
+          style={({ pressed }) => [styles.hostCard, { opacity: pressed ? 0.8 : 1 }]}
+          onPress={() => !isHost && setHostProfileId(run.host_id)}
+        >
           <View style={styles.hostAvatar}>
             <Text style={styles.hostAvatarText}>{run.host_name?.charAt(0).toUpperCase()}</Text>
           </View>
@@ -474,7 +479,10 @@ export default function RunDetailScreen() {
               <Text style={styles.yourRunText}>Your Run</Text>
             </View>
           )}
-        </View>
+          {!isHost && (
+            <Feather name="chevron-right" size={16} color={C.textMuted} />
+          )}
+        </Pressable>
 
         <View style={styles.infoGrid}>
           <View style={styles.infoCard}>
@@ -658,6 +666,8 @@ export default function RunDetailScreen() {
           </View>
         )}
       </ScrollView>
+
+      <HostProfileSheet hostId={hostProfileId} onClose={() => setHostProfileId(null)} />
 
       {/* ─── Full-screen photo viewer ─────────────────────────────────────── */}
       {viewingPhoto && (

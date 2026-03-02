@@ -1377,3 +1377,51 @@ export async function deleteSoloRunPhoto(photoId: string, userId: string) {
     [photoId, userId]
   );
 }
+
+export async function getPublicUserProfile(userId: string) {
+  const userRes = await pool.query(
+    `SELECT id, name, photo_url, avg_pace, avg_distance, hosted_runs, completed_runs, total_miles, avg_rating
+     FROM users WHERE id = $1`,
+    [userId]
+  );
+  if (!userRes.rows.length) return null;
+  const u = userRes.rows[0];
+
+  const friendsRes = await pool.query(
+    `SELECT COUNT(*) as cnt FROM friends
+     WHERE (requester_id = $1 OR addressee_id = $1) AND status = 'accepted'`,
+    [userId]
+  );
+
+  const achievementsRes = await pool.query(
+    `SELECT slug FROM achievements WHERE user_id = $1`,
+    [userId]
+  );
+
+  return {
+    id: u.id,
+    name: u.name,
+    photo_url: u.photo_url,
+    avg_pace: parseFloat(u.avg_pace ?? 10),
+    avg_distance: parseFloat(u.avg_distance ?? 3),
+    hosted_runs: u.hosted_runs ?? 0,
+    completed_runs: u.completed_runs ?? 0,
+    total_miles: parseFloat(u.total_miles ?? 0),
+    avg_rating: parseFloat(u.avg_rating ?? 0),
+    friends_count: parseInt(friendsRes.rows[0]?.cnt ?? "0"),
+    earned_slugs: achievementsRes.rows.map((r: any) => r.slug as string),
+  };
+}
+
+export async function getFriendshipStatus(currentUserId: string, targetUserId: string) {
+  const res = await pool.query(
+    `SELECT id, status, requester_id FROM friends
+     WHERE (requester_id = $1 AND addressee_id = $2) OR (requester_id = $2 AND addressee_id = $1)`,
+    [currentUserId, targetUserId]
+  );
+  if (!res.rows.length) return { status: "none" as const, friendshipId: null };
+  const row = res.rows[0];
+  if (row.status === "accepted") return { status: "friends" as const, friendshipId: row.id };
+  if (row.requester_id === currentUserId) return { status: "pending_sent" as const, friendshipId: row.id };
+  return { status: "pending_received" as const, friendshipId: row.id };
+}
