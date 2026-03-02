@@ -445,13 +445,36 @@ function CrewDetailSheet({
     onError: (e: any) => Alert.alert("Error", e.message ?? "Could not leave crew"),
   });
 
+  const disbandMutation = useMutation({
+    mutationFn: () => apiRequest("DELETE", `/api/crews/${crew?.id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/crews"] });
+      onClose();
+    },
+    onError: (e: any) => Alert.alert("Error", e.message ?? "Could not disband crew"),
+  });
+
   const handleLeave = () => {
+    const isCreatorWithOthers = isCreator && members.length > 1;
     Alert.alert(
       "Leave Crew",
-      `Are you sure you want to leave ${crew?.name}?`,
+      isCreatorWithOthers
+        ? `You created ${crew?.name}. If you leave, the next member to join will become the new creator and the crew stays active.`
+        : `Are you sure you want to leave ${crew?.name}?`,
       [
         { text: "Cancel", style: "cancel" },
         { text: "Leave", style: "destructive", onPress: () => leaveMutation.mutate() },
+      ]
+    );
+  };
+
+  const handleDisband = () => {
+    Alert.alert(
+      "Disband Crew",
+      `This will permanently delete ${crew?.name} and remove all members. This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Disband", style: "destructive", onPress: () => disbandMutation.mutate() },
       ]
     );
   };
@@ -614,6 +637,26 @@ function CrewDetailSheet({
                     Schedule a {activityFilter === "ride" ? "Ride" : "Run"}
                   </Text>
                 </TouchableOpacity>
+
+                {/* Disband (creator only) */}
+                {isCreator && (
+                  <TouchableOpacity
+                    style={s.disbandBtn}
+                    onPress={handleDisband}
+                    disabled={disbandMutation.isPending}
+                    testID="disband-crew-btn"
+                  >
+                    {disbandMutation.isPending
+                      ? <ActivityIndicator color="#fff" />
+                      : (
+                        <>
+                          <Ionicons name="trash-outline" size={16} color="#fff" />
+                          <Text style={s.disbandBtnTxt}>Disband Crew</Text>
+                        </>
+                      )
+                    }
+                  </TouchableOpacity>
+                )}
 
                 {/* Leave */}
                 <TouchableOpacity
@@ -1370,6 +1413,22 @@ const s = StyleSheet.create({
     fontFamily: "Outfit_700Bold",
     fontSize: 15,
     color: C.bg,
+  },
+  disbandBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginHorizontal: 24,
+    marginTop: 10,
+    paddingVertical: 14,
+    borderRadius: 14,
+    backgroundColor: C.danger,
+  },
+  disbandBtnTxt: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 15,
+    color: "#fff",
   },
   leaveBtn: {
     flexDirection: "row",

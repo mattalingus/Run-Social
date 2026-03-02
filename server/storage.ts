@@ -1903,7 +1903,40 @@ export async function inviteUserToCrew(crewId: string, userId: string, invitedBy
 }
 
 export async function leaveCrewById(crewId: string, userId: string) {
+  const countRes = await pool.query(
+    `SELECT COUNT(*) as cnt FROM crew_members WHERE crew_id = $1 AND status = 'member' AND user_id != $2`,
+    [crewId, userId]
+  );
+  const remaining = parseInt(countRes.rows[0]?.cnt ?? 0);
+
+  if (remaining === 0) {
+    await pool.query(`DELETE FROM crews WHERE id = $1`, [crewId]);
+    return { disbanded: true };
+  }
+
+  const crewRes = await pool.query(`SELECT created_by FROM crews WHERE id = $1`, [crewId]);
+  const isCreator = crewRes.rows[0]?.created_by === userId;
+
+  if (isCreator) {
+    const nextRes = await pool.query(
+      `SELECT user_id FROM crew_members WHERE crew_id = $1 AND user_id != $2 AND status = 'member' ORDER BY joined_at ASC LIMIT 1`,
+      [crewId, userId]
+    );
+    const newOwner = nextRes.rows[0]?.user_id;
+    if (newOwner) {
+      await pool.query(`UPDATE crews SET created_by = $1 WHERE id = $2`, [newOwner, crewId]);
+    }
+  }
+
   await pool.query(`DELETE FROM crew_members WHERE crew_id = $1 AND user_id = $2`, [crewId, userId]);
+  return { disbanded: false };
+}
+
+export async function disbandCrewById(crewId: string, userId: string) {
+  const crewRes = await pool.query(`SELECT created_by FROM crews WHERE id = $1`, [crewId]);
+  if (!crewRes.rows[0]) throw new Error("Crew not found");
+  if (crewRes.rows[0].created_by !== userId) throw new Error("Only the creator can disband this crew");
+  await pool.query(`DELETE FROM crews WHERE id = $1`, [crewId]);
 }
 
 export async function getCrewRuns(crewId: string) {
