@@ -1386,7 +1386,11 @@ export default function DiscoverScreen() {
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: C.card, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: hStrict ? C.primary + "55" : C.border }}>
               <View style={{ flex: 1, marginRight: 12 }}>
                 <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text }}>Strict Mode</Text>
-                <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, marginTop: 2 }}>Runners avg. pace must be within set range AND have a recent run covering 70% of the planned distance</Text>
+                <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, marginTop: 2 }}>
+                  {hActivityType === "ride"
+                    ? "Riders avg. pace must be within set range AND have a recent ride covering 70% of the planned distance"
+                    : "Runners avg. pace must be within set range AND have a recent run covering 70% of the planned distance"}
+                </Text>
               </View>
               <Switch
                 value={hStrict}
@@ -1397,7 +1401,7 @@ export default function DiscoverScreen() {
             </View>
 
             {/* Max Runners */}
-            <Text style={s.hLabel}>Max Runners</Text>
+            <Text style={s.hLabel}>{hActivityType === "ride" ? "Max Riders" : "Max Runners"}</Text>
             <View style={s.hStepper}>
               <Pressable
                 style={[s.hStepBtn, hMaxParticipants <= 1 && hMaxParticipants !== 0 && { opacity: 0.4 }]}
