@@ -522,12 +522,6 @@ export default function MapScreen() {
         {/* Dim overlay */}
         <View style={s.mapDim} pointerEvents="none" />
 
-        {/* Bottom gradient */}
-        <View style={s.gradBottom} pointerEvents="none">
-          {[0.04, 0.14, 0.32, 0.60, 0.84].map((op, i) => (
-            <View key={i} style={[s.gradLayer, { opacity: op, height: [12, 18, 24, 32, 52][i] }]} />
-          ))}
-        </View>
 
         {/* ─── Sidebar (inside map card) ────────────────────────────────── */}
         <View style={s.sideBar}>
@@ -893,8 +887,6 @@ const s = StyleSheet.create({
   },
 
   mapDim: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.13)" },
-  gradBottom: { position: "absolute", bottom: 0, left: 0, right: 0 },
-  gradLayer: { width: "100%", backgroundColor: C.bg },
 
   backBtn: {
     flexDirection: "row",
