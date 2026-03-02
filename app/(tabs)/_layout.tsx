@@ -42,7 +42,7 @@ export default function TabLayout() {
         tabBarBackground: () => <PillBackground />,
         tabBarLabelStyle: {
           fontFamily:   "Outfit_600SemiBold",
-          fontSize:     11,
+          fontSize:     13,
           marginBottom: 4,
         },
         tabBarIconStyle: { marginTop: 4 },
