@@ -472,7 +472,7 @@ function CrewDetailSheet({
   const handleDisband = () => {
     Alert.alert(
       "Disband Crew",
-      `This will permanently delete this crew and remove all members. This cannot be undone.`,
+      `This will permanently delete ${crew?.name} and remove all members. This cannot be undone.`,
       [
         { text: "Cancel", style: "cancel" },
         { text: "Disband", style: "destructive", onPress: () => disbandMutation.mutate() },
