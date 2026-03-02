@@ -739,6 +739,53 @@ export default function MapScreen() {
 
       </View>{/* ── end mapCard ──────────────────────────────────────────────── */}
 
+      {/* ─── Mini run cards strip ─────────────────────────────────────────── */}
+      {!selectedRun && !selectedCommunityPath && visibleRuns.length > 0 && (
+        <View style={s.miniStrip}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: 12, gap: 8, alignItems: "center" }}
+          >
+            {visibleRuns.map((run) => (
+              <Pressable
+                key={run.id}
+                style={({ pressed }) => [s.miniCard, { opacity: pressed ? 0.8 : 1 }]}
+                onPress={() => openCard(run)}
+              >
+                {run.host_marker_icon ? (
+                  <View style={s.miniAvatar}>
+                    <Text style={{ fontSize: 18 }}>{run.host_marker_icon}</Text>
+                  </View>
+                ) : run.host_photo ? (
+                  <Image source={{ uri: run.host_photo }} style={s.miniAvatarImg} />
+                ) : (
+                  <View style={s.miniAvatar}>
+                    <Text style={s.miniAvatarTxt}>{run.host_name?.charAt(0).toUpperCase()}</Text>
+                  </View>
+                )}
+                <View style={{ flex: 1, gap: 3 }}>
+                  <View style={s.miniStatRow}>
+                    <Feather name="map" size={10} color={C.primary} />
+                    <Text style={s.miniStatTxt}>{formatDistance(run.min_distance)} mi</Text>
+                  </View>
+                  <View style={s.miniStatRow}>
+                    <Feather name="zap" size={10} color="#F4C542" />
+                    <Text style={[s.miniStatTxt, { color: "#F4C542" }]}>{formatPace(run.min_pace)}/mi</Text>
+                  </View>
+                  <View style={s.miniStatRow}>
+                    <Feather name="users" size={10} color={C.textSecondary} />
+                    <Text style={[s.miniStatTxt, { color: C.textSecondary }]}>
+                      {run.participant_count}/{run.max_participants}
+                    </Text>
+                  </View>
+                </View>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
       {/* ─── Insights strip (below map card, fixed height so map never jumps) */}
       <View style={[s.insightArea, { marginBottom: insets.bottom + 4 }]}>
         {insights.length > 0 && (
@@ -1023,6 +1070,53 @@ const s = StyleSheet.create({
   resetTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.textSecondary },
   applyBtn: { flex: 2, height: 52, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: C.primary },
   applyTxt: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.bg },
+
+  miniStrip: { height: 86, justifyContent: "center" },
+  miniCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    width: 136,
+    backgroundColor: "#1A2E21",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#2A3D30",
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    height: 70,
+  },
+  miniAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#0F2018",
+    borderWidth: 1,
+    borderColor: "#00D97E44",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  miniAvatarImg: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    flexShrink: 0,
+  },
+  miniAvatarTxt: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 15,
+    color: "#00D97E",
+  },
+  miniStatRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  miniStatTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 11,
+    color: "#C2DAC8",
+  },
 
   insightArea: { height: 54, justifyContent: "center" },
   insightScroll: { paddingHorizontal: 16, gap: 8, alignItems: "center" },
