@@ -97,6 +97,7 @@ export async function initDb() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS pace_goal REAL DEFAULT NULL;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS distance_goal REAL DEFAULT 100;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS goal_period VARCHAR DEFAULT 'monthly';
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS push_token TEXT DEFAULT NULL;
 
     CREATE TABLE IF NOT EXISTS solo_runs (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -274,6 +275,23 @@ export async function updateUser(id: string, updates: Record<string, any>) {
 
 function toSnake(s: string) {
   return s.replace(/([A-Z])/g, "_$1").toLowerCase();
+}
+
+export async function updatePushToken(userId: string, token: string | null) {
+  await pool.query(`UPDATE users SET push_token = $2 WHERE id = $1`, [userId, token]);
+}
+
+export async function getFriendsWithPushTokens(userId: string): Promise<{ id: string; name: string; push_token: string }[]> {
+  const result = await pool.query(
+    `SELECT u.id, u.name, u.push_token
+     FROM friends f
+     JOIN users u ON (CASE WHEN f.requester_id = $1 THEN f.addressee_id ELSE f.requester_id END) = u.id
+     WHERE (f.requester_id = $1 OR f.addressee_id = $1)
+       AND f.status = 'accepted'
+       AND u.push_token IS NOT NULL`,
+    [userId]
+  );
+  return result.rows;
 }
 
 export async function createRun(data: {

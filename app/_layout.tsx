@@ -1,11 +1,13 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack, router } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
+import * as Notifications from "expo-notifications";
 import React, { useEffect, useRef } from "react";
+import { Platform } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { queryClient } from "@/lib/query-client";
+import { queryClient, getApiUrl } from "@/lib/query-client";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { StatusBar } from "expo-status-bar";
 import {
@@ -18,10 +20,43 @@ import C from "@/constants/colors";
 
 SplashScreen.preventAutoHideAsync();
 
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+
+async function registerPushToken(userId: string) {
+  try {
+    const { status: existing } = await Notifications.getPermissionsAsync();
+    let finalStatus = existing;
+    if (existing !== "granted") {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    if (finalStatus !== "granted") return;
+
+    const tokenData = await Notifications.getExpoPushTokenAsync();
+    const token = tokenData.data;
+
+    await fetch(new URL("/api/users/me/push-token", getApiUrl()).toString(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ token }),
+    });
+  } catch (e) {
+    // Non-critical — silently ignore
+  }
+}
+
 function RootLayoutNav() {
   const { user, isLoading } = useAuth();
   const [fontsLoaded] = useFonts({ Outfit_400Regular, Outfit_600SemiBold, Outfit_700Bold });
   const splashHidden = useRef(false);
+  const pushRegistered = useRef(false);
 
   useEffect(() => {
     if (!isLoading && fontsLoaded) {
@@ -34,6 +69,28 @@ function RootLayoutNav() {
       }
     }
   }, [isLoading, fontsLoaded, user]);
+
+  // Register push token once when user logs in
+  useEffect(() => {
+    if (user && !pushRegistered.current && Platform.OS !== "web") {
+      pushRegistered.current = true;
+      registerPushToken(user.id);
+    }
+    if (!user) {
+      pushRegistered.current = false;
+    }
+  }, [user]);
+
+  // Open run when notification is tapped
+  useEffect(() => {
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const runId = response.notification.request.content.data?.runId;
+      if (runId) {
+        router.push(`/run/${runId}`);
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
   if (isLoading || !fontsLoaded) return null;
 

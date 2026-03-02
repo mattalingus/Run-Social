@@ -497,7 +497,7 @@ export default function RunDetailScreen() {
           {parseInt(run.plan_count) > 0 && (
             <View style={styles.planCountRow}>
               <Feather name="calendar" size={13} color={C.textMuted} />
-              <Text style={styles.planCountText}>{run.plan_count} {parseInt(run.plan_count) === 1 ? "person" : "people"} planning to attend</Text>
+              <Text style={styles.planCountText}>{run.plan_count} {parseInt(run.plan_count) === 1 ? "person" : "people"} planning to run</Text>
             </View>
           )}
           {user && (
@@ -742,7 +742,7 @@ export default function RunDetailScreen() {
               color={isPlanned ? C.primary : C.textSecondary}
             />
             <Text style={[styles.planBtnText, isPlanned && styles.planBtnTextActive]}>
-              {isPlanned ? "Planning to attend — tap to remove" : "I'm planning to attend"}
+              {isPlanned ? "Planning to run — tap to remove" : "I'm planning to run"}
             </Text>
           </Pressable>
         )}

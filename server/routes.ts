@@ -7,6 +7,7 @@ import multer from "multer";
 import * as storage from "./storage";
 import { generateDummyRuns, clearAndReseedRuns, getRunCount } from "./seed";
 import { uploadPhotoBuffer, streamObject } from "./objectStorage";
+import { sendPushNotification } from "./notifications";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 
@@ -119,6 +120,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await storage.getUserById(req.session.userId!);
       const { password: _, ...safeUser } = user;
       res.json(safeUser);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/users/me/push-token", requireAuth, async (req, res) => {
+    try {
+      const { token } = req.body;
+      await storage.updatePushToken(req.session.userId!, token ?? null);
+      res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
@@ -267,6 +278,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const run = await storage.createRun({ ...req.body, hostId: req.session.userId! });
       res.status(201).json(run);
+      // Notify friends (fire-and-forget)
+      storage.getFriendsWithPushTokens(req.session.userId!).then((friends) => {
+        const tokens = friends.map((f) => f.push_token).filter(Boolean);
+        if (tokens.length) {
+          const privacy = run.privacy === "private" ? "private" : "public";
+          sendPushNotification(
+            tokens,
+            "New run from a friend 🏃",
+            `${run.host_name} just posted a ${privacy} run — "${run.title}"`,
+            { runId: run.id }
+          );
+        }
+      }).catch(() => {});
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
@@ -362,6 +386,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (run.host_id === req.session.userId) return res.status(400).json({ message: "You are the host" });
       const result = await storage.togglePlan(req.session.userId!, req.params.id);
       res.json(result);
+      // Notify host only when planning (not unplanning), fire-and-forget
+      if (result.planned) {
+        storage.getUserById(run.host_id).then(async (host) => {
+          if (host?.push_token) {
+            const planner = await storage.getUserById(req.session.userId!);
+            sendPushNotification(
+              host.push_token,
+              "Someone plans to run with you 📅",
+              `${planner?.name ?? "Someone"} is planning to join "${run.title}"`,
+              { runId: run.id }
+            );
+          }
+        }).catch(() => {});
+      }
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
@@ -409,6 +447,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const participant = await storage.joinRun(req.params.id, req.session.userId!);
       res.json(participant);
+      // Notify host (fire-and-forget)
+      storage.getUserById(run.host_id).then((host) => {
+        if (host?.push_token) {
+          sendPushNotification(
+            host.push_token,
+            "Someone joined your run 🎉",
+            `${user.name} joined "${run.title}"`,
+            { runId: run.id }
+          );
+        }
+      }).catch(() => {});
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
