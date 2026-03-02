@@ -79,6 +79,35 @@ function formatDate(s: string) {
   return new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface TopRun {
+  dist: number | null;
+  date: string;
+  pace: number | null;
+  title: string | null;
+  run_type: "solo" | "group";
+}
+
+interface TopRunsData {
+  longestRuns: TopRun[];
+  fastestRuns: TopRun[];
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function fmtPace(p: number | null) {
+  if (!p || p <= 0) return "—";
+  return `${Math.floor(p)}:${Math.round((p % 1) * 60).toString().padStart(2, "0")}/mi`;
+}
+
+function fmtDate(d: string) {
+  const date = new Date(d);
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+const RANK_COLORS = ["#FFD700", "#C0C0C0", "#CD7F32", C.textMuted, C.textMuted] as const;
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function ProfileScreen() {
@@ -97,6 +126,7 @@ export default function ProfileScreen() {
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [uploadingProfile, setUploadingProfile] = useState(false);
   const [uploadingPin, setUploadingPin] = useState(false);
+  const [topRunsModal, setTopRunsModal] = useState<"longest" | "fastest" | null>(null);
   const [friendSearch, setFriendSearch] = useState("");
   const [showAddFriend, setShowAddFriend] = useState(false);
   const [showFriendList, setShowFriendList] = useState(false);
@@ -228,6 +258,11 @@ export default function ProfileScreen() {
 
   const { data: runRecords } = useQuery<{ longest_run: number | null; fastest_pace: number | null }>({
     queryKey: ["/api/users/me/run-records"],
+    enabled: !!user,
+  });
+
+  const { data: topRunsData } = useQuery<TopRunsData>({
+    queryKey: ["/api/users/me/top-runs"],
     enabled: !!user,
   });
 
@@ -480,20 +515,28 @@ export default function ProfileScreen() {
             <Text style={styles.statName}>Rating</Text>
           </View>
         )}
-        <View style={styles.statCard}>
+        <Pressable
+          style={({ pressed }) => [styles.statCard, styles.statCardTappable, { opacity: pressed ? 0.75 : 1 }]}
+          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setTopRunsModal("longest"); }}
+        >
           <Text style={styles.statNum}>
             {runRecords?.longest_run ? `${formatDistance(runRecords.longest_run)} mi` : "—"}
           </Text>
           <Text style={styles.statName}>Longest Run</Text>
-        </View>
-        <View style={styles.statCard}>
+          <Feather name="chevron-right" size={10} color={C.textMuted} style={{ marginTop: 2 }} />
+        </Pressable>
+        <Pressable
+          style={({ pressed }) => [styles.statCard, styles.statCardTappable, { opacity: pressed ? 0.75 : 1 }]}
+          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setTopRunsModal("fastest"); }}
+        >
           <Text style={styles.statNum}>
             {runRecords?.fastest_pace
               ? `${Math.floor(runRecords.fastest_pace)}:${Math.round((runRecords.fastest_pace % 1) * 60).toString().padStart(2, "0")}`
               : "—"}
           </Text>
           <Text style={styles.statName}>Fastest Pace</Text>
-        </View>
+          <Feather name="chevron-right" size={10} color={C.textMuted} style={{ marginTop: 2 }} />
+        </Pressable>
       </View>
 
       {/* ── My Stats ──────────────────────────────────────────────────────── */}
@@ -955,6 +998,70 @@ export default function ProfileScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* ── Top Runs Modal ─────────────────────────────────────────────────── */}
+      {topRunsModal !== null && (
+        <Modal visible transparent animationType="slide" onRequestClose={() => setTopRunsModal(null)}>
+          <Pressable style={styles.modalOverlay} onPress={() => setTopRunsModal(null)} />
+          <View style={[styles.modalSheet, styles.friendModalSheet, { paddingBottom: insets.bottom + 24 }]}>
+            <View style={styles.modalTitleRow}>
+              <Text style={styles.modalTitle}>
+                {topRunsModal === "longest" ? "Top 5 Longest Runs" : "Top 5 Fastest Runs"}
+              </Text>
+              <Pressable onPress={() => setTopRunsModal(null)} hitSlop={12}>
+                <Feather name="x" size={20} color={C.textMuted} />
+              </Pressable>
+            </View>
+
+            {(() => {
+              const list = topRunsModal === "longest"
+                ? (topRunsData?.longestRuns ?? [])
+                : (topRunsData?.fastestRuns ?? []);
+
+              if (list.length === 0) {
+                return (
+                  <View style={styles.emptyState}>
+                    <Feather name="activity" size={32} color={C.textMuted} />
+                    <Text style={styles.emptyStateTxt}>No completed runs yet</Text>
+                  </View>
+                );
+              }
+
+              return list.map((run, i) => (
+                <View key={i} style={styles.topRunRow}>
+                  <View style={[styles.topRunRank, { borderColor: RANK_COLORS[i] + "66" }]}>
+                    <Text style={[styles.topRunRankNum, { color: RANK_COLORS[i] }]}>#{i + 1}</Text>
+                  </View>
+                  <View style={styles.topRunInfo}>
+                    <Text style={styles.topRunTitle} numberOfLines={1}>
+                      {run.title || (run.run_type === "solo" ? "Solo run" : "Group run")}
+                    </Text>
+                    <Text style={styles.topRunMeta}>
+                      {run.date ? fmtDate(run.date) : ""}
+                      {run.pace ? ` · ${fmtPace(run.pace)}` : ""}
+                    </Text>
+                  </View>
+                  <View style={styles.topRunStat}>
+                    {topRunsModal === "longest" ? (
+                      <>
+                        <Text style={styles.topRunStatNum}>{formatDistance(run.dist)}</Text>
+                        <Text style={styles.topRunStatUnit}>mi</Text>
+                      </>
+                    ) : (
+                      <Text style={styles.topRunStatNum}>{fmtPace(run.pace)}</Text>
+                    )}
+                    <View style={[styles.topRunTypePill, { backgroundColor: run.run_type === "solo" ? C.primaryMuted : C.blue + "22" }]}>
+                      <Text style={[styles.topRunTypeTxt, { color: run.run_type === "solo" ? C.primary : C.blue }]}>
+                        {run.run_type}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              ));
+            })()}
+          </View>
+        </Modal>
+      )}
+
     </ScrollView>
   );
 }
@@ -1246,6 +1353,30 @@ const styles = StyleSheet.create({
   achProgressTxt: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary },
   achProgressTrackSmall: { height: 3, backgroundColor: C.border, borderRadius: 2, overflow: "hidden" as const, marginTop: 2 },
   achProgressFillSmall: { height: 3, borderRadius: 2, backgroundColor: C.primaryDark },
+
+  statCardTappable: { borderWidth: 1, borderColor: C.border + "88" },
+
+  topRunRow: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: C.surface, borderRadius: 14, padding: 12,
+    borderWidth: 1, borderColor: C.border,
+  },
+  topRunRank: {
+    width: 36, height: 36, borderRadius: 18,
+    borderWidth: 1.5, alignItems: "center", justifyContent: "center",
+    flexShrink: 0,
+  },
+  topRunRankNum: { fontFamily: "Outfit_700Bold", fontSize: 12 },
+  topRunInfo: { flex: 1, gap: 2 },
+  topRunTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text },
+  topRunMeta: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary },
+  topRunStat: { alignItems: "flex-end", gap: 4 },
+  topRunStatNum: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.text },
+  topRunStatUnit: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted },
+  topRunTypePill: {
+    borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2,
+  },
+  topRunTypeTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 10, textTransform: "uppercase" as const, letterSpacing: 0.4 },
 });
 
 const devStyles = StyleSheet.create({

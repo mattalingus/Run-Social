@@ -153,6 +153,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/users/me/top-runs", requireAuth, async (req, res) => {
+    try {
+      const topRuns = await storage.getUserTopRuns(req.session.userId!);
+      res.json(topRuns);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.get("/api/users/me/achievements", requireAuth, async (req, res) => {
     const achievements = await storage.getUserAchievements(req.session.userId!);
     res.json(achievements);

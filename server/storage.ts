@@ -1428,6 +1428,50 @@ export async function getFriendshipStatus(currentUserId: string, targetUserId: s
   return { status: "pending_received" as const, friendshipId: row.id };
 }
 
+export async function getUserTopRuns(userId: string) {
+  const longestRes = await pool.query(
+    `SELECT dist, date, pace, title, run_type FROM (
+       SELECT distance_miles as dist, date, pace_min_per_mile as pace, title, 'solo' as run_type
+       FROM solo_runs WHERE user_id = $1 AND completed = true AND distance_miles IS NOT NULL
+       UNION ALL
+       SELECT rp.final_distance as dist, r.date, rp.final_pace as pace, r.title, 'group' as run_type
+       FROM run_participants rp
+       JOIN runs r ON r.id = rp.run_id
+       WHERE rp.user_id = $1 AND rp.final_distance IS NOT NULL
+     ) combined
+     ORDER BY dist DESC LIMIT 5`,
+    [userId]
+  );
+
+  const fastestRes = await pool.query(
+    `SELECT dist, date, pace, title, run_type FROM (
+       SELECT distance_miles as dist, date, pace_min_per_mile as pace, title, 'solo' as run_type
+       FROM solo_runs WHERE user_id = $1 AND completed = true
+         AND pace_min_per_mile IS NOT NULL AND pace_min_per_mile > 0
+       UNION ALL
+       SELECT rp.final_distance as dist, r.date, rp.final_pace as pace, r.title, 'group' as run_type
+       FROM run_participants rp
+       JOIN runs r ON r.id = rp.run_id
+       WHERE rp.user_id = $1 AND rp.final_pace IS NOT NULL AND rp.final_pace > 0
+     ) combined
+     ORDER BY pace ASC LIMIT 5`,
+    [userId]
+  );
+
+  const parse = (r: any) => ({
+    dist: r.dist ? parseFloat(r.dist) : null,
+    date: r.date as string,
+    pace: r.pace ? parseFloat(r.pace) : null,
+    title: r.title as string | null,
+    run_type: r.run_type as "solo" | "group",
+  });
+
+  return {
+    longestRuns: longestRes.rows.map(parse),
+    fastestRuns: fastestRes.rows.map(parse),
+  };
+}
+
 export async function getUserRunRecords(userId: string) {
   const longestRes = await pool.query(
     `SELECT MAX(dist) as longest FROM (
