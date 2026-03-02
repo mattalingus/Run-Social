@@ -1191,7 +1191,7 @@ export default function DiscoverScreen() {
               </Pressable>
             )}
             <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 17, color: C.text }}>
-              {hostPage === "location" ? "Drop a Pin" : "Host a Run"}
+              {hostPage === "location" ? "Drop a Pin" : hActivityType === "ride" ? "Host a Ride" : "Host a Run"}
             </Text>
             {hostPage === "location" ? (
               <Pressable
