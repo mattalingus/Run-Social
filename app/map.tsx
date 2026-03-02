@@ -563,7 +563,10 @@ export default function MapScreen() {
           {user && (
             <Pressable
               style={[s.sideBtn, s.sideBtnGreen]}
-              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); router.push("/create-run"); }}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                router.push({ pathname: "/create-run", params: { activityType: activityFilter } });
+              }}
             >
               <Feather name="plus" size={20} color={C.bg} />
             </Pressable>
@@ -746,6 +749,7 @@ export default function MapScreen() {
                     pathLng: selectedCommunityPath.start_lng.toString(),
                     pathName: selectedCommunityPath.name,
                     pathDistance: selectedCommunityPath.distance_miles?.toFixed(2) ?? "",
+                    activityType: activityFilter,
                   },
                 });
               }}

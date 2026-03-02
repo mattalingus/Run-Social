@@ -14,7 +14,7 @@ import {
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Feather } from "@expo/vector-icons";
+import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Clipboard from "expo-clipboard";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -34,9 +34,10 @@ export default function CreateRunScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const qc = useQueryClient();
-  const params = useLocalSearchParams<{ pathLat?: string; pathLng?: string; pathName?: string; pathDistance?: string }>();
+  const params = useLocalSearchParams<{ pathLat?: string; pathLng?: string; pathName?: string; pathDistance?: string; activityType?: string }>();
 
-  const [title, setTitle] = useState(params.pathName ? `Run on ${params.pathName}` : "");
+  const [activityType, setActivityType] = useState<"run" | "ride">(params.activityType === "ride" ? "ride" : "run");
+  const [title, setTitle] = useState(params.pathName ? `${params.activityType === "ride" ? "Ride on" : "Run on"} ${params.pathName}` : "");
   const [description, setDescription] = useState("");
   const [privacy, setPrivacy] = useState("public");
   const [date, setDate] = useState("");
@@ -80,6 +81,7 @@ export default function CreateRunScreen() {
         maxParticipants: parseInt(maxParticipants),
         invitePassword: privacy === "private" && invitePassword.trim() ? invitePassword.trim() : undefined,
         runStyle: runStyle ?? undefined,
+        activityType,
       });
       return res.json();
     },
@@ -90,9 +92,11 @@ export default function CreateRunScreen() {
       if (run?.privacy === "private" && run?.invite_token) {
         setInviteModal({ token: run.invite_token, title: run.title });
       } else {
-        Alert.alert("Run Created!", "Your run is now live on the map.", [
-          { text: "Great!", onPress: () => router.back() },
-        ]);
+        Alert.alert(
+          activityType === "ride" ? "Ride Created!" : "Run Created!",
+          activityType === "ride" ? "Your ride is now live on the map." : "Your run is now live on the map.",
+          [{ text: "Great!", onPress: () => router.back() }]
+        );
       }
     },
     onError: (e: any) => {
@@ -112,7 +116,7 @@ export default function CreateRunScreen() {
         <Pressable onPress={() => router.back()} style={styles.cancelBtn}>
           <Feather name="x" size={20} color={C.textSecondary} />
         </Pressable>
-        <Text style={styles.headerTitle}>Create Run</Text>
+        <Text style={styles.headerTitle}>{activityType === "ride" ? "Create Ride" : "Create Run"}</Text>
         <Pressable
           style={({ pressed }) => [styles.createBtn, { opacity: pressed || createMutation.isPending ? 0.8 : 1 }]}
           onPress={() => createMutation.mutate()}
@@ -132,12 +136,32 @@ export default function CreateRunScreen() {
         bottomOffset={20}
       >
         <View style={styles.field}>
-          <Text style={styles.label}>Run Title *</Text>
+          <Text style={styles.label}>Activity Type</Text>
+          <View style={styles.activityRow}>
+            <Pressable
+              style={[styles.activityPill, activityType === "run" && styles.activityPillActive]}
+              onPress={() => { setActivityType("run"); Haptics.selectionAsync(); }}
+            >
+              <Ionicons name="walk" size={14} color={activityType === "run" ? C.bg : C.textMuted} />
+              <Text style={[styles.activityPillTxt, activityType === "run" && styles.activityPillTxtActive]}>Run</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.activityPill, activityType === "ride" && styles.activityPillActive]}
+              onPress={() => { setActivityType("ride"); Haptics.selectionAsync(); }}
+            >
+              <Ionicons name="bicycle" size={14} color={activityType === "ride" ? C.bg : C.textMuted} />
+              <Text style={[styles.activityPillTxt, activityType === "ride" && styles.activityPillTxtActive]}>Bike Ride</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={styles.field}>
+          <Text style={styles.label}>{activityType === "ride" ? "Ride Title *" : "Run Title *"}</Text>
           <TextInput
             style={styles.input}
             value={title}
             onChangeText={setTitle}
-            placeholder="e.g. Morning 5K in the Park"
+            placeholder={activityType === "ride" ? "e.g. Sunday Morning Group Ride" : "e.g. Morning 5K in the Park"}
             placeholderTextColor={C.textMuted}
             maxLength={60}
           />
@@ -443,6 +467,15 @@ const styles = StyleSheet.create({
   privacyLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary },
   privacyLabelActive: { color: C.primary },
   privacyDesc: { fontFamily: "Outfit_400Regular", fontSize: 10, color: C.textMuted, textAlign: "center" },
+  activityRow: { flexDirection: "row", gap: 8 },
+  activityPill: {
+    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    paddingVertical: 10, borderRadius: 20,
+    backgroundColor: C.surface, borderWidth: 1.5, borderColor: C.border,
+  },
+  activityPillActive: { backgroundColor: C.primary, borderColor: C.primary },
+  activityPillTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textMuted },
+  activityPillTxtActive: { color: C.bg },
   row: { flexDirection: "row", gap: 12 },
   sectionDivider: { borderTopWidth: 1, borderTopColor: C.border, paddingTop: 16 },
   sectionLabel: { fontFamily: "Outfit_700Bold", fontSize: 14, color: C.text },

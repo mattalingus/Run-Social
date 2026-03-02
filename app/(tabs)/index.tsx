@@ -762,8 +762,10 @@ export default function DiscoverScreen() {
 
   const bookmarkedIds = useMemo(() => new Set(bookmarkedRuns.map((r) => r.id)), [bookmarkedRuns]);
   const sortedBookmarkedRuns = useMemo(() =>
-    [...bookmarkedRuns].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
-    [bookmarkedRuns]
+    [...bookmarkedRuns]
+      .filter((r) => (r.activity_type ?? "run") === activityFilter)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
+    [bookmarkedRuns, activityFilter]
   );
 
   const bookmarkMutation = useMutation({
@@ -1044,7 +1046,7 @@ export default function DiscoverScreen() {
             <View>
             {user && sortedBookmarkedRuns.length > 0 && (
               <View style={s.savedSection}>
-                <Text style={s.savedSectionTitle}>Saved Runs</Text>
+                <Text style={s.savedSectionTitle}>{activityFilter === "ride" ? "Saved Rides" : "Saved Runs"}</Text>
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
