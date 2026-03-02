@@ -603,10 +603,18 @@ export default function RunDetailScreen() {
             <Text style={styles.sectionTitle}>Participants ({run.participant_count})</Text>
             <View style={styles.participantsList}>
               {participants.slice(0, 8).map((p: any) => (
-                <View key={p.id} style={styles.participantItem}>
-                  <View style={styles.participantAvatar}>
-                    <Text style={styles.participantAvatarText}>{p.name?.charAt(0).toUpperCase()}</Text>
-                  </View>
+                <Pressable
+                  key={p.id}
+                  style={({ pressed }) => [styles.participantItem, { opacity: pressed ? 0.8 : 1 }]}
+                  onPress={() => setHostProfileId(p.id)}
+                >
+                  {p.photo_url ? (
+                    <Image source={{ uri: p.photo_url }} style={styles.participantAvatarImg} />
+                  ) : (
+                    <View style={styles.participantAvatar}>
+                      <Text style={styles.participantAvatarText}>{p.name?.charAt(0).toUpperCase()}</Text>
+                    </View>
+                  )}
                   <View style={styles.participantInfo}>
                     <Text style={styles.participantName}>{p.name}</Text>
                     <Text style={styles.participantPace}>{formatPace(p.avg_pace)}/mi · {formatDistance(p.avg_distance)} mi avg</Text>
@@ -616,7 +624,8 @@ export default function RunDetailScreen() {
                       {p.status === "confirmed" ? "Done" : "Joined"}
                     </Text>
                   </View>
-                </View>
+                  <Feather name="chevron-right" size={14} color={C.textMuted} />
+                </Pressable>
               ))}
             </View>
           </View>
@@ -919,8 +928,9 @@ const styles = StyleSheet.create({
   participantsSection: { gap: 10, marginBottom: 16 },
   participantsList: { gap: 8 },
   participantItem: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: C.card, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: C.border },
-  participantAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: C.surface, alignItems: "center", justifyContent: "center" },
-  participantAvatarText: { fontFamily: "Outfit_700Bold", fontSize: 14, color: C.textSecondary },
+  participantAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.surface, alignItems: "center", justifyContent: "center" },
+  participantAvatarImg: { width: 40, height: 40, borderRadius: 20 },
+  participantAvatarText: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.textSecondary },
   participantInfo: { flex: 1, gap: 2 },
   participantName: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text },
   participantPace: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary },
