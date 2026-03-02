@@ -76,7 +76,8 @@ export default function RunDetailScreen() {
   const qc = useQueryClient();
   const [joining, setJoining] = useState(false);
   const [confirming, setConfirming] = useState(false);
-  const [showFirstRunModal, setShowFirstRunModal] = useState(false);
+  const [showRulesModal, setShowRulesModal] = useState(false);
+  const [proximityTriggered, setProximityTriggered] = useState(false);
   const [starting, setStarting] = useState(false);
   const [hostDist, setHostDist] = useState<number | null>(null);
   const [passwordInput, setPasswordInput] = useState("");
@@ -251,6 +252,34 @@ export default function RunDetailScreen() {
     });
   }, [isHost, run?.id]);
 
+  // Geo-proximity auto-trigger: show rules modal when non-participant arrives within 1 km
+  useEffect(() => {
+    if (!user || !run || isHost || isParticipant || isPastRun || proximityTriggered || Platform.OS === "web") return;
+    let sub: any = null;
+    Location.getForegroundPermissionsAsync().then(async (perm) => {
+      try {
+        let granted = perm.granted;
+        if (!granted) {
+          const req = await Location.requestForegroundPermissionsAsync();
+          granted = req.granted;
+        }
+        if (!granted) return;
+        sub = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.Balanced, distanceInterval: 50 },
+          (loc) => {
+            const d = haversineKmDetail(loc.coords.latitude, loc.coords.longitude, run.location_lat, run.location_lng);
+            if (d <= 1) {
+              setProximityTriggered(true);
+              setShowRulesModal(true);
+              sub?.remove();
+            }
+          }
+        );
+      } catch { /* location unavailable */ }
+    });
+    return () => { sub?.remove(); };
+  }, [user?.id, run?.id, isParticipant, isHost, isPastRun, proximityTriggered]);
+
   async function handleStartRun() {
     if (!user) return;
     setStarting(true);
@@ -285,11 +314,7 @@ export default function RunDetailScreen() {
 
   async function handleJoin() {
     if (!user) return router.push("/(auth)/login");
-    if (run?.is_strict && (recentDistances ?? []).length === 0) {
-      setShowFirstRunModal(true);
-      return;
-    }
-    doJoin();
+    setShowRulesModal(true);
   }
 
   async function handleLeave() {
@@ -814,27 +839,28 @@ export default function RunDetailScreen() {
         )}
       </View>
 
-      {/* ── First-run rules popup ─────────────────────────────────────────── */}
-      {showFirstRunModal && (
-        <Modal transparent animationType="slide" onRequestClose={() => setShowFirstRunModal(false)}>
+      {/* ── Community rules popup ─────────────────────────────────────────── */}
+      {showRulesModal && (
+        <Modal transparent animationType="slide" onRequestClose={() => setShowRulesModal(false)}>
           <View style={styles.frModalWrap}>
-            <Pressable style={styles.frOverlay} onPress={() => setShowFirstRunModal(false)} />
+            <Pressable style={styles.frOverlay} onPress={() => setShowRulesModal(false)} />
             <View style={[styles.frSheet, { paddingBottom: insets.bottom + 24 }]}>
               <View style={styles.frHandle} />
               <View style={styles.frHeader}>
-                <Text style={styles.frTitle}>Welcome, New Runner!</Text>
-                <Pressable onPress={() => setShowFirstRunModal(false)}>
+                <Text style={styles.frTitle}>Before You Run</Text>
+                <Pressable onPress={() => setShowRulesModal(false)}>
                   <Feather name="x" size={18} color={C.textSecondary} />
                 </Pressable>
               </View>
               <Text style={styles.frIntro}>
-                You're joining your first run on PaceUp — no run history needed. As you log more runs, eligibility checks will kick in automatically to help match you with the right groups.
+                {proximityTriggered
+                  ? `You're within 1 km of this run — want to join the group?`
+                  : `A quick reminder before you join the group.`}
               </Text>
               {[
-                { icon: "zap" as const,       title: "Non-strict runs",    body: "You qualify if your pace matches, OR if any of your last 10 runs covers 50%+ of the planned distance. Either one is enough." },
-                { icon: "shield" as const,     title: "Strict runs",        body: "Both criteria must pass — pace must be in range AND one of your last 10 runs must cover 70%+ of the planned distance." },
-                { icon: "trending-up" as const, title: "Growing into runs", body: "You can join runs longer than you've done before. Non-strict runs are designed to welcome runners pushing their limits." },
-                { icon: "star" as const,       title: "Log your runs",      body: "Every solo run and group run you complete builds your history and keeps your eligibility current." },
+                { icon: "smile" as const,      title: "Have fun",   body: "Running with others is a great time. Enjoy the pace, the people, and the miles." },
+                { icon: "heart" as const,      title: "Be kind",    body: "Cheer each other on. Every runner is working hard — support your group." },
+                { icon: "trending-up" as const, title: "Keep up",   body: "Do your best to match the group's pace. If you fall behind, it's okay — just keep moving." },
               ].map((item) => (
                 <View key={item.title} style={styles.frRuleRow}>
                   <View style={styles.frRuleIcon}>
@@ -849,12 +875,12 @@ export default function RunDetailScreen() {
               <Pressable
                 style={[styles.primaryBtn, { marginTop: 20 }]}
                 onPress={() => {
-                  setShowFirstRunModal(false);
+                  setShowRulesModal(false);
                   doJoin();
                 }}
               >
                 <Ionicons name="walk" size={18} color={C.text} />
-                <Text style={styles.primaryBtnText}>Got it — Join Run</Text>
+                <Text style={styles.primaryBtnText}>Let's go!</Text>
               </Pressable>
             </View>
           </View>
