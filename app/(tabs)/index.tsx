@@ -766,6 +766,20 @@ export default function DiscoverScreen() {
     },
   });
 
+  const { data: plannedRuns = [] } = useQuery<Run[]>({
+    queryKey: ["/api/runs/planned"],
+    staleTime: 30_000,
+    enabled: !!user,
+  });
+
+  const removePlanMutation = useMutation({
+    mutationFn: (runId: string) => apiRequest("POST", `/api/runs/${runId}/plan`),
+    onSuccess: (_data, runId) => {
+      qc.invalidateQueries({ queryKey: ["/api/runs/planned"] });
+      qc.invalidateQueries({ queryKey: ["/api/runs", runId, "status"] });
+    },
+  });
+
   const friendIdSet = useMemo(
     () => new Set(friends.map((f) => f.id)),
     [friends]
@@ -1015,6 +1029,45 @@ export default function DiscoverScreen() {
                           onPress={() => bookmarkMutation.mutate(r.id)}
                         >
                           <Ionicons name="bookmark" size={15} color={C.primary} />
+                        </Pressable>
+                      </View>
+                      <View style={s.savedCardMeta}>
+                        <Feather name="calendar" size={11} color={C.textMuted} />
+                        <Text style={s.savedCardMetaTxt}>{formatDate(r.date)}</Text>
+                      </View>
+                      <View style={s.savedCardMeta}>
+                        <Feather name="map-pin" size={11} color={C.textMuted} />
+                        <Text style={s.savedCardMetaTxt} numberOfLines={1}>{r.location_name}</Text>
+                      </View>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+            {user && plannedRuns.length > 0 && (
+              <View style={s.savedSection}>
+                <Text style={s.savedSectionTitle}>Planning to Run</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={s.savedScroll}
+                >
+                  {plannedRuns.map((r) => (
+                    <Pressable
+                      key={r.id}
+                      style={s.savedCard}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        router.push(`/run/${r.id}`);
+                      }}
+                    >
+                      <View style={s.savedCardTop}>
+                        <Text style={s.savedCardTitle} numberOfLines={2}>{r.title}</Text>
+                        <Pressable
+                          hitSlop={8}
+                          onPress={() => removePlanMutation.mutate(r.id)}
+                        >
+                          <Ionicons name="calendar" size={15} color={C.primary} />
                         </Pressable>
                       </View>
                       <View style={s.savedCardMeta}>
