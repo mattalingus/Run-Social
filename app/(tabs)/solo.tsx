@@ -1017,10 +1017,10 @@ const s = StyleSheet.create({
   historyTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   historyTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text, flex: 1 },
   historyBadge: { fontSize: 14 },
-  historyMeta: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textSecondary, marginTop: 3 },
+  historyMeta: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary, marginTop: 3 },
   historyRight: { alignItems: "flex-end" },
   historyDist: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.primary },
-  historyDistUnit: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted },
+  historyDistUnit: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textMuted },
 
   emptyCard: {
     backgroundColor: C.surface,
