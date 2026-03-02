@@ -399,7 +399,7 @@ export default function RunTrackingScreen() {
           <View style={t.checkCircle}>
             <Feather name="check" size={28} color={C.primary} />
           </View>
-          <Text style={t.summaryTitle}>Run Complete</Text>
+          <Text style={t.summaryTitle}>{activityFilter === "ride" ? "Ride Complete" : "Run Complete"}</Text>
 
           <View style={t.statsRow}>
             <View style={t.statBlock}>
@@ -482,7 +482,7 @@ export default function RunTrackingScreen() {
                 {saving ? (
                   <ActivityIndicator color={C.bg} />
                 ) : (
-                  <Text style={t.saveBtnTxt}>Save Run</Text>
+                  <Text style={t.saveBtnTxt}>{activityFilter === "ride" ? "Save Ride" : "Save Run"}</Text>
                 )}
               </Pressable>
 
@@ -616,7 +616,7 @@ export default function RunTrackingScreen() {
               },
             ]} />
             <Text style={t.statusTxt}>
-              {phase === "idle" ? "Ready" : phase === "active" ? "Running" : "Paused"}
+              {phase === "idle" ? "Ready" : phase === "active" ? (activityFilter === "ride" ? "Riding" : "Running") : "Paused"}
             </Text>
           </View>
         )}
@@ -647,7 +647,7 @@ export default function RunTrackingScreen() {
               onPress={handleStart}
             >
               <Ionicons name="play" size={26} color={C.bg} />
-              <Text style={t.startBtnTxt}>Start Run</Text>
+              <Text style={t.startBtnTxt}>{activityFilter === "ride" ? "Start Ride" : "Start Run"}</Text>
             </Pressable>
           )}
 

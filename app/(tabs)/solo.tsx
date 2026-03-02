@@ -643,7 +643,7 @@ export default function SoloScreen() {
           onPress={() => router.push("/run-tracking" as any)}
         >
           <Ionicons name="play-circle" size={22} color={C.bg} />
-          <Text style={s.runSoloBtnTxt}>Run Solo</Text>
+          <Text style={s.runSoloBtnTxt}>{activityFilter === "ride" ? "Ride Solo" : "Run Solo"}</Text>
         </Pressable>
 
         {/* ─── Saved Paths ─────────────────────────────────────────────── */}
