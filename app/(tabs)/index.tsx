@@ -13,6 +13,7 @@ import {
   ScrollView,
   Switch,
   Alert,
+  Image,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { router } from "expo-router";
@@ -87,6 +88,7 @@ interface Run {
   max_participants: number;
   privacy: string;
   host_hosted_runs?: number;
+  host_photo?: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -431,13 +433,24 @@ function RunCard({
             )}
           </View>
         </View>
-        <Text style={s.hostLine}>
-          {run.host_name}
-          {run.host_rating > 0 && (
-            <Text style={s.ratingText}>{"  "}★ {run.host_rating.toFixed(1)}</Text>
+        <View style={s.hostRow}>
+          {run.host_photo ? (
+            <Image source={{ uri: run.host_photo }} style={s.hostAvatar} />
+          ) : (
+            <View style={s.hostAvatarFallback}>
+              <Text style={s.hostAvatarLetter}>{run.host_name?.charAt(0).toUpperCase()}</Text>
+            </View>
           )}
-          {(() => { const b = getHostBadge(run.host_hosted_runs); return b ? <Text style={[s.hostBadge, { color: b.color }]}>{"  · "}{b.label}</Text> : null; })()}
-        </Text>
+          <View style={s.hostInfo}>
+            <Text style={s.hostName} numberOfLines={1}>{run.host_name}</Text>
+            <View style={s.hostMetaRow}>
+              {run.host_rating > 0 && (
+                <Text style={s.ratingText}>★ {run.host_rating.toFixed(1)}</Text>
+              )}
+              {(() => { const b = getHostBadge(run.host_hosted_runs); return b ? <Text style={[s.hostBadge, { color: b.color }]}>{run.host_rating > 0 ? "  · " : ""}{b.label}</Text> : null; })()}
+            </View>
+          </View>
+        </View>
       </View>
 
       <View style={s.cardMeta}>
@@ -1526,8 +1539,14 @@ const s = StyleSheet.create({
     borderColor: C.orange + "40",
   },
   urgentText: { fontFamily: "Outfit_600SemiBold", fontSize: 10, color: C.orange },
-  hostLine: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary },
-  ratingText: { color: C.gold },
+  hostRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 2 },
+  hostAvatar: { width: 26, height: 26, borderRadius: 13, backgroundColor: C.primaryMuted },
+  hostAvatarFallback: { width: 26, height: 26, borderRadius: 13, backgroundColor: C.primaryMuted, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: C.primary + "44" },
+  hostAvatarLetter: { fontFamily: "Outfit_700Bold", fontSize: 11, color: C.primary },
+  hostInfo: { flex: 1, gap: 1 },
+  hostName: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.text },
+  hostMetaRow: { flexDirection: "row", alignItems: "center" },
+  ratingText: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.gold },
   hostBadge: { fontFamily: "Outfit_600SemiBold", fontSize: 11 },
 
   cardMeta: { gap: 3 },
