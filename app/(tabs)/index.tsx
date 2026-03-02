@@ -911,7 +911,7 @@ export default function DiscoverScreen() {
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <View style={[s.header, { paddingTop: headerTopPad }]}>
         <View style={s.titleRow}>
-          <Text style={s.title}>Fara</Text>
+          <Text style={s.title}>FARA</Text>
 
           <View style={s.headerBtns}>
             {/* Filter */}
@@ -1449,7 +1449,7 @@ export default function DiscoverScreen() {
 
           <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
             <Text style={s.rulesIntro}>
-              By hosting a run on Fara, you agree to uphold these community standards. Every runner deserves a safe and welcoming experience.
+              By hosting a run on FARA, you agree to uphold these community standards. Every runner deserves a safe and welcoming experience.
             </Text>
 
             {[

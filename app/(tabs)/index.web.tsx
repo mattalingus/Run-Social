@@ -151,7 +151,7 @@ export default function DiscoverScreen() {
       {/* ─── Header ───────────────────────────────────────────────────────── */}
       <View style={st.header}>
         <View style={st.titleRow}>
-          <Text style={st.title}>Fara</Text>
+          <Text style={st.title}>FARA</Text>
           <View style={st.headerBtns}>
             {/* Filter */}
             <Pressable

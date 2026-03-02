@@ -1,4 +1,4 @@
-# Fara — Social Running App
+# FARA — Social Running App
 
 
 ## Overview

@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Fara",
+    "name": "FARA",
     "slug": "paceup",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -41,8 +41,8 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow Fara to use your location to discover nearby runs.",
-          "locationWhenInUsePermission": "Allow Fara to use your location to discover nearby runs."
+          "locationAlwaysAndWhenInUsePermission": "Allow FARA to use your location to discover nearby runs.",
+          "locationWhenInUsePermission": "Allow FARA to use your location to discover nearby runs."
         }
       ]
     ],

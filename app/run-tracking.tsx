@@ -206,7 +206,7 @@ export default function RunTrackingScreen() {
         if (!res.granted) {
           Alert.alert(
             "Location Required",
-            "Enable location access so Fara can measure your run distance."
+            "Enable location access so FARA can measure your run distance."
           );
           return;
         }
