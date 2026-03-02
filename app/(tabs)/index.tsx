@@ -535,7 +535,7 @@ export default function DiscoverScreen() {
   const [hPrivacy, setHPrivacy] = useState("public");
   const [hPassword, setHPassword] = useState("");
   const [hMaxParticipants, setHMaxParticipants] = useState(20);
-  const [hTags, setHTags] = useState<string[]>([]);
+  const [hTags, setHTags] = useState<string[]>(["General"]);
   const [hDist, setHDist] = useState("3");
   const [hMinPace, setHMinPace] = useState(8);
   const [hMaxPace, setHMaxPace] = useState(12);
@@ -549,7 +549,7 @@ export default function DiscoverScreen() {
   function resetHostForm() {
     setHTitle(""); setHLocation(""); setHDate(""); setHTime("");
     setHPrivacy("public"); setHPassword(""); setHMaxParticipants(20);
-    setHTags([]); setHDist("3"); setHMinPace(8); setHMaxPace(12);
+    setHTags(["General"]); setHDist("3"); setHMinPace(8); setHMaxPace(12);
     setHLocationLat(null); setHLocationLng(null); setPinCoord(null); setHostPage("form");
     setHAmPm("AM");
   }
@@ -1253,23 +1253,6 @@ export default function DiscoverScreen() {
               </Pressable>
             </View>
 
-            {/* Host Style */}
-            <Text style={s.hLabel}>Host Style</Text>
-            <View style={s.hTagRow}>
-              {HOST_STYLES.map((tag) => (
-                <Pressable
-                  key={tag}
-                  style={[s.hTag, hTags.includes(tag) && s.hTagActive]}
-                  onPress={() => {
-                    setHTags((prev) => prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]);
-                    Haptics.selectionAsync();
-                  }}
-                >
-                  <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: hTags.includes(tag) ? C.primary : C.textSecondary }}>{tag}</Text>
-                </Pressable>
-              ))}
-            </View>
-
             {/* Planned Distance */}
             <Text style={s.hLabel}>Planned Distance (miles)</Text>
             <TextInput
@@ -1282,7 +1265,7 @@ export default function DiscoverScreen() {
             />
 
             {/* Pace Range */}
-            <Text style={s.hLabel}>Pace Range (min/mile) · 30 sec steps</Text>
+            <Text style={s.hLabel}>Pace Range For Runners (Min/Mile)</Text>
             <View style={{ gap: 8 }}>
               <View style={s.hPaceRow}>
                 <Text style={s.hPaceLabel}>Slowest</Text>
@@ -1312,6 +1295,23 @@ export default function DiscoverScreen() {
                   </Pressable>
                 </View>
               </View>
+            </View>
+
+            {/* Host Style */}
+            <Text style={s.hLabel}>Host Style</Text>
+            <View style={s.hTagRow}>
+              {HOST_STYLES.map((tag) => (
+                <Pressable
+                  key={tag}
+                  style={[s.hTag, hTags.includes(tag) && s.hTagActive]}
+                  onPress={() => {
+                    setHTags((prev) => prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]);
+                    Haptics.selectionAsync();
+                  }}
+                >
+                  <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: hTags.includes(tag) ? C.primary : C.textSecondary }}>{tag}</Text>
+                </Pressable>
+              ))}
             </View>
           </ScrollView>
           )}
