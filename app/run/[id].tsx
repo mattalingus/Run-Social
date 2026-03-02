@@ -303,18 +303,13 @@ export default function RunDetailScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       qc.invalidateQueries({ queryKey: ["/api/runs", id, "participants"] });
       qc.invalidateQueries({ queryKey: ["/api/runs"] });
-      Alert.alert("Joined!", "You're registered for this run.");
+      Alert.alert("You're in!", "You've been added to the live count for this run.");
     } catch (e: any) {
       Alert.alert("Can't Join", e.message || "Unable to join run");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setJoining(false);
     }
-  }
-
-  async function handleJoin() {
-    if (!user) return router.push("/(auth)/login");
-    setShowRulesModal(true);
   }
 
   async function handleLeave() {
@@ -760,28 +755,6 @@ export default function RunDetailScreen() {
             <Text style={styles.liveBtnText}>Join Live Run</Text>
           </Pressable>
         )}
-        {!isHost && !isPastRun && !isLive && !isParticipant && (
-          <Pressable
-            style={({ pressed }) => [styles.primaryBtn, { opacity: pressed || joining ? 0.85 : 1 }]}
-            onPress={handleJoin}
-            disabled={joining}
-          >
-            {joining ? <ActivityIndicator color={C.text} /> : (
-              <>
-                <Ionicons name="walk" size={18} color={C.text} />
-                <Text style={styles.primaryBtnText}>Join Run</Text>
-              </>
-            )}
-          </Pressable>
-        )}
-        {!isHost && !isPastRun && !isLive && isParticipant && (
-          <Pressable
-            style={({ pressed }) => [styles.secondaryBtn, { opacity: pressed ? 0.8 : 1 }]}
-            onPress={handleLeave}
-          >
-            <Text style={styles.secondaryBtnText}>Leave Run</Text>
-          </Pressable>
-        )}
         {isPastRun && isParticipant && !hasConfirmed && (
           <Pressable
             style={({ pressed }) => [styles.primaryBtn, { opacity: pressed || confirming ? 0.85 : 1 }]}
@@ -811,7 +784,7 @@ export default function RunDetailScreen() {
             <Text style={styles.ratedText}>You rated this host {myRating.stars}/5</Text>
           </View>
         )}
-        {!isHost && !isParticipant && !isPastRun && !isLive && user && (
+        {!isHost && !isParticipant && !isPastRun && user && (
           <Pressable
             style={({ pressed }) => [
               styles.planBtn,
@@ -831,10 +804,10 @@ export default function RunDetailScreen() {
             </Text>
           </Pressable>
         )}
-        {isParticipant && !isPastRun && !isLive && (
+        {isParticipant && !isPastRun && (
           <View style={styles.joinedBanner}>
-            <Feather name="check" size={14} color={C.primary} />
-            <Text style={styles.joinedText}>You're registered for this run</Text>
+            <Feather name="map-pin" size={14} color={C.primary} />
+            <Text style={styles.joinedText}>You've arrived — you're in the live count</Text>
           </View>
         )}
       </View>

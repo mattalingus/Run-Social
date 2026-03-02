@@ -175,7 +175,7 @@ function RunMarker({ run, isSelected, onPress }: { run: Run; isSelected: boolean
     >
       <Animated.View style={[mk.wrap, { transform: [{ scale }] }]}>
         {soon && <View style={mk.glow} />}
-        {run.is_active && <View style={mk.liveRing} />}
+        {run.is_active && run.participant_count > 0 && <View style={mk.liveRing} />}
         <View style={[mk.circle, isSelected && mk.circleSelected]}>
           {isEmojiIcon ? (
             <Text style={mk.emoji}>{icon}</Text>
@@ -188,7 +188,7 @@ function RunMarker({ run, isSelected, onPress }: { run: Run; isSelected: boolean
           )}
         </View>
         <View style={mk.pin} />
-        {run.is_active && (
+        {run.is_active && run.participant_count > 0 && (
           <View style={mk.liveBadge}>
             <Text style={mk.liveBadgeText}>LIVE</Text>
           </View>
@@ -642,15 +642,15 @@ export default function MapScreen() {
                     {formatDistance(selectedRun.min_distance)}–{formatDistance(selectedRun.max_distance)} mi
                   </Text>
                 </View>
-                <View style={[s.chip, selectedRun.is_active && s.chipLive]}>
-                  {selectedRun.is_active ? (
+                <View style={[s.chip, (selectedRun.is_active && selectedRun.participant_count > 0) && s.chipLive]}>
+                  {selectedRun.is_active && selectedRun.participant_count > 0 ? (
                     <View style={s.chipLiveDot} />
                   ) : (
                     <Feather name="users" size={11} color={C.textSecondary} />
                   )}
-                  <Text style={[s.chipTxt, selectedRun.is_active && { color: C.primary }]}>
-                    {selectedRun.is_active
-                      ? `${selectedRun.participant_count} live now`
+                  <Text style={[s.chipTxt, (selectedRun.is_active && selectedRun.participant_count > 0) && { color: C.primary }]}>
+                    {selectedRun.is_active && selectedRun.participant_count > 0
+                      ? `${selectedRun.participant_count} arrived`
                       : `${selectedRun.participant_count}/${selectedRun.max_participants}`}
                   </Text>
                 </View>
@@ -665,7 +665,7 @@ export default function MapScreen() {
                 style={({ pressed }) => [s.joinBtn, { opacity: pressed ? 0.85 : 1 }]}
                 onPress={() => { closeCard(); router.push(`/run/${selectedRun.id}`); }}
               >
-                <Text style={s.joinTxt}>View &amp; Join Run</Text>
+                <Text style={s.joinTxt}>View Run</Text>
                 <Feather name="arrow-right" size={16} color={C.bg} />
               </Pressable>
             </>

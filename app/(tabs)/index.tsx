@@ -447,7 +447,12 @@ function RunCard({
           <View style={s.cardTitleRow}>
             <Text style={s.cardTitle} numberOfLines={2}>{run.title}</Text>
             <View style={s.cardTitleRight}>
-              {spotsLeft <= 3 && spotsLeft > 0 && (
+              {run.is_active && run.participant_count > 0 && (
+                <View style={s.livePill}>
+                  <Text style={s.livePillTxt}>LIVE</Text>
+                </View>
+              )}
+              {spotsLeft <= 3 && spotsLeft > 0 && !run.is_active && (
                 <View style={s.urgentBadge}>
                   <Text style={s.urgentText}>{spotsLeft} left</Text>
                 </View>
@@ -495,8 +500,12 @@ function RunCard({
             </View>
             <View style={s.statDiv} />
             <View style={s.stat}>
-              <Ionicons name="people" size={12} color={C.textMuted} />
-              <Text style={s.statLabel}>{run.participant_count}/{run.max_participants}</Text>
+              <Ionicons name="people" size={12} color={run.is_active && run.participant_count > 0 ? C.primary : C.textMuted} />
+              <Text style={[s.statLabel, run.is_active && run.participant_count > 0 && { color: C.primary }]}>
+                {run.is_active && run.participant_count > 0
+                  ? `${run.participant_count} arrived`
+                  : `${run.participant_count}/${run.max_participants}`}
+              </Text>
             </View>
           </View>
 
@@ -1571,6 +1580,15 @@ const s = StyleSheet.create({
     borderColor: C.orange + "40",
   },
   urgentText: { fontFamily: "Outfit_600SemiBold", fontSize: 10, color: C.orange },
+  livePill: {
+    backgroundColor: C.primary + "22",
+    borderRadius: 5,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: C.primary + "55",
+  },
+  livePillTxt: { fontFamily: "Outfit_700Bold", fontSize: 10, color: C.primary },
   hostAvatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: C.primaryMuted },
   hostAvatarFallback: { width: 52, height: 52, borderRadius: 26, backgroundColor: C.primaryMuted, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: C.primary + "55" },
   hostAvatarLetter: { fontFamily: "Outfit_700Bold", fontSize: 20, color: C.primary },
