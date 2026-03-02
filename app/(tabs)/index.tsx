@@ -981,7 +981,8 @@ export default function DiscoverScreen() {
             <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={C.primary} />
           }
           ListHeaderComponent={
-            user && sortedBookmarkedRuns.length > 0 ? (
+            <View>
+            {user && sortedBookmarkedRuns.length > 0 && (
               <View style={s.savedSection}>
                 <Text style={s.savedSectionTitle}>Saved Runs</Text>
                 <ScrollView
@@ -1019,7 +1020,9 @@ export default function DiscoverScreen() {
                   ))}
                 </ScrollView>
               </View>
-            ) : null
+            )}
+            <Text style={s.nearbyLabel}>Upcoming Runs Nearby</Text>
+            </View>
           }
           renderItem={({ item }) => (
             <RunCard
@@ -1544,6 +1547,7 @@ const s = StyleSheet.create({
   cardBookmarkBtn: { padding: 2 },
   savedSection: { marginBottom: 16 },
   savedSectionTitle: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.text, marginBottom: 10 },
+  nearbyLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary, marginBottom: 10 },
   savedScroll: { gap: 10, paddingRight: 4 },
   savedCard: {
     width: 160,
