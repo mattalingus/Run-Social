@@ -933,6 +933,7 @@ export default function ProfileScreen() {
             </View>
           )}
         </View>
+        <HostProfileSheet hostId={viewProfileId} onClose={() => setViewProfileId(null)} />
       </Modal>
 
       {/* ── Add Friend Modal ───────────────────────────────────────────────── */}
@@ -1038,6 +1039,7 @@ export default function ProfileScreen() {
           )}
 
         </View>
+        <HostProfileSheet hostId={viewProfileId} onClose={() => setViewProfileId(null)} />
         </KeyboardAvoidingView>
       </Modal>
 
@@ -1105,7 +1107,6 @@ export default function ProfileScreen() {
         </Modal>
       )}
 
-      <HostProfileSheet hostId={viewProfileId} onClose={() => setViewProfileId(null)} />
     </ScrollView>
   );
 }
