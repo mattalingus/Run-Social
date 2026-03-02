@@ -792,7 +792,7 @@ export default function RunDetailScreen() {
         {!isHost && !isParticipant && !isPastRun && user && (
           <Pressable
             style={({ pressed }) => [
-              isPlanned ? styles.planBtnActive : styles.primaryBtn,
+              isPlanned ? [styles.planBtn, styles.planBtnActive] : styles.primaryBtn,
               { opacity: pressed || planMutation.isPending ? 0.8 : 1 },
             ]}
             onPress={() => planMutation.mutate()}
@@ -805,7 +805,7 @@ export default function RunDetailScreen() {
                   size={18}
                   color={isPlanned ? C.primary : C.text}
                 />
-                <Text style={isPlanned ? styles.planBtnTextActive : styles.primaryBtnText}>
+                <Text style={isPlanned ? [styles.planBtnText, styles.planBtnTextActive] : styles.primaryBtnText}>
                   {isPlanned ? "Planning to run — tap to remove" : "Plan to Run"}
                 </Text>
               </>
