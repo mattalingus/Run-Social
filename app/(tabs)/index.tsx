@@ -536,8 +536,7 @@ export default function DiscoverScreen() {
   const [hPassword, setHPassword] = useState("");
   const [hMaxParticipants, setHMaxParticipants] = useState(20);
   const [hTags, setHTags] = useState<string[]>([]);
-  const [hMinDist, setHMinDist] = useState("3");
-  const [hMaxDist, setHMaxDist] = useState("6");
+  const [hDist, setHDist] = useState("3");
   const [hMinPace, setHMinPace] = useState(8);
   const [hMaxPace, setHMaxPace] = useState(12);
   const [hLocationLat, setHLocationLat] = useState<number | null>(null);
@@ -550,7 +549,7 @@ export default function DiscoverScreen() {
   function resetHostForm() {
     setHTitle(""); setHLocation(""); setHDate(""); setHTime("");
     setHPrivacy("public"); setHPassword(""); setHMaxParticipants(20);
-    setHTags([]); setHMinDist("3"); setHMaxDist("6"); setHMinPace(8); setHMaxPace(12);
+    setHTags([]); setHDist("3"); setHMinPace(8); setHMaxPace(12);
     setHLocationLat(null); setHLocationLng(null); setPinCoord(null); setHostPage("form");
     setHAmPm("AM");
   }
@@ -674,8 +673,8 @@ export default function DiscoverScreen() {
         locationLat: hLocationLat,
         locationLng: hLocationLng,
         locationName: hLocation.trim(),
-        minDistance: parseFloat(hMinDist) || 1,
-        maxDistance: parseFloat(hMaxDist) || 6,
+        minDistance: parseFloat(hDist) || 3,
+        maxDistance: parseFloat(hDist) || 3,
         minPace: hMinPace,
         maxPace: hMaxPace,
         tags: hTags,
@@ -1271,27 +1270,16 @@ export default function DiscoverScreen() {
               ))}
             </View>
 
-            {/* Distance Range */}
-            <Text style={s.hLabel}>Distance Range (miles)</Text>
-            <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
-              <TextInput
-                style={[s.hInput, { flex: 1, textAlign: "center" }]}
-                value={hMinDist}
-                onChangeText={setHMinDist}
-                placeholder="Min"
-                placeholderTextColor={C.textMuted}
-                keyboardType="decimal-pad"
-              />
-              <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textMuted }}>to</Text>
-              <TextInput
-                style={[s.hInput, { flex: 1, textAlign: "center" }]}
-                value={hMaxDist}
-                onChangeText={setHMaxDist}
-                placeholder="Max"
-                placeholderTextColor={C.textMuted}
-                keyboardType="decimal-pad"
-              />
-            </View>
+            {/* Planned Distance */}
+            <Text style={s.hLabel}>Planned Distance (miles)</Text>
+            <TextInput
+              style={s.hInput}
+              value={hDist}
+              onChangeText={setHDist}
+              placeholder="e.g. 3.1"
+              placeholderTextColor={C.textMuted}
+              keyboardType="decimal-pad"
+            />
 
             {/* Pace Range */}
             <Text style={s.hLabel}>Pace Range (min/mile) · 30 sec steps</Text>
