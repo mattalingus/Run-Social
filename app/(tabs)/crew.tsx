@@ -1161,6 +1161,38 @@ const s = StyleSheet.create({
     color: C.textMuted,
     marginTop: 4,
   },
+  crewCardChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+    marginTop: 6,
+  },
+  crewStyleChip: {
+    backgroundColor: C.card,
+    borderRadius: 5,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: C.borderLight,
+  },
+  crewStyleChipTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 10,
+    color: C.textSecondary,
+  },
+  crewVibeChip: {
+    backgroundColor: C.card,
+    borderRadius: 5,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: C.borderLight,
+  },
+  crewVibeChipTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 10,
+    color: C.textSecondary,
+  },
 
   // Empty state
   emptyState: {
