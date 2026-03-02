@@ -21,6 +21,7 @@ import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
+import { useActivity } from "@/contexts/ActivityContext";
 import C from "@/constants/colors";
 import { formatDistance } from "@/lib/formatDistance";
 
@@ -77,6 +78,7 @@ function calcPace(distanceMi: number, elapsedSec: number): string {
 export default function RunTrackingScreen() {
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
+  const { activityFilter } = useActivity();
 
   const [permission, requestPermission] = Location.useForegroundPermissions();
   const [phase, setPhase] = useState<Phase>("idle");
@@ -285,7 +287,7 @@ export default function RunTrackingScreen() {
     setSaving(true);
     try {
       const res = await apiRequest("POST", "/api/solo-runs", {
-        title: `${formatDistance(distance)} mi solo run`,
+        title: `${formatDistance(distance)} mi solo ${activityFilter === "ride" ? "ride" : "run"}`,
         date: new Date().toISOString(),
         distanceMiles: Math.max(distance, 0.001),
         paceMinPerMile: pace,
@@ -293,6 +295,7 @@ export default function RunTrackingScreen() {
         completed: true,
         planned: false,
         routePath: routePathRef.current.length > 1 ? routePathRef.current : null,
+        activityType: activityFilter,
       });
       const saved = await res.json();
       setSavedRunId(saved.id);

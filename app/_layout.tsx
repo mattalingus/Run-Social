@@ -9,6 +9,7 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient, getApiUrl } from "@/lib/query-client";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { ActivityProvider } from "@/contexts/ActivityContext";
 import { StatusBar } from "expo-status-bar";
 import {
   useFonts,
@@ -141,11 +142,13 @@ export default function RootLayout() {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <GestureHandlerRootView style={{ flex: 1, backgroundColor: C.bg }}>
-            <KeyboardProvider>
-              <RootLayoutNav />
-            </KeyboardProvider>
-          </GestureHandlerRootView>
+          <ActivityProvider>
+            <GestureHandlerRootView style={{ flex: 1, backgroundColor: C.bg }}>
+              <KeyboardProvider>
+                <RootLayoutNav />
+              </KeyboardProvider>
+            </GestureHandlerRootView>
+          </ActivityProvider>
         </AuthProvider>
       </QueryClientProvider>
     </ErrorBoundary>

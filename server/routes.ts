@@ -619,7 +619,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/solo-runs", requireAuth, async (req, res) => {
     try {
-      const { title, date, distanceMiles, paceMinPerMile, durationSeconds, completed, planned, notes, routePath } = req.body;
+      const { title, date, distanceMiles, paceMinPerMile, durationSeconds, completed, planned, notes, routePath, activityType } = req.body;
       if (!date || !distanceMiles) return res.status(400).json({ message: "date and distanceMiles required" });
       const run = await storage.createSoloRun({
         userId: req.session.userId!,
@@ -632,6 +632,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         planned: !!planned,
         notes,
         routePath: Array.isArray(routePath) ? routePath : null,
+        activityType: activityType === "ride" ? "ride" : "run",
       });
       res.status(201).json(run);
     } catch (e: any) {

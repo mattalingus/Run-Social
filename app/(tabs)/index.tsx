@@ -28,6 +28,7 @@ import C from "@/constants/colors";
 import RangeSlider from "@/components/RangeSlider";
 import { formatDistance } from "@/lib/formatDistance";
 import { useAuth } from "@/contexts/AuthContext";
+import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest } from "@/lib/query-client";
 import WebFAB from "@/components/WebFAB";
 
@@ -539,7 +540,7 @@ export default function DiscoverScreen() {
   const [search, setSearch] = useState("");
   const [sortOption, setSortOption] = useState<SortOption>("soonest");
   const [showSort, setShowSort] = useState(false);
-  const [activityFilter, setActivityFilter] = useState<"run" | "ride">("run");
+  const { activityFilter, setActivityFilter } = useActivity();
   const [showFilter, setShowFilter] = useState(false);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
 

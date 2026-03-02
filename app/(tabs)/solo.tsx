@@ -21,6 +21,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
+import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import C from "@/constants/colors";
 import { formatDistance } from "@/lib/formatDistance";
@@ -42,6 +43,7 @@ interface SoloRun {
   notes: string | null;
   route_path: Array<{ latitude: number; longitude: number }> | null;
   created_at: string;
+  activity_type: "run" | "ride";
 }
 
 interface SavedPath {
@@ -305,6 +307,7 @@ const bar = StyleSheet.create({
 export default function SoloScreen() {
   const insets = useSafeAreaInsets();
   const { user, refreshUser } = useAuth();
+  const { activityFilter, setActivityFilter } = useActivity();
   const qc = useQueryClient();
 
   const [showGoals, setShowGoals] = useState(false);
@@ -370,9 +373,14 @@ export default function SoloScreen() {
 
   // ─── Rankings ───────────────────────────────────────────────────────────────
 
+  const filteredSoloRuns = useMemo(
+    () => soloRuns.filter((r) => (r.activity_type ?? "run") === activityFilter),
+    [soloRuns, activityFilter]
+  );
+
   const completedRuns = useMemo(
-    () => soloRuns.filter((r) => r.completed && r.pace_min_per_mile),
-    [soloRuns]
+    () => filteredSoloRuns.filter((r) => r.completed && r.pace_min_per_mile),
+    [filteredSoloRuns]
   );
 
   const rankings = useMemo<RankingCategory[]>(() => {
@@ -429,7 +437,7 @@ export default function SoloScreen() {
     setSaving(true);
     try {
       const pace = pPace.trim() ? parsePaceInput(pPace) : null;
-      const label = pTitle.trim() || `${formatDistance(dist)} mi solo run`;
+      const label = pTitle.trim() || `${formatDistance(dist)} mi solo ${activityFilter === "ride" ? "ride" : "run"}`;
       await saveMutation.mutateAsync({
         title: label,
         date: runDate.toISOString(),
@@ -437,6 +445,7 @@ export default function SoloScreen() {
         paceMinPerMile: pace,
         planned: true,
         completed: false,
+        activityType: activityFilter,
       });
       if (pNotify) await scheduleRunNotifications(runDate, label);
       setShowPlan(false);
@@ -494,11 +503,29 @@ export default function SoloScreen() {
         <View style={s.headerRow}>
           <View>
             <Text style={s.screenTitle}>Solo</Text>
-            <Text style={s.screenSub}>Your personal running</Text>
+            <Text style={s.screenSub}>Your personal {activityFilter === "ride" ? "riding" : "running"}</Text>
           </View>
           <Pressable style={s.planBtn} onPress={() => setShowPlan(true)}>
             <Feather name="plus" size={18} color={C.bg} />
-            <Text style={s.planBtnTxt}>Plan Run</Text>
+            <Text style={s.planBtnTxt}>{activityFilter === "ride" ? "Plan Ride" : "Plan Run"}</Text>
+          </Pressable>
+        </View>
+
+        {/* ─── Activity Toggle ─────────────────────────────────────────── */}
+        <View style={s.activityToggleRow}>
+          <Pressable
+            style={[s.activityPill, activityFilter === "run" && s.activityPillActive]}
+            onPress={() => { setActivityFilter("run"); Haptics.selectionAsync(); }}
+          >
+            <Ionicons name="walk" size={14} color={activityFilter === "run" ? C.bg : C.textMuted} />
+            <Text style={[s.activityPillTxt, activityFilter === "run" && s.activityPillTxtActive]}>Runs</Text>
+          </Pressable>
+          <Pressable
+            style={[s.activityPill, activityFilter === "ride" && s.activityPillActive]}
+            onPress={() => { setActivityFilter("ride"); Haptics.selectionAsync(); }}
+          >
+            <Ionicons name="bicycle" size={14} color={activityFilter === "ride" ? C.bg : C.textMuted} />
+            <Text style={[s.activityPillTxt, activityFilter === "ride" && s.activityPillTxtActive]}>Rides</Text>
           </Pressable>
         </View>
 
@@ -653,22 +680,22 @@ export default function SoloScreen() {
           </View>
         )}
 
-        {/* ─── Run History ─────────────────────────────────────────────── */}
+        {/* ─── Run / Ride History ──────────────────────────────────────── */}
         <View style={s.section}>
-          <Text style={s.sectionTitle}>Run History</Text>
+          <Text style={s.sectionTitle}>{activityFilter === "ride" ? "Ride History" : "Run History"}</Text>
 
           {isLoading ? (
             <ActivityIndicator color={C.primary} style={{ marginTop: 20 }} />
-          ) : soloRuns.length === 0 ? (
+          ) : filteredSoloRuns.length === 0 ? (
             <View style={s.emptyCard}>
-              <Ionicons name="walk-outline" size={44} color={C.textMuted} />
-              <Text style={s.emptyTitle}>No solo runs yet</Text>
-              <Text style={s.emptyBody}>Plan your first run and start tracking your progress</Text>
+              <Ionicons name={activityFilter === "ride" ? "bicycle-outline" : "walk-outline"} size={44} color={C.textMuted} />
+              <Text style={s.emptyTitle}>{activityFilter === "ride" ? "No solo rides yet" : "No solo runs yet"}</Text>
+              <Text style={s.emptyBody}>{activityFilter === "ride" ? "Plan your first ride and start tracking your progress" : "Plan your first run and start tracking your progress"}</Text>
             </View>
           ) : (
-            soloRuns.map((run) => {
+            filteredSoloRuns.map((run) => {
               const badge = runBadges[run.id];
-              const label = run.title || `${formatDistance(run.distance_miles)} mi run`;
+              const label = run.title || `${formatDistance(run.distance_miles)} mi ${run.activity_type === "ride" ? "ride" : "run"}`;
               const isExpanded = expandedRunId === run.id;
               return (
                 <Pressable
@@ -795,7 +822,7 @@ export default function SoloScreen() {
         <View style={[s.sheet, { paddingBottom: insets.bottom + 24 }]}>
           <View style={s.sheetHandle} />
           <View style={s.sheetHeader}>
-            <Text style={s.sheetTitle}>Plan a Solo Run</Text>
+            <Text style={s.sheetTitle}>{activityFilter === "ride" ? "Plan a Solo Ride" : "Plan a Solo Run"}</Text>
             <Pressable onPress={() => setShowPlan(false)} hitSlop={12}>
               <Feather name="x" size={22} color={C.textSecondary} />
             </Pressable>
@@ -807,7 +834,7 @@ export default function SoloScreen() {
               style={s.input}
               value={pTitle}
               onChangeText={setPTitle}
-              placeholder="Morning tempo run"
+              placeholder={activityFilter === "ride" ? "Morning group ride" : "Morning tempo run"}
               placeholderTextColor={C.textMuted}
             />
 
@@ -901,6 +928,16 @@ const s = StyleSheet.create({
   },
   screenTitle: { fontFamily: "Outfit_700Bold", fontSize: 30, color: C.text, letterSpacing: -0.5 },
   screenSub: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary, marginTop: 2 },
+
+  activityToggleRow: { flexDirection: "row", gap: 8, marginBottom: 20 },
+  activityPill: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
+    backgroundColor: C.surface, borderWidth: 1.5, borderColor: C.border,
+  },
+  activityPillActive: { backgroundColor: C.primary, borderColor: C.primary },
+  activityPillTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textMuted },
+  activityPillTxtActive: { color: C.bg },
   planBtn: {
     flexDirection: "row",
     alignItems: "center",
