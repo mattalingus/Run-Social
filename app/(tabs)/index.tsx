@@ -735,6 +735,10 @@ export default function DiscoverScreen() {
   });
 
   const bookmarkedIds = useMemo(() => new Set(bookmarkedRuns.map((r) => r.id)), [bookmarkedRuns]);
+  const sortedBookmarkedRuns = useMemo(() =>
+    [...bookmarkedRuns].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
+    [bookmarkedRuns]
+  );
 
   const bookmarkMutation = useMutation({
     mutationFn: (runId: string) => apiRequest("POST", `/api/runs/${runId}/bookmark`),
@@ -961,7 +965,7 @@ export default function DiscoverScreen() {
             <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={C.primary} />
           }
           ListHeaderComponent={
-            user && bookmarkedRuns.length > 0 ? (
+            user && sortedBookmarkedRuns.length > 0 ? (
               <View style={s.savedSection}>
                 <Text style={s.savedSectionTitle}>Saved Runs</Text>
                 <ScrollView
@@ -969,7 +973,7 @@ export default function DiscoverScreen() {
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={s.savedScroll}
                 >
-                  {bookmarkedRuns.map((r) => (
+                  {sortedBookmarkedRuns.map((r) => (
                     <Pressable
                       key={r.id}
                       style={s.savedCard}
