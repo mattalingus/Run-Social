@@ -585,8 +585,8 @@ export default function DiscoverScreen() {
   // ─── Date / Time parse helpers ─────────────────────────────────────────────
   function parseDMY(raw: string): Date | null {
     const cleaned = raw.trim().replace(/\//g, "/");
-    const [d, m, y] = cleaned.split("/");
-    if (!d || !m || !y) return null;
+    const [m, d, y] = cleaned.split("/");
+    if (!m || !d || !y) return null;
     const year = y.length === 2 ? 2000 + parseInt(y, 10) : parseInt(y, 10);
     const date = new Date(year, parseInt(m, 10) - 1, parseInt(d, 10));
     return isNaN(date.getTime()) ? null : date;
@@ -666,7 +666,7 @@ export default function DiscoverScreen() {
       if (hLocationLat === null || hLocationLng === null) throw new Error("Please pick a location on the map");
       if (!hDate.trim() || !hTime.trim()) throw new Error("Date and time are required");
       const parsedDate = parseDMY(hDate.trim());
-      if (!parsedDate) throw new Error("Invalid date — use DD/MM/YY (e.g. 25/06/25)");
+      if (!parsedDate) throw new Error("Invalid date — use MM/DD/YY (e.g. 06/25/25)");
       const parsedTime = parseHHMMAMPM(hTime.trim(), hAmPm);
       if (!parsedTime) throw new Error("Invalid time — use H:MM (e.g. 7:30)");
       parsedDate.setHours(parsedTime.hours, parsedTime.minutes, 0, 0);
@@ -1174,7 +1174,7 @@ export default function DiscoverScreen() {
                 style={[s.hInput, { flex: 1 }]}
                 value={hDate}
                 onChangeText={handleDateChange}
-                placeholder="DD/MM/YY"
+                placeholder="MM/DD/YY"
                 placeholderTextColor={C.textMuted}
                 keyboardType="number-pad"
                 maxLength={8}
