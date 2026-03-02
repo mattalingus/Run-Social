@@ -787,21 +787,24 @@ export default function RunDetailScreen() {
         {!isHost && !isParticipant && !isPastRun && user && (
           <Pressable
             style={({ pressed }) => [
-              styles.planBtn,
-              isPlanned && styles.planBtnActive,
+              isPlanned ? styles.planBtnActive : styles.primaryBtn,
               { opacity: pressed || planMutation.isPending ? 0.8 : 1 },
             ]}
             onPress={() => planMutation.mutate()}
             disabled={planMutation.isPending}
           >
-            <Ionicons
-              name={isPlanned ? "calendar" : "calendar-outline"}
-              size={16}
-              color={isPlanned ? C.primary : C.textSecondary}
-            />
-            <Text style={[styles.planBtnText, isPlanned && styles.planBtnTextActive]}>
-              {isPlanned ? "Planning to run — tap to remove" : "I'm planning to run"}
-            </Text>
+            {planMutation.isPending ? <ActivityIndicator color={isPlanned ? C.primary : C.text} /> : (
+              <>
+                <Ionicons
+                  name={isPlanned ? "calendar" : "calendar-outline"}
+                  size={18}
+                  color={isPlanned ? C.primary : C.text}
+                />
+                <Text style={isPlanned ? styles.planBtnTextActive : styles.primaryBtnText}>
+                  {isPlanned ? "Planning to run — tap to remove" : "Plan to Run"}
+                </Text>
+              </>
+            )}
           </Pressable>
         )}
         {isParticipant && !isPastRun && (

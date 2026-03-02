@@ -397,6 +397,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ─── Bookmarks & Plans ─────────────────────────────────────────────────────
 
+  app.get("/api/runs/planned", requireAuth, async (req, res) => {
+    try {
+      const runs = await storage.getPlannedRuns(req.session.userId!);
+      res.json(runs);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.get("/api/runs/bookmarked", requireAuth, async (req, res) => {
     try {
       const runs = await storage.getBookmarkedRuns(req.session.userId!);

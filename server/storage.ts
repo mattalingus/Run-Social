@@ -1307,6 +1307,22 @@ export async function getRunStatus(userId: string, runId: string) {
   };
 }
 
+export async function getPlannedRuns(userId: string) {
+  const result = await pool.query(
+    `SELECT r.*, u.name as host_name, u.avg_rating as host_rating, u.photo_url as host_photo,
+      u.marker_icon as host_marker_icon,
+      (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled') as participant_count,
+      pr.created_at as planned_at
+     FROM planned_runs pr
+     JOIN runs r ON r.id = pr.run_id
+     JOIN users u ON u.id = r.host_id
+     WHERE pr.user_id = $1
+     ORDER BY r.date ASC`,
+    [userId]
+  );
+  return result.rows;
+}
+
 export async function getBookmarkedRuns(userId: string) {
   const result = await pool.query(
     `SELECT r.*, u.name as host_name, u.avg_rating as host_rating, u.photo_url as host_photo,
