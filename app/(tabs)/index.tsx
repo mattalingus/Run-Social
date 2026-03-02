@@ -652,7 +652,8 @@ export default function DiscoverScreen() {
 
   function stepMinPace(dir: 1 | -1) {
     const next = Math.round((hMinPace + dir * PACE_STEP_30S) * 10) / 10;
-    setHMinPace(Math.max(5, Math.min(hMaxPace - PACE_STEP_30S, next)));
+    const floor = hActivityType === "ride" ? 2 : 4;
+    setHMinPace(Math.max(floor, Math.min(hMaxPace - PACE_STEP_30S, next)));
     Haptics.selectionAsync();
   }
 
@@ -1271,7 +1272,7 @@ export default function DiscoverScreen() {
             <View style={s.activityToggleRow}>
               <Pressable
                 style={[s.activityPill, hActivityType === "run" && s.activityPillActive, { flex: 1 }]}
-                onPress={() => { setHActivityType("run"); Haptics.selectionAsync(); }}
+                onPress={() => { setHActivityType("run"); setHMinPace((p) => Math.max(4, p)); Haptics.selectionAsync(); }}
               >
                 <Ionicons name="walk" size={14} color={hActivityType === "run" ? C.bg : C.textMuted} />
                 <Text style={[s.activityPillTxt, hActivityType === "run" && s.activityPillTxtActive]}>Run</Text>
@@ -1430,7 +1431,7 @@ export default function DiscoverScreen() {
             />
 
             {/* Pace Range */}
-            <Text style={s.hLabel}>Pace Range For Runners (Min/Mile)</Text>
+            <Text style={s.hLabel}>{hActivityType === "ride" ? "Pace Range For Riders (Min/Mile)" : "Pace Range For Runners (Min/Mile)"}</Text>
             <View style={{ gap: 8 }}>
               <View style={s.hPaceRow}>
                 <Text style={s.hPaceLabel}>Slowest</Text>
