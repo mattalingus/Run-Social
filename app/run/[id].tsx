@@ -818,7 +818,7 @@ export default function RunDetailScreen() {
                   color={isPlanned ? C.primary : C.text}
                 />
                 <Text style={isPlanned ? [styles.planBtnText, styles.planBtnTextActive] : styles.primaryBtnText}>
-                  {isPlanned ? "Planning to run — tap to remove" : "Plan to Run"}
+                  {isPlanned ? "I'm Not Coming" : "I Plan To Run"}
                 </Text>
               </>
             )}
