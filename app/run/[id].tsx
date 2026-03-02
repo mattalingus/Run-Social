@@ -78,6 +78,8 @@ export default function RunDetailScreen() {
   const [confirming, setConfirming] = useState(false);
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [proximityTriggered, setProximityTriggered] = useState(false);
+  const [showPlanInfoModal, setShowPlanInfoModal] = useState(false);
+  const [planInfoPage, setPlanInfoPage] = useState(0);
   const [starting, setStarting] = useState(false);
   const [hostDist, setHostDist] = useState<number | null>(null);
   const [passwordInput, setPasswordInput] = useState("");
@@ -819,7 +821,14 @@ export default function RunDetailScreen() {
               isPlanned ? [styles.planBtn, styles.planBtnActive] : styles.primaryBtn,
               { opacity: pressed || planMutation.isPending ? 0.8 : 1 },
             ]}
-            onPress={() => planMutation.mutate()}
+            onPress={() => {
+              if (isPlanned) {
+                planMutation.mutate();
+              } else {
+                setPlanInfoPage(0);
+                setShowPlanInfoModal(true);
+              }
+            }}
             disabled={planMutation.isPending}
           >
             {planMutation.isPending ? <ActivityIndicator color={isPlanned ? C.primary : C.text} /> : (
@@ -843,6 +852,160 @@ export default function RunDetailScreen() {
           </View>
         )}
       </View>
+
+      {/* ── Plan info modal (How It Works) ───────────────────────────────── */}
+      {showPlanInfoModal && (
+        <Modal transparent animationType="slide" onRequestClose={() => setShowPlanInfoModal(false)}>
+          <View style={styles.frModalWrap}>
+            <Pressable style={styles.frOverlay} onPress={() => setShowPlanInfoModal(false)} />
+            <View style={[styles.frSheet, { paddingBottom: insets.bottom + 24 }]}>
+              <View style={styles.frHandle} />
+
+              {planInfoPage === 0 ? (
+                <>
+                  <View style={styles.frHeader}>
+                    <Text style={styles.frTitle}>
+                      {run?.activity_type === "ride" ? "How Riding Works" : "How Running Works"}
+                    </Text>
+                    <Pressable onPress={() => setShowPlanInfoModal(false)} hitSlop={12}>
+                      <Feather name="x" size={18} color={C.textSecondary} />
+                    </Pressable>
+                  </View>
+                  <Text style={styles.frIntro}>
+                    {run?.activity_type === "ride"
+                      ? "Here's what happens after you tap 'I Plan To Ride'."
+                      : "Here's what happens after you tap 'I Plan To Run'."}
+                  </Text>
+                  {[
+                    {
+                      icon: "calendar" as const,
+                      title: "Reserve your spot",
+                      body: run?.activity_type === "ride"
+                        ? "Planning locks you into the ride lineup. The host can see you're coming."
+                        : "Planning locks you into the run lineup. The host can see you're coming.",
+                    },
+                    {
+                      icon: "map-pin" as const,
+                      title: "Head to the start",
+                      body: "On the day, head to the host's pin location shown on the map.",
+                    },
+                    {
+                      icon: "clock" as const,
+                      title: "Arrive within the window",
+                      body: run?.activity_type === "ride"
+                        ? "Check-in opens 1 hour before start. You're not officially in the ride until you're close to the start pin."
+                        : "Check-in opens 1 hour before start. You're not officially in the run until you're close to the start pin.",
+                    },
+                    {
+                      icon: "users" as const,
+                      title: "Go with the group",
+                      body: run?.activity_type === "ride"
+                        ? "Once checked in, you're live. Ride together and enjoy the miles."
+                        : "Once checked in, you're live. Run together and enjoy the miles.",
+                    },
+                  ].map((item) => (
+                    <View key={item.title} style={styles.frRuleRow}>
+                      <View style={styles.frRuleIcon}>
+                        <Feather name={item.icon} size={15} color={C.primary} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.frRuleTitle}>{item.title}</Text>
+                        <Text style={styles.frRuleBody}>{item.body}</Text>
+                      </View>
+                    </View>
+                  ))}
+                  <View style={styles.planInfoPageRow}>
+                    <View style={[styles.planInfoDot, styles.planInfoDotActive]} />
+                    <View style={styles.planInfoDot} />
+                  </View>
+                  <Pressable
+                    style={[styles.primaryBtn, { marginTop: 8 }]}
+                    onPress={() => setPlanInfoPage(1)}
+                  >
+                    <Text style={styles.primaryBtnText}>Next</Text>
+                    <Feather name="arrow-right" size={16} color={C.text} />
+                  </Pressable>
+                </>
+              ) : (
+                <>
+                  <View style={styles.frHeader}>
+                    <Text style={styles.frTitle}>Check-In Rules</Text>
+                    <Pressable onPress={() => setShowPlanInfoModal(false)} hitSlop={12}>
+                      <Feather name="x" size={18} color={C.textSecondary} />
+                    </Pressable>
+                  </View>
+                  <Text style={styles.frIntro}>
+                    Planning a spot doesn't make you official — arriving does.
+                  </Text>
+                  {[
+                    {
+                      icon: "navigation" as const,
+                      title: "Location is required",
+                      body: "Your phone needs location enabled so FARA can detect when you arrive near the start.",
+                    },
+                    {
+                      icon: "clock" as const,
+                      title: "1-hour window",
+                      body: "Check-in opens exactly 1 hour before the start time. Arriving earlier won't count.",
+                    },
+                    {
+                      icon: "check-circle" as const,
+                      title: "Auto check-in",
+                      body: run?.activity_type === "ride"
+                        ? "When you're within ~1 km of the host's pin during the window, you're automatically added to the live rider count."
+                        : "When you're within ~1 km of the host's pin during the window, you're automatically added to the live runner count.",
+                    },
+                    {
+                      icon: "alert-circle" as const,
+                      title: "No-shows are removed",
+                      body: "If you planned but don't check in, your spot is released for others.",
+                    },
+                  ].map((item) => (
+                    <View key={item.title} style={styles.frRuleRow}>
+                      <View style={styles.frRuleIcon}>
+                        <Feather name={item.icon} size={15} color={C.primary} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.frRuleTitle}>{item.title}</Text>
+                        <Text style={styles.frRuleBody}>{item.body}</Text>
+                      </View>
+                    </View>
+                  ))}
+                  <View style={styles.planInfoPageRow}>
+                    <View style={styles.planInfoDot} />
+                    <View style={[styles.planInfoDot, styles.planInfoDotActive]} />
+                  </View>
+                  <View style={{ flexDirection: "row", gap: 10, marginTop: 8 }}>
+                    <Pressable
+                      style={[styles.planBtn, { flex: 1 }]}
+                      onPress={() => setPlanInfoPage(0)}
+                    >
+                      <Feather name="arrow-left" size={16} color={C.textSecondary} />
+                      <Text style={styles.planBtnText}>Back</Text>
+                    </Pressable>
+                    <Pressable
+                      style={[styles.primaryBtn, { flex: 2 }]}
+                      onPress={() => {
+                        setShowPlanInfoModal(false);
+                        planMutation.mutate();
+                      }}
+                    >
+                      <Ionicons
+                        name={run?.activity_type === "ride" ? "bicycle" : "walk"}
+                        size={18}
+                        color={C.text}
+                      />
+                      <Text style={styles.primaryBtnText}>
+                        {run?.activity_type === "ride" ? "I'm In, Let's Ride!" : "I'm In, Let's Run!"}
+                      </Text>
+                    </Pressable>
+                  </View>
+                </>
+              )}
+            </View>
+          </View>
+        </Modal>
+      )}
 
       {/* ── Community rules popup ─────────────────────────────────────────── */}
       {showRulesModal && (
@@ -1041,4 +1204,7 @@ const styles = StyleSheet.create({
   frRuleIcon: { width: 32, height: 32, borderRadius: 10, backgroundColor: C.primaryMuted, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: C.primary + "44" },
   frRuleTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text, marginBottom: 2 },
   frRuleBody: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary, lineHeight: 18 },
+  planInfoPageRow: { flexDirection: "row", justifyContent: "center", gap: 6, marginTop: 16 },
+  planInfoDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.border },
+  planInfoDotActive: { backgroundColor: C.primary, width: 18 },
 });
