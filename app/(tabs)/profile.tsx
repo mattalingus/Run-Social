@@ -11,6 +11,7 @@ import {
   Modal,
   TextInput,
   Image,
+  Share,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -25,6 +26,10 @@ import { MARKER_ICONS } from "@/constants/markerIcons";
 import { ACHIEVEMENTS, type AchievementDef } from "@/constants/achievements";
 import { formatDistance } from "@/lib/formatDistance";
 import { pickAndUploadImage } from "@/lib/uploadImage";
+
+const APP_SHARE_URL = process.env.EXPO_PUBLIC_DOMAIN
+  ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
+  : "https://paceup.app";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -953,6 +958,33 @@ export default function ProfileScreen() {
             )}
           </View>
 
+          {/* ── Invite Share ─────────────────────────────────────────────── */}
+          <View style={styles.inviteDivider}>
+            <View style={styles.inviteDivLine} />
+            <Text style={styles.inviteDivTxt}>or</Text>
+            <View style={styles.inviteDivLine} />
+          </View>
+
+          <View style={styles.inviteCard}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.inviteCardTitle}>Invite to PaceUp</Text>
+              <Text style={styles.inviteCardSub}>Share a link so friends can download the app</Text>
+            </View>
+            <Pressable
+              style={({ pressed }) => [styles.inviteShareBtn, { opacity: pressed ? 0.75 : 1 }]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                Share.share({
+                  message: `Join me on PaceUp — the social running app! Download it here: ${APP_SHARE_URL}`,
+                  url: APP_SHARE_URL,
+                });
+              }}
+            >
+              <Feather name="share-2" size={15} color={C.bg} />
+              <Text style={styles.inviteShareBtnTxt}>Share Link</Text>
+            </Pressable>
+          </View>
+
           {friendSearch.length >= 2 && searchResults.length > 0 && (
             <View style={styles.friendsSection}>
               <Text style={styles.friendsSectionTitle}>Results</Text>
@@ -1377,6 +1409,23 @@ const styles = StyleSheet.create({
     borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2,
   },
   topRunTypeTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 10, textTransform: "uppercase" as const, letterSpacing: 0.4 },
+
+  inviteDivider: { flexDirection: "row", alignItems: "center", gap: 10, marginVertical: 2 },
+  inviteDivLine: { flex: 1, height: 1, backgroundColor: C.border },
+  inviteDivTxt: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted },
+  inviteCard: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: C.surface, borderRadius: 14, padding: 14,
+    borderWidth: 1, borderColor: C.border,
+  },
+  inviteCardTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text, marginBottom: 2 },
+  inviteCardSub: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary },
+  inviteShareBtn: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    backgroundColor: C.primary, borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 9, flexShrink: 0,
+  },
+  inviteShareBtnTxt: { fontFamily: "Outfit_700Bold", fontSize: 13, color: C.bg },
 });
 
 const devStyles = StyleSheet.create({
