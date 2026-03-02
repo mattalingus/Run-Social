@@ -199,6 +199,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/users/match-contacts", requireAuth, async (req, res) => {
+    try {
+      const { emails } = req.body as { emails: string[] };
+      if (!Array.isArray(emails)) return res.status(400).json({ message: "emails must be an array" });
+      const capped = emails.slice(0, 500);
+      const matches = await storage.matchUsersByEmails(capped, req.session.userId!);
+      res.json(matches);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.get("/api/users/:id/profile", requireAuth, async (req, res) => {
     try {
       const profile = await storage.getPublicUserProfile(req.params.id);

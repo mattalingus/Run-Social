@@ -26,6 +26,7 @@ import { MARKER_ICONS } from "@/constants/markerIcons";
 import { ACHIEVEMENTS, type AchievementDef } from "@/constants/achievements";
 import { formatDistance } from "@/lib/formatDistance";
 import { pickAndUploadImage } from "@/lib/uploadImage";
+import * as Contacts from "expo-contacts";
 
 const APP_SHARE_URL = process.env.EXPO_PUBLIC_DOMAIN
   ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
@@ -132,6 +133,9 @@ export default function ProfileScreen() {
   const [uploadingProfile, setUploadingProfile] = useState(false);
   const [uploadingPin, setUploadingPin] = useState(false);
   const [topRunsModal, setTopRunsModal] = useState<"longest" | "fastest" | null>(null);
+  const [contactMatches, setContactMatches] = useState<any[]>([]);
+  const [contactsLoading, setContactsLoading] = useState(false);
+  const [contactsChecked, setContactsChecked] = useState(false);
   const [friendSearch, setFriendSearch] = useState("");
   const [showAddFriend, setShowAddFriend] = useState(false);
   const [showFriendList, setShowFriendList] = useState(false);
@@ -930,13 +934,13 @@ export default function ProfileScreen() {
       </Modal>
 
       {/* ── Add Friend Modal ───────────────────────────────────────────────── */}
-      <Modal visible={showAddFriend} transparent animationType="slide" onRequestClose={() => { setShowAddFriend(false); setFriendSearch(""); }}>
+      <Modal visible={showAddFriend} transparent animationType="slide" onRequestClose={() => { setShowAddFriend(false); setFriendSearch(""); setContactsChecked(false); setContactMatches([]); }}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
-        <Pressable style={styles.modalOverlay} onPress={() => { setShowAddFriend(false); setFriendSearch(""); }} />
+        <Pressable style={styles.modalOverlay} onPress={() => { setShowAddFriend(false); setFriendSearch(""); setContactsChecked(false); setContactMatches([]); }} />
         <View style={[styles.modalSheet, styles.friendModalSheet, { paddingBottom: insets.bottom + 24 }]}>
           <View style={styles.modalTitleRow}>
             <Text style={styles.modalTitle}>Add Friends</Text>
-            <Pressable onPress={() => { setShowAddFriend(false); setFriendSearch(""); }} hitSlop={12}>
+            <Pressable onPress={() => { setShowAddFriend(false); setFriendSearch(""); setContactsChecked(false); setContactMatches([]); }} hitSlop={12}>
               <Feather name="x" size={20} color={C.textMuted} />
             </Pressable>
           </View>
@@ -957,6 +961,108 @@ export default function ProfileScreen() {
               </Pressable>
             )}
           </View>
+
+          {/* ── Find from Contacts ───────────────────────────────────────── */}
+          {Platform.OS !== "web" && (
+            <View style={styles.contactsSection}>
+              <View style={styles.contactsCard}>
+                <View style={styles.contactsCardIcon}>
+                  <Feather name="users" size={18} color={C.primary} />
+                </View>
+                <View style={styles.contactsCardInfo}>
+                  <Text style={styles.contactsCardTitle}>Find from Contacts</Text>
+                  <Text style={styles.contactsCardSub}>See which of your contacts use PaceUp</Text>
+                </View>
+                <Pressable
+                  style={({ pressed }) => [styles.contactsFindBtn, { opacity: pressed ? 0.75 : 1 }]}
+                  disabled={contactsLoading}
+                  onPress={async () => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setContactsLoading(true);
+                    try {
+                      const { status } = await Contacts.requestPermissionsAsync();
+                      if (status !== "granted") {
+                        Alert.alert(
+                          "Contacts Access",
+                          "To find friends, allow PaceUp to access your contacts in Settings.",
+                          [{ text: "OK" }]
+                        );
+                        setContactsLoading(false);
+                        return;
+                      }
+                      const { data } = await Contacts.getContactsAsync({ fields: [Contacts.Fields.Emails] });
+                      const emails: string[] = [];
+                      for (const c of data) {
+                        for (const e of c.emails ?? []) {
+                          if (e.email) emails.push(e.email.toLowerCase());
+                        }
+                      }
+                      const unique = [...new Set(emails)];
+                      const res = await apiRequest("POST", "/api/users/match-contacts", { emails: unique });
+                      const matches = await res.json();
+                      setContactMatches(matches);
+                      setContactsChecked(true);
+                    } catch {
+                      Alert.alert("Error", "Could not read contacts. Please try again.");
+                    }
+                    setContactsLoading(false);
+                  }}
+                >
+                  {contactsLoading ? (
+                    <ActivityIndicator size="small" color={C.bg} />
+                  ) : (
+                    <Text style={styles.contactsFindBtnTxt}>{contactsChecked ? "Refresh" : "Find"}</Text>
+                  )}
+                </Pressable>
+              </View>
+
+              {contactsChecked && (
+                <View style={{ gap: 8 }}>
+                  {contactMatches.length === 0 ? (
+                    <View style={styles.searchHint}>
+                      <Text style={styles.searchHintTxt}>None of your contacts are on PaceUp yet</Text>
+                    </View>
+                  ) : (
+                    <>
+                      <Text style={styles.friendsSectionTitle}>
+                        {contactMatches.length} runner{contactMatches.length !== 1 ? "s" : ""} from your contacts
+                      </Text>
+                      {contactMatches.map((u: any) => (
+                        <View key={u.id} style={styles.friendCard}>
+                          <View style={styles.friendAvatar}>
+                            {u.photo_url
+                              ? <Image source={{ uri: u.photo_url }} style={styles.friendAvatarImg} />
+                              : <Text style={styles.friendAvatarTxt}>{u.name.charAt(0).toUpperCase()}</Text>}
+                          </View>
+                          <View style={styles.friendInfo}>
+                            <Text style={styles.friendName}>{u.name}</Text>
+                            <Text style={styles.friendStat}>{u.completed_runs} runs · {formatDistance(u.total_miles)} mi</Text>
+                          </View>
+                          {u.friendship_status === "friends" ? (
+                            <View style={styles.friendStatusBadge}>
+                              <Feather name="check" size={12} color={C.primary} />
+                              <Text style={styles.friendStatusTxt}>Friends</Text>
+                            </View>
+                          ) : u.friendship_status === "pending_sent" ? (
+                            <View style={[styles.friendStatusBadge, { backgroundColor: C.border }]}>
+                              <Text style={[styles.friendStatusTxt, { color: C.textSecondary }]}>Pending</Text>
+                            </View>
+                          ) : (
+                            <Pressable
+                              style={styles.friendAddBtn}
+                              onPress={() => sendRequestMutation.mutate(u.id)}
+                            >
+                              <Feather name="user-plus" size={16} color={C.bg} />
+                            </Pressable>
+                          )}
+                        </View>
+                      ))}
+                    </>
+                  )}
+                </View>
+              )}
+            </View>
+          )}
 
           {/* ── Invite Share ─────────────────────────────────────────────── */}
           <View style={styles.inviteDivider}>
@@ -1426,6 +1532,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 9, flexShrink: 0,
   },
   inviteShareBtnTxt: { fontFamily: "Outfit_700Bold", fontSize: 13, color: C.bg },
+
+  contactsSection: { gap: 10 },
+  contactsCard: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: C.surface, borderRadius: 14, padding: 14,
+    borderWidth: 1, borderColor: C.border,
+  },
+  contactsCardIcon: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: C.primaryMuted, alignItems: "center", justifyContent: "center",
+    flexShrink: 0,
+  },
+  contactsCardInfo: { flex: 1, gap: 2 },
+  contactsCardTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text },
+  contactsCardSub: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary },
+  contactsFindBtn: {
+    backgroundColor: C.primary, borderRadius: 12,
+    paddingHorizontal: 16, paddingVertical: 9, flexShrink: 0,
+    minWidth: 66, alignItems: "center", justifyContent: "center",
+  },
+  contactsFindBtnTxt: { fontFamily: "Outfit_700Bold", fontSize: 13, color: C.bg },
 });
 
 const devStyles = StyleSheet.create({

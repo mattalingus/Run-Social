@@ -1428,6 +1428,33 @@ export async function getFriendshipStatus(currentUserId: string, targetUserId: s
   return { status: "pending_received" as const, friendshipId: row.id };
 }
 
+export async function matchUsersByEmails(emails: string[], currentUserId: string) {
+  if (!emails.length) return [];
+  const lower = emails.map((e) => e.toLowerCase());
+  const res = await pool.query(
+    `SELECT id, name, username, photo_url, total_miles, completed_runs
+     FROM users
+     WHERE email = ANY($1) AND id != $2`,
+    [lower, currentUserId]
+  );
+  const results = await Promise.all(
+    res.rows.map(async (u: any) => {
+      const fs = await getFriendshipStatus(currentUserId, u.id);
+      return {
+        id: u.id as string,
+        name: u.name as string,
+        username: u.username as string | null,
+        photo_url: u.photo_url as string | null,
+        total_miles: parseFloat(u.total_miles ?? 0),
+        completed_runs: parseInt(u.completed_runs ?? 0),
+        friendship_status: fs.status,
+        friendship_id: fs.friendshipId,
+      };
+    })
+  );
+  return results;
+}
+
 export async function getUserTopRuns(userId: string) {
   const longestRes = await pool.query(
     `SELECT dist, date, pace, title, run_type FROM (
