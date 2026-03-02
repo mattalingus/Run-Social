@@ -101,6 +101,7 @@ export async function initDb() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS name_changed_at TIMESTAMPTZ DEFAULT NULL;
     ALTER TABLE runs ADD COLUMN IF NOT EXISTS is_strict BOOLEAN DEFAULT false;
     ALTER TABLE runs ADD COLUMN IF NOT EXISTS run_style TEXT DEFAULT NULL;
+    ALTER TABLE runs ADD COLUMN IF NOT EXISTS activity_type TEXT DEFAULT 'run';
     ALTER TABLE users ALTER COLUMN avg_pace SET DEFAULT NULL;
     ALTER TABLE users ALTER COLUMN avg_distance SET DEFAULT NULL;
 
@@ -317,14 +318,16 @@ export async function createRun(data: {
   invitePassword?: string;
   isStrict?: boolean;
   runStyle?: string;
+  activityType?: string;
 }) {
   const inviteToken = data.privacy === "private"
     ? Math.random().toString(36).substring(2, 10).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase()
     : null;
+  const activityType = data.activityType === "ride" ? "ride" : "run";
   const result = await pool.query(
-    `INSERT INTO runs (host_id, title, description, privacy, date, location_lat, location_lng, location_name, min_distance, max_distance, min_pace, max_pace, tags, max_participants, invite_token, invite_password, is_strict, run_style)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
-    [data.hostId, data.title, data.description || null, data.privacy, data.date, data.locationLat, data.locationLng, data.locationName, data.minDistance, data.maxDistance, data.minPace, data.maxPace, data.tags, data.maxParticipants, inviteToken, data.invitePassword || null, data.isStrict ?? false, data.runStyle || null]
+    `INSERT INTO runs (host_id, title, description, privacy, date, location_lat, location_lng, location_name, min_distance, max_distance, min_pace, max_pace, tags, max_participants, invite_token, invite_password, is_strict, run_style, activity_type)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING *`,
+    [data.hostId, data.title, data.description || null, data.privacy, data.date, data.locationLat, data.locationLng, data.locationName, data.minDistance, data.maxDistance, data.minPace, data.maxPace, data.tags, data.maxParticipants, inviteToken, data.invitePassword || null, data.isStrict ?? false, data.runStyle || null, activityType]
   );
   return result.rows[0];
 }

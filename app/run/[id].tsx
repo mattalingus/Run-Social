@@ -830,7 +830,7 @@ export default function RunDetailScreen() {
                   color={isPlanned ? C.primary : C.text}
                 />
                 <Text style={isPlanned ? [styles.planBtnText, styles.planBtnTextActive] : styles.primaryBtnText}>
-                  {isPlanned ? "I'm Not Coming" : "I Plan To Run"}
+                  {isPlanned ? "I'm Not Coming" : run?.activity_type === "ride" ? "I Plan To Ride" : "I Plan To Run"}
                 </Text>
               </>
             )}

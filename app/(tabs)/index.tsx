@@ -89,6 +89,9 @@ interface Run {
   privacy: string;
   host_hosted_runs?: number;
   host_photo?: string;
+  is_active?: boolean;
+  run_style?: string;
+  activity_type?: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -488,7 +491,7 @@ function RunCard({
 
           <View style={s.cardStats}>
             <View style={s.stat}>
-              <Ionicons name="walk" size={12} color={C.orange} />
+              <Ionicons name={run.activity_type === "ride" ? "bicycle" : "walk"} size={12} color={C.orange} />
               <Text style={s.statLabel}>{formatPace(run.min_pace)}–{formatPace(run.max_pace)}</Text>
               <Text style={s.statUnit}>/mi</Text>
             </View>
@@ -536,6 +539,7 @@ export default function DiscoverScreen() {
   const [search, setSearch] = useState("");
   const [sortOption, setSortOption] = useState<SortOption>("soonest");
   const [showSort, setShowSort] = useState(false);
+  const [activityFilter, setActivityFilter] = useState<"run" | "ride">("run");
   const [showFilter, setShowFilter] = useState(false);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
 
@@ -562,13 +566,14 @@ export default function DiscoverScreen() {
   const [isGeocodingPin, setIsGeocodingPin] = useState(false);
   const [hAmPm, setHAmPm] = useState<"AM" | "PM">("AM");
   const [hStrict, setHStrict] = useState(false);
+  const [hActivityType, setHActivityType] = useState<"run" | "ride">("run");
 
   function resetHostForm() {
     setHTitle(""); setHLocation(""); setHDate(""); setHTime("");
     setHPrivacy("public"); setHPassword(""); setHMaxParticipants(20);
     setHTags(["General"]); setHDist("3"); setHMinPace(8); setHMaxPace(12);
     setHLocationLat(null); setHLocationLng(null); setPinCoord(null); setHostPage("form");
-    setHAmPm("AM"); setHStrict(false);
+    setHAmPm("AM"); setHStrict(false); setHActivityType("run");
   }
 
   function handleDateChange(text: string) {
@@ -700,6 +705,7 @@ export default function DiscoverScreen() {
         maxParticipants: hMaxParticipants === 0 ? 9999 : hMaxParticipants,
         invitePassword: hPrivacy === "private" && hPassword.trim() ? hPassword.trim() : undefined,
         isStrict: hStrict,
+        activityType: hActivityType,
       });
       return res.json();
     },
@@ -836,7 +842,8 @@ export default function DiscoverScreen() {
         (applied.visibility === "public" && r.privacy === "public") ||
         (applied.visibility === "friends" && friendIdSet.has(r.host_id));
 
-      return matchSearch && matchPace && matchDist && matchProx && matchStyle && matchVisibility;
+      const matchActivity = (r.activity_type ?? "run") === activityFilter;
+      return matchSearch && matchPace && matchDist && matchProx && matchStyle && matchVisibility && matchActivity;
     });
 
     switch (sortOption) {
@@ -954,7 +961,7 @@ export default function DiscoverScreen() {
             style={s.searchInput}
             value={search}
             onChangeText={(t) => { setSearch(t); setShowSort(false); }}
-            placeholder="Search runs, hosts, locations..."
+            placeholder={activityFilter === "ride" ? "Search rides, hosts, locations..." : "Search runs, hosts, locations..."}
             placeholderTextColor={C.textMuted}
           />
           {search.length > 0 && (
@@ -962,6 +969,24 @@ export default function DiscoverScreen() {
               <Feather name="x" size={15} color={C.textMuted} />
             </Pressable>
           )}
+        </View>
+
+        {/* Activity toggle */}
+        <View style={s.activityToggleRow}>
+          <Pressable
+            style={[s.activityPill, activityFilter === "run" && s.activityPillActive]}
+            onPress={() => { setActivityFilter("run"); Haptics.selectionAsync(); }}
+          >
+            <Ionicons name="walk" size={13} color={activityFilter === "run" ? C.bg : C.textMuted} />
+            <Text style={[s.activityPillTxt, activityFilter === "run" && s.activityPillTxtActive]}>Runs</Text>
+          </Pressable>
+          <Pressable
+            style={[s.activityPill, activityFilter === "ride" && s.activityPillActive]}
+            onPress={() => { setActivityFilter("ride"); Haptics.selectionAsync(); }}
+          >
+            <Ionicons name="bicycle" size={13} color={activityFilter === "ride" ? C.bg : C.textMuted} />
+            <Text style={[s.activityPillTxt, activityFilter === "ride" && s.activityPillTxtActive]}>Rides</Text>
+          </Pressable>
         </View>
       </View>
 
@@ -1055,15 +1080,15 @@ export default function DiscoverScreen() {
                 </ScrollView>
               </View>
             )}
-            {user && plannedRuns.length > 0 && (
+            {user && plannedRuns.filter((r) => (r.activity_type ?? "run") === activityFilter).length > 0 && (
               <View style={s.savedSection}>
-                <Text style={s.savedSectionTitle}>Planning to Run</Text>
+                <Text style={s.savedSectionTitle}>{activityFilter === "ride" ? "Planning to Ride" : "Planning to Run"}</Text>
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={s.savedScroll}
                 >
-                  {plannedRuns.map((r) => (
+                  {plannedRuns.filter((r) => (r.activity_type ?? "run") === activityFilter).map((r) => (
                     <Pressable
                       key={r.id}
                       style={({ pressed }) => [s.plannedCard, { opacity: pressed ? 0.85 : 1 }]}
@@ -1074,7 +1099,7 @@ export default function DiscoverScreen() {
                     >
                       <View style={s.plannedCardHeader}>
                         <View style={s.plannedDot} />
-                        <Text style={s.plannedLabel}>Planning to run</Text>
+                        <Text style={s.plannedLabel}>{activityFilter === "ride" ? "Planning to ride" : "Planning to run"}</Text>
                         <Pressable
                           hitSlop={10}
                           onPress={(e) => { e.stopPropagation?.(); removePlanMutation.mutate(r.id); }}
@@ -1100,7 +1125,7 @@ export default function DiscoverScreen() {
                 </ScrollView>
               </View>
             )}
-            <Text style={s.nearbyLabel}>Upcoming Runs Nearby</Text>
+            <Text style={s.nearbyLabel}>{activityFilter === "ride" ? "Upcoming Rides Nearby" : "Upcoming Runs Nearby"}</Text>
             </View>
           }
           renderItem={({ item }) => (
@@ -1119,12 +1144,12 @@ export default function DiscoverScreen() {
           )}
           ListEmptyComponent={
             <View style={s.empty}>
-              <Ionicons name="walk-outline" size={44} color={C.textMuted} />
-              <Text style={s.emptyTitle}>No runs found</Text>
+              <Ionicons name={activityFilter === "ride" ? "bicycle-outline" : "walk-outline"} size={44} color={C.textMuted} />
+              <Text style={s.emptyTitle}>{activityFilter === "ride" ? "No rides found" : "No runs found"}</Text>
               <Text style={s.emptySub}>
                 {search || isFiltered
                   ? "Try adjusting your filters"
-                  : "Check back soon for upcoming runs"}
+                  : activityFilter === "ride" ? "Check back soon for upcoming rides" : "Check back soon for upcoming runs"}
               </Text>
             </View>
           }
@@ -1238,13 +1263,32 @@ export default function DiscoverScreen() {
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
+            {/* Activity Type */}
+            <Text style={s.hLabel}>Activity Type</Text>
+            <View style={s.activityToggleRow}>
+              <Pressable
+                style={[s.activityPill, hActivityType === "run" && s.activityPillActive, { flex: 1 }]}
+                onPress={() => { setHActivityType("run"); Haptics.selectionAsync(); }}
+              >
+                <Ionicons name="walk" size={14} color={hActivityType === "run" ? C.bg : C.textMuted} />
+                <Text style={[s.activityPillTxt, hActivityType === "run" && s.activityPillTxtActive]}>Run</Text>
+              </Pressable>
+              <Pressable
+                style={[s.activityPill, hActivityType === "ride" && s.activityPillActive, { flex: 1 }]}
+                onPress={() => { setHActivityType("ride"); Haptics.selectionAsync(); }}
+              >
+                <Ionicons name="bicycle" size={14} color={hActivityType === "ride" ? C.bg : C.textMuted} />
+                <Text style={[s.activityPillTxt, hActivityType === "ride" && s.activityPillTxtActive]}>Bike Ride</Text>
+              </Pressable>
+            </View>
+
             {/* Title */}
-            <Text style={s.hLabel}>Run Title *</Text>
+            <Text style={s.hLabel}>{hActivityType === "ride" ? "Ride Title *" : "Run Title *"}</Text>
             <TextInput
               style={s.hInput}
               value={hTitle}
               onChangeText={setHTitle}
-              placeholder="e.g. Morning 5K in the Park"
+              placeholder={hActivityType === "ride" ? "e.g. Sunday Morning Group Ride" : "e.g. Morning 5K in the Park"}
               placeholderTextColor={C.textMuted}
               maxLength={60}
             />
@@ -1568,6 +1612,16 @@ const s = StyleSheet.create({
     gap: 10,
   },
   searchInput: { flex: 1, fontFamily: "Outfit_400Regular", fontSize: 14, color: C.text },
+
+  activityToggleRow: { flexDirection: "row", gap: 8, marginTop: 10 },
+  activityPill: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+    backgroundColor: C.surface, borderWidth: 1.5, borderColor: C.border,
+  },
+  activityPillActive: { backgroundColor: C.primary, borderColor: C.primary },
+  activityPillTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textMuted },
+  activityPillTxtActive: { color: C.bg },
 
   sortOverlay: {
     position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
