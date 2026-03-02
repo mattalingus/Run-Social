@@ -234,6 +234,25 @@ export async function initDb() {
       photo_url TEXT NOT NULL,
       created_at TIMESTAMP DEFAULT NOW()
     );
+
+    CREATE TABLE IF NOT EXISTS crews (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      name TEXT NOT NULL,
+      description TEXT,
+      emoji TEXT DEFAULT '🏃',
+      created_by VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS crew_members (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      crew_id VARCHAR NOT NULL REFERENCES crews(id) ON DELETE CASCADE,
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      status TEXT DEFAULT 'pending',
+      invited_by VARCHAR REFERENCES users(id),
+      joined_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(crew_id, user_id)
+    );
   `);
 }
 
@@ -1517,4 +1536,121 @@ export async function getUserRunRecords(userId: string) {
     longest_run: longestRes.rows[0]?.longest ? parseFloat(longestRes.rows[0].longest) : null,
     fastest_pace: fastestRes.rows[0]?.fastest_pace ? parseFloat(fastestRes.rows[0].fastest_pace) : null,
   };
+}
+
+// ─── Crew Storage ─────────────────────────────────────────────────────────────
+
+export async function createCrew(data: { name: string; description?: string; emoji: string; createdBy: string }) {
+  const res = await pool.query(
+    `INSERT INTO crews (name, description, emoji, created_by) VALUES ($1, $2, $3, $4) RETURNING *`,
+    [data.name, data.description ?? null, data.emoji, data.createdBy]
+  );
+  const crew = res.rows[0];
+  await pool.query(
+    `INSERT INTO crew_members (crew_id, user_id, status, invited_by) VALUES ($1, $2, 'member', $3)`,
+    [crew.id, data.createdBy, data.createdBy]
+  );
+  return crew;
+}
+
+export async function getCrewsByUser(userId: string) {
+  const res = await pool.query(
+    `SELECT c.*, cm.status,
+       (SELECT COUNT(*) FROM crew_members WHERE crew_id = c.id AND status = 'member') AS member_count,
+       u.name AS created_by_name
+     FROM crews c
+     JOIN crew_members cm ON cm.crew_id = c.id AND cm.user_id = $1 AND cm.status = 'member'
+     JOIN users u ON u.id = c.created_by
+     ORDER BY c.created_at DESC`,
+    [userId]
+  );
+  return res.rows;
+}
+
+export async function getCrewById(crewId: string) {
+  const crew = await pool.query(`SELECT * FROM crews WHERE id = $1`, [crewId]);
+  if (!crew.rows[0]) return null;
+  const members = await pool.query(
+    `SELECT cm.*, u.name, u.photo_url, u.avg_pace, u.hosted_runs FROM crew_members cm
+     JOIN users u ON u.id = cm.user_id
+     WHERE cm.crew_id = $1 AND cm.status = 'member'
+     ORDER BY cm.joined_at ASC`,
+    [crewId]
+  );
+  return { ...crew.rows[0], members: members.rows };
+}
+
+export async function getCrewInvites(userId: string) {
+  const res = await pool.query(
+    `SELECT cm.*, c.name AS crew_name, c.emoji, c.description,
+       (SELECT COUNT(*) FROM crew_members WHERE crew_id = c.id AND status = 'member') AS member_count,
+       u.name AS invited_by_name
+     FROM crew_members cm
+     JOIN crews c ON c.id = cm.crew_id
+     JOIN users u ON u.id = cm.invited_by
+     WHERE cm.user_id = $1 AND cm.status = 'pending'
+     ORDER BY cm.joined_at DESC`,
+    [userId]
+  );
+  return res.rows;
+}
+
+export async function respondToCrewInvite(crewId: string, userId: string, accept: boolean) {
+  if (accept) {
+    await pool.query(
+      `UPDATE crew_members SET status = 'member' WHERE crew_id = $1 AND user_id = $2`,
+      [crewId, userId]
+    );
+  } else {
+    await pool.query(
+      `DELETE FROM crew_members WHERE crew_id = $1 AND user_id = $2`,
+      [crewId, userId]
+    );
+  }
+}
+
+export async function inviteUserToCrew(crewId: string, userId: string, invitedBy: string) {
+  await pool.query(
+    `INSERT INTO crew_members (crew_id, user_id, status, invited_by)
+     VALUES ($1, $2, 'pending', $3)
+     ON CONFLICT (crew_id, user_id) DO NOTHING`,
+    [crewId, userId, invitedBy]
+  );
+}
+
+export async function leaveCrewById(crewId: string, userId: string) {
+  await pool.query(`DELETE FROM crew_members WHERE crew_id = $1 AND user_id = $2`, [crewId, userId]);
+}
+
+export async function getCrewRuns(crewId: string) {
+  const members = await pool.query(
+    `SELECT user_id FROM crew_members WHERE crew_id = $1 AND status = 'member'`,
+    [crewId]
+  );
+  if (members.rows.length === 0) return [];
+  const memberIds = members.rows.map((m: any) => m.user_id);
+  const placeholders = memberIds.map((_: any, i: number) => `$${i + 1}`).join(", ");
+  const res = await pool.query(
+    `SELECT r.*, u.name AS host_name, u.photo_url AS host_photo,
+       (SELECT COUNT(*) FROM run_participants WHERE run_id = r.id) AS participant_count
+     FROM runs r
+     JOIN users u ON u.id = r.host_id
+     WHERE r.host_id IN (${placeholders})
+       AND r.date > NOW()
+       AND r.privacy != 'solo'
+     ORDER BY r.date ASC`,
+    memberIds
+  );
+  return res.rows;
+}
+
+export async function searchUsersForInvite(query: string, excludeIds: string[]) {
+  const res = await pool.query(
+    `SELECT id, name, photo_url, hosted_runs FROM users
+     WHERE (LOWER(name) LIKE $1 OR LOWER(email) LIKE $1)
+       AND id != ALL($2::varchar[])
+     LIMIT 10`,
+    [`%${query.toLowerCase()}%`, excludeIds]
+  );
+  return res.rows;
 }

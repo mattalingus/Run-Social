@@ -33,6 +33,7 @@ app/
     index.web.tsx      - Web fallback (list view, no maps)
     discover.tsx       - Run discovery with search & filter
     solo.tsx           - Solo running: goal tracker, performance rankings, plan runs + local notifications
+    crew.tsx           - Crew tab: create/join crews, invite users, view upcoming crew runs filtered by activity type
     profile.tsx        - User profile, goals, achievements, history
   run/
     [id].tsx           - Run detail screen (join, leave, complete, rate, host start/view live)

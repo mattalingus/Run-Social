@@ -890,6 +890,90 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ─── Crew Routes ────────────────────────────────────────────────────────────
+
+  app.get("/api/crews", requireAuth, async (req, res) => {
+    try {
+      const crews = await storage.getCrewsByUser(req.session.userId!);
+      res.json(crews);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/crews", requireAuth, async (req, res) => {
+    try {
+      const { name, description, emoji } = req.body;
+      if (!name?.trim()) return res.status(400).json({ message: "Name is required" });
+      const crew = await storage.createCrew({ name: name.trim(), description, emoji: emoji || "🏃", createdBy: req.session.userId! });
+      res.json(crew);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/crew-invites", requireAuth, async (req, res) => {
+    try {
+      const invites = await storage.getCrewInvites(req.session.userId!);
+      res.json(invites);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/crew-invites/:crewId/respond", requireAuth, async (req, res) => {
+    try {
+      const { accept } = req.body;
+      await storage.respondToCrewInvite(req.params.crewId, req.session.userId!, !!accept);
+      res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/crews/:id", requireAuth, async (req, res) => {
+    try {
+      const crew = await storage.getCrewById(req.params.id);
+      if (!crew) return res.status(404).json({ message: "Crew not found" });
+      res.json(crew);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/crews/:id/invite", requireAuth, async (req, res) => {
+    try {
+      const { userId } = req.body;
+      if (!userId) return res.status(400).json({ message: "userId required" });
+      await storage.inviteUserToCrew(req.params.id, userId, req.session.userId!);
+      const invitedUser = await storage.getUserById(userId);
+      const crew = await storage.getCrewById(req.params.id);
+      if (invitedUser?.push_token && crew) {
+        const inviter = await storage.getUserById(req.session.userId!);
+        sendPushNotification(
+          invitedUser.push_token,
+          `You've been invited to ${crew.name} 🏃`,
+          `${inviter?.name ?? "Someone"} invited you to join their crew`,
+          { crewId: req.params.id }
+        );
+      }
+      res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.delete("/api/crews/:id/leave", requireAuth, async (req, res) => {
+    try {
+      await storage.leaveCrewById(req.params.id, req.session.userId!);
+      res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/crews/:id/runs", requireAuth, async (req, res) => {
+    try {
+      const runs = await storage.getCrewRuns(req.params.id);
+      res.json(runs);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/users/search", requireAuth, async (req, res) => {
+    try {
+      const q = (req.query.q as string) || "";
+      if (q.length < 2) return res.json([]);
+      const users = await storage.searchUsersForInvite(q, [req.session.userId!]);
+      res.json(users);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
   app.post("/api/admin/seed-runs", async (req, res) => {
     try {
       const { count = 20 } = req.body;
