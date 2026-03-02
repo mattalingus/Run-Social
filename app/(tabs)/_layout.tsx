@@ -6,15 +6,17 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 const TAB_BG      = "#0B1A16";
 const ACTIVE_TINT = "#4EB082";
 const MUTED_TINT  = "#3A5847";
+const PILL_H      = 60;
+const PILL_RADIUS = 30;
+const PILL_MX     = 40;
 
-function SolidTabBarBackground() {
-  return <View style={styles.tabBarBg} />;
+function PillBackground() {
+  return <View style={styles.pill} />;
 }
 
 export default function TabLayout() {
-  const insets  = useSafeAreaInsets();
-  const isWeb   = Platform.OS === "web";
-  const tabBarHeight = (isWeb ? 50 : 56) + insets.bottom;
+  const insets = useSafeAreaInsets();
+  const isWeb  = Platform.OS === "web";
 
   return (
     <Tabs
@@ -23,24 +25,28 @@ export default function TabLayout() {
         tabBarActiveTintColor:   ACTIVE_TINT,
         tabBarInactiveTintColor: MUTED_TINT,
         tabBarStyle: {
-          position:        "absolute",
-          backgroundColor: TAB_BG,
-          borderTopWidth:  0,
-          height:          tabBarHeight,
-          elevation:       0,
-          shadowColor:     "transparent",
-          shadowOpacity:   0,
-          shadowRadius:    0,
-          shadowOffset:    { width: 0, height: 0 },
+          position:     "absolute",
+          height:       PILL_H,
+          left:         isWeb ? 140 : PILL_MX,
+          right:        isWeb ? 140 : PILL_MX,
+          bottom:       insets.bottom + (isWeb ? 34 : 16),
+          borderRadius: PILL_RADIUS,
+          borderTopWidth: 0,
+          backgroundColor: "transparent",
+          elevation:    10,
+          shadowColor:  "#000",
+          shadowOpacity: 0.35,
+          shadowRadius: 16,
+          shadowOffset: { width: 0, height: 6 },
         },
-        tabBarBackground: () => <SolidTabBarBackground />,
+        tabBarBackground: () => <PillBackground />,
         tabBarLabelStyle: {
-          fontFamily: "Outfit_600SemiBold",
-          fontSize:   11,
-          marginBottom: 2,
+          fontFamily:   "Outfit_600SemiBold",
+          fontSize:     11,
+          marginBottom: 4,
         },
-        tabBarIconStyle:  { marginTop: 4 },
-        tabBarItemStyle:  { paddingTop: 0, paddingBottom: 0 },
+        tabBarIconStyle: { marginTop: 4 },
+        tabBarItemStyle: { paddingTop: 0, paddingBottom: 0 },
       }}
     >
       <Tabs.Screen
@@ -48,7 +54,7 @@ export default function TabLayout() {
         options={{
           title: "Discover",
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "search" : "search-outline"} size={23} color={color} />
+            <Ionicons name={focused ? "search" : "search-outline"} size={22} color={color} />
           ),
         }}
       />
@@ -57,7 +63,7 @@ export default function TabLayout() {
         options={{
           title: "Solo",
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "stopwatch" : "stopwatch-outline"} size={23} color={color} />
+            <Ionicons name={focused ? "stopwatch" : "stopwatch-outline"} size={22} color={color} />
           ),
         }}
       />
@@ -66,7 +72,7 @@ export default function TabLayout() {
         options={{
           title: "Profile",
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "person" : "person-outline"} size={23} color={color} />
+            <Ionicons name={focused ? "person" : "person-outline"} size={22} color={color} />
           ),
         }}
       />
@@ -75,10 +81,12 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
-  tabBarBg: {
+  pill: {
     flex:            1,
     backgroundColor: TAB_BG,
-    borderTopWidth:  1,
-    borderTopColor:  "#162820",
+    borderRadius:    PILL_RADIUS,
+    overflow:        "hidden",
+    borderWidth:     1,
+    borderColor:     "#1E3528",
   },
 });

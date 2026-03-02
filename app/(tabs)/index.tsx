@@ -1380,7 +1380,7 @@ export default function DiscoverScreen() {
       ) : (
         <Pressable
           testID="map-fab"
-          style={[s.fab, { bottom: insets.bottom + 42 }]}
+          style={[s.fab, { bottom: insets.bottom + 92 }]}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
             goToMap();
