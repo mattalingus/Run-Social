@@ -16,7 +16,7 @@ import {
   Image,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -768,17 +768,28 @@ export default function DiscoverScreen() {
 
   const { data: plannedRuns = [] } = useQuery<Run[]>({
     queryKey: ["/api/runs/planned"],
-    staleTime: 30_000,
+    staleTime: 0,
     enabled: !!user,
   });
 
   const removePlanMutation = useMutation({
     mutationFn: (runId: string) => apiRequest("POST", `/api/runs/${runId}/plan`),
     onSuccess: (_data, runId) => {
+      qc.setQueryData<Run[]>(["/api/runs/planned"], (old) =>
+        old ? old.filter((r) => r.id !== runId) : []
+      );
       qc.invalidateQueries({ queryKey: ["/api/runs/planned"] });
       qc.invalidateQueries({ queryKey: ["/api/runs", runId, "status"] });
     },
   });
+
+  useFocusEffect(
+    useCallback(() => {
+      if (user) {
+        qc.invalidateQueries({ queryKey: ["/api/runs/planned"] });
+      }
+    }, [user, qc])
+  );
 
   const friendIdSet = useMemo(
     () => new Set(friends.map((f) => f.id)),

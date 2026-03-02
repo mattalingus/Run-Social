@@ -174,7 +174,19 @@ export default function RunDetailScreen() {
 
   const planMutation = useMutation({
     mutationFn: () => apiRequest("POST", `/api/runs/${id}/plan`),
-    onSuccess: () => {
+    onSuccess: async (res) => {
+      const body = await res.json();
+      if (body.planned) {
+        qc.setQueryData<any[]>(["/api/runs/planned"], (old) => {
+          if (!old) return run ? [run] : [];
+          if (old.some((r: any) => r.id === id)) return old;
+          return run ? [...old, run] : old;
+        });
+      } else {
+        qc.setQueryData<any[]>(["/api/runs/planned"], (old) =>
+          old ? old.filter((r: any) => r.id !== id) : []
+        );
+      }
       qc.invalidateQueries({ queryKey: ["/api/runs", id, "status"] });
       qc.invalidateQueries({ queryKey: ["/api/runs", id] });
       qc.invalidateQueries({ queryKey: ["/api/runs/planned"] });
