@@ -1,10 +1,7 @@
-import { isLiquidGlassAvailable } from "expo-glass-effect";
 import { Tabs } from "expo-router";
-import { NativeTabs, Icon, Label } from "expo-router/unstable-native-tabs";
 import { Platform, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import C from "@/constants/colors";
 
 const TAB_BG      = "#0B1A16";
 const ACTIVE_TINT = "#4EB082";
@@ -14,26 +11,7 @@ function SolidTabBarBackground() {
   return <View style={styles.tabBarBg} />;
 }
 
-function NativeTabLayout() {
-  return (
-    <NativeTabs>
-      <NativeTabs.Trigger name="index">
-        <Icon sf={{ default: "magnifyingglass", selected: "magnifyingglass" }} />
-        <Label>Discover</Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="solo">
-        <Icon sf={{ default: "stopwatch", selected: "stopwatch.fill" }} />
-        <Label>Solo</Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="profile">
-        <Icon sf={{ default: "person", selected: "person.fill" }} />
-        <Label>Profile</Label>
-      </NativeTabs.Trigger>
-    </NativeTabs>
-  );
-}
-
-function ClassicTabLayout() {
+export default function TabLayout() {
   const insets  = useSafeAreaInsets();
   const isWeb   = Platform.OS === "web";
   const tabBarHeight = (isWeb ? 50 : 56) + insets.bottom;
@@ -94,13 +72,6 @@ function ClassicTabLayout() {
       />
     </Tabs>
   );
-}
-
-export default function TabLayout() {
-  if (isLiquidGlassAvailable()) {
-    return <NativeTabLayout />;
-  }
-  return <ClassicTabLayout />;
 }
 
 const styles = StyleSheet.create({
