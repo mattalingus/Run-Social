@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,6 +11,8 @@ import {
   Modal,
   Share,
 } from "react-native";
+import MapView, { Marker } from "react-native-maps";
+import * as Location from "expo-location";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -54,6 +56,14 @@ export default function CreateRunScreen() {
   const [maxParticipants, setMaxParticipants] = useState("20");
   const [invitePassword, setInvitePassword] = useState("");
   const [inviteModal, setInviteModal] = useState<{ token: string; title: string } | null>(null);
+  const [locationPickerOpen, setLocationPickerOpen] = useState(false);
+  const [pickerLat, setPickerLat] = useState(parseFloat(params.pathLat ?? "37.7749"));
+  const [pickerLng, setPickerLng] = useState(parseFloat(params.pathLng ?? "-122.4194"));
+  const [pickerName, setPickerName] = useState(params.pathName ?? "");
+  const [plannedDistance, setPlannedDistance] = useState(params.pathDistance ?? "3");
+  const [plannedPace, setPlannedPace] = useState("9");
+
+  const isCrew = !!params.crewId;
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -65,24 +75,30 @@ export default function CreateRunScreen() {
       const dateTime = new Date(`${date}T${time}:00`);
       if (isNaN(dateTime.getTime())) throw new Error("Invalid date or time format");
 
+      const dist = isCrew ? parseFloat(plannedDistance) || 3 : parseFloat(minDistance);
+      const distMax = isCrew ? dist : parseFloat(maxDistance);
+      const pace = isCrew ? parseFloat(plannedPace) || 9 : parseFloat(minPace);
+      const paceMax = isCrew ? pace : parseFloat(maxPace);
+
       const res = await apiRequest("POST", "/api/runs", {
         title: title.trim(),
         description: description.trim() || undefined,
-        privacy,
+        privacy: isCrew ? "public" : privacy,
         date: dateTime.toISOString(),
         locationLat: parseFloat(locationLat),
         locationLng: parseFloat(locationLng),
         locationName: locationName.trim(),
-        minDistance: parseFloat(minDistance),
-        maxDistance: parseFloat(maxDistance),
-        minPace: parseFloat(minPace),
-        maxPace: parseFloat(maxPace),
-        tags: selectedTags,
+        minDistance: dist,
+        maxDistance: distMax,
+        minPace: pace,
+        maxPace: paceMax,
+        tags: isCrew ? [] : selectedTags,
         maxParticipants: parseInt(maxParticipants),
-        invitePassword: privacy === "private" && invitePassword.trim() ? invitePassword.trim() : undefined,
-        runStyle: runStyle ?? undefined,
+        invitePassword: !isCrew && privacy === "private" && invitePassword.trim() ? invitePassword.trim() : undefined,
+        runStyle: isCrew ? undefined : (runStyle ?? undefined),
         activityType,
         crewId: params.crewId || undefined,
+        isStrict: false,
       });
       return res.json();
     },
@@ -186,7 +202,7 @@ export default function CreateRunScreen() {
             style={[styles.input, styles.textarea]}
             value={description}
             onChangeText={setDescription}
-            placeholder="Tell runners what to expect..."
+            placeholder={isCrew ? "Tell the crew what to expect..." : "Tell runners what to expect..."}
             placeholderTextColor={C.textMuted}
             multiline
             numberOfLines={3}
@@ -257,97 +273,110 @@ export default function CreateRunScreen() {
           </View>
         </View>
 
+        {/* Location picker — map-based */}
         <View style={styles.field}>
-          <Text style={styles.label}>Location Name *</Text>
-          <TextInput
-            style={styles.input}
-            value={locationName}
-            onChangeText={setLocationName}
-            placeholder="e.g. Central Park South Entrance"
-            placeholderTextColor={C.textMuted}
-          />
+          <Text style={styles.label}>Start Location *</Text>
+          <Pressable
+            style={({ pressed }) => [styles.locationBtn, { opacity: pressed ? 0.8 : 1 }]}
+            onPress={() => {
+              setPickerLat(parseFloat(locationLat) || 37.7749);
+              setPickerLng(parseFloat(locationLng) || -122.4194);
+              setPickerName(locationName);
+              setLocationPickerOpen(true);
+            }}
+          >
+            <Feather name="map-pin" size={16} color={locationName ? C.primary : C.textMuted} />
+            <Text style={[styles.locationBtnTxt, locationName ? { color: C.text } : {}]} numberOfLines={1}>
+              {locationName || "Tap to set location on map"}
+            </Text>
+            <Feather name="chevron-right" size={14} color={C.textMuted} />
+          </Pressable>
         </View>
 
-        <View style={styles.row}>
-          <View style={[styles.field, { flex: 1 }]}>
-            <Text style={styles.label}>Latitude</Text>
-            <TextInput
-              style={styles.input}
-              value={locationLat}
-              onChangeText={setLocationLat}
-              keyboardType="decimal-pad"
-              placeholderTextColor={C.textMuted}
-            />
+        {/* Pace & Distance — simplified for crew, ranges for public runs */}
+        {isCrew ? (
+          <View style={styles.row}>
+            <View style={[styles.field, { flex: 1 }]}>
+              <Text style={styles.label}>Planned Distance (mi)</Text>
+              <TextInput
+                style={styles.input}
+                value={plannedDistance}
+                onChangeText={setPlannedDistance}
+                keyboardType="decimal-pad"
+                placeholder="3"
+                placeholderTextColor={C.textMuted}
+              />
+            </View>
+            <View style={[styles.field, { flex: 1 }]}>
+              <Text style={styles.label}>Planned Pace (min/mi)</Text>
+              <TextInput
+                style={styles.input}
+                value={plannedPace}
+                onChangeText={setPlannedPace}
+                keyboardType="decimal-pad"
+                placeholder="9"
+                placeholderTextColor={C.textMuted}
+              />
+            </View>
           </View>
-          <View style={[styles.field, { flex: 1 }]}>
-            <Text style={styles.label}>Longitude</Text>
-            <TextInput
-              style={styles.input}
-              value={locationLng}
-              onChangeText={setLocationLng}
-              keyboardType="decimal-pad"
-              placeholderTextColor={C.textMuted}
-            />
-          </View>
-        </View>
-
-        <View style={styles.sectionDivider}>
-          <Text style={styles.sectionLabel}>Pace Requirements (min/mile)</Text>
-        </View>
-
-        <View style={styles.row}>
-          <View style={[styles.field, { flex: 1 }]}>
-            <Text style={styles.label}>Min Pace</Text>
-            <TextInput
-              style={styles.input}
-              value={minPace}
-              onChangeText={setMinPace}
-              keyboardType="decimal-pad"
-              placeholder="8.0"
-              placeholderTextColor={C.textMuted}
-            />
-          </View>
-          <View style={[styles.field, { flex: 1 }]}>
-            <Text style={styles.label}>Max Pace</Text>
-            <TextInput
-              style={styles.input}
-              value={maxPace}
-              onChangeText={setMaxPace}
-              keyboardType="decimal-pad"
-              placeholder="12.0"
-              placeholderTextColor={C.textMuted}
-            />
-          </View>
-        </View>
-
-        <View style={styles.sectionDivider}>
-          <Text style={styles.sectionLabel}>Distance Requirements (miles)</Text>
-        </View>
-
-        <View style={styles.row}>
-          <View style={[styles.field, { flex: 1 }]}>
-            <Text style={styles.label}>Min Distance</Text>
-            <TextInput
-              style={styles.input}
-              value={minDistance}
-              onChangeText={setMinDistance}
-              keyboardType="decimal-pad"
-              placeholder="3"
-              placeholderTextColor={C.textMuted}
-            />
-          </View>
-          <View style={[styles.field, { flex: 1 }]}>
-            <Text style={styles.label}>Max Distance</Text>
-            <TextInput
-              style={styles.input}
-              value={maxDistance}
-              onChangeText={setMaxDistance}
-              keyboardType="decimal-pad"
-              placeholder="6"
-              placeholderTextColor={C.textMuted}
-            />
-          </View>
-        </View>
+        ) : (
+          <>
+            <View style={styles.sectionDivider}>
+              <Text style={styles.sectionLabel}>Pace Requirements (min/mile)</Text>
+            </View>
+            <View style={styles.row}>
+              <View style={[styles.field, { flex: 1 }]}>
+                <Text style={styles.label}>Min Pace</Text>
+                <TextInput
+                  style={styles.input}
+                  value={minPace}
+                  onChangeText={setMinPace}
+                  keyboardType="decimal-pad"
+                  placeholder="8.0"
+                  placeholderTextColor={C.textMuted}
+                />
+              </View>
+              <View style={[styles.field, { flex: 1 }]}>
+                <Text style={styles.label}>Max Pace</Text>
+                <TextInput
+                  style={styles.input}
+                  value={maxPace}
+                  onChangeText={setMaxPace}
+                  keyboardType="decimal-pad"
+                  placeholder="12.0"
+                  placeholderTextColor={C.textMuted}
+                />
+              </View>
+            </View>
+            <View style={styles.sectionDivider}>
+              <Text style={styles.sectionLabel}>Distance Requirements (miles)</Text>
+            </View>
+            <View style={styles.row}>
+              <View style={[styles.field, { flex: 1 }]}>
+                <Text style={styles.label}>Min Distance</Text>
+                <TextInput
+                  style={styles.input}
+                  value={minDistance}
+                  onChangeText={setMinDistance}
+                  keyboardType="decimal-pad"
+                  placeholder="3"
+                  placeholderTextColor={C.textMuted}
+                />
+              </View>
+              <View style={[styles.field, { flex: 1 }]}>
+                <Text style={styles.label}>Max Distance</Text>
+                <TextInput
+                  style={styles.input}
+                  value={maxDistance}
+                  onChangeText={setMaxDistance}
+                  keyboardType="decimal-pad"
+                  placeholder="6"
+                  placeholderTextColor={C.textMuted}
+                />
+              </View>
+            </View>
+          </>
+        )}
 
         <View style={styles.field}>
           <Text style={styles.label}>Max Participants</Text>
@@ -361,38 +390,122 @@ export default function CreateRunScreen() {
           />
         </View>
 
-        <View style={styles.field}>
-          <Text style={styles.label}>Run Style</Text>
-          <Text style={styles.fieldHint}>What kind of run is this?</Text>
-          <View style={styles.tagsGrid}>
-            {RUN_STYLES.map((s) => (
-              <Pressable
-                key={s}
-                style={[styles.tagChip, styles.runStyleChip, runStyle === s && styles.runStyleChipActive]}
-                onPress={() => { setRunStyle(runStyle === s ? null : s); Haptics.selectionAsync(); }}
-              >
-                <Text style={[styles.tagChipText, runStyle === s && styles.runStyleChipTextActive]}>{s}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
+        {!isCrew && (
+          <>
+            <View style={styles.field}>
+              <Text style={styles.label}>Run Style</Text>
+              <Text style={styles.fieldHint}>What kind of run is this?</Text>
+              <View style={styles.tagsGrid}>
+                {RUN_STYLES.map((s) => (
+                  <Pressable
+                    key={s}
+                    style={[styles.tagChip, styles.runStyleChip, runStyle === s && styles.runStyleChipActive]}
+                    onPress={() => { setRunStyle(runStyle === s ? null : s); Haptics.selectionAsync(); }}
+                  >
+                    <Text style={[styles.tagChipText, runStyle === s && styles.runStyleChipTextActive]}>{s}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
 
-        <View style={styles.field}>
-          <Text style={styles.label}>Group Vibe</Text>
-          <Text style={styles.fieldHint}>What's the vibe of your group?</Text>
-          <View style={styles.tagsGrid}>
-            {RUN_TAGS.map((tag) => (
-              <Pressable
-                key={tag}
-                style={[styles.tagChip, selectedTags.includes(tag) && styles.tagChipActive]}
-                onPress={() => toggleTag(tag)}
-              >
-                <Text style={[styles.tagChipText, selectedTags.includes(tag) && styles.tagChipTextActive]}>{tag}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
+            <View style={styles.field}>
+              <Text style={styles.label}>Group Vibe</Text>
+              <Text style={styles.fieldHint}>What's the vibe of your group?</Text>
+              <View style={styles.tagsGrid}>
+                {RUN_TAGS.map((tag) => (
+                  <Pressable
+                    key={tag}
+                    style={[styles.tagChip, selectedTags.includes(tag) && styles.tagChipActive]}
+                    onPress={() => toggleTag(tag)}
+                  >
+                    <Text style={[styles.tagChipText, selectedTags.includes(tag) && styles.tagChipTextActive]}>{tag}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          </>
+        )}
       </KeyboardAwareScrollViewCompat>
+
+      {/* ── Location Picker Modal ─────────────────────────────────────── */}
+      {locationPickerOpen && (
+        <Modal animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setLocationPickerOpen(false)}>
+          <View style={styles.pickerSheet}>
+            <View style={styles.pickerHandle} />
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>Set Start Location</Text>
+              <Pressable onPress={() => setLocationPickerOpen(false)} hitSlop={12}>
+                <Feather name="x" size={20} color={C.textSecondary} />
+              </Pressable>
+            </View>
+
+            {Platform.OS !== "web" ? (
+              <>
+                <Text style={styles.pickerHint}>Tap on the map to place your start pin</Text>
+                <MapView
+                  style={styles.pickerMap}
+                  initialRegion={{
+                    latitude: pickerLat,
+                    longitude: pickerLng,
+                    latitudeDelta: 0.01,
+                    longitudeDelta: 0.01,
+                  }}
+                  onPress={(e) => {
+                    setPickerLat(e.nativeEvent.coordinate.latitude);
+                    setPickerLng(e.nativeEvent.coordinate.longitude);
+                    Haptics.selectionAsync();
+                  }}
+                >
+                  <Marker coordinate={{ latitude: pickerLat, longitude: pickerLng }} pinColor="#00D97E" />
+                </MapView>
+              </>
+            ) : (
+              <View style={styles.pickerWebFields}>
+                <Text style={styles.pickerLabel}>Latitude</Text>
+                <TextInput
+                  style={styles.pickerInput}
+                  value={String(pickerLat)}
+                  onChangeText={(v) => setPickerLat(parseFloat(v) || 0)}
+                  keyboardType="decimal-pad"
+                  placeholderTextColor={C.textMuted}
+                />
+                <Text style={styles.pickerLabel}>Longitude</Text>
+                <TextInput
+                  style={styles.pickerInput}
+                  value={String(pickerLng)}
+                  onChangeText={(v) => setPickerLng(parseFloat(v) || 0)}
+                  keyboardType="decimal-pad"
+                  placeholderTextColor={C.textMuted}
+                />
+              </View>
+            )}
+
+            <View style={[styles.pickerBottom, { paddingBottom: insets.bottom + 16 }]}>
+              <TextInput
+                style={styles.pickerInput}
+                value={pickerName}
+                onChangeText={setPickerName}
+                placeholder="Location name (e.g. Central Park South Entrance)"
+                placeholderTextColor={C.textMuted}
+              />
+              <Pressable
+                style={({ pressed }) => [styles.pickerConfirm, { opacity: pressed ? 0.85 : 1 }]}
+                onPress={() => {
+                  if (!pickerName.trim()) { Alert.alert("Name required", "Type a name for this location"); return; }
+                  setLocationLat(String(pickerLat));
+                  setLocationLng(String(pickerLng));
+                  setLocationName(pickerName.trim());
+                  setLocationPickerOpen(false);
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                }}
+              >
+                <Feather name="check" size={16} color={C.bg} />
+                <Text style={styles.pickerConfirmTxt}>Use This Location</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+      )}
 
       {inviteModal && (
         <Modal transparent animationType="fade">

@@ -236,6 +236,8 @@ export async function initDb() {
     );
 
     ALTER TABLE runs ADD COLUMN IF NOT EXISTS crew_id VARCHAR REFERENCES crews(id) ON DELETE SET NULL;
+    ALTER TABLE crews ADD COLUMN IF NOT EXISTS run_style TEXT DEFAULT NULL;
+    ALTER TABLE crews ADD COLUMN IF NOT EXISTS tags TEXT[] DEFAULT '{}';
 
     CREATE TABLE IF NOT EXISTS crews (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1617,10 +1619,10 @@ export async function getUserRunRecords(userId: string) {
 
 // ─── Crew Storage ─────────────────────────────────────────────────────────────
 
-export async function createCrew(data: { name: string; description?: string; emoji: string; createdBy: string }) {
+export async function createCrew(data: { name: string; description?: string; emoji: string; createdBy: string; runStyle?: string; tags?: string[] }) {
   const res = await pool.query(
-    `INSERT INTO crews (name, description, emoji, created_by) VALUES ($1, $2, $3, $4) RETURNING *`,
-    [data.name, data.description ?? null, data.emoji, data.createdBy]
+    `INSERT INTO crews (name, description, emoji, created_by, run_style, tags) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+    [data.name, data.description ?? null, data.emoji, data.createdBy, data.runStyle ?? null, data.tags ?? []]
   );
   const crew = res.rows[0];
   await pool.query(

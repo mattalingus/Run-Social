@@ -34,6 +34,8 @@ const C = {
 };
 
 const EMOJIS = ["🏃", "🚴", "⚡", "🔥", "💪", "🌿", "🦅", "🐺", "🦁", "🏔", "🌊", "⭐", "🎯", "🚀", "🌙"];
+const CREW_RUN_STYLES = ["Easy Pace", "Chill", "Steady", "Tempo", "Fast", "Recovery", "Long Run", "Progressive", "Intervals", "Race Prep"];
+const CREW_VIBES = ["Talkative", "Quiet", "Motivational", "Training", "Ministry", "Recovery"];
 
 interface Crew {
   id: string;
@@ -44,6 +46,8 @@ interface Crew {
   created_at: string;
   member_count: number;
   created_by_name: string;
+  run_style?: string;
+  tags?: string[];
 }
 
 interface CrewMember {
@@ -119,6 +123,7 @@ function InviteBanner({ invite, onAccept, onDecline }: { invite: CrewInvite; onA
 
 // ─── Crew Card ────────────────────────────────────────────────────────────────
 function CrewCard({ crew, onPress }: { crew: Crew; onPress: () => void }) {
+  const vibes = crew.tags ?? [];
   return (
     <TouchableOpacity style={s.crewCard} onPress={onPress} activeOpacity={0.75} testID={`crew-card-${crew.id}`}>
       <View style={s.crewCardLeft}>
@@ -133,6 +138,20 @@ function CrewCard({ crew, onPress }: { crew: Crew; onPress: () => void }) {
           <Text style={s.crewCardMeta}>
             <Ionicons name="people-outline" size={12} color={C.textMuted} /> {crew.member_count} member{crew.member_count !== 1 ? "s" : ""}
           </Text>
+          {(crew.run_style || vibes.length > 0) ? (
+            <View style={s.crewCardChips}>
+              {crew.run_style ? (
+                <View style={s.crewStyleChip}>
+                  <Text style={s.crewStyleChipTxt}>{crew.run_style}</Text>
+                </View>
+              ) : null}
+              {vibes.slice(0, 2).map((v) => (
+                <View key={v} style={s.crewVibeChip}>
+                  <Text style={s.crewVibeChipTxt}>{v}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
         </View>
       </View>
       <Ionicons name="chevron-forward" size={18} color={C.textMuted} />
@@ -145,10 +164,12 @@ function CreateCrewSheet({ visible, onClose, onCreated }: { visible: boolean; on
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [emoji, setEmoji] = useState("🏃");
+  const [runStyle, setRunStyle] = useState<string | null>(null);
+  const [vibes, setVibes] = useState<string[]>([]);
   const qc = useQueryClient();
 
   const createMutation = useMutation({
-    mutationFn: async (data: { name: string; description: string; emoji: string }) => {
+    mutationFn: async (data: { name: string; description: string; emoji: string; runStyle?: string; tags: string[] }) => {
       const res = await apiRequest("POST", "/api/crews", data);
       return res.json() as Promise<Crew>;
     },
@@ -157,6 +178,8 @@ function CreateCrewSheet({ visible, onClose, onCreated }: { visible: boolean; on
       setName("");
       setDescription("");
       setEmoji("🏃");
+      setRunStyle(null);
+      setVibes([]);
       onCreated(crew);
     },
     onError: (e: any) => Alert.alert("Error", e.message ?? "Could not create crew"),
@@ -164,8 +187,10 @@ function CreateCrewSheet({ visible, onClose, onCreated }: { visible: boolean; on
 
   const handleCreate = () => {
     if (!name.trim()) { Alert.alert("Name required", "Give your crew a name"); return; }
-    createMutation.mutate({ name: name.trim(), description: description.trim(), emoji });
+    createMutation.mutate({ name: name.trim(), description: description.trim(), emoji, runStyle: runStyle ?? undefined, tags: vibes });
   };
+
+  const toggleVibe = (v: string) => setVibes((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]);
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -216,6 +241,34 @@ function CreateCrewSheet({ visible, onClose, onCreated }: { visible: boolean; on
               maxLength={120}
               testID="crew-desc-input"
             />
+
+            <Text style={s.fieldLabel}>Run Style <Text style={s.fieldOptional}>(optional)</Text></Text>
+            <Text style={s.fieldHint}>What kind of activities does your crew do?</Text>
+            <View style={s.chipsGrid}>
+              {CREW_RUN_STYLES.map((st) => (
+                <TouchableOpacity
+                  key={st}
+                  style={[s.chip, runStyle === st && s.chipStyleActive]}
+                  onPress={() => setRunStyle(runStyle === st ? null : st)}
+                >
+                  <Text style={[s.chipTxt, runStyle === st && s.chipStyleActiveTxt]}>{st}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={s.fieldLabel}>Group Vibe <Text style={s.fieldOptional}>(optional)</Text></Text>
+            <Text style={s.fieldHint}>What best describes the energy of your crew?</Text>
+            <View style={s.chipsGrid}>
+              {CREW_VIBES.map((v) => (
+                <TouchableOpacity
+                  key={v}
+                  style={[s.chip, vibes.includes(v) && s.chipVibeActive]}
+                  onPress={() => toggleVibe(v)}
+                >
+                  <Text style={[s.chipTxt, vibes.includes(v) && s.chipVibeActiveTxt]}>{v}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
 
             <TouchableOpacity
               style={[s.primaryBtn, createMutation.isPending && { opacity: 0.6 }]}

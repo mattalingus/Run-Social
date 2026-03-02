@@ -960,9 +960,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/crews", requireAuth, async (req, res) => {
     try {
-      const { name, description, emoji } = req.body;
+      const { name, description, emoji, runStyle, tags } = req.body;
       if (!name?.trim()) return res.status(400).json({ message: "Name is required" });
-      const crew = await storage.createCrew({ name: name.trim(), description, emoji: emoji || "🏃", createdBy: req.session.userId! });
+      const crew = await storage.createCrew({ name: name.trim(), description, emoji: emoji || "🏃", createdBy: req.session.userId!, runStyle, tags: Array.isArray(tags) ? tags : [] });
       res.json(crew);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
