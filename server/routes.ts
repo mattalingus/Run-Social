@@ -982,6 +982,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
+  app.get("/api/crews/search", requireAuth, async (req, res) => {
+    try {
+      const q = (req.query.q as string) || "";
+      const friendsOnly = req.query.friends === "true";
+      if (!q.trim() && !friendsOnly) return res.json([]);
+      const results = await storage.searchCrews(req.session.userId!, q, friendsOnly);
+      res.json(results);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/crews/:id/join-request", requireAuth, async (req, res) => {
+    try {
+      const result = await storage.requestToJoinCrew(req.params.id, req.session.userId!);
+      if ("error" in result) return res.status(400).json({ message: result.error });
+      res.json(result);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
   app.get("/api/crews/:id", requireAuth, async (req, res) => {
     try {
       const crew = await storage.getCrewById(req.params.id);

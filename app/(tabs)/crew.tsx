@@ -12,6 +12,7 @@ import {
   Platform,
   Alert,
   KeyboardAvoidingView,
+  Keyboard,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -642,6 +643,54 @@ function CrewDetailSheet({
   );
 }
 
+// ─── Search Result Card ────────────────────────────────────────────────────────
+function SearchResultCard({
+  crew,
+  isMember,
+  hasRequested,
+  onOpen,
+  onRequest,
+}: {
+  crew: Crew & { is_member: boolean; has_requested: boolean };
+  isMember: boolean;
+  hasRequested: boolean;
+  onOpen: () => void;
+  onRequest: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      style={s.searchCard}
+      onPress={isMember ? onOpen : undefined}
+      activeOpacity={isMember ? 0.75 : 1}
+    >
+      <Text style={s.searchCardEmoji}>{crew.emoji}</Text>
+      <View style={{ flex: 1, gap: 3 }}>
+        <Text style={s.searchCardName} numberOfLines={1}>{crew.name}</Text>
+        <Text style={s.searchCardMeta}>
+          {crew.member_count} {Number(crew.member_count) === 1 ? "member" : "members"}
+          {crew.run_style ? ` · ${crew.run_style}` : ""}
+        </Text>
+        {crew.description ? (
+          <Text style={s.searchCardDesc} numberOfLines={1}>{crew.description}</Text>
+        ) : null}
+      </View>
+      {isMember ? (
+        <View style={s.searchCardBadge}>
+          <Text style={s.searchCardBadgeTxt}>Joined</Text>
+        </View>
+      ) : hasRequested ? (
+        <View style={[s.searchCardBadge, s.searchCardBadgePending]}>
+          <Text style={[s.searchCardBadgeTxt, { color: C.textMuted }]}>Requested</Text>
+        </View>
+      ) : (
+        <TouchableOpacity style={s.searchCardJoinBtn} onPress={onRequest}>
+          <Text style={s.searchCardJoinTxt}>Request</Text>
+        </TouchableOpacity>
+      )}
+    </TouchableOpacity>
+  );
+}
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function CrewScreen() {
   const insets = useSafeAreaInsets();
@@ -649,6 +698,12 @@ export default function CrewScreen() {
   const qc = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [selectedCrew, setSelectedCrew] = useState<Crew | null>(null);
+  const [searchText, setSearchText] = useState("");
+  const [friendsOnly, setFriendsOnly] = useState(false);
+  const [searchActive, setSearchActive] = useState(false);
+
+  const isSearching = searchText.trim().length > 0 || friendsOnly;
+  const searchUrl = `/api/crews/search?q=${encodeURIComponent(searchText.trim())}&friends=${friendsOnly}`;
 
   const { data: currentUser } = useQuery<{ id: string; name: string }>({
     queryKey: ["/api/me"],
@@ -662,6 +717,11 @@ export default function CrewScreen() {
     queryKey: ["/api/crew-invites"],
   });
 
+  const { data: searchResults = [], isFetching: searchFetching } = useQuery<any[]>({
+    queryKey: [searchUrl],
+    enabled: isSearching,
+  });
+
   const respondMutation = useMutation({
     mutationFn: ({ crewId, accept }: { crewId: string; accept: boolean }) =>
       apiRequest("POST", `/api/crew-invites/${crewId}/respond`, { accept }),
@@ -670,6 +730,20 @@ export default function CrewScreen() {
       qc.invalidateQueries({ queryKey: ["/api/crews"] });
     },
   });
+
+  const joinRequestMutation = useMutation({
+    mutationFn: (crewId: string) => apiRequest("POST", `/api/crews/${crewId}/join-request`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [searchUrl] });
+    },
+  });
+
+  const clearSearch = () => {
+    setSearchText("");
+    setFriendsOnly(false);
+    setSearchActive(false);
+    Keyboard.dismiss();
+  };
 
   const topPad = isWeb ? 67 : insets.top;
   const bottomPad = isWeb ? 34 : insets.bottom;
@@ -688,51 +762,132 @@ export default function CrewScreen() {
         </TouchableOpacity>
       </View>
 
-      <FlatList
-        data={crews}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={{
-          paddingHorizontal: 20,
-          paddingBottom: bottomPad + 90,
-          paddingTop: 8,
-        }}
-        ListHeaderComponent={() => (
-          <>
-            {/* Invite banners */}
-            {invites.map((invite) => (
-              <InviteBanner
-                key={invite.crew_id}
-                invite={invite}
-                onAccept={() => respondMutation.mutate({ crewId: invite.crew_id, accept: true })}
-                onDecline={() => respondMutation.mutate({ crewId: invite.crew_id, accept: false })}
-              />
-            ))}
-          </>
+      {/* Search bar */}
+      <View style={s.searchRow}>
+        <View style={s.searchBar}>
+          <Ionicons name="search" size={15} color={C.textMuted} />
+          <TextInput
+            style={s.searchInput}
+            value={searchText}
+            onChangeText={setSearchText}
+            onFocus={() => setSearchActive(true)}
+            onBlur={() => { if (!searchText && !friendsOnly) setSearchActive(false); }}
+            placeholder="Search crews..."
+            placeholderTextColor={C.textMuted}
+            returnKeyType="search"
+            testID="crew-search-input"
+          />
+          {searchText.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchText("")} hitSlop={8}>
+              <Ionicons name="close-circle" size={15} color={C.textMuted} />
+            </TouchableOpacity>
+          )}
+        </View>
+        {(searchActive || friendsOnly) && (
+          <TouchableOpacity style={s.searchCancelBtn} onPress={clearSearch}>
+            <Text style={s.searchCancelTxt}>Cancel</Text>
+          </TouchableOpacity>
         )}
-        renderItem={({ item }) => (
-          <CrewCard crew={item} onPress={() => setSelectedCrew(item)} />
-        )}
-        ListEmptyComponent={() =>
-          isLoading ? (
-            <View style={s.emptyState}>
-              <ActivityIndicator color={C.primary} size="large" />
-            </View>
-          ) : (
-            <View style={s.emptyState}>
-              <Ionicons name="people-outline" size={52} color={C.textMuted} />
-              <Text style={s.emptyTitle}>No crews yet</Text>
-              <Text style={s.emptyBody}>
-                Create a crew and invite your running friends — or accept an invite when one arrives.
-              </Text>
-              <TouchableOpacity style={s.primaryBtn} onPress={() => setShowCreate(true)} testID="create-first-crew">
-                <Text style={s.primaryBtnTxt}>Create a Crew</Text>
-              </TouchableOpacity>
-            </View>
-          )
-        }
-        scrollEnabled={!!(crews.length > 0 || invites.length > 0)}
-        showsVerticalScrollIndicator={false}
-      />
+      </View>
+
+      {/* Friends toggle — visible when search is active */}
+      {(searchActive || friendsOnly) && (
+        <View style={s.friendsRow}>
+          <TouchableOpacity
+            style={[s.friendsPill, friendsOnly && s.friendsPillActive]}
+            onPress={() => setFriendsOnly(!friendsOnly)}
+            testID="friends-only-toggle"
+          >
+            <Ionicons name="people" size={13} color={friendsOnly ? C.bg : C.textMuted} />
+            <Text style={[s.friendsPillTxt, friendsOnly && s.friendsPillTxtActive]}>Friends' Crews</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {isSearching ? (
+        /* ── Search Results ── */
+        <FlatList
+          data={searchResults}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: bottomPad + 90, paddingTop: 12 }}
+          keyboardShouldPersistTaps="handled"
+          renderItem={({ item }) => (
+            <SearchResultCard
+              crew={item}
+              isMember={item.is_member}
+              hasRequested={item.has_requested}
+              onOpen={() => setSelectedCrew(item)}
+              onRequest={() => joinRequestMutation.mutate(item.id)}
+            />
+          )}
+          ListEmptyComponent={() =>
+            searchFetching ? (
+              <View style={s.emptyState}>
+                <ActivityIndicator color={C.primary} />
+              </View>
+            ) : (
+              <View style={s.emptyState}>
+                <Ionicons name="search-outline" size={44} color={C.textMuted} />
+                <Text style={s.emptyTitle}>
+                  {friendsOnly ? "No crews found" : "No results"}
+                </Text>
+                <Text style={s.emptyBody}>
+                  {friendsOnly
+                    ? "None of your friends are in a crew yet."
+                    : "Try a different crew name."}
+                </Text>
+              </View>
+            )
+          }
+          showsVerticalScrollIndicator={false}
+        />
+      ) : (
+        /* ── My Crews ── */
+        <FlatList
+          data={crews}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{
+            paddingHorizontal: 20,
+            paddingBottom: bottomPad + 90,
+            paddingTop: 8,
+          }}
+          ListHeaderComponent={() => (
+            <>
+              {invites.map((invite) => (
+                <InviteBanner
+                  key={invite.crew_id}
+                  invite={invite}
+                  onAccept={() => respondMutation.mutate({ crewId: invite.crew_id, accept: true })}
+                  onDecline={() => respondMutation.mutate({ crewId: invite.crew_id, accept: false })}
+                />
+              ))}
+            </>
+          )}
+          renderItem={({ item }) => (
+            <CrewCard crew={item} onPress={() => setSelectedCrew(item)} />
+          )}
+          ListEmptyComponent={() =>
+            isLoading ? (
+              <View style={s.emptyState}>
+                <ActivityIndicator color={C.primary} size="large" />
+              </View>
+            ) : (
+              <View style={s.emptyState}>
+                <Ionicons name="people-outline" size={52} color={C.textMuted} />
+                <Text style={s.emptyTitle}>No crews yet</Text>
+                <Text style={s.emptyBody}>
+                  Create a crew and invite your running friends — or accept an invite when one arrives.
+                </Text>
+                <TouchableOpacity style={s.primaryBtn} onPress={() => setShowCreate(true)} testID="create-first-crew">
+                  <Text style={s.primaryBtnTxt}>Create a Crew</Text>
+                </TouchableOpacity>
+              </View>
+            )
+          }
+          scrollEnabled={!!(crews.length > 0 || invites.length > 0)}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
 
       <CreateCrewSheet
         visible={showCreate}
@@ -769,6 +924,125 @@ const s = StyleSheet.create({
     fontFamily: "Outfit_700Bold",
     fontSize: 28,
     color: C.text,
+  },
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingBottom: 10,
+    gap: 10,
+  },
+  searchBar: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: C.surface,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  searchInput: {
+    flex: 1,
+    fontFamily: "Outfit_400Regular",
+    fontSize: 14,
+    color: C.text,
+  },
+  searchCancelBtn: {
+    paddingVertical: 6,
+  },
+  searchCancelTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 14,
+    color: C.primary,
+  },
+  friendsRow: {
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+    flexDirection: "row",
+    gap: 8,
+  },
+  friendsPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  friendsPillActive: {
+    backgroundColor: C.primary,
+    borderColor: C.primary,
+  },
+  friendsPillTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 13,
+    color: C.textMuted,
+  },
+  friendsPillTxtActive: {
+    color: C.bg,
+  },
+  searchCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: C.card,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  searchCardEmoji: {
+    fontSize: 30,
+  },
+  searchCardName: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 15,
+    color: C.text,
+  },
+  searchCardMeta: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 12,
+    color: C.textMuted,
+  },
+  searchCardDesc: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 12,
+    color: C.textDim,
+  },
+  searchCardBadge: {
+    backgroundColor: "#00D97E22",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: "#00D97E44",
+  },
+  searchCardBadgePending: {
+    backgroundColor: C.surface,
+    borderColor: C.border,
+  },
+  searchCardBadgeTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 12,
+    color: C.primary,
+  },
+  searchCardJoinBtn: {
+    backgroundColor: C.primary,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  searchCardJoinTxt: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 12,
+    color: C.bg,
   },
   headerAdd: {
     width: 38,

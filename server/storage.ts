@@ -1715,6 +1715,62 @@ export async function getCrewRuns(crewId: string) {
   return res.rows;
 }
 
+export async function searchCrews(userId: string, query: string, friendsOnly: boolean) {
+  if (friendsOnly) {
+    const res = await pool.query(
+      `SELECT DISTINCT c.*,
+         (SELECT COUNT(*) FROM crew_members WHERE crew_id = c.id AND status = 'member') AS member_count,
+         u.name AS created_by_name,
+         EXISTS(SELECT 1 FROM crew_members WHERE crew_id = c.id AND user_id = $1 AND status = 'member') AS is_member,
+         EXISTS(SELECT 1 FROM crew_members WHERE crew_id = c.id AND user_id = $1 AND status = 'pending') AS has_requested
+       FROM crews c
+       JOIN crew_members cm2 ON cm2.crew_id = c.id AND cm2.status = 'member'
+       JOIN friends f ON (
+         (f.requester_id = $1 AND f.addressee_id = cm2.user_id) OR
+         (f.addressee_id = $1 AND f.requester_id = cm2.user_id)
+       )
+       JOIN users u ON u.id = c.created_by
+       WHERE f.status = 'accepted'
+         AND cm2.user_id != $1
+         ${query ? "AND LOWER(c.name) LIKE $2" : ""}
+       ORDER BY member_count DESC
+       LIMIT 30`,
+      query ? [userId, `%${query.toLowerCase()}%`] : [userId]
+    );
+    return res.rows;
+  }
+  if (!query.trim()) return [];
+  const res = await pool.query(
+    `SELECT c.*,
+       (SELECT COUNT(*) FROM crew_members WHERE crew_id = c.id AND status = 'member') AS member_count,
+       u.name AS created_by_name,
+       EXISTS(SELECT 1 FROM crew_members WHERE crew_id = c.id AND user_id = $1 AND status = 'member') AS is_member,
+       EXISTS(SELECT 1 FROM crew_members WHERE crew_id = c.id AND user_id = $1 AND status = 'pending') AS has_requested
+     FROM crews c
+     JOIN users u ON u.id = c.created_by
+     WHERE LOWER(c.name) LIKE $2
+     ORDER BY member_count DESC
+     LIMIT 30`,
+    [userId, `%${query.toLowerCase()}%`]
+  );
+  return res.rows;
+}
+
+export async function requestToJoinCrew(crewId: string, userId: string) {
+  const existing = await pool.query(
+    `SELECT status FROM crew_members WHERE crew_id = $1 AND user_id = $2`,
+    [crewId, userId]
+  );
+  if (existing.rows.length > 0) {
+    return { error: existing.rows[0].status === "member" ? "already_member" : "already_requested" };
+  }
+  await pool.query(
+    `INSERT INTO crew_members (crew_id, user_id, status, invited_by) VALUES ($1, $2, 'pending', $2)`,
+    [crewId, userId]
+  );
+  return { ok: true };
+}
+
 export async function searchUsersForInvite(query: string, excludeIds: string[]) {
   const res = await pool.query(
     `SELECT id, name, photo_url, hosted_runs FROM users
