@@ -511,8 +511,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!run) return res.status(404).json({ message: "Run not found" });
       if (run.crew_id) {
         if (!req.session.userId) return res.status(403).json({ message: "Crew run — members only", isCrewRun: true });
-        const member = await storage.isCrewMember(run.crew_id, req.session.userId);
-        if (!member) return res.status(403).json({ message: "Crew run — members only", isCrewRun: true });
+        // Host always has access to their own crew run regardless of membership
+        if (run.host_id !== req.session.userId) {
+          const member = await storage.isCrewMember(run.crew_id, req.session.userId);
+          if (!member) return res.status(403).json({ message: "Crew run — members only", isCrewRun: true });
+        }
       } else if (run.privacy === "private") {
         if (!req.session.userId) return res.status(403).json({ message: "Private run", isPrivate: true });
         const hasAccess = await storage.hasRunAccess(req.params.id, req.session.userId);
