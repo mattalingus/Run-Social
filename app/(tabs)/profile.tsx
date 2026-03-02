@@ -1000,13 +1000,18 @@ export default function ProfileScreen() {
                 const hasIncoming = incomingRequests.some((r: any) => r.id === u.id);
                 return (
                   <View key={u.id} style={styles.friendCard}>
-                    <View style={styles.friendAvatar}>
-                      {u.photo_url ? <Image source={{ uri: u.photo_url }} style={styles.friendAvatarImg} /> : <Text style={styles.friendAvatarTxt}>{u.name.charAt(0).toUpperCase()}</Text>}
-                    </View>
-                    <View style={styles.friendInfo}>
-                      <Text style={styles.friendName}>{u.name}</Text>
-                      <Text style={styles.friendStat}>{u.completed_runs} runs · {formatDistance(u.total_miles)} mi</Text>
-                    </View>
+                    <Pressable
+                      style={styles.friendCardInfo}
+                      onPress={() => { setViewProfileId(u.id); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+                    >
+                      <View style={styles.friendAvatar}>
+                        {u.photo_url ? <Image source={{ uri: u.photo_url }} style={styles.friendAvatarImg} /> : <Text style={styles.friendAvatarTxt}>{u.name.charAt(0).toUpperCase()}</Text>}
+                      </View>
+                      <View style={styles.friendInfo}>
+                        <Text style={styles.friendName}>{u.name}</Text>
+                        <Text style={styles.friendStat}>{u.completed_runs} runs · {formatDistance(u.total_miles)} mi</Text>
+                      </View>
+                    </Pressable>
                     {isAlreadyFriend ? (
                       <View style={styles.friendStatusBadge}><Feather name="check" size={12} color={C.primary} /><Text style={styles.friendStatusTxt}>Friends</Text></View>
                     ) : hasSent ? (
