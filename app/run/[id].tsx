@@ -385,10 +385,10 @@ export default function RunDetailScreen() {
             disabled={unlocking}
           >
             {unlocking ? (
-              <ActivityIndicator size="small" color={C.bg} />
+              <ActivityIndicator size="small" color={C.text} />
             ) : (
               <>
-                <Feather name="unlock" size={18} color={C.bg} />
+                <Feather name="unlock" size={18} color={C.text} />
                 <Text style={styles.lockUnlockTxt}>Unlock Run</Text>
               </>
             )}
@@ -641,9 +641,9 @@ export default function RunDetailScreen() {
                 onPress={handleStartRun}
                 disabled={starting || hostDist === null || hostDist > 1}
               >
-                {starting ? <ActivityIndicator color={C.bg} /> : (
+                {starting ? <ActivityIndicator color={C.text} /> : (
                   <>
-                    <Feather name="play" size={18} color={C.bg} />
+                    <Feather name="play" size={18} color={C.text} />
                     <Text style={styles.primaryBtnText}>Start Run</Text>
                   </>
                 )}
@@ -680,9 +680,9 @@ export default function RunDetailScreen() {
             onPress={handleJoin}
             disabled={joining}
           >
-            {joining ? <ActivityIndicator color={C.bg} /> : (
+            {joining ? <ActivityIndicator color={C.text} /> : (
               <>
-                <Ionicons name="walk" size={18} color={C.bg} />
+                <Ionicons name="walk" size={18} color={C.text} />
                 <Text style={styles.primaryBtnText}>Join Run</Text>
               </>
             )}
@@ -702,9 +702,9 @@ export default function RunDetailScreen() {
             onPress={handleConfirmComplete}
             disabled={confirming}
           >
-            {confirming ? <ActivityIndicator color={C.bg} /> : (
+            {confirming ? <ActivityIndicator color={C.text} /> : (
               <>
-                <Feather name="check-circle" size={18} color={C.bg} />
+                <Feather name="check-circle" size={18} color={C.text} />
                 <Text style={styles.primaryBtnText}>Log Completion</Text>
               </>
             )}
@@ -821,7 +821,7 @@ const styles = StyleSheet.create({
   participantStatusText: { fontFamily: "Outfit_600SemiBold", fontSize: 11 },
   bottomBar: { padding: 20, paddingTop: 12, gap: 10, borderTopWidth: 1, borderTopColor: C.border, backgroundColor: C.bg },
   primaryBtn: { backgroundColor: C.primary, borderRadius: 14, height: 52, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
-  primaryBtnText: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.bg },
+  primaryBtnText: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.text },
   secondaryBtn: { borderRadius: 14, height: 52, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: C.danger + "66" },
   secondaryBtnText: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.danger },
   rateBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 14, height: 52, backgroundColor: C.gold + "22", borderWidth: 1, borderColor: C.gold + "44" },
@@ -852,7 +852,7 @@ const styles = StyleSheet.create({
   },
   lockError: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: "#FF6B6B", textAlign: "center" },
   lockUnlockBtn: { backgroundColor: C.primary, borderRadius: 14, height: 52, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 32, width: "100%" },
-  lockUnlockTxt: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.bg },
+  lockUnlockTxt: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.text },
 
   // ─── Run Photos ───────────────────────────────────────────────────────────
   photosSection: { marginTop: 24, marginBottom: 16 },
