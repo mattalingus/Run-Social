@@ -486,27 +486,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!run) return res.status(404).json({ message: "Run not found" });
       if (run.host_id === req.session.userId) return res.status(400).json({ message: "You are the host" });
       const user = await storage.getUserById(req.session.userId!);
-      // Eligibility check based on strict mode
-      const paceOk = user.avg_pace >= run.min_pace && user.avg_pace <= run.max_pace;
-      const recentDistances = await storage.getUserRecentDistances(req.session.userId!);
-      // New runners with no history are always allowed through — popup is handled client-side
-      if (recentDistances.length > 0) {
-        const distThreshold = run.is_strict ? 0.7 : 0.5;
-        const distOk = recentDistances.some((d) => d >= run.min_distance * distThreshold);
-
-        if (run.is_strict) {
+      // Eligibility checks only apply to strict runs
+      if (run.is_strict) {
+        const paceOk = user.avg_pace >= run.min_pace && user.avg_pace <= run.max_pace;
+        const recentDistances = await storage.getUserRecentDistances(req.session.userId!);
+        if (recentDistances.length > 0) {
+          const distOk = recentDistances.some((d) => d >= run.min_distance * 0.7);
           if (!paceOk && !distOk) {
-            return res.status(400).json({ message: `Strict run: your pace (${user.avg_pace} min/mi) doesn't match and no recent run covers ${Math.round(distThreshold * 100)}%+ of the ${run.min_distance} mi distance` });
+            return res.status(400).json({ message: `Strict run: your pace (${user.avg_pace} min/mi) doesn't match and no recent run covers 70%+ of the ${run.min_distance} mi distance` });
           }
           if (!paceOk) {
             return res.status(400).json({ message: `Strict run: your pace (${user.avg_pace} min/mi) must be between ${run.min_pace}–${run.max_pace} min/mi` });
           }
           if (!distOk) {
-            return res.status(400).json({ message: `Strict run: you need at least one recent run covering ${Math.round(distThreshold * 100)}%+ of the planned ${run.min_distance} mi distance` });
-          }
-        } else {
-          if (!paceOk && !distOk) {
-            return res.status(400).json({ message: `Your pace (${user.avg_pace} min/mi) doesn't match and no recent run covers ${Math.round(distThreshold * 100)}%+ of the ${run.min_distance} mi planned distance` });
+            return res.status(400).json({ message: `Strict run: you need at least one recent run covering 70%+ of the planned ${run.min_distance} mi distance` });
           }
         }
       }

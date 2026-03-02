@@ -285,7 +285,7 @@ export default function RunDetailScreen() {
 
   async function handleJoin() {
     if (!user) return router.push("/(auth)/login");
-    if ((recentDistances ?? []).length === 0) {
+    if (run?.is_strict && (recentDistances ?? []).length === 0) {
       setShowFirstRunModal(true);
       return;
     }
@@ -534,31 +534,24 @@ export default function RunDetailScreen() {
               <Text style={styles.planCountText}>{run.plan_count} {parseInt(run.plan_count) === 1 ? "person" : "people"} planning to run</Text>
             </View>
           )}
-          {user && (() => {
+          {user && run.is_strict && (() => {
             const hasHistory = (recentDistances ?? []).length > 0;
             if (!hasHistory) {
               return (
                 <View style={[styles.eligibilityRow, { backgroundColor: C.primaryMuted, borderColor: C.primary + "44" }]}>
                   <Feather name="check-circle" size={14} color={C.primary} />
-                  <Text style={[styles.eligibilityText, { color: C.primary }]}>Open to all — log some runs to unlock full eligibility checks</Text>
+                  <Text style={[styles.eligibilityText, { color: C.primary }]}>No run history yet — you can still join this run</Text>
                 </View>
               );
             }
             const paceOk = user.avg_pace >= run.min_pace && user.avg_pace <= run.max_pace;
-            const distThreshold = run.is_strict ? 0.7 : 0.5;
-            const distOk = (recentDistances ?? []).some((d) => d >= run.min_distance * distThreshold);
-            const eligible = run.is_strict ? (paceOk && distOk) : (paceOk || distOk);
+            const distOk = (recentDistances ?? []).some((d) => d >= run.min_distance * 0.7);
+            const eligible = paceOk && distOk;
             let msg = "";
-            if (run.is_strict) {
-              if (eligible) msg = "Pace and distance both qualify";
-              else if (!paceOk && !distOk) msg = "Pace and distance both fall short";
-              else if (!paceOk) msg = `Your pace (${formatPace(user.avg_pace)}/mi) doesn't match this run`;
-              else msg = `No recent run covers 70%+ of the planned ${formatDistance(run.min_distance)} mi`;
-            } else {
-              if (eligible && paceOk) msg = "Your pace qualifies";
-              else if (eligible && distOk) msg = `A past run qualifies your distance (50%+ of ${formatDistance(run.min_distance)} mi)`;
-              else msg = `Pace and recent run distances don't meet the requirements`;
-            }
+            if (eligible) msg = "Pace and distance both qualify";
+            else if (!paceOk && !distOk) msg = "Pace and distance both fall short";
+            else if (!paceOk) msg = `Your pace (${formatPace(user.avg_pace)}/mi) doesn't match this run`;
+            else msg = `No recent run covers 70%+ of the planned ${formatDistance(run.min_distance)} mi`;
             return (
               <View style={[styles.eligibilityRow, {
                 backgroundColor: eligible ? C.primaryMuted : C.danger + "22",
