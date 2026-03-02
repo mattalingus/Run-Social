@@ -407,33 +407,16 @@ function RunCard({
   onBookmark?: () => void;
 }) {
   const spotsLeft = run.max_participants - run.participant_count;
+  const badge = getHostBadge(run.host_hosted_runs);
   return (
     <Pressable
       style={({ pressed }) => [s.card, { opacity: pressed ? 0.85 : 1 }]}
       onPress={onPress}
       testID={`run-card-${run.id}`}
     >
-      <View style={s.cardTop}>
-        <View style={s.cardTitleRow}>
-          <Text style={s.cardTitle} numberOfLines={1}>{run.title}</Text>
-          <View style={s.cardTitleRight}>
-            {spotsLeft <= 3 && spotsLeft > 0 && (
-              <View style={s.urgentBadge}>
-                <Text style={s.urgentText}>{spotsLeft} left</Text>
-              </View>
-            )}
-            {onBookmark && (
-              <Pressable onPress={(e) => { e.stopPropagation?.(); onBookmark(); }} hitSlop={8} style={s.cardBookmarkBtn}>
-                <Ionicons
-                  name={isBookmarked ? "bookmark" : "bookmark-outline"}
-                  size={16}
-                  color={isBookmarked ? C.primary : C.textMuted}
-                />
-              </Pressable>
-            )}
-          </View>
-        </View>
-        <View style={s.hostRow}>
+      <View style={s.cardBody}>
+        {/* ── Left: Host column ── */}
+        <View style={s.hostColumn}>
           {run.host_photo ? (
             <Image source={{ uri: run.host_photo }} style={s.hostAvatar} />
           ) : (
@@ -441,65 +424,86 @@ function RunCard({
               <Text style={s.hostAvatarLetter}>{run.host_name?.charAt(0).toUpperCase()}</Text>
             </View>
           )}
-          <View style={s.hostInfo}>
-            <Text style={s.hostName} numberOfLines={1}>{run.host_name}</Text>
-            <View style={s.hostMetaRow}>
-              {run.host_rating > 0 && (
-                <Text style={s.ratingText}>★ {run.host_rating.toFixed(1)}</Text>
+          <Text style={s.hostColumnName} numberOfLines={2}>{run.host_name}</Text>
+          {run.host_rating > 0 && (
+            <Text style={s.hostColumnRating}>★ {run.host_rating.toFixed(1)}</Text>
+          )}
+          {badge && (
+            <Text style={[s.hostColumnBadge, { color: badge.color }]}>{badge.label}</Text>
+          )}
+        </View>
+
+        <View style={s.cardDivider} />
+
+        {/* ── Right: Run details ── */}
+        <View style={s.cardDetails}>
+          <View style={s.cardTitleRow}>
+            <Text style={s.cardTitle} numberOfLines={2}>{run.title}</Text>
+            <View style={s.cardTitleRight}>
+              {spotsLeft <= 3 && spotsLeft > 0 && (
+                <View style={s.urgentBadge}>
+                  <Text style={s.urgentText}>{spotsLeft} left</Text>
+                </View>
               )}
-              {(() => { const b = getHostBadge(run.host_hosted_runs); return b ? <Text style={[s.hostBadge, { color: b.color }]}>{run.host_rating > 0 ? "  · " : ""}{b.label}</Text> : null; })()}
+              {onBookmark && (
+                <Pressable onPress={(e) => { e.stopPropagation?.(); onBookmark(); }} hitSlop={8} style={s.cardBookmarkBtn}>
+                  <Ionicons
+                    name={isBookmarked ? "bookmark" : "bookmark-outline"}
+                    size={16}
+                    color={isBookmarked ? C.primary : C.textMuted}
+                  />
+                </Pressable>
+              )}
             </View>
           </View>
-        </View>
-      </View>
 
-      <View style={s.cardMeta}>
-        <View style={s.metaItem}>
-          <Feather name="calendar" size={12} color={C.textMuted} />
-          <Text style={s.metaText}>{formatDate(run.date)} · {formatTime(run.date)}</Text>
-        </View>
-        <View style={s.metaItem}>
-          <Feather name="map-pin" size={12} color={C.textMuted} />
-          <Text style={s.metaText} numberOfLines={1}>{run.location_name}</Text>
-        </View>
-        {distanceMi !== undefined && (
-          <View style={s.metaItem}>
-            <Feather name="navigation" size={12} color={C.textMuted} />
-            <Text style={s.metaText}>{formatDistance(distanceMi)} mi away</Text>
-          </View>
-        )}
-      </View>
-
-      <View style={s.cardStats}>
-        <View style={s.stat}>
-          <Ionicons name="walk" size={13} color={C.orange} />
-          <Text style={s.statLabel}>{formatPace(run.min_pace)}–{formatPace(run.max_pace)}</Text>
-          <Text style={s.statUnit}>/mi</Text>
-        </View>
-        <View style={s.statDiv} />
-        <View style={s.stat}>
-          <Feather name="target" size={13} color={C.blue} />
-          <Text style={s.statLabel}>
-            {formatDistance(run.min_distance)}–{formatDistance(run.max_distance)}
-          </Text>
-          <Text style={s.statUnit}>mi</Text>
-        </View>
-        <View style={s.statDiv} />
-        <View style={s.stat}>
-          <Ionicons name="people" size={13} color={C.textMuted} />
-          <Text style={s.statLabel}>{run.participant_count}/{run.max_participants}</Text>
-        </View>
-      </View>
-
-      {run.tags?.length > 0 && (
-        <View style={s.tags}>
-          {run.tags.slice(0, 3).map((t) => (
-            <View key={t} style={s.tag}>
-              <Text style={s.tagTxt}>{t}</Text>
+          <View style={s.cardMeta}>
+            <View style={s.metaItem}>
+              <Feather name="calendar" size={11} color={C.textMuted} />
+              <Text style={s.metaText}>{formatDate(run.date)} · {formatTime(run.date)}</Text>
             </View>
-          ))}
+            <View style={s.metaItem}>
+              <Feather name="map-pin" size={11} color={C.textMuted} />
+              <Text style={s.metaText} numberOfLines={1}>{run.location_name}</Text>
+            </View>
+            {distanceMi !== undefined && (
+              <View style={s.metaItem}>
+                <Feather name="navigation" size={11} color={C.textMuted} />
+                <Text style={s.metaText}>{formatDistance(distanceMi)} mi away</Text>
+              </View>
+            )}
+          </View>
+
+          <View style={s.cardStats}>
+            <View style={s.stat}>
+              <Ionicons name="walk" size={12} color={C.orange} />
+              <Text style={s.statLabel}>{formatPace(run.min_pace)}–{formatPace(run.max_pace)}</Text>
+              <Text style={s.statUnit}>/mi</Text>
+            </View>
+            <View style={s.statDiv} />
+            <View style={s.stat}>
+              <Feather name="target" size={12} color={C.blue} />
+              <Text style={s.statLabel}>{formatDistance(run.min_distance)}–{formatDistance(run.max_distance)}</Text>
+              <Text style={s.statUnit}>mi</Text>
+            </View>
+            <View style={s.statDiv} />
+            <View style={s.stat}>
+              <Ionicons name="people" size={12} color={C.textMuted} />
+              <Text style={s.statLabel}>{run.participant_count}/{run.max_participants}</Text>
+            </View>
+          </View>
+
+          {run.tags?.length > 0 && (
+            <View style={s.tags}>
+              {run.tags.slice(0, 3).map((t) => (
+                <View key={t} style={s.tag}>
+                  <Text style={s.tagTxt}>{t}</Text>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
-      )}
+      </View>
     </Pressable>
   );
 }
@@ -1504,15 +1508,17 @@ const s = StyleSheet.create({
   card: {
     backgroundColor: C.surface,
     borderRadius: 14,
-    padding: 15,
+    padding: 14,
     borderWidth: 1,
     borderColor: C.border,
-    gap: 9,
   },
-  cardTop: { gap: 3 },
-  cardTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  cardTitle: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.text, flex: 1 },
-  cardTitleRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+  cardBody: { flexDirection: "row", alignItems: "stretch", gap: 12 },
+  hostColumn: { width: 66, alignItems: "center", gap: 4, paddingTop: 2 },
+  cardDivider: { width: 1, backgroundColor: C.border },
+  cardDetails: { flex: 1, gap: 8 },
+  cardTitleRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  cardTitle: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.text, flex: 1, lineHeight: 20 },
+  cardTitleRight: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 2 },
   cardBookmarkBtn: { padding: 2 },
   savedSection: { marginBottom: 16 },
   savedSectionTitle: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.text, marginBottom: 10 },
@@ -1539,15 +1545,12 @@ const s = StyleSheet.create({
     borderColor: C.orange + "40",
   },
   urgentText: { fontFamily: "Outfit_600SemiBold", fontSize: 10, color: C.orange },
-  hostRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 2 },
-  hostAvatar: { width: 26, height: 26, borderRadius: 13, backgroundColor: C.primaryMuted },
-  hostAvatarFallback: { width: 26, height: 26, borderRadius: 13, backgroundColor: C.primaryMuted, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: C.primary + "44" },
-  hostAvatarLetter: { fontFamily: "Outfit_700Bold", fontSize: 11, color: C.primary },
-  hostInfo: { flex: 1, gap: 1 },
-  hostName: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.text },
-  hostMetaRow: { flexDirection: "row", alignItems: "center" },
-  ratingText: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.gold },
-  hostBadge: { fontFamily: "Outfit_600SemiBold", fontSize: 11 },
+  hostAvatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: C.primaryMuted },
+  hostAvatarFallback: { width: 52, height: 52, borderRadius: 26, backgroundColor: C.primaryMuted, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: C.primary + "55" },
+  hostAvatarLetter: { fontFamily: "Outfit_700Bold", fontSize: 20, color: C.primary },
+  hostColumnName: { fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.text, textAlign: "center" },
+  hostColumnRating: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.gold, textAlign: "center" },
+  hostColumnBadge: { fontFamily: "Outfit_600SemiBold", fontSize: 10, textAlign: "center" },
 
   cardMeta: { gap: 3 },
   metaItem: { flexDirection: "row", alignItems: "center", gap: 6 },
