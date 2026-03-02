@@ -353,10 +353,10 @@ function InviteUserSheet({
             </TouchableOpacity>
           </View>
 
-          <View style={s.searchBar}>
+          <View style={s.memberSearchBar}>
             <Ionicons name="search-outline" size={18} color={C.textMuted} style={{ marginRight: 8 }} />
             <TextInput
-              style={s.searchInput}
+              style={s.memberSearchInput}
               value={query}
               onChangeText={search}
               placeholder="Search by name"
@@ -753,14 +753,18 @@ export default function CrewScreen() {
       {/* Header */}
       <View style={s.header}>
         <Text style={s.headerTitle}>Crew</Text>
-        <TouchableOpacity
-          style={s.headerAdd}
-          onPress={() => setShowCreate(true)}
-          testID="open-create-crew"
-        >
-          <Ionicons name="add" size={22} color={C.bg} />
-        </TouchableOpacity>
       </View>
+
+      {/* Create A Crew CTA */}
+      <TouchableOpacity
+        style={s.createCrewBtn}
+        onPress={() => setShowCreate(true)}
+        testID="open-create-crew"
+        activeOpacity={0.88}
+      >
+        <Ionicons name="people" size={20} color={C.bg} />
+        <Text style={s.createCrewBtnTxt}>Create A Crew</Text>
+      </TouchableOpacity>
 
       {/* Search bar */}
       <View style={s.searchRow}>
@@ -1044,13 +1048,21 @@ const s = StyleSheet.create({
     fontSize: 12,
     color: C.bg,
   },
-  headerAdd: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: C.primary,
+  createCrewBtn: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    gap: 10,
+    backgroundColor: C.primary,
+    borderRadius: 16,
+    paddingVertical: 16,
+    marginHorizontal: 20,
+    marginBottom: 14,
+  },
+  createCrewBtnTxt: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 17,
+    color: C.bg,
   },
 
   // Invite banner
@@ -1480,7 +1492,7 @@ const s = StyleSheet.create({
   },
 
   // Search / Invite user
-  searchBar: {
+  memberSearchBar: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: C.surface,
@@ -1493,7 +1505,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
-  searchInput: {
+  memberSearchInput: {
     flex: 1,
     fontFamily: "Outfit_400Regular",
     fontSize: 15,
