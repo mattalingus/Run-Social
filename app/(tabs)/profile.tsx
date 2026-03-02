@@ -26,6 +26,7 @@ import { MARKER_ICONS } from "@/constants/markerIcons";
 import { ACHIEVEMENTS, type AchievementDef } from "@/constants/achievements";
 import { formatDistance } from "@/lib/formatDistance";
 import { pickAndUploadImage } from "@/lib/uploadImage";
+import HostProfileSheet from "@/components/HostProfileSheet";
 const APP_SHARE_URL = process.env.EXPO_PUBLIC_DOMAIN
   ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
   : "https://paceup.app";
@@ -133,6 +134,7 @@ export default function ProfileScreen() {
   const [topRunsModal, setTopRunsModal] = useState<"longest" | "fastest" | null>(null);
   const [friendSearch, setFriendSearch] = useState("");
   const [showAddFriend, setShowAddFriend] = useState(false);
+  const [viewProfileId, setViewProfileId] = useState<string | null>(null);
   const [showFriendList, setShowFriendList] = useState(false);
   const [showAchievements, setShowAchievements] = useState(false);
   const [selectedAchievement, setSelectedAchievement] = useState<AchievementDef | null>(null);
@@ -897,13 +899,18 @@ export default function ProfileScreen() {
               <Text style={styles.friendsSectionTitle}>Your Friends ({friendsList.length})</Text>
               {friendsList.map((f: any) => (
                 <View key={f.friendship_id} style={styles.friendCard}>
-                  <View style={styles.friendAvatar}>
-                    {f.photo_url ? <Image source={{ uri: f.photo_url }} style={styles.friendAvatarImg} /> : <Text style={styles.friendAvatarTxt}>{f.name.charAt(0).toUpperCase()}</Text>}
-                  </View>
-                  <View style={styles.friendInfo}>
-                    <Text style={styles.friendName}>{f.name}</Text>
-                    <Text style={styles.friendStat}>{f.completed_runs} runs · {formatDistance(f.total_miles)} mi</Text>
-                  </View>
+                  <Pressable
+                    style={styles.friendCardInfo}
+                    onPress={() => { setViewProfileId(f.id); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+                  >
+                    <View style={styles.friendAvatar}>
+                      {f.photo_url ? <Image source={{ uri: f.photo_url }} style={styles.friendAvatarImg} /> : <Text style={styles.friendAvatarTxt}>{f.name.charAt(0).toUpperCase()}</Text>}
+                    </View>
+                    <View style={styles.friendInfo}>
+                      <Text style={styles.friendName}>{f.name}</Text>
+                      <Text style={styles.friendStat}>{f.completed_runs} runs · {formatDistance(f.total_miles)} mi</Text>
+                    </View>
+                  </Pressable>
                   <Pressable
                     style={styles.friendRemoveBtn}
                     onPress={() => Alert.alert("Remove Friend", `Remove ${f.name} from your friends?`, [
@@ -1093,6 +1100,7 @@ export default function ProfileScreen() {
         </Modal>
       )}
 
+      <HostProfileSheet hostId={viewProfileId} onClose={() => setViewProfileId(null)} />
     </ScrollView>
   );
 }
@@ -1308,6 +1316,7 @@ const styles = StyleSheet.create({
   friendsSection: { gap: 10 },
   friendsSectionTitle: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.textSecondary, textTransform: "uppercase" as const, letterSpacing: 0.8, marginBottom: 2 },
   friendCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: C.surface, borderRadius: 14, padding: 12, borderWidth: 1, borderColor: C.border },
+  friendCardInfo: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
   friendAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.primaryMuted, borderWidth: 1, borderColor: C.primary + "33", alignItems: "center", justifyContent: "center", overflow: "hidden" },
   friendAvatarImg: { width: 44, height: 44, borderRadius: 22 },
   friendAvatarTxt: { fontFamily: "Outfit_700Bold", fontSize: 18, color: C.primary },
