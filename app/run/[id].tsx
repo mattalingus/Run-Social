@@ -89,6 +89,11 @@ export default function RunDetailScreen() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
   const [hostProfileId, setHostProfileId] = useState<string | null>(null);
+  const [showEditSheet, setShowEditSheet] = useState(false);
+  const [editDate, setEditDate] = useState("");
+  const [editTime, setEditTime] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   const { data: run, isLoading, refetch } = useQuery<any>({
     queryKey: ["/api/runs", id],
@@ -309,6 +314,73 @@ export default function RunDetailScreen() {
     } finally {
       setStarting(false);
     }
+  }
+
+  function handleOpenEdit() {
+    if (!run) return;
+    const d = new Date(run.date);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    const hours = String(d.getHours()).padStart(2, "0");
+    const minutes = String(d.getMinutes()).padStart(2, "0");
+    setEditDate(`${year}-${month}-${day}`);
+    setEditTime(`${hours}:${minutes}`);
+    setShowEditSheet(true);
+  }
+
+  async function handleSaveEdit() {
+    if (!editDate.trim() || !editTime.trim()) {
+      Alert.alert("Missing info", "Please enter both a date and time.");
+      return;
+    }
+    const parsed = new Date(`${editDate}T${editTime}:00`);
+    if (isNaN(parsed.getTime())) {
+      Alert.alert("Invalid format", "Date must be YYYY-MM-DD and time HH:MM.");
+      return;
+    }
+    setEditSaving(true);
+    try {
+      await apiRequest("PATCH", `/api/runs/${id}`, { date: parsed.toISOString() });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      qc.invalidateQueries({ queryKey: ["/api/runs", id] });
+      qc.invalidateQueries({ queryKey: ["/api/runs"] });
+      setShowEditSheet(false);
+    } catch (e: any) {
+      Alert.alert("Error", e.message || "Could not update the run.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
+  function handleCancelRun() {
+    const label = run?.activity_type === "ride" ? "ride" : "run";
+    Alert.alert(
+      "Cancel Run",
+      `Are you sure you want to cancel this ${label}? All participants will be notified and the event will be removed.`,
+      [
+        { text: "Keep It", style: "cancel" },
+        {
+          text: "Cancel Run",
+          style: "destructive",
+          onPress: async () => {
+            setCancelling(true);
+            try {
+              await apiRequest("DELETE", `/api/runs/${id}`);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              qc.invalidateQueries({ queryKey: ["/api/runs"] });
+              router.back();
+            } catch (e: any) {
+              Alert.alert("Error", e.message || "Could not cancel the run.");
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            } finally {
+              setCancelling(false);
+            }
+          },
+        },
+      ]
+    );
   }
 
   async function doJoin() {
@@ -744,6 +816,30 @@ export default function RunDetailScreen() {
             </Pressable>
           ) : (
             <>
+              {/* Host management: Edit time & Cancel */}
+              <View style={styles.hostMgmtRow}>
+                <Pressable
+                  style={({ pressed }) => [styles.hostMgmtBtn, { opacity: pressed ? 0.75 : 1 }]}
+                  onPress={handleOpenEdit}
+                  testID="edit-run-btn"
+                >
+                  <Feather name="edit-2" size={15} color={C.textSecondary} />
+                  <Text style={styles.hostMgmtTxt}>Edit Time</Text>
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [styles.hostMgmtBtn, styles.hostMgmtDangerBtn, { opacity: pressed || cancelling ? 0.75 : 1 }]}
+                  onPress={handleCancelRun}
+                  disabled={cancelling}
+                  testID="cancel-run-btn"
+                >
+                  {cancelling ? <ActivityIndicator size="small" color={C.danger} /> : (
+                    <>
+                      <Feather name="x-circle" size={15} color={C.danger} />
+                      <Text style={styles.hostMgmtDangerTxt}>Cancel Run</Text>
+                    </>
+                  )}
+                </Pressable>
+              </View>
               <Pressable
                 style={({ pressed }) => [
                   styles.primaryBtn,
@@ -1054,6 +1150,66 @@ export default function RunDetailScreen() {
           </View>
         </Modal>
       )}
+
+      {/* ── Edit Date/Time Sheet ──────────────────────────────────────────── */}
+      {showEditSheet && (
+        <Modal transparent animationType="slide" onRequestClose={() => setShowEditSheet(false)}>
+          <View style={styles.frModalWrap}>
+            <Pressable style={styles.frOverlay} onPress={() => setShowEditSheet(false)} />
+            <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.editSheetOuter}>
+              <View style={[styles.editSheet, { paddingBottom: insets.bottom + 24 }]}>
+                <View style={styles.frHandle} />
+                <View style={styles.editSheetHeader}>
+                  <Text style={styles.editSheetTitle}>Edit Date & Time</Text>
+                  <Pressable onPress={() => setShowEditSheet(false)} hitSlop={12}>
+                    <Feather name="x" size={18} color={C.textSecondary} />
+                  </Pressable>
+                </View>
+                <Text style={styles.editSheetSub}>
+                  All participants will be notified of the new time.
+                </Text>
+                <View style={styles.editFieldGroup}>
+                  <Text style={styles.editFieldLabel}>Date (YYYY-MM-DD)</Text>
+                  <TextInput
+                    style={styles.editInput}
+                    value={editDate}
+                    onChangeText={setEditDate}
+                    placeholder="2025-06-15"
+                    placeholderTextColor={C.textMuted}
+                    keyboardType="numbers-and-punctuation"
+                    autoCorrect={false}
+                  />
+                </View>
+                <View style={styles.editFieldGroup}>
+                  <Text style={styles.editFieldLabel}>Time (HH:MM, 24-hr)</Text>
+                  <TextInput
+                    style={styles.editInput}
+                    value={editTime}
+                    onChangeText={setEditTime}
+                    placeholder="07:30"
+                    placeholderTextColor={C.textMuted}
+                    keyboardType="numbers-and-punctuation"
+                    autoCorrect={false}
+                  />
+                </View>
+                <Pressable
+                  style={({ pressed }) => [styles.primaryBtn, { opacity: pressed || editSaving ? 0.85 : 1, marginTop: 8 }]}
+                  onPress={handleSaveEdit}
+                  disabled={editSaving}
+                  testID="save-edit-btn"
+                >
+                  {editSaving ? <ActivityIndicator color={C.text} /> : (
+                    <>
+                      <Feather name="check" size={16} color={C.text} />
+                      <Text style={styles.primaryBtnText}>Save Changes</Text>
+                    </>
+                  )}
+                </Pressable>
+              </View>
+            </KeyboardAvoidingView>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -1141,6 +1297,19 @@ const styles = StyleSheet.create({
   liveBtnText: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.primary },
   liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.primary },
   btnDisabled: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
+  hostMgmtRow: { flexDirection: "row", gap: 10 },
+  hostMgmtBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, height: 44, borderRadius: 12, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
+  hostMgmtTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.textSecondary },
+  hostMgmtDangerBtn: { borderColor: C.danger + "55", backgroundColor: C.danger + "11" },
+  hostMgmtDangerTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.danger },
+  editSheetOuter: { justifyContent: "flex-end" },
+  editSheet: { backgroundColor: C.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, gap: 16 },
+  editSheetHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  editSheetTitle: { fontFamily: "Outfit_700Bold", fontSize: 20, color: C.text },
+  editSheetSub: { fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textSecondary, lineHeight: 20, marginTop: -8 },
+  editFieldGroup: { gap: 6 },
+  editFieldLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary },
+  editInput: { backgroundColor: C.card, borderRadius: 12, borderWidth: 1, borderColor: C.border, paddingHorizontal: 16, paddingVertical: 14, fontFamily: "Outfit_400Regular", fontSize: 16, color: C.text },
   proximityWarn: { flexDirection: "row", alignItems: "center", gap: 6, justifyContent: "center", paddingTop: 4 },
   proximityText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary, flex: 1 },
   errorText: { fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text },

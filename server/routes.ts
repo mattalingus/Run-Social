@@ -584,6 +584,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ success: true });
   });
 
+  app.patch("/api/runs/:id", requireAuth, async (req, res) => {
+    try {
+      const { date } = req.body;
+      if (!date) return res.status(400).json({ message: "date is required" });
+      const updated = await storage.updateRunDateTime(req.params.id, req.session.userId!, date);
+      const tokens = await storage.getRunParticipantTokens(req.params.id);
+      if (tokens.length) {
+        const newDate = new Date(updated.date);
+        const label = `${newDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} at ${newDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
+        sendPushNotification(
+          tokens.map((t) => t.push_token).filter(Boolean),
+          "Run time updated ⏰",
+          `"${updated.title}" has been rescheduled to ${label}`,
+          { runId: req.params.id }
+        );
+      }
+      res.json(updated);
+    } catch (e: any) {
+      res.status(e.message.includes("Only the host") ? 403 : 500).json({ message: e.message });
+    }
+  });
+
+  app.delete("/api/runs/:id", requireAuth, async (req, res) => {
+    try {
+      const result = await storage.cancelRun(req.params.id, req.session.userId!);
+      if (result.tokens.length) {
+        sendPushNotification(
+          result.tokens.map((t) => t.push_token).filter(Boolean),
+          "Run cancelled ❌",
+          `"${result.title}" has been cancelled by the host`,
+          {}
+        );
+      }
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(e.message.includes("Only the host") ? 403 : 500).json({ message: e.message });
+    }
+  });
+
   app.post("/api/runs/:id/complete", requireAuth, async (req, res) => {
     try {
       const { milesLogged } = req.body;

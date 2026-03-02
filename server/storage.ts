@@ -748,6 +748,41 @@ export async function leaveRun(runId: string, userId: string) {
   );
 }
 
+export async function getRunParticipantTokens(runId: string): Promise<{ name: string; push_token: string }[]> {
+  const result = await pool.query(
+    `SELECT u.name, u.push_token
+     FROM run_participants rp
+     JOIN users u ON u.id = rp.user_id
+     WHERE rp.run_id = $1 AND rp.status != 'cancelled' AND u.push_token IS NOT NULL`,
+    [runId]
+  );
+  return result.rows;
+}
+
+export async function updateRunDateTime(runId: string, userId: string, newDate: string) {
+  const run = await pool.query(`SELECT * FROM runs WHERE id = $1`, [runId]);
+  if (!run.rows.length) throw new Error("Run not found");
+  if (run.rows[0].host_id !== userId) throw new Error("Only the host can edit this run");
+  const updated = await pool.query(
+    `UPDATE runs SET date = $2 WHERE id = $1 RETURNING *`,
+    [runId, newDate]
+  );
+  return updated.rows[0];
+}
+
+export async function cancelRun(runId: string, userId: string) {
+  const run = await pool.query(`SELECT * FROM runs WHERE id = $1`, [runId]);
+  if (!run.rows.length) throw new Error("Run not found");
+  if (run.rows[0].host_id !== userId) throw new Error("Only the host can cancel this run");
+  const tokens = await getRunParticipantTokens(runId);
+  await pool.query(`DELETE FROM run_participants WHERE run_id = $1`, [runId]);
+  await pool.query(`DELETE FROM run_invites WHERE run_id = $1`, [runId]);
+  await pool.query(`DELETE FROM bookmarked_runs WHERE run_id = $1`, [runId]);
+  await pool.query(`DELETE FROM run_photos WHERE run_id = $1`, [runId]);
+  await pool.query(`DELETE FROM runs WHERE id = $1`, [runId]);
+  return { title: run.rows[0].title, tokens };
+}
+
 export async function getRunParticipants(runId: string) {
   const result = await pool.query(
     `SELECT u.id, u.name, u.photo_url, u.avg_pace, u.avg_distance, rp.status, rp.joined_at
