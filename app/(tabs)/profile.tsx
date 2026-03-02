@@ -20,6 +20,7 @@ import * as Haptics from "expo-haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
+import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest } from "@/lib/query-client";
 import C from "@/constants/colors";
 import { MARKER_ICONS } from "@/constants/markerIcons";
@@ -131,7 +132,7 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { user, logout, refreshUser } = useAuth();
   const qc = useQueryClient();
-  const [profileActivity, setProfileActivity] = useState<"run" | "ride">("run");
+  const { activityFilter: profileActivity, setActivityFilter: setProfileActivity } = useActivity();
 
   const [showGoals, setShowGoals] = useState(false);
   const [showPace, setShowPace] = useState(false);
