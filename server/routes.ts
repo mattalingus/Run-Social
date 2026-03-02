@@ -1046,15 +1046,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
-  app.get("/api/users/search", requireAuth, async (req, res) => {
-    try {
-      const q = (req.query.q as string) || "";
-      if (q.length < 2) return res.json([]);
-      const users = await storage.searchUsersForInvite(q, [req.session.userId!]);
-      res.json(users);
-    } catch (e: any) { res.status(500).json({ message: e.message }); }
-  });
-
   app.post("/api/admin/seed-runs", async (req, res) => {
     try {
       const { count = 20 } = req.body;

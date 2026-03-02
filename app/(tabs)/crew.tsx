@@ -87,6 +87,7 @@ interface Run {
 interface UserSearchResult {
   id: string;
   name: string;
+  username?: string;
   photo_url?: string;
   hosted_runs?: number;
 }
@@ -291,12 +292,10 @@ function CreateCrewSheet({ visible, onClose, onCreated }: { visible: boolean; on
 
 // ─── Invite User Sheet ────────────────────────────────────────────────────────
 function InviteUserSheet({
-  visible,
   onClose,
   crewId,
   existingMemberIds,
 }: {
-  visible: boolean;
   onClose: () => void;
   crewId: string;
   existingMemberIds: string[];
@@ -342,66 +341,74 @@ function InviteUserSheet({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
-        <View style={s.sheet}>
-          <View style={s.sheetHandle} />
-          <View style={s.sheetHeader}>
-            <Text style={s.sheetTitle}>Invite to Crew</Text>
-            <TouchableOpacity onPress={handleClose} testID="close-invite-sheet">
-              <Ionicons name="close" size={24} color={C.textMuted} />
-            </TouchableOpacity>
-          </View>
-
-          <View style={s.memberSearchBar}>
-            <Ionicons name="search-outline" size={18} color={C.textMuted} style={{ marginRight: 8 }} />
-            <TextInput
-              style={s.memberSearchInput}
-              value={query}
-              onChangeText={search}
-              placeholder="Search by name"
-              placeholderTextColor={C.textMuted}
-              autoFocus
-              testID="invite-search-input"
-            />
-            {searching && <ActivityIndicator size="small" color={C.primary} />}
-          </View>
-
-          <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
-            {results.length === 0 && query.length >= 2 && !searching && (
-              <Text style={s.noResults}>No users found</Text>
-            )}
-            {results.map((u) => (
-              <View key={u.id} style={s.searchResultRow}>
-                <View style={s.searchResultAvatar}>
-                  <Text style={s.searchResultAvatarText}>{u.name[0]?.toUpperCase()}</Text>
-                </View>
-                <View style={s.searchResultInfo}>
-                  <Text style={s.searchResultName}>{u.name}</Text>
-                  {(u.hosted_runs ?? 0) > 0 && (
-                    <Text style={s.searchResultMeta}>{u.hosted_runs} runs hosted</Text>
-                  )}
-                </View>
-                {invited.has(u.id) ? (
-                  <View style={s.invitedBadge}>
-                    <Ionicons name="checkmark" size={14} color={C.primary} />
-                    <Text style={s.invitedBadgeTxt}>Invited</Text>
-                  </View>
-                ) : (
-                  <TouchableOpacity
-                    style={s.inviteBtn}
-                    onPress={() => inviteMutation.mutate(u.id)}
-                    testID={`invite-user-${u.id}`}
-                  >
-                    <Text style={s.inviteBtnTxt}>Invite</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            ))}
-          </ScrollView>
+    <View style={s.inviteOverlay}>
+      <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={handleClose} />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={s.inviteOverlaySheet}
+      >
+      <View style={{ flex: 1 }}>
+        <View style={s.sheetHandle} />
+        <View style={s.sheetHeader}>
+          <Text style={s.sheetTitle}>Invite to Crew</Text>
+          <TouchableOpacity onPress={handleClose} testID="close-invite-sheet">
+            <Ionicons name="close" size={24} color={C.textMuted} />
+          </TouchableOpacity>
         </View>
+
+        <View style={s.memberSearchBar}>
+          <Ionicons name="search-outline" size={18} color={C.textMuted} style={{ marginRight: 8 }} />
+          <TextInput
+            style={s.memberSearchInput}
+            value={query}
+            onChangeText={search}
+            placeholder="Search by username"
+            placeholderTextColor={C.textMuted}
+            autoFocus
+            autoCapitalize="none"
+            autoCorrect={false}
+            testID="invite-search-input"
+          />
+          {searching && <ActivityIndicator size="small" color={C.primary} />}
+        </View>
+
+        <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
+          {results.length === 0 && query.length >= 2 && !searching && (
+            <Text style={s.noResults}>No users found</Text>
+          )}
+          {results.map((u) => (
+            <View key={u.id} style={s.searchResultRow}>
+              <View style={s.searchResultAvatar}>
+                <Text style={s.searchResultAvatarText}>{u.name[0]?.toUpperCase()}</Text>
+              </View>
+              <View style={s.searchResultInfo}>
+                <Text style={s.searchResultName}>{u.name}</Text>
+                <Text style={s.searchResultMeta}>
+                  {u.username ? `@${u.username}` : ""}
+                  {u.username && (u.hosted_runs ?? 0) > 0 ? "  ·  " : ""}
+                  {(u.hosted_runs ?? 0) > 0 ? `${u.hosted_runs} hosted` : ""}
+                </Text>
+              </View>
+              {invited.has(u.id) ? (
+                <View style={s.invitedBadge}>
+                  <Ionicons name="checkmark" size={14} color={C.primary} />
+                  <Text style={s.invitedBadgeTxt}>Invited</Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={s.inviteBtn}
+                  onPress={() => inviteMutation.mutate(u.id)}
+                  testID={`invite-user-${u.id}`}
+                >
+                  <Text style={s.inviteBtnTxt}>Invite</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ))}
+        </ScrollView>
+      </View>
       </KeyboardAvoidingView>
-    </Modal>
+    </View>
   );
 }
 
@@ -628,17 +635,16 @@ function CrewDetailSheet({
               </ScrollView>
             </>
           )}
+
+          {showInvite && crew && (
+            <InviteUserSheet
+              onClose={() => setShowInvite(false)}
+              crewId={crew.id}
+              existingMemberIds={memberIds}
+            />
+          )}
         </View>
       </Modal>
-
-      {showInvite && crew && (
-        <InviteUserSheet
-          visible={showInvite}
-          onClose={() => setShowInvite(false)}
-          crewId={crew.id}
-          existingMemberIds={memberIds}
-        />
-      )}
     </>
   );
 }
@@ -1486,6 +1492,22 @@ const s = StyleSheet.create({
     fontFamily: "Outfit_600SemiBold",
     fontSize: 13,
     color: C.primary,
+  },
+  inviteOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.55)",
+  },
+  inviteOverlaySheet: {
+    backgroundColor: C.surface,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 40,
+    height: "75%",
   },
 
   // Members

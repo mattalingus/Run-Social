@@ -376,7 +376,7 @@ export async function getUserRecentDistances(userId: string, limit = 10): Promis
 
 export async function searchUsers(query: string, currentUserId: string) {
   const result = await pool.query(
-    `SELECT id, name, photo_url, completed_runs, total_miles FROM users WHERE id != $1 AND name ILIKE $2 LIMIT 20`,
+    `SELECT id, name, username, photo_url, completed_runs, total_miles FROM users WHERE id != $1 AND username ILIKE $2 LIMIT 20`,
     [currentUserId, `%${query}%`]
   );
   return result.rows;
@@ -1978,11 +1978,11 @@ export async function requestToJoinCrew(crewId: string, userId: string) {
 
 export async function searchUsersForInvite(query: string, excludeIds: string[]) {
   const res = await pool.query(
-    `SELECT id, name, photo_url, hosted_runs FROM users
-     WHERE (LOWER(name) LIKE $1 OR LOWER(email) LIKE $1)
+    `SELECT id, name, username, photo_url, hosted_runs FROM users
+     WHERE username ILIKE $1
        AND id != ALL($2::varchar[])
      LIMIT 10`,
-    [`%${query.toLowerCase()}%`, excludeIds]
+    [`%${query}%`, excludeIds]
   );
   return res.rows;
 }

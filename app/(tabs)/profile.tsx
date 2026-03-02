@@ -1116,9 +1116,10 @@ export default function ProfileScreen() {
               style={[styles.searchInput, { color: C.text }]}
               value={friendSearch}
               onChangeText={setFriendSearch}
-              placeholder="Search runners by name..."
+              placeholder="Search by username..."
               placeholderTextColor={C.textMuted}
-              autoCapitalize="words"
+              autoCapitalize="none"
+              autoCorrect={false}
             />
             {friendSearch.length > 0 && (
               <Pressable onPress={() => setFriendSearch("")} hitSlop={8}>
@@ -1172,7 +1173,9 @@ export default function ProfileScreen() {
                       </View>
                       <View style={styles.friendInfo}>
                         <Text style={styles.friendName}>{u.name}</Text>
-                        <Text style={styles.friendStat}>{u.completed_runs} runs · {formatDistance(u.total_miles)} mi</Text>
+                        <Text style={styles.friendStat}>
+                          {u.username ? `@${u.username}  ·  ` : ""}{u.completed_runs} runs · {formatDistance(u.total_miles)} mi
+                        </Text>
                       </View>
                     </Pressable>
                     {isAlreadyFriend ? (
