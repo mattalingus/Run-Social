@@ -45,7 +45,7 @@ const SORT_OPTIONS: { key: SortOption; label: string }[] = [
 ];
 
 const HOST_STYLES = ["General", "Talkative", "Quiet", "Motivational", "Training", "Ministry", "Recovery", "Girlies", "Bros"];
-const PROX_STEPS  = [1, 5, 10, 25, 50]; // miles
+const PROX_STEPS  = [1, 5, 10, 25, 50]; // miles (null = Nationwide)
 
 interface FilterState {
   paceMin: number;
@@ -62,7 +62,7 @@ const DEFAULT_FILTERS: FilterState = {
   paceMax: 15.0,
   distMin: 1,
   distMax: 20,
-  maxDistFromMe: null,
+  maxDistFromMe: 10,
   styles: [],
   visibility: "all",
 };
@@ -237,15 +237,6 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
               )}
             </View>
             <View style={fm.proxRow}>
-              <Pressable
-                style={[fm.proxChip, draft.maxDistFromMe === null && fm.proxChipActive]}
-                onPress={() => setDraft((p) => ({ ...p, maxDistFromMe: null }))}
-                disabled={!userLocation}
-              >
-                <Text style={[fm.proxChipTxt, draft.maxDistFromMe === null && fm.proxChipTxtActive]}>
-                  Any
-                </Text>
-              </Pressable>
               {PROX_STEPS.map((mi) => (
                 <Pressable
                   key={mi}
@@ -257,7 +248,7 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
                   onPress={() => {
                     if (!userLocation) return;
                     Haptics.selectionAsync();
-                    setDraft((p) => ({ ...p, maxDistFromMe: p.maxDistFromMe === mi ? null : mi }));
+                    setDraft((p) => ({ ...p, maxDistFromMe: mi }));
                   }}
                   disabled={!userLocation}
                 >
@@ -272,6 +263,19 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
                   </Text>
                 </Pressable>
               ))}
+              <Pressable
+                style={[fm.proxChip, draft.maxDistFromMe === null && fm.proxChipActive, !userLocation && fm.proxChipDisabled]}
+                onPress={() => {
+                  if (!userLocation) return;
+                  Haptics.selectionAsync();
+                  setDraft((p) => ({ ...p, maxDistFromMe: null }));
+                }}
+                disabled={!userLocation}
+              >
+                <Text style={[fm.proxChipTxt, draft.maxDistFromMe === null && fm.proxChipTxtActive, !userLocation && fm.proxChipTxtDisabled]}>
+                  Nationwide
+                </Text>
+              </Pressable>
             </View>
           </View>
 
@@ -511,7 +515,7 @@ function RunCard({
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
-const PARTICIPANT_STEPS = [5, 10, 15, 20, 25, 30, 40, 50, 75, 100, 0]; // 0 = unlimited
+const PARTICIPANT_STEPS = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 40, 50, 75, 100, 0]; // 0 = unlimited
 
 export default function DiscoverScreen() {
   const insets = useSafeAreaInsets();
@@ -519,7 +523,7 @@ export default function DiscoverScreen() {
   const qc = useQueryClient();
 
   const [search, setSearch] = useState("");
-  const [sortOption, setSortOption] = useState<SortOption>("nearest");
+  const [sortOption, setSortOption] = useState<SortOption>("soonest");
   const [showSort, setShowSort] = useState(false);
   const [showFilter, setShowFilter] = useState(false);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -825,11 +829,11 @@ export default function DiscoverScreen() {
     applied.paceMax !== DEFAULT_FILTERS.paceMax ||
     applied.distMin !== DEFAULT_FILTERS.distMin ||
     applied.distMax !== DEFAULT_FILTERS.distMax ||
-    applied.maxDistFromMe !== null ||
+    applied.maxDistFromMe !== DEFAULT_FILTERS.maxDistFromMe ||
     applied.styles.length > 0 ||
     applied.visibility !== "all";
 
-  const isNonDefaultSort = sortOption !== "nearest";
+  const isNonDefaultSort = sortOption !== "soonest";
 
   function openFilter() {
     setDraft({ ...applied });
@@ -1242,9 +1246,9 @@ export default function DiscoverScreen() {
             <Text style={s.hLabel}>Max Runners</Text>
             <View style={s.hStepper}>
               <Pressable
-                style={[s.hStepBtn, hMaxParticipants <= 5 && { opacity: 0.4 }]}
+                style={[s.hStepBtn, hMaxParticipants <= 1 && hMaxParticipants !== 0 && { opacity: 0.4 }]}
                 onPress={() => stepParticipants(-1)}
-                disabled={hMaxParticipants <= 5 && hMaxParticipants !== 0}
+                disabled={hMaxParticipants <= 1 && hMaxParticipants !== 0}
               >
                 <Feather name="minus" size={18} color={C.primary} />
               </Pressable>
