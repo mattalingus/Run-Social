@@ -885,7 +885,7 @@ const styles = StyleSheet.create({
   planCountText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted },
   planBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-    borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16,
+    borderRadius: 14, height: 52, paddingHorizontal: 16,
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
   },
   planBtnActive: { backgroundColor: C.primaryMuted, borderColor: C.primary + "55" },
