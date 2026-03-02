@@ -650,13 +650,8 @@ export default function DiscoverScreen() {
   const [showRulesModal, setShowRulesModal] = useState(false);
 
   // ─── Host FAB helpers ───────────────────────────────────────────────────────
-  const openHostModal = useCallback(async () => {
-    const seen = await AsyncStorage.getItem("@paceup/hosting_rules_seen");
-    if (!seen) {
-      setShowRulesModal(true);
-    } else {
-      setShowHostModal(true);
-    }
+  const openHostModal = useCallback(() => {
+    setShowRulesModal(true);
   }, []);
 
   const createRunMutation = useMutation({
@@ -1374,8 +1369,7 @@ export default function DiscoverScreen() {
           <View style={s.rulesFooter}>
             <Pressable
               style={s.rulesAgreeBtn}
-              onPress={async () => {
-                await AsyncStorage.setItem("@paceup/hosting_rules_seen", "1");
+              onPress={() => {
                 setShowRulesModal(false);
                 setShowHostModal(true);
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
