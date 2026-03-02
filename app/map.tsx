@@ -661,7 +661,7 @@ export default function MapScreen() {
                 <View style={s.chip}>
                   <Feather name="map" size={11} color={C.blue} />
                   <Text style={[s.chipTxt, { color: C.blue }]}>
-                    {formatDistance(selectedRun.min_distance)}–{formatDistance(selectedRun.max_distance)} mi
+                    {selectedRun.min_distance === selectedRun.max_distance ? formatDistance(selectedRun.min_distance) : `${formatDistance(selectedRun.min_distance)}–${formatDistance(selectedRun.max_distance)}`} mi
                   </Text>
                 </View>
                 <View style={[s.chip, (selectedRun.is_active && selectedRun.participant_count > 0) && s.chipLive]}>

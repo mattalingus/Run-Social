@@ -288,7 +288,7 @@ export default function DiscoverScreen() {
                     <View style={st.stat}>
                       <Feather name="target" size={12} color={C.blue} />
                       <Text style={st.statText}>
-                        {formatDistance(run.min_distance)}–{formatDistance(run.max_distance)} mi
+                        {run.min_distance === run.max_distance ? formatDistance(run.min_distance) : `${formatDistance(run.min_distance)}–${formatDistance(run.max_distance)}`} mi
                       </Text>
                     </View>
                     <View style={st.divDot} />

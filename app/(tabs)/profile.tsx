@@ -794,7 +794,7 @@ export default function ProfileScreen() {
                 </View>
                 <View>
                   <Text style={styles.historyTitle} numberOfLines={1}>{run.title}</Text>
-                  <Text style={styles.historyMeta}>{formatDate(run.date)} · {formatDistance(run.min_distance)}–{formatDistance(run.max_distance)} mi</Text>
+                  <Text style={styles.historyMeta}>{formatDate(run.date)} · {run.min_distance === run.max_distance ? formatDistance(run.min_distance) : `${formatDistance(run.min_distance)}–${formatDistance(run.max_distance)}`} mi</Text>
                 </View>
               </View>
               <View style={[styles.historyStatus, { backgroundColor: run.is_completed ? C.primary + "22" : C.border }]}>

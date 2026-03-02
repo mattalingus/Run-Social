@@ -499,7 +499,7 @@ function RunCard({
             <View style={s.statDiv} />
             <View style={s.stat}>
               <Feather name="target" size={12} color={C.blue} />
-              <Text style={s.statLabel}>{formatDistance(run.min_distance)}–{formatDistance(run.max_distance)}</Text>
+              <Text style={s.statLabel}>{run.min_distance === run.max_distance ? formatDistance(run.min_distance) : `${formatDistance(run.min_distance)}–${formatDistance(run.max_distance)}`}</Text>
               <Text style={s.statUnit}>mi</Text>
             </View>
             <View style={s.statDiv} />

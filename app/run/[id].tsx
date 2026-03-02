@@ -629,7 +629,7 @@ export default function RunDetailScreen() {
             <View style={styles.reqDivider} />
             <View style={styles.reqItem}>
               <Feather name="target" size={20} color={C.blue} />
-              <Text style={styles.reqValue}>{formatDistance(run.min_distance)} – {formatDistance(run.max_distance)}</Text>
+              <Text style={styles.reqValue}>{run.min_distance === run.max_distance ? formatDistance(run.min_distance) : `${formatDistance(run.min_distance)} – ${formatDistance(run.max_distance)}`}</Text>
               <Text style={styles.reqLabel}>Distance (mi)</Text>
             </View>
             <View style={styles.reqDivider} />
