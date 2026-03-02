@@ -86,9 +86,20 @@ interface Run {
   participant_count: number;
   max_participants: number;
   privacy: string;
+  host_hosted_runs?: number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function getHostBadge(hostedRuns?: number): { label: string; color: string } | null {
+  if (!hostedRuns || hostedRuns < 1) return null;
+  if (hostedRuns === 1) return { label: "1st Run", color: "#A0C4FF" };
+  if (hostedRuns < 5)   return { label: "Bronze",  color: "#CD7F32" };
+  if (hostedRuns < 20)  return { label: "Silver",  color: "#9E9E9E" };
+  if (hostedRuns < 100) return { label: "Gold",    color: "#FFD700" };
+  if (hostedRuns < 500) return { label: "Platinum", color: "#B0E0E6" };
+  return { label: "Elite", color: "#C084FC" };
+}
 
 function haversine(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 3958.8;
@@ -425,6 +436,7 @@ function RunCard({
           {run.host_rating > 0 && (
             <Text style={s.ratingText}>{"  "}★ {run.host_rating.toFixed(1)}</Text>
           )}
+          {(() => { const b = getHostBadge(run.host_hosted_runs); return b ? <Text style={[s.hostBadge, { color: b.color }]}>{"  · "}{b.label}</Text> : null; })()}
         </Text>
       </View>
 
@@ -1516,6 +1528,7 @@ const s = StyleSheet.create({
   urgentText: { fontFamily: "Outfit_600SemiBold", fontSize: 10, color: C.orange },
   hostLine: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary },
   ratingText: { color: C.gold },
+  hostBadge: { fontFamily: "Outfit_600SemiBold", fontSize: 11 },
 
   cardMeta: { gap: 3 },
   metaItem: { flexDirection: "row", alignItems: "center", gap: 6 },

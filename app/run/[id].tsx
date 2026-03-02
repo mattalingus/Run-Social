@@ -33,6 +33,16 @@ function haversineKmDetail(lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+function getHostBadge(hostedRuns?: number): { label: string; color: string } | null {
+  if (!hostedRuns || hostedRuns < 1) return null;
+  if (hostedRuns === 1) return { label: "1st Run", color: "#A0C4FF" };
+  if (hostedRuns < 5)   return { label: "Bronze",  color: "#CD7F32" };
+  if (hostedRuns < 20)  return { label: "Silver",  color: "#9E9E9E" };
+  if (hostedRuns < 100) return { label: "Gold",    color: "#FFD700" };
+  if (hostedRuns < 500) return { label: "Platinum", color: "#B0E0E6" };
+  return { label: "Elite", color: "#C084FC" };
+}
+
 const RUN_TAG_ICONS: Record<string, string> = {
   Talkative: "message-circle",
   Quiet: "moon",
@@ -429,12 +439,15 @@ export default function RunDetailScreen() {
           </View>
           <View style={styles.hostInfo}>
             <Text style={styles.hostName}>{run.host_name}</Text>
-            {run.host_rating > 0 && (
-              <View style={styles.ratingRow}>
-                <Ionicons name="star" size={12} color={C.gold} />
-                <Text style={styles.ratingText}>{parseFloat(run.host_rating).toFixed(1)} rating</Text>
-              </View>
-            )}
+            <View style={styles.hostMeta}>
+              {run.host_rating > 0 && (
+                <View style={styles.ratingRow}>
+                  <Ionicons name="star" size={12} color={C.gold} />
+                  <Text style={styles.ratingText}>{parseFloat(run.host_rating).toFixed(1)} rating</Text>
+                </View>
+              )}
+              {(() => { const b = getHostBadge(run.host_hosted_runs); return b ? <Text style={[styles.hostBadgeText, { color: b.color }]}>{b.label}</Text> : null; })()}
+            </View>
           </View>
           {isHost && (
             <View style={styles.yourRunBadge}>
@@ -769,8 +782,10 @@ const styles = StyleSheet.create({
   hostAvatarText: { fontFamily: "Outfit_700Bold", fontSize: 18, color: C.primary },
   hostInfo: { flex: 1, gap: 2 },
   hostName: { fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.text },
+  hostMeta: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
   ratingRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   ratingText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary },
+  hostBadgeText: { fontFamily: "Outfit_600SemiBold", fontSize: 11 },
   yourRunBadge: { backgroundColor: C.primaryMuted, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: C.primary + "44" },
   yourRunText: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.primary },
   infoGrid: { gap: 10, marginBottom: 16 },
