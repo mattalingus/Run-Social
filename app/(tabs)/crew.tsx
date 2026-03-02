@@ -1178,7 +1178,7 @@ const s = StyleSheet.create({
   crewStyleChipTxt: {
     fontFamily: "Outfit_600SemiBold",
     fontSize: 10,
-    color: C.textSecondary,
+    color: C.text,
   },
   crewVibeChip: {
     backgroundColor: C.card,
@@ -1191,7 +1191,7 @@ const s = StyleSheet.create({
   crewVibeChipTxt: {
     fontFamily: "Outfit_600SemiBold",
     fontSize: 10,
-    color: C.textSecondary,
+    color: C.text,
   },
 
   // Empty state
