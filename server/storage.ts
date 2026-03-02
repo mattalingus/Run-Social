@@ -235,6 +235,8 @@ export async function initDb() {
       created_at TIMESTAMP DEFAULT NOW()
     );
 
+    ALTER TABLE runs ADD COLUMN IF NOT EXISTS crew_id VARCHAR REFERENCES crews(id) ON DELETE SET NULL;
+
     CREATE TABLE IF NOT EXISTS crews (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
       name TEXT NOT NULL,
@@ -339,15 +341,16 @@ export async function createRun(data: {
   isStrict?: boolean;
   runStyle?: string;
   activityType?: string;
+  crewId?: string;
 }) {
   const inviteToken = data.privacy === "private"
     ? Math.random().toString(36).substring(2, 10).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase()
     : null;
   const activityType = data.activityType === "ride" ? "ride" : "run";
   const result = await pool.query(
-    `INSERT INTO runs (host_id, title, description, privacy, date, location_lat, location_lng, location_name, min_distance, max_distance, min_pace, max_pace, tags, max_participants, invite_token, invite_password, is_strict, run_style, activity_type)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING *`,
-    [data.hostId, data.title, data.description || null, data.privacy, data.date, data.locationLat, data.locationLng, data.locationName, data.minDistance, data.maxDistance, data.minPace, data.maxPace, data.tags, data.maxParticipants, inviteToken, data.invitePassword || null, data.isStrict ?? false, data.runStyle || null, activityType]
+    `INSERT INTO runs (host_id, title, description, privacy, date, location_lat, location_lng, location_name, min_distance, max_distance, min_pace, max_pace, tags, max_participants, invite_token, invite_password, is_strict, run_style, activity_type, crew_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING *`,
+    [data.hostId, data.title, data.description || null, data.privacy, data.date, data.locationLat, data.locationLng, data.locationName, data.minDistance, data.maxDistance, data.minPace, data.maxPace, data.tags, data.maxParticipants, inviteToken, data.invitePassword || null, data.isStrict ?? false, data.runStyle || null, activityType, data.crewId || null]
   );
   return result.rows[0];
 }
@@ -459,7 +462,8 @@ export async function getFriendPrivateRuns(userId: string, bounds?: { swLat: num
   JOIN friends f ON ((f.requester_id = $1 AND f.addressee_id = r.host_id) OR (f.addressee_id = $1 AND f.requester_id = r.host_id))
   WHERE r.privacy = 'private' AND r.date > NOW() AND r.is_completed = false
     AND f.status = 'accepted' AND r.host_id != $1
-    AND r.id NOT IN (SELECT run_id FROM run_invites WHERE invitee_id = $1)`;
+    AND r.id NOT IN (SELECT run_id FROM run_invites WHERE invitee_id = $1)
+    AND r.crew_id IS NULL`;
   const params: any[] = [userId];
   let idx = 2;
   if (bounds) {
@@ -478,7 +482,7 @@ export async function getInvitedPrivateRuns(userId: string, bounds?: { swLat: nu
   FROM runs r
   JOIN users u ON u.id = r.host_id
   JOIN run_invites ri ON ri.run_id = r.id AND ri.invitee_id = $1
-  WHERE r.privacy = 'private' AND r.date > NOW() AND r.is_completed = false`;
+  WHERE r.privacy = 'private' AND r.date > NOW() AND r.is_completed = false AND r.crew_id IS NULL`;
   const params: any[] = [userId];
   let idx = 2;
   if (bounds) {
@@ -502,6 +506,44 @@ export async function grantRunAccess(runId: string, userId: string) {
     `INSERT INTO run_invites (run_id, invitee_id, invited_by) SELECT $1, $2, host_id FROM runs WHERE id = $1 ON CONFLICT (run_id, invitee_id) DO NOTHING`,
     [runId, userId]
   );
+}
+
+export async function isCrewMember(crewId: string, userId: string): Promise<boolean> {
+  const res = await pool.query(
+    `SELECT 1 FROM crew_members WHERE crew_id = $1 AND user_id = $2 AND status = 'member'`,
+    [crewId, userId]
+  );
+  return res.rows.length > 0;
+}
+
+export async function getCrewVisibleRuns(userId: string, bounds?: { swLat: number; neLat: number; swLng: number; neLng: number }) {
+  let query = `SELECT r.*, u.name as host_name, u.avg_rating as host_rating, u.photo_url as host_photo,
+      u.marker_icon as host_marker_icon, u.hosted_runs as host_hosted_runs,
+      (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled') as participant_count,
+      false as is_locked
+    FROM runs r
+    JOIN users u ON u.id = r.host_id
+    JOIN crew_members cm ON cm.crew_id = r.crew_id AND cm.user_id = $1 AND cm.status = 'member'
+    WHERE r.crew_id IS NOT NULL AND r.date > NOW() - INTERVAL '2 hours' AND r.is_completed = false`;
+  const params: any[] = [userId];
+  let idx = 2;
+  if (bounds) {
+    query += ` AND r.location_lat BETWEEN $${idx++} AND $${idx++} AND r.location_lng BETWEEN $${idx++} AND $${idx++}`;
+    params.push(bounds.swLat, bounds.neLat, bounds.swLng, bounds.neLng);
+  }
+  query += ` ORDER BY r.date ASC LIMIT 100`;
+  const result = await pool.query(query, params);
+  return result.rows;
+}
+
+export async function getCrewMemberPushTokens(crewId: string): Promise<string[]> {
+  const res = await pool.query(
+    `SELECT u.push_token FROM users u
+     JOIN crew_members cm ON cm.user_id = u.id
+     WHERE cm.crew_id = $1 AND cm.status = 'member' AND u.push_token IS NOT NULL`,
+    [crewId]
+  );
+  return res.rows.map((r: any) => r.push_token);
 }
 
 export async function verifyAndJoinPrivateRun(runId: string, userId: string, password?: string, token?: string) {
@@ -623,7 +665,7 @@ export async function getPublicRuns(filters?: {
   let query = `SELECT r.*, u.name as host_name, u.avg_rating as host_rating, u.photo_url as host_photo, u.marker_icon as host_marker_icon, u.hosted_runs as host_hosted_runs,
     (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled') as participant_count
     FROM runs r JOIN users u ON u.id = r.host_id
-    WHERE r.privacy = 'public' AND r.date > NOW() - INTERVAL '2 hours' AND r.is_completed = false`;
+    WHERE r.privacy = 'public' AND r.date > NOW() - INTERVAL '2 hours' AND r.is_completed = false AND r.crew_id IS NULL`;
   const params: any[] = [];
   let idx = 1;
   if (filters?.minPace !== undefined) { query += ` AND r.max_pace >= $${idx++}`; params.push(filters.minPace); }

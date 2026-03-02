@@ -16,6 +16,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { router } from "expo-router";
 import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 
@@ -496,6 +497,32 @@ function CrewDetailSheet({
                   )}
                 </View>
 
+                {/* Schedule Run/Ride */}
+                <TouchableOpacity
+                  style={s.scheduleBtn}
+                  onPress={() => {
+                    onClose();
+                    router.push({
+                      pathname: "/create-run",
+                      params: {
+                        activityType: activityFilter,
+                        crewId: crew?.id,
+                        crewName: crew?.name,
+                      },
+                    });
+                  }}
+                  testID="schedule-crew-run-btn"
+                >
+                  <Ionicons
+                    name={activityFilter === "ride" ? "bicycle-outline" : "walk-outline"}
+                    size={16}
+                    color={C.primary}
+                  />
+                  <Text style={s.scheduleBtnTxt}>
+                    Schedule a {activityFilter === "ride" ? "Ride" : "Run"}
+                  </Text>
+                </TouchableOpacity>
+
                 {/* Leave */}
                 <TouchableOpacity
                   style={s.leaveBtn}
@@ -879,13 +906,30 @@ const s = StyleSheet.create({
     fontSize: 16,
     color: C.bg,
   },
+  scheduleBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginHorizontal: 24,
+    marginTop: 24,
+    marginBottom: 0,
+    paddingVertical: 14,
+    borderRadius: 14,
+    backgroundColor: C.primary,
+  },
+  scheduleBtnTxt: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 15,
+    color: C.bg,
+  },
   leaveBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
     marginHorizontal: 24,
-    marginTop: 8,
+    marginTop: 10,
     marginBottom: 16,
     paddingVertical: 14,
     borderRadius: 14,

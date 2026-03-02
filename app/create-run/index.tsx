@@ -34,7 +34,7 @@ export default function CreateRunScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const qc = useQueryClient();
-  const params = useLocalSearchParams<{ pathLat?: string; pathLng?: string; pathName?: string; pathDistance?: string; activityType?: string }>();
+  const params = useLocalSearchParams<{ pathLat?: string; pathLng?: string; pathName?: string; pathDistance?: string; activityType?: string; crewId?: string; crewName?: string }>();
 
   const [activityType, setActivityType] = useState<"run" | "ride">(params.activityType === "ride" ? "ride" : "run");
   const [title, setTitle] = useState(params.pathName ? `${params.activityType === "ride" ? "Ride on" : "Run on"} ${params.pathName}` : "");
@@ -82,6 +82,7 @@ export default function CreateRunScreen() {
         invitePassword: privacy === "private" && invitePassword.trim() ? invitePassword.trim() : undefined,
         runStyle: runStyle ?? undefined,
         activityType,
+        crewId: params.crewId || undefined,
       });
       return res.json();
     },
@@ -135,6 +136,14 @@ export default function CreateRunScreen() {
         showsVerticalScrollIndicator={false}
         bottomOffset={20}
       >
+        {params.crewId ? (
+          <View style={styles.crewBanner}>
+            <Ionicons name="people" size={16} color="#00D97E" />
+            <Text style={styles.crewBannerTxt}>
+              Scheduling for <Text style={styles.crewBannerName}>{params.crewName ?? "your crew"}</Text> — only members will see this
+            </Text>
+          </View>
+        ) : null}
         <View style={styles.field}>
           <Text style={styles.label}>Activity Type</Text>
           <View style={styles.activityRow}>
@@ -427,6 +436,9 @@ export default function CreateRunScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
+  crewBanner: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#00D97E18", borderRadius: 12, borderWidth: 1, borderColor: "#00D97E40", padding: 12, marginBottom: 16 },
+  crewBannerTxt: { fontFamily: "Outfit_400Regular", fontSize: 13, color: "#A8C4B4", flex: 1 },
+  crewBannerName: { fontFamily: "Outfit_700Bold", color: "#00D97E" },
   center: { alignItems: "center", justifyContent: "center", gap: 16, padding: 40 },
   lockedTitle: { fontFamily: "Outfit_700Bold", fontSize: 20, color: C.text, textAlign: "center" },
   lockedSub: { fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textSecondary, textAlign: "center" },

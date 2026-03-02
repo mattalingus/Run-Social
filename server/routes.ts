@@ -325,11 +325,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const bounds = (filters.swLat !== undefined && filters.neLat !== undefined && filters.swLng !== undefined && filters.neLng !== undefined)
           ? { swLat: filters.swLat, neLat: filters.neLat, swLng: filters.swLng, neLng: filters.neLng }
           : undefined;
-        const [friendLocked, invited] = await Promise.all([
+        const [friendLocked, invited, crewRuns] = await Promise.all([
           storage.getFriendPrivateRuns(req.session.userId, bounds),
           storage.getInvitedPrivateRuns(req.session.userId, bounds),
+          storage.getCrewVisibleRuns(req.session.userId, bounds),
         ]);
-        const combined = [...publicRuns, ...invited, ...friendLocked];
+        const combined = [...publicRuns, ...invited, ...friendLocked, ...crewRuns];
         const seen = new Set<string>();
         const deduped = combined.filter(r => { if (seen.has(r.id)) return false; seen.add(r.id); return true; });
         return res.json(deduped);
@@ -353,19 +354,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const run = await storage.createRun({ ...req.body, hostId: req.session.userId! });
       res.status(201).json(run);
-      // Notify friends (fire-and-forget)
-      storage.getFriendsWithPushTokens(req.session.userId!).then((friends) => {
-        const tokens = friends.map((f) => f.push_token).filter(Boolean);
-        if (tokens.length) {
-          const privacy = run.privacy === "private" ? "private" : "public";
-          sendPushNotification(
-            tokens,
-            "New run from a friend 🏃",
-            `${run.host_name} just posted a ${privacy} run — "${run.title}"`,
-            { runId: run.id }
-          );
-        }
-      }).catch(() => {});
+      // Notify — crew runs notify crew members; regular runs notify friends (fire-and-forget)
+      if (run.crew_id) {
+        storage.getCrewMemberPushTokens(run.crew_id).then((tokens) => {
+          const filtered = tokens.filter(Boolean);
+          if (filtered.length) {
+            const actLabel = run.activity_type === "ride" ? "ride" : "run";
+            sendPushNotification(
+              filtered,
+              `New crew ${actLabel} scheduled 🏃`,
+              `${run.host_name} posted "${run.title}" for your crew`,
+              { runId: run.id }
+            );
+          }
+        }).catch(() => {});
+      } else {
+        storage.getFriendsWithPushTokens(req.session.userId!).then((friends) => {
+          const tokens = friends.map((f: any) => f.push_token).filter(Boolean);
+          if (tokens.length) {
+            const privacy = run.privacy === "private" ? "private" : "public";
+            sendPushNotification(
+              tokens,
+              "New run from a friend 🏃",
+              `${run.host_name} just posted a ${privacy} run — "${run.title}"`,
+              { runId: run.id }
+            );
+          }
+        }).catch(() => {});
+      }
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
@@ -493,7 +509,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const run = await storage.getRunById(req.params.id);
       if (!run) return res.status(404).json({ message: "Run not found" });
-      if (run.privacy === "private") {
+      if (run.crew_id) {
+        if (!req.session.userId) return res.status(403).json({ message: "Crew run — members only", isCrewRun: true });
+        const member = await storage.isCrewMember(run.crew_id, req.session.userId);
+        if (!member) return res.status(403).json({ message: "Crew run — members only", isCrewRun: true });
+      } else if (run.privacy === "private") {
         if (!req.session.userId) return res.status(403).json({ message: "Private run", isPrivate: true });
         const hasAccess = await storage.hasRunAccess(req.params.id, req.session.userId);
         if (!hasAccess) {
