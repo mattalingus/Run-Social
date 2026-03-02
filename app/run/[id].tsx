@@ -140,6 +140,15 @@ export default function RunDetailScreen() {
     enabled: !!user && !!id,
   });
 
+  const { data: recentDistances } = useQuery<number[]>({
+    queryKey: ["/api/users/me/recent-distances"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/users/me/recent-distances");
+      return res.json();
+    },
+    enabled: !!user,
+  });
+
   const { data: runStatus } = useQuery<{ is_bookmarked: boolean; is_planned: boolean }>({
     queryKey: ["/api/runs", id, "status"],
     queryFn: async () => {
@@ -474,7 +483,14 @@ export default function RunDetailScreen() {
         </View>
 
         <View style={styles.requirementsCard}>
-          <Text style={styles.requirementsTitle}>Requirements</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <Text style={styles.requirementsTitle}>Requirements</Text>
+            {run.is_strict && (
+              <View style={{ backgroundColor: C.orange + "22", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: C.orange + "55" }}>
+                <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.orange }}>Strict</Text>
+              </View>
+            )}
+          </View>
           <View style={styles.requirementsGrid}>
             <View style={styles.reqItem}>
               <Ionicons name="walk" size={20} color={C.orange} />
@@ -500,25 +516,38 @@ export default function RunDetailScreen() {
               <Text style={styles.planCountText}>{run.plan_count} {parseInt(run.plan_count) === 1 ? "person" : "people"} planning to run</Text>
             </View>
           )}
-          {user && (
-            <View style={[styles.eligibilityRow, {
-              backgroundColor: (user.avg_pace >= run.min_pace && user.avg_pace <= run.max_pace && user.avg_distance >= run.min_distance) ? C.primaryMuted : C.danger + "22",
-              borderColor: (user.avg_pace >= run.min_pace && user.avg_pace <= run.max_pace && user.avg_distance >= run.min_distance) ? C.primary + "44" : C.danger + "44",
-            }]}>
-              <Feather
-                name={(user.avg_pace >= run.min_pace && user.avg_pace <= run.max_pace && user.avg_distance >= run.min_distance) ? "check-circle" : "alert-circle"}
-                size={14}
-                color={(user.avg_pace >= run.min_pace && user.avg_pace <= run.max_pace && user.avg_distance >= run.min_distance) ? C.primary : C.danger}
-              />
-              <Text style={[styles.eligibilityText, {
-                color: (user.avg_pace >= run.min_pace && user.avg_pace <= run.max_pace && user.avg_distance >= run.min_distance) ? C.primary : C.danger,
+          {user && (() => {
+            const paceOk = user.avg_pace >= run.min_pace && user.avg_pace <= run.max_pace;
+            const distThreshold = run.is_strict ? 0.7 : 0.5;
+            const distOk = (recentDistances ?? []).some((d) => d >= run.min_distance * distThreshold);
+            const eligible = run.is_strict ? (paceOk && distOk) : (paceOk || distOk);
+            let msg = "";
+            if (run.is_strict) {
+              if (eligible) msg = "Pace and distance both qualify";
+              else if (!paceOk && !distOk) msg = "Pace and distance both fall short";
+              else if (!paceOk) msg = `Your pace (${formatPace(user.avg_pace)}/mi) doesn't match this run`;
+              else msg = `No recent run covers 70%+ of the planned ${formatDistance(run.min_distance)} mi`;
+            } else {
+              if (eligible && paceOk) msg = "Your pace qualifies";
+              else if (eligible && distOk) msg = `A past run qualifies your distance (50%+ of ${formatDistance(run.min_distance)} mi)`;
+              else msg = `Pace and recent run distances don't meet the requirements`;
+            }
+            return (
+              <View style={[styles.eligibilityRow, {
+                backgroundColor: eligible ? C.primaryMuted : C.danger + "22",
+                borderColor: eligible ? C.primary + "44" : C.danger + "44",
               }]}>
-                {(user.avg_pace >= run.min_pace && user.avg_pace <= run.max_pace && user.avg_distance >= run.min_distance)
-                  ? "You meet the requirements"
-                  : `Your pace (${formatPace(user.avg_pace)}/mi) or distance (${formatDistance(user.avg_distance)} mi) doesn't match`}
-              </Text>
-            </View>
-          )}
+                <Feather
+                  name={eligible ? "check-circle" : "alert-circle"}
+                  size={14}
+                  color={eligible ? C.primary : C.danger}
+                />
+                <Text style={[styles.eligibilityText, { color: eligible ? C.primary : C.danger }]}>
+                  {msg}
+                </Text>
+              </View>
+            );
+          })()}
         </View>
 
         {run.description ? (

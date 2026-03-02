@@ -98,6 +98,7 @@ export async function initDb() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS distance_goal REAL DEFAULT 100;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS goal_period VARCHAR DEFAULT 'monthly';
     ALTER TABLE users ADD COLUMN IF NOT EXISTS push_token TEXT DEFAULT NULL;
+    ALTER TABLE runs ADD COLUMN IF NOT EXISTS is_strict BOOLEAN DEFAULT false;
 
     CREATE TABLE IF NOT EXISTS solo_runs (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -310,16 +311,34 @@ export async function createRun(data: {
   tags: string[];
   maxParticipants: number;
   invitePassword?: string;
+  isStrict?: boolean;
 }) {
   const inviteToken = data.privacy === "private"
     ? Math.random().toString(36).substring(2, 10).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase()
     : null;
   const result = await pool.query(
-    `INSERT INTO runs (host_id, title, description, privacy, date, location_lat, location_lng, location_name, min_distance, max_distance, min_pace, max_pace, tags, max_participants, invite_token, invite_password)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
-    [data.hostId, data.title, data.description || null, data.privacy, data.date, data.locationLat, data.locationLng, data.locationName, data.minDistance, data.maxDistance, data.minPace, data.maxPace, data.tags, data.maxParticipants, inviteToken, data.invitePassword || null]
+    `INSERT INTO runs (host_id, title, description, privacy, date, location_lat, location_lng, location_name, min_distance, max_distance, min_pace, max_pace, tags, max_participants, invite_token, invite_password, is_strict)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
+    [data.hostId, data.title, data.description || null, data.privacy, data.date, data.locationLat, data.locationLng, data.locationName, data.minDistance, data.maxDistance, data.minPace, data.maxPace, data.tags, data.maxParticipants, inviteToken, data.invitePassword || null, data.isStrict ?? false]
   );
   return result.rows[0];
+}
+
+export async function getUserRecentDistances(userId: string, limit = 10): Promise<number[]> {
+  const result = await pool.query(
+    `SELECT distance FROM (
+       SELECT distance_miles AS distance, date FROM solo_runs
+       WHERE user_id = $1 AND completed = true AND distance_miles IS NOT NULL
+       UNION ALL
+       SELECT rp.final_distance AS distance, r.date FROM run_participants rp
+       JOIN runs r ON r.id = rp.run_id
+       WHERE rp.user_id = $1 AND rp.final_distance IS NOT NULL
+     ) combined
+     ORDER BY date DESC
+     LIMIT $2`,
+    [userId, limit]
+  );
+  return result.rows.map((r: any) => r.distance as number);
 }
 
 export async function searchUsers(query: string, currentUserId: string) {

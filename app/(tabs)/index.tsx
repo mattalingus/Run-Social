@@ -552,13 +552,14 @@ export default function DiscoverScreen() {
   const [pinCoord, setPinCoord] = useState<{ latitude: number; longitude: number } | null>(null);
   const [isGeocodingPin, setIsGeocodingPin] = useState(false);
   const [hAmPm, setHAmPm] = useState<"AM" | "PM">("AM");
+  const [hStrict, setHStrict] = useState(false);
 
   function resetHostForm() {
     setHTitle(""); setHLocation(""); setHDate(""); setHTime("");
     setHPrivacy("public"); setHPassword(""); setHMaxParticipants(20);
     setHTags(["General"]); setHDist("3"); setHMinPace(8); setHMaxPace(12);
     setHLocationLat(null); setHLocationLng(null); setPinCoord(null); setHostPage("form");
-    setHAmPm("AM");
+    setHAmPm("AM"); setHStrict(false);
   }
 
   function handleDateChange(text: string) {
@@ -689,6 +690,7 @@ export default function DiscoverScreen() {
         tags: hTags,
         maxParticipants: hMaxParticipants === 0 ? 9999 : hMaxParticipants,
         invitePassword: hPrivacy === "private" && hPassword.trim() ? hPassword.trim() : undefined,
+        isStrict: hStrict,
       });
       return res.json();
     },
@@ -1250,6 +1252,20 @@ export default function DiscoverScreen() {
                 />
               </>
             )}
+
+            {/* Strict Mode */}
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: C.card, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: hStrict ? C.primary + "55" : C.border }}>
+              <View style={{ flex: 1, marginRight: 12 }}>
+                <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text }}>Strict Mode</Text>
+                <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, marginTop: 2 }}>Runners must match pace AND have a recent run covering 70%+ of planned distance</Text>
+              </View>
+              <Switch
+                value={hStrict}
+                onValueChange={(v) => { setHStrict(v); Haptics.selectionAsync(); }}
+                trackColor={{ false: C.border, true: C.primary }}
+                thumbColor={C.text}
+              />
+            </View>
 
             {/* Max Runners */}
             <Text style={s.hLabel}>Max Runners</Text>
