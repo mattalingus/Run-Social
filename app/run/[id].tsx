@@ -448,6 +448,7 @@ export default function RunDetailScreen() {
               )}
               {(() => { const b = getHostBadge(run.host_hosted_runs); return b ? <Text style={[styles.hostBadgeText, { color: b.color }]}>{b.label}</Text> : null; })()}
             </View>
+            <Text style={styles.hostPlannedDist}>{formatDistance(run.min_distance)} mi planned</Text>
           </View>
           {isHost && (
             <View style={styles.yourRunBadge}>
@@ -782,6 +783,7 @@ const styles = StyleSheet.create({
   hostAvatarText: { fontFamily: "Outfit_700Bold", fontSize: 18, color: C.primary },
   hostInfo: { flex: 1, gap: 2 },
   hostName: { fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.text },
+  hostPlannedDist: { fontFamily: "Outfit_700Bold", fontSize: 14, color: C.text, marginTop: 3 },
   hostMeta: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
   ratingRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   ratingText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary },

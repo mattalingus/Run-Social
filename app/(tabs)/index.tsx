@@ -431,6 +431,7 @@ function RunCard({
           {badge && (
             <Text style={[s.hostColumnBadge, { color: badge.color }]}>{badge.label}</Text>
           )}
+          <Text style={s.hostColumnDist}>{formatDistance(run.min_distance)} mi</Text>
         </View>
 
         <View style={s.cardDivider} />
@@ -659,6 +660,8 @@ export default function DiscoverScreen() {
       if (!hLocation.trim()) throw new Error("Location is required — tap the pin to set it on the map");
       if (hLocationLat === null || hLocationLng === null) throw new Error("Please pick a location on the map");
       if (!hDate.trim() || !hTime.trim()) throw new Error("Date and time are required");
+      const distVal = parseFloat(hDist);
+      if (!hDist.trim() || isNaN(distVal) || distVal <= 0) throw new Error("Planned distance is required (e.g. 3.1 miles)");
       const parsedDate = parseDMY(hDate.trim());
       if (!parsedDate) throw new Error("Invalid date — use MM/DD/YY (e.g. 06/25/25)");
       const parsedTime = parseHHMMAMPM(hTime.trim(), hAmPm);
@@ -673,8 +676,8 @@ export default function DiscoverScreen() {
         locationLat: hLocationLat,
         locationLng: hLocationLng,
         locationName: hLocation.trim(),
-        minDistance: parseFloat(hDist) || 3,
-        maxDistance: parseFloat(hDist) || 3,
+        minDistance: distVal,
+        maxDistance: distVal,
         minPace: hMinPace,
         maxPace: hMaxPace,
         tags: hTags,
@@ -1537,6 +1540,7 @@ const s = StyleSheet.create({
   hostColumnName: { fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.text, textAlign: "center" },
   hostColumnRating: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.gold, textAlign: "center" },
   hostColumnBadge: { fontFamily: "Outfit_600SemiBold", fontSize: 10, textAlign: "center" },
+  hostColumnDist: { fontFamily: "Outfit_700Bold", fontSize: 13, color: C.text, textAlign: "center", marginTop: 2 },
 
   cardMeta: { gap: 3 },
   metaItem: { flexDirection: "row", alignItems: "center", gap: 6 },
