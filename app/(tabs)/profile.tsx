@@ -685,7 +685,7 @@ export default function ProfileScreen() {
 
       {/* ── Dev Mode ──────────────────────────────────────────────────────── */}
       <Pressable onPress={handleVersionTap} style={devStyles.versionWrap}>
-        <Text style={devStyles.versionText}>PaceUp v1.0</Text>
+        <Text style={devStyles.versionText}>Fara v1.0</Text>
       </Pressable>
 
       {showDevMode && (
@@ -966,7 +966,7 @@ export default function ProfileScreen() {
 
           <View style={styles.inviteCard}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.inviteCardTitle}>Invite to PaceUp</Text>
+              <Text style={styles.inviteCardTitle}>Invite to Fara</Text>
               <Text style={styles.inviteCardSub}>Share a link so friends can download the app</Text>
             </View>
             <Pressable
@@ -974,7 +974,7 @@ export default function ProfileScreen() {
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 Share.share({
-                  message: `Join me on PaceUp — the social running app! Download it here: ${APP_SHARE_URL}`,
+                  message: `Join me on Fara — the social running app! Download it here: ${APP_SHARE_URL}`,
                   url: APP_SHARE_URL,
                 });
               }}

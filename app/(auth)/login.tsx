@@ -116,7 +116,7 @@ export default function LoginScreen() {
         </View>
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>New to PaceUp? </Text>
+          <Text style={styles.footerText}>New to Fara? </Text>
           <Pressable onPress={() => router.push("/(auth)/register")}>
             <Text style={styles.footerLink}>Create account</Text>
           </Pressable>

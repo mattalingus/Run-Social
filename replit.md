@@ -1,4 +1,4 @@
-# PaceUp — Social Running App
+# Fara — Social Running App
 
 
 ## Overview

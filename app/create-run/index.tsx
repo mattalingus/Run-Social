@@ -363,7 +363,7 @@ export default function CreateRunScreen() {
                 </Pressable>
                 <Pressable
                   style={styles.inviteShareBtn}
-                  onPress={() => Share.share({ message: `Join my private run "${inviteModal.title}" on PaceUp! Use invite code: ${inviteModal.token}` })}
+                  onPress={() => Share.share({ message: `Join my private run "${inviteModal.title}" on Fara! Use invite code: ${inviteModal.token}` })}
                 >
                   <Feather name="share-2" size={16} color={C.bg} />
                   <Text style={styles.inviteShareTxt}>Share</Text>
