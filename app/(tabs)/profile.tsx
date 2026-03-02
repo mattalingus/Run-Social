@@ -139,6 +139,10 @@ export default function ProfileScreen() {
   const [showAchievements, setShowAchievements] = useState(false);
   const [selectedAchievement, setSelectedAchievement] = useState<AchievementDef | null>(null);
   const [achFilter, setAchFilter] = useState("All");
+  const [showEditName, setShowEditName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState("");
+  const [nameError, setNameError] = useState("");
+  const [nameDaysRemaining, setNameDaysRemaining] = useState<number | null>(null);
 
   // ─── Handlers ──────────────────────────────────────────────────────────────
 
@@ -272,6 +276,30 @@ export default function ProfileScreen() {
     enabled: !!user,
   });
 
+  const nameMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const res = await apiRequest("PUT", "/api/users/me/name", { name });
+      const body = await res.json();
+      if (!res.ok) throw { status: res.status, ...body };
+      return body;
+    },
+    onSuccess: () => {
+      refreshUser();
+      setShowEditName(false);
+      setNameError("");
+      setNameDaysRemaining(null);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    onError: (e: any) => {
+      if (e.status === 429) {
+        setNameDaysRemaining(e.daysRemaining ?? 30);
+        setNameError(e.message ?? "Name change on cooldown");
+      } else {
+        setNameError(e.message ?? "Failed to update name");
+      }
+    },
+  });
+
   const sendRequestMutation = useMutation({
     mutationFn: async (userId: string) => {
       const res = await apiRequest("POST", "/api/friends/request", { userId });
@@ -353,7 +381,26 @@ export default function ProfileScreen() {
         </Pressable>
 
         <View style={styles.profileInfo}>
-          <Text style={styles.profileName}>{user.name}</Text>
+          <Pressable
+            style={styles.profileNameRow}
+            onPress={() => {
+              const changedAt = (user as any).name_changed_at;
+              if (changedAt) {
+                const daysSince = (Date.now() - new Date(changedAt).getTime()) / (1000 * 60 * 60 * 24);
+                if (daysSince < 30) setNameDaysRemaining(Math.ceil(30 - daysSince));
+                else setNameDaysRemaining(null);
+              } else {
+                setNameDaysRemaining(null);
+              }
+              setEditNameValue(user.name);
+              setNameError("");
+              setShowEditName(true);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+          >
+            <Text style={styles.profileName}>{user.name}</Text>
+            <Feather name="edit-2" size={13} color={C.textMuted} style={{ marginTop: 2 }} />
+          </Pressable>
           <Text style={styles.profileEmail}>{user.email}</Text>
           <View style={styles.roleChip}>
             <Feather name="user" size={11} color={C.primary} />
@@ -713,6 +760,46 @@ export default function ProfileScreen() {
       )}
 
       {/* ── Modals ────────────────────────────────────────────────────────── */}
+
+      {/* ── Edit Name Modal ────────────────────────────────────────────────── */}
+      <Modal visible={showEditName} transparent animationType="slide" onRequestClose={() => setShowEditName(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+        <Pressable style={styles.modalOverlay} onPress={() => setShowEditName(false)} />
+        <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 24 }]}>
+          <Text style={styles.modalTitle}>Change Name</Text>
+
+          {nameDaysRemaining !== null && (
+            <View style={styles.nameLockBanner}>
+              <Feather name="lock" size={14} color={C.orange} />
+              <Text style={styles.nameLockTxt}>You can change your name again in {nameDaysRemaining} day{nameDaysRemaining === 1 ? "" : "s"}</Text>
+            </View>
+          )}
+
+          <View style={styles.modalField}>
+            <Text style={styles.modalLabel}>Display Name</Text>
+            <TextInput
+              style={[styles.modalInput, nameDaysRemaining !== null && { opacity: 0.5 }]}
+              value={editNameValue}
+              onChangeText={(t) => { setEditNameValue(t); setNameError(""); }}
+              placeholder="Your name"
+              placeholderTextColor={C.textMuted}
+              autoCapitalize="words"
+              maxLength={30}
+              editable={nameDaysRemaining === null}
+            />
+            {nameError !== "" && <Text style={styles.nameErrorTxt}>{nameError}</Text>}
+          </View>
+
+          <Pressable
+            style={({ pressed }) => [styles.modalBtn, (nameDaysRemaining !== null || nameMutation.isPending) && { opacity: 0.5 }, { opacity: pressed && nameDaysRemaining === null ? 0.8 : undefined }]}
+            onPress={() => { if (nameDaysRemaining === null) nameMutation.mutate(editNameValue); }}
+            disabled={nameDaysRemaining !== null || nameMutation.isPending}
+          >
+            {nameMutation.isPending ? <ActivityIndicator color={C.bg} /> : <Text style={styles.modalBtnText}>Save Name</Text>}
+          </Pressable>
+        </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       <Modal visible={showGoals} transparent animationType="slide" onRequestClose={() => setShowGoals(false)}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
@@ -1147,8 +1234,12 @@ const styles = StyleSheet.create({
   avatarText: { fontFamily: "Outfit_700Bold", fontSize: 26, color: C.primary },
 
   profileInfo: { flex: 1, gap: 2 },
+  profileNameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   profileName: { fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text },
   profileEmail: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary },
+  nameLockBanner: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: C.orange + "18", borderRadius: 10, padding: 10, marginBottom: 4 },
+  nameLockTxt: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.orange, flex: 1 },
+  nameErrorTxt: { fontFamily: "Outfit_400Regular", fontSize: 12, color: "#FF6B6B", marginTop: 4 },
   roleChip: {
     flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4,
     alignSelf: "flex-start", backgroundColor: C.card, borderRadius: 6,

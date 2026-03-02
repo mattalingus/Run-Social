@@ -113,6 +113,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.put("/api/users/me/name", requireAuth, async (req, res) => {
+    try {
+      const { name } = req.body;
+      if (!name || typeof name !== "string") return res.status(400).json({ message: "Name is required" });
+      const trimmed = name.trim();
+      if (trimmed.length < 2 || trimmed.length > 30) return res.status(400).json({ message: "Name must be 2–30 characters" });
+      if (!/^[a-zA-Z\s\-']+$/.test(trimmed)) return res.status(400).json({ message: "Name can only contain letters, spaces, hyphens, and apostrophes" });
+
+      const current = await storage.getUserById(req.session.userId!);
+      if (!current) return res.status(404).json({ message: "User not found" });
+
+      if (current.name_changed_at) {
+        const daysSince = (Date.now() - new Date(current.name_changed_at).getTime()) / (1000 * 60 * 60 * 24);
+        if (daysSince < 30) {
+          const daysRemaining = Math.ceil(30 - daysSince);
+          return res.status(429).json({ message: `You can change your name again in ${daysRemaining} day${daysRemaining === 1 ? "" : "s"}`, daysRemaining });
+        }
+      }
+
+      const user = await storage.updateUser(req.session.userId!, { name: trimmed, nameChangedAt: new Date() });
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const { password: _, ...safeUser } = user;
+      res.json(safeUser);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.put("/api/users/me/goals", requireAuth, async (req, res) => {
     try {
       const { monthlyGoal, yearlyGoal } = req.body;
