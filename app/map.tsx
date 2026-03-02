@@ -739,9 +739,9 @@ export default function MapScreen() {
 
       </View>{/* ── end mapCard ──────────────────────────────────────────────── */}
 
-      {/* ─── Mini run cards strip ─────────────────────────────────────────── */}
-      {!selectedRun && !selectedCommunityPath && visibleRuns.length > 0 && (
-        <View style={s.miniStrip}>
+      {/* ─── Mini run cards strip — always reserves space so map never resizes */}
+      <View style={s.miniStrip}>
+        {!selectedRun && !selectedCommunityPath && visibleRuns.length > 0 && (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -783,8 +783,8 @@ export default function MapScreen() {
               </Pressable>
             ))}
           </ScrollView>
-        </View>
-      )}
+        )}
+      </View>
 
       {/* ─── Insights strip (below map card, fixed height so map never jumps) */}
       <View style={[s.insightArea, { marginBottom: insets.bottom + 4 }]}>
