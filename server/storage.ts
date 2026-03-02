@@ -301,7 +301,6 @@ export async function createRun(data: {
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
     [data.hostId, data.title, data.description || null, data.privacy, data.date, data.locationLat, data.locationLng, data.locationName, data.minDistance, data.maxDistance, data.minPace, data.maxPace, data.tags, data.maxParticipants, inviteToken, data.invitePassword || null]
   );
-  await pool.query(`UPDATE users SET hosted_runs = hosted_runs + 1 WHERE id = $1`, [data.hostId]);
   return result.rows[0];
 }
 
@@ -669,6 +668,19 @@ export async function confirmRunCompletion(runId: string, userId: string, milesL
     await checkAndAwardAchievements(userId, totalMiles);
   }
   await checkHostUnlock(userId);
+
+  const runRes = await pool.query(`SELECT host_id FROM runs WHERE id = $1`, [runId]);
+  const hostId = runRes.rows[0]?.host_id;
+  if (hostId && userId !== hostId) {
+    const confirmedNonHost = await pool.query(
+      `SELECT COUNT(*) as cnt FROM run_participants WHERE run_id = $1 AND status = 'confirmed' AND user_id != $2`,
+      [runId, hostId]
+    );
+    if (parseInt(confirmedNonHost.rows[0]?.cnt) === 1) {
+      await pool.query(`UPDATE users SET hosted_runs = hosted_runs + 1 WHERE id = $1`, [hostId]);
+    }
+  }
+
   return { success: true };
 }
 
