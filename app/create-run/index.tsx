@@ -89,6 +89,10 @@ export default function CreateRunScreen() {
     onSuccess: (run: any) => {
       qc.invalidateQueries({ queryKey: ["/api/runs"] });
       qc.invalidateQueries({ queryKey: ["/api/runs/mine"] });
+      if (params.crewId) {
+        qc.invalidateQueries({ queryKey: ["/api/crews", params.crewId, "runs"] });
+        qc.invalidateQueries({ queryKey: ["/api/crews"] });
+      }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       if (run?.privacy === "private" && run?.invite_token) {
         setInviteModal({ token: run.invite_token, title: run.title });
@@ -190,24 +194,26 @@ export default function CreateRunScreen() {
           />
         </View>
 
-        <View style={styles.field}>
-          <Text style={styles.label}>Visibility</Text>
-          <View style={styles.privacyRow}>
-            {PRIVACY_OPTIONS.map((opt) => (
-              <Pressable
-                key={opt.value}
-                style={[styles.privacyOption, privacy === opt.value && styles.privacyOptionActive]}
-                onPress={() => { setPrivacy(opt.value); Haptics.selectionAsync(); }}
-              >
-                <Feather name={opt.icon as any} size={16} color={privacy === opt.value ? C.primary : C.textSecondary} />
-                <Text style={[styles.privacyLabel, privacy === opt.value && styles.privacyLabelActive]}>{opt.label}</Text>
-                <Text style={styles.privacyDesc}>{opt.desc}</Text>
-              </Pressable>
-            ))}
+        {!params.crewId && (
+          <View style={styles.field}>
+            <Text style={styles.label}>Visibility</Text>
+            <View style={styles.privacyRow}>
+              {PRIVACY_OPTIONS.map((opt) => (
+                <Pressable
+                  key={opt.value}
+                  style={[styles.privacyOption, privacy === opt.value && styles.privacyOptionActive]}
+                  onPress={() => { setPrivacy(opt.value); Haptics.selectionAsync(); }}
+                >
+                  <Feather name={opt.icon as any} size={16} color={privacy === opt.value ? C.primary : C.textSecondary} />
+                  <Text style={[styles.privacyLabel, privacy === opt.value && styles.privacyLabelActive]}>{opt.label}</Text>
+                  <Text style={styles.privacyDesc}>{opt.desc}</Text>
+                </Pressable>
+              ))}
+            </View>
           </View>
-        </View>
+        )}
 
-        {privacy === "private" && (
+        {!params.crewId && privacy === "private" && (
           <View style={styles.field}>
             <View style={styles.passwordHeader}>
               <Feather name="key" size={14} color={C.textSecondary} />

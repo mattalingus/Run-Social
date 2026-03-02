@@ -1665,23 +1665,15 @@ export async function leaveCrewById(crewId: string, userId: string) {
 }
 
 export async function getCrewRuns(crewId: string) {
-  const members = await pool.query(
-    `SELECT user_id FROM crew_members WHERE crew_id = $1 AND status = 'member'`,
-    [crewId]
-  );
-  if (members.rows.length === 0) return [];
-  const memberIds = members.rows.map((m: any) => m.user_id);
-  const placeholders = memberIds.map((_: any, i: number) => `$${i + 1}`).join(", ");
   const res = await pool.query(
     `SELECT r.*, u.name AS host_name, u.photo_url AS host_photo,
        (SELECT COUNT(*) FROM run_participants WHERE run_id = r.id) AS participant_count
      FROM runs r
      JOIN users u ON u.id = r.host_id
-     WHERE r.host_id IN (${placeholders})
+     WHERE r.crew_id = $1
        AND r.date > NOW()
-       AND r.privacy != 'solo'
      ORDER BY r.date ASC`,
-    memberIds
+    [crewId]
   );
   return res.rows;
 }

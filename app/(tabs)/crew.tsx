@@ -478,7 +478,16 @@ function CrewDetailSheet({
                     </View>
                   ) : (
                     filteredRuns.map((run) => (
-                      <View key={run.id} style={s.runRow}>
+                      <TouchableOpacity
+                        key={run.id}
+                        style={s.runRow}
+                        activeOpacity={0.7}
+                        testID={`crew-run-row-${run.id}`}
+                        onPress={() => {
+                          onClose();
+                          router.push({ pathname: "/run/[id]", params: { id: run.id } });
+                        }}
+                      >
                         <Ionicons
                           name={run.activity_type === "ride" ? "bicycle-outline" : "walk-outline"}
                           size={16}
@@ -492,7 +501,8 @@ function CrewDetailSheet({
                             {run.participant_count ? ` · ${run.participant_count} going` : ""}
                           </Text>
                         </View>
-                      </View>
+                        <Ionicons name="chevron-forward" size={14} color={C.textMuted} />
+                      </TouchableOpacity>
                     ))
                   )}
                 </View>
