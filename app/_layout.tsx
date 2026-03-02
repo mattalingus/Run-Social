@@ -1,7 +1,7 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack, router } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -21,10 +21,14 @@ SplashScreen.preventAutoHideAsync();
 function RootLayoutNav() {
   const { user, isLoading } = useAuth();
   const [fontsLoaded] = useFonts({ Outfit_400Regular, Outfit_600SemiBold, Outfit_700Bold });
+  const splashHidden = useRef(false);
 
   useEffect(() => {
     if (!isLoading && fontsLoaded) {
-      SplashScreen.hideAsync();
+      if (!splashHidden.current) {
+        splashHidden.current = true;
+        SplashScreen.hideAsync();
+      }
       if (!user) {
         router.replace("/(auth)/login");
       }
