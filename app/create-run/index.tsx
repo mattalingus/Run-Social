@@ -56,24 +56,92 @@ export default function CreateRunScreen() {
   const [maxParticipants, setMaxParticipants] = useState("20");
   const [invitePassword, setInvitePassword] = useState("");
   const [inviteModal, setInviteModal] = useState<{ token: string; title: string } | null>(null);
-  const [locationPickerOpen, setLocationPickerOpen] = useState(false);
-  const [pickerLat, setPickerLat] = useState(parseFloat(params.pathLat ?? "37.7749"));
-  const [pickerLng, setPickerLng] = useState(parseFloat(params.pathLng ?? "-122.4194"));
-  const [pickerName, setPickerName] = useState(params.pathName ?? "");
+  const [page, setPage] = useState<"form" | "location">("form");
+  const [pinCoord, setPinCoord] = useState<{ latitude: number; longitude: number } | null>(
+    params.pathLat ? { latitude: parseFloat(params.pathLat), longitude: parseFloat(params.pathLng ?? "-122.4194") } : null
+  );
+  const [isGeocodingPin, setIsGeocodingPin] = useState(false);
+  const [amPm, setAmPm] = useState<"AM" | "PM">("AM");
   const [plannedDistance, setPlannedDistance] = useState(params.pathDistance ?? "3");
   const [plannedPace, setPlannedPace] = useState("9");
 
   const isCrew = !!params.crewId;
 
+  function autoFormatTime(digits: string): string {
+    if (digits.length <= 1) return digits;
+    if (digits.length === 2) {
+      if (parseInt(digits[0], 10) > 1) return digits[0] + ":" + digits[1];
+      return digits;
+    }
+    if (digits.length === 3) {
+      if (parseInt(digits[0], 10) > 1) return digits[0] + ":" + digits.slice(1);
+      return digits.slice(0, 2) + ":" + digits[2];
+    }
+    if (parseInt(digits[0], 10) > 1) return digits[0] + ":" + digits.slice(1, 3);
+    return digits.slice(0, 2) + ":" + digits.slice(2, 4);
+  }
+
+  function handleDateChange(text: string) {
+    const digits = text.replace(/\D/g, "").slice(0, 6);
+    let formatted = digits;
+    if (digits.length > 2) formatted = digits.slice(0, 2) + "/" + digits.slice(2);
+    if (digits.length > 4) formatted = digits.slice(0, 2) + "/" + digits.slice(2, 4) + "/" + digits.slice(4);
+    setDate(formatted);
+  }
+
+  function handleTimeChange(text: string) {
+    const digits = text.replace(/\D/g, "").slice(0, 4);
+    setTime(autoFormatTime(digits));
+  }
+
+  function parseDMY(raw: string): Date | null {
+    const [m, d, y] = raw.trim().split("/");
+    if (!m || !d || !y) return null;
+    const year = y.length === 2 ? 2000 + parseInt(y, 10) : parseInt(y, 10);
+    const dt = new Date(year, parseInt(m, 10) - 1, parseInt(d, 10));
+    return isNaN(dt.getTime()) ? null : dt;
+  }
+
+  function parseHHMMAMPM(raw: string, ap: "AM" | "PM"): { hours: number; minutes: number } | null {
+    const match = raw.trim().match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) return null;
+    let hours = parseInt(match[1], 10);
+    const minutes = parseInt(match[2], 10);
+    if (ap === "PM" && hours !== 12) hours += 12;
+    if (ap === "AM" && hours === 12) hours = 0;
+    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+    return { hours, minutes };
+  }
+
+  async function reverseGeocode(lat: number, lng: number) {
+    setIsGeocodingPin(true);
+    try {
+      const results = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
+      if (results.length > 0) {
+        const r = results[0];
+        const parts = [r.name, r.street, r.city, r.region].filter(Boolean);
+        setLocationName(parts.join(", "));
+      }
+    } catch { } finally {
+      setIsGeocodingPin(false);
+    }
+  }
+
   const createMutation = useMutation({
     mutationFn: async () => {
       if (!title.trim()) throw new Error("Title is required");
-      if (!date.trim()) throw new Error("Date is required (YYYY-MM-DD)");
-      if (!time.trim()) throw new Error("Time is required (HH:MM)");
-      if (!locationName.trim()) throw new Error("Location name is required");
+      if (!date.trim()) throw new Error("Date is required (MM/DD/YY)");
+      if (!time.trim()) throw new Error("Time is required (H:MM)");
+      if (!locationName.trim()) throw new Error("Location name is required — tap the pin to set it on the map");
+      if (!locationLat || !locationLng) throw new Error("Please set the location on the map");
 
-      const dateTime = new Date(`${date}T${time}:00`);
-      if (isNaN(dateTime.getTime())) throw new Error("Invalid date or time format");
+      const parsedDate = parseDMY(date.trim());
+      if (!parsedDate) throw new Error("Invalid date — use MM/DD/YY format");
+      const parsedTime = parseHHMMAMPM(time.trim(), amPm);
+      if (!parsedTime) throw new Error("Invalid time — use H:MM format");
+
+      const dateTime = new Date(parsedDate.getFullYear(), parsedDate.getMonth(), parsedDate.getDate(), parsedTime.hours, parsedTime.minutes);
+      if (isNaN(dateTime.getTime())) throw new Error("Invalid date or time");
 
       const dist = isCrew ? parseFloat(plannedDistance) || 3 : parseFloat(minDistance);
       const distMax = isCrew ? dist : parseFloat(maxDistance);

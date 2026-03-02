@@ -1340,7 +1340,7 @@ const s = StyleSheet.create({
     color: C.textDim,
     textAlign: "center",
     lineHeight: 24,
-    paddingHorizontal: 8,
+    paddingHorizontal: 32,
     marginTop: 4,
   },
   detailToggleRow: {
