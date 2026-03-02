@@ -361,7 +361,7 @@ function CrewDetailSheet({
   onClose: () => void;
   currentUserId: string;
 }) {
-  const { activityFilter } = useActivity();
+  const { activityFilter, setActivityFilter } = useActivity();
   const [showInvite, setShowInvite] = useState(false);
   const qc = useQueryClient();
 
@@ -407,20 +407,41 @@ function CrewDetailSheet({
           <View style={s.sheetHandle} />
           {!crew ? null : (
             <>
-              <View style={s.sheetHeader}>
-                <View style={s.detailTitleRow}>
-                  <Text style={s.detailEmoji}>{crew.emoji}</Text>
-                  <Text style={s.sheetTitle}>{crew.name}</Text>
-                </View>
-                <TouchableOpacity onPress={onClose} testID="close-crew-detail">
-                  <Ionicons name="close" size={24} color={C.textMuted} />
+              {/* Close button row */}
+              <View style={s.detailCloseRow}>
+                <TouchableOpacity onPress={onClose} testID="close-crew-detail" style={s.detailCloseBtn}>
+                  <Ionicons name="close" size={22} color={C.textMuted} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Hero title */}
+              <View style={s.detailHero}>
+                <Text style={s.detailHeroEmoji}>{crew.emoji}</Text>
+                <Text style={s.detailHeroName}>{crew.name}</Text>
+                {crew.description ? (
+                  <Text style={s.detailDesc}>{crew.description}</Text>
+                ) : null}
+              </View>
+
+              {/* Runs / Rides toggle */}
+              <View style={s.detailToggleRow}>
+                <TouchableOpacity
+                  style={[s.detailToggleBtn, activityFilter === "run" && s.detailToggleBtnActive]}
+                  onPress={() => setActivityFilter("run")}
+                >
+                  <Ionicons name="walk" size={14} color={activityFilter === "run" ? C.bg : C.textMuted} />
+                  <Text style={[s.detailToggleTxt, activityFilter === "run" && s.detailToggleTxtActive]}>Runs</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[s.detailToggleBtn, activityFilter === "ride" && s.detailToggleBtnActive]}
+                  onPress={() => setActivityFilter("ride")}
+                >
+                  <Ionicons name="bicycle" size={14} color={activityFilter === "ride" ? C.bg : C.textMuted} />
+                  <Text style={[s.detailToggleTxt, activityFilter === "ride" && s.detailToggleTxtActive]}>Rides</Text>
                 </TouchableOpacity>
               </View>
 
               <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
-                {crew.description ? (
-                  <Text style={s.detailDesc}>{crew.description}</Text>
-                ) : null}
 
                 {/* Members */}
                 <View style={s.detailSection}>
@@ -954,21 +975,75 @@ const s = StyleSheet.create({
   },
 
   // Detail
-  detailTitleRow: {
+  detailCloseRow: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
+    justifyContent: "flex-end",
+    paddingHorizontal: 20,
+    paddingTop: 6,
+    paddingBottom: 2,
   },
-  detailEmoji: {
-    fontSize: 24,
+  detailCloseBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: C.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  detailHero: {
+    alignItems: "center",
+    paddingHorizontal: 24,
+    paddingBottom: 16,
+    paddingTop: 8,
+  },
+  detailHeroEmoji: {
+    fontSize: 52,
+    marginBottom: 8,
+  },
+  detailHeroName: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 28,
+    color: C.text,
+    textAlign: "center",
+    marginBottom: 6,
   },
   detailDesc: {
     fontFamily: "Outfit_400Regular",
-    fontSize: 14,
+    fontSize: 17,
     color: C.textDim,
-    paddingHorizontal: 24,
-    paddingTop: 12,
-    lineHeight: 20,
+    textAlign: "center",
+    lineHeight: 24,
+    paddingHorizontal: 8,
+    marginTop: 4,
+  },
+  detailToggleRow: {
+    flexDirection: "row",
+    alignSelf: "center",
+    backgroundColor: C.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: C.border,
+    padding: 3,
+    marginBottom: 4,
+  },
+  detailToggleBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 18,
+    paddingVertical: 7,
+    borderRadius: 17,
+  },
+  detailToggleBtnActive: {
+    backgroundColor: C.primary,
+  },
+  detailToggleTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 13,
+    color: C.textMuted,
+  },
+  detailToggleTxtActive: {
+    color: C.bg,
   },
   detailSection: {
     paddingHorizontal: 24,
