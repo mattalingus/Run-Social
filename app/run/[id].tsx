@@ -614,9 +614,21 @@ export default function RunDetailScreen() {
           </View>
         ) : null}
 
-        {run.tags?.length > 0 && (
+        {run.run_style && (
           <View style={styles.tagsSection}>
             <Text style={styles.sectionTitle}>Run Style</Text>
+            <View style={styles.runStyleBadgeRow}>
+              <View style={styles.runStyleBadge}>
+                <Feather name="activity" size={14} color={C.bg} />
+                <Text style={styles.runStyleBadgeText}>{run.run_style}</Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {run.tags?.length > 0 && (
+          <View style={styles.tagsSection}>
+            <Text style={styles.sectionTitle}>Group Vibe</Text>
             <View style={styles.tagsGrid}>
               {run.tags.map((tag: string) => (
                 <View key={tag} style={styles.tagChip}>
@@ -937,6 +949,9 @@ const styles = StyleSheet.create({
   tagsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   tagChip: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: C.primaryMuted, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1, borderColor: C.primary + "33" },
   tagText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.primary },
+  runStyleBadgeRow: { flexDirection: "row" },
+  runStyleBadge: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: C.primary, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10 },
+  runStyleBadgeText: { fontFamily: "Outfit_700Bold", fontSize: 14, color: C.bg },
   participantsSection: { gap: 10, marginBottom: 16 },
   participantsList: { gap: 8 },
   participantItem: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: C.card, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: C.border },

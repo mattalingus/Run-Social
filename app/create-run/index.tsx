@@ -23,6 +23,7 @@ import { apiRequest } from "@/lib/query-client";
 import C from "@/constants/colors";
 
 const RUN_TAGS = ["Talkative", "Quiet", "Motivational", "Training", "Ministry", "Recovery"];
+const RUN_STYLES = ["Easy Pace", "Chill", "Steady", "Tempo", "Fast", "Recovery", "Long Run", "Progressive", "Intervals", "Race Prep"];
 const PRIVACY_OPTIONS = [
   { value: "public", label: "Public", icon: "globe", desc: "Anyone can join" },
   { value: "private", label: "Private", icon: "lock", desc: "Invite only" },
@@ -48,6 +49,7 @@ export default function CreateRunScreen() {
   const [minPace, setMinPace] = useState("8");
   const [maxPace, setMaxPace] = useState("12");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [runStyle, setRunStyle] = useState<string | null>(null);
   const [maxParticipants, setMaxParticipants] = useState("20");
   const [invitePassword, setInvitePassword] = useState("");
   const [inviteModal, setInviteModal] = useState<{ token: string; title: string } | null>(null);
@@ -77,6 +79,7 @@ export default function CreateRunScreen() {
         tags: selectedTags,
         maxParticipants: parseInt(maxParticipants),
         invitePassword: privacy === "private" && invitePassword.trim() ? invitePassword.trim() : undefined,
+        runStyle: runStyle ?? undefined,
       });
       return res.json();
     },
@@ -320,7 +323,24 @@ export default function CreateRunScreen() {
         </View>
 
         <View style={styles.field}>
-          <Text style={styles.label}>Run Style Tags</Text>
+          <Text style={styles.label}>Run Style</Text>
+          <Text style={styles.fieldHint}>What kind of run is this?</Text>
+          <View style={styles.tagsGrid}>
+            {RUN_STYLES.map((s) => (
+              <Pressable
+                key={s}
+                style={[styles.tagChip, styles.runStyleChip, runStyle === s && styles.runStyleChipActive]}
+                onPress={() => { setRunStyle(runStyle === s ? null : s); Haptics.selectionAsync(); }}
+              >
+                <Text style={[styles.tagChipText, runStyle === s && styles.runStyleChipTextActive]}>{s}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.field}>
+          <Text style={styles.label}>Group Vibe</Text>
+          <Text style={styles.fieldHint}>What's the vibe of your group?</Text>
           <View style={styles.tagsGrid}>
             {RUN_TAGS.map((tag) => (
               <Pressable
@@ -438,6 +458,10 @@ const styles = StyleSheet.create({
   tagChipActive: { backgroundColor: C.primaryMuted, borderColor: C.primary },
   tagChipText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary },
   tagChipTextActive: { color: C.primary },
+  runStyleChip: { borderRadius: 12 },
+  runStyleChipActive: { backgroundColor: C.primary, borderColor: C.primary },
+  runStyleChipTextActive: { color: C.bg },
+  fieldHint: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, marginTop: -6, marginBottom: 8 },
   passwordHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 },
   passwordHint: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted, marginTop: 4 },
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", alignItems: "center", justifyContent: "center", padding: 24 },
