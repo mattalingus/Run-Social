@@ -146,12 +146,26 @@ function LockedRunMarker({ run, isSelected, onPress }: { run: Run; isSelected: b
 
 function RunMarker({ run, isSelected, onPress }: { run: Run; isSelected: boolean; onPress: () => void }) {
   const scale = useRef(new Animated.Value(1)).current;
-  const [loaded, setLoaded] = useState(false);
+  const frozen = useRef(false);
+  const [tracksViewChanges, setTracksViewChanges] = useState(true);
   const soon = isWithin24h(run.date);
   const icon = run.host_marker_icon;
   const isEmojiIcon = !!icon && !icon.startsWith("http") && !icon.startsWith("/api/objects");
   const isUrlIcon = !!icon && (icon.startsWith("http") || icon.startsWith("/api/objects"));
   const photoSrc = isUrlIcon ? icon : (run.host_photo || avatarUrl(run.host_name));
+
+  function freeze() {
+    if (!frozen.current) {
+      frozen.current = true;
+      setTracksViewChanges(false);
+    }
+  }
+
+  useEffect(() => {
+    if (isEmojiIcon) { frozen.current = true; setTracksViewChanges(false); return; }
+    const t = setTimeout(freeze, 1500);
+    return () => clearTimeout(t);
+  }, []);
 
   if (run.is_locked) {
     return <LockedRunMarker run={run} isSelected={isSelected} onPress={onPress} />;
@@ -171,7 +185,7 @@ function RunMarker({ run, isSelected, onPress }: { run: Run; isSelected: boolean
       coordinate={{ latitude: run.location_lat, longitude: run.location_lng }}
       onPress={handlePress}
       anchor={{ x: 0.5, y: 0.5 }}
-      tracksViewChanges={isEmojiIcon ? false : !loaded}
+      tracksViewChanges={tracksViewChanges}
     >
       <Animated.View style={[mk.wrap, { transform: [{ scale }] }]}>
         {soon && <View style={mk.glow} />}
@@ -183,7 +197,7 @@ function RunMarker({ run, isSelected, onPress }: { run: Run; isSelected: boolean
             <Image
               source={{ uri: photoSrc }}
               style={mk.img}
-              onLoad={() => setLoaded(true)}
+              onLoad={freeze}
             />
           )}
         </View>
