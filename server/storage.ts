@@ -1107,6 +1107,11 @@ export async function getAchievementStats(userId: string) {
     friendsRes, publicJoinedRes, squadRunsRes, maxSingleRunRes,
     monthlyMaxRes, streakRes, nightRunsRes, morningRunsRes,
     communityLeaderRes, uniqueLocRes, twoWeekRes, comebackRes,
+    // Ride-specific
+    completedRidesRes, publicRidesJoinedRes, squadRidesRes, rideTotalMilesRes,
+    rideMaxSingleRes, rideMonthlyMaxRes, rideStreakRes, nightRidesRes,
+    morningRidesRes, rideCommunityRes, rideUniqueLocRes, rideTwoWeekRes,
+    rideComebackRes, rideHostedRes,
   ] = await Promise.all([
     pool.query(
       `SELECT COUNT(*) as cnt FROM friends WHERE (requester_id = $1 OR addressee_id = $1) AND status = 'accepted'`,
@@ -1195,9 +1200,113 @@ export async function getAchievementStats(userId: string) {
        SELECT COUNT(*) > 0 AS had_gap FROM gaps WHERE gap > INTERVAL '30 days'`,
       [userId]
     ),
+    // ── Ride stats ──────────────────────────────────────────────────────────
+    pool.query(
+      `SELECT COUNT(*) as cnt FROM run_participants rp JOIN runs r ON r.id = rp.run_id
+       WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND r.activity_type = 'ride'`,
+      [userId]
+    ),
+    pool.query(
+      `SELECT COUNT(*) as cnt FROM run_participants rp JOIN runs r ON r.id = rp.run_id
+       WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND r.privacy = 'public' AND r.host_id != $1 AND r.activity_type = 'ride'`,
+      [userId]
+    ),
+    pool.query(
+      `SELECT COUNT(DISTINCT rp.run_id) as cnt FROM run_participants rp JOIN runs r ON r.id = rp.run_id
+       WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND r.activity_type = 'ride'
+       AND (SELECT COUNT(*) FROM run_participants rp2 WHERE rp2.run_id = rp.run_id AND rp2.status != 'cancelled') >= 3`,
+      [userId]
+    ),
+    pool.query(
+      `SELECT COALESCE(SUM(rp.miles_logged), 0) as total FROM run_participants rp JOIN runs r ON r.id = rp.run_id
+       WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND r.activity_type = 'ride'`,
+      [userId]
+    ),
+    pool.query(
+      `SELECT COALESCE(MAX(rp.miles_logged), 0) as max FROM run_participants rp JOIN runs r ON r.id = rp.run_id
+       WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND r.activity_type = 'ride'`,
+      [userId]
+    ),
+    pool.query(
+      `SELECT COALESCE(MAX(cnt), 0) as max FROM (
+         SELECT DATE_TRUNC('month', r.date) as m, COUNT(*) as cnt
+         FROM run_participants rp JOIN runs r ON r.id = rp.run_id
+         WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND r.activity_type = 'ride'
+         GROUP BY m
+       ) sub`,
+      [userId]
+    ),
+    pool.query(
+      `WITH dates AS (
+         SELECT DISTINCT DATE_TRUNC('day', r.date)::date AS d
+         FROM run_participants rp JOIN runs r ON r.id = rp.run_id
+         WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND r.activity_type = 'ride'
+         ORDER BY d
+       ), gaps AS (
+         SELECT d, d - LAG(d) OVER (ORDER BY d) AS gap FROM dates
+       ), groups AS (
+         SELECT d, SUM(CASE WHEN gap IS NULL OR gap != 1 THEN 1 ELSE 0 END) OVER (ORDER BY d) AS grp FROM gaps
+       )
+       SELECT COALESCE(MAX(cnt), 0) AS max FROM (SELECT grp, COUNT(*) AS cnt FROM groups GROUP BY grp) sub`,
+      [userId]
+    ),
+    pool.query(
+      `SELECT COUNT(*) as cnt FROM run_participants rp JOIN runs r ON r.id = rp.run_id
+       WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND r.activity_type = 'ride'
+       AND EXTRACT(HOUR FROM r.date AT TIME ZONE 'UTC') >= 20`,
+      [userId]
+    ),
+    pool.query(
+      `SELECT COUNT(*) as cnt FROM run_participants rp JOIN runs r ON r.id = rp.run_id
+       WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND r.activity_type = 'ride'
+       AND EXTRACT(HOUR FROM r.date AT TIME ZONE 'UTC') < 7`,
+      [userId]
+    ),
+    pool.query(
+      `SELECT COUNT(*) as cnt FROM run_participants rp JOIN runs r ON r.id = rp.run_id
+       WHERE r.host_id = $1 AND rp.user_id != $1 AND rp.status = 'confirmed' AND r.activity_type = 'ride'`,
+      [userId]
+    ),
+    pool.query(
+      `SELECT COUNT(DISTINCT r.location_name) as cnt FROM run_participants rp JOIN runs r ON r.id = rp.run_id
+       WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND r.activity_type = 'ride'`,
+      [userId]
+    ),
+    pool.query(
+      `WITH run_dates AS (
+         SELECT r.date FROM run_participants rp JOIN runs r ON r.id = rp.run_id
+         WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND r.activity_type = 'ride'
+         ORDER BY r.date
+       )
+       SELECT COALESCE(MAX(cnt), 0) AS max FROM (
+         SELECT r1.date, COUNT(*) as cnt FROM run_dates r1
+         JOIN run_dates r2 ON r2.date BETWEEN r1.date AND r1.date + INTERVAL '14 days'
+         GROUP BY r1.date
+       ) sub`,
+      [userId]
+    ),
+    pool.query(
+      `WITH run_dates AS (
+         SELECT r.date FROM run_participants rp JOIN runs r ON r.id = rp.run_id
+         WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND r.activity_type = 'ride'
+         ORDER BY r.date
+       ), gaps AS (
+         SELECT date, LAG(date) OVER (ORDER BY date) AS prev_date,
+           date - LAG(date) OVER (ORDER BY date) AS gap FROM run_dates
+       )
+       SELECT COUNT(*) > 0 AS had_gap FROM gaps WHERE gap > INTERVAL '30 days'`,
+      [userId]
+    ),
+    pool.query(
+      `SELECT COUNT(*) as cnt FROM runs WHERE host_id = $1 AND activity_type = 'ride'`,
+      [userId]
+    ),
   ]);
 
   const maxSingleMiles = parseFloat(maxSingleRunRes.rows[0]?.max ?? 0);
+
+  const rideTotalMiles = parseFloat(rideTotalMilesRes.rows[0]?.total ?? 0);
+  const rideMaxSingle = parseFloat(rideMaxSingleRes.rows[0]?.max ?? 0);
 
   return {
     completed_runs: parseInt(u.completed_runs ?? 0),
@@ -1221,7 +1330,103 @@ export async function getAchievementStats(userId: string) {
     negative_split_count: 0,
     five_k_crusher_count: 0,
     pace_perfect_count: 0,
+    // Ride stats
+    completed_rides: parseInt(completedRidesRes.rows[0]?.cnt ?? 0),
+    public_rides_joined: parseInt(publicRidesJoinedRes.rows[0]?.cnt ?? 0),
+    squad_rides_count: parseInt(squadRidesRes.rows[0]?.cnt ?? 0),
+    ride_total_miles: rideTotalMiles,
+    ride_max_single_miles: rideMaxSingle,
+    ride_monthly_max: parseInt(rideMonthlyMaxRes.rows[0]?.max ?? 0),
+    ride_max_streak_days: parseInt(rideStreakRes.rows[0]?.max ?? 0),
+    night_rides_count: parseInt(nightRidesRes.rows[0]?.cnt ?? 0),
+    morning_rides_count: parseInt(morningRidesRes.rows[0]?.cnt ?? 0),
+    ride_participants_hosted: parseInt(rideCommunityRes.rows[0]?.cnt ?? 0),
+    ride_unique_locations: parseInt(rideUniqueLocRes.rows[0]?.cnt ?? 0),
+    ride_max_in_14_days: parseInt(rideTwoWeekRes.rows[0]?.max ?? 0),
+    had_ride_comeback: rideComebackRes.rows[0]?.had_gap === true ? 1 : 0,
+    ride_hosted_count: parseInt(rideHostedRes.rows[0]?.cnt ?? 0),
+    has_fast_ride: rideMaxSingle >= 20 ? 1 : 0,
+    ride_pace_perfect_count: 0,
   };
+}
+
+export async function checkAndAwardRideAchievements(userId: string) {
+  const ridesRes = await pool.query(
+    `SELECT COUNT(*) as cnt FROM run_participants rp JOIN runs r ON r.id = rp.run_id
+     WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND r.activity_type = 'ride'`,
+    [userId]
+  );
+  const hostedRes = await pool.query(
+    `SELECT COUNT(*) as cnt FROM runs WHERE host_id = $1 AND activity_type = 'ride'`,
+    [userId]
+  );
+  const completedRides = parseInt(ridesRes.rows[0]?.cnt ?? 0);
+  const hostedRides = parseInt(hostedRes.rows[0]?.cnt ?? 0);
+
+  if (completedRides >= 1) await awardSlug(userId, "first_ride");
+  if (completedRides >= 5) await awardSlug(userId, "five_rides");
+  if (completedRides >= 10) await awardSlug(userId, "ten_rides");
+  if (completedRides >= 25) await awardSlug(userId, "ride_grinder");
+  if (hostedRides >= 1) await awardSlug(userId, "ride_host_debut");
+  if (hostedRides >= 5) await awardSlug(userId, "ride_crew_builder");
+
+  const rideMilesRes = await pool.query(
+    `SELECT COALESCE(SUM(rp.miles_logged), 0) as total FROM run_participants rp JOIN runs r ON r.id = rp.run_id
+     WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND r.activity_type = 'ride'`,
+    [userId]
+  );
+  const totalRideMiles = parseFloat(rideMilesRes.rows[0]?.total ?? 0);
+  if (totalRideMiles >= 25) await awardSlug(userId, "ride_miles_25");
+  if (totalRideMiles >= 100) await awardSlug(userId, "ride_miles_100");
+  if (totalRideMiles >= 250) await awardSlug(userId, "ride_miles_250");
+  if (totalRideMiles >= 500) await awardSlug(userId, "ride_miles_500");
+
+  const maxSingleRide = await pool.query(
+    `SELECT COALESCE(MAX(rp.miles_logged), 0) as max FROM run_participants rp JOIN runs r ON r.id = rp.run_id
+     WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND r.activity_type = 'ride'`,
+    [userId]
+  );
+  const maxRideMiles = parseFloat(maxSingleRide.rows[0]?.max ?? 0);
+  if (maxRideMiles >= 50) await awardSlug(userId, "half_century");
+  if (maxRideMiles >= 100) await awardSlug(userId, "century_ride");
+
+  const publicRideRes = await pool.query(
+    `SELECT COUNT(*) as cnt FROM run_participants rp JOIN runs r ON r.id = rp.run_id
+     WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND r.privacy = 'public' AND r.host_id != $1 AND r.activity_type = 'ride'`,
+    [userId]
+  );
+  if (parseInt(publicRideRes.rows[0]?.cnt) >= 1) await awardSlug(userId, "social_cyclist");
+
+  const squadRideRes = await pool.query(
+    `SELECT COUNT(DISTINCT rp.run_id) as cnt FROM run_participants rp JOIN runs r ON r.id = rp.run_id
+     WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND r.activity_type = 'ride'
+     AND (SELECT COUNT(*) FROM run_participants rp2 WHERE rp2.run_id = rp.run_id AND rp2.status != 'cancelled') >= 3`,
+    [userId]
+  );
+  if (parseInt(squadRideRes.rows[0]?.cnt) >= 1) await awardSlug(userId, "squad_rider");
+
+  const rideParticipants = await pool.query(
+    `SELECT COUNT(*) as cnt FROM run_participants rp JOIN runs r ON r.id = rp.run_id
+     WHERE r.host_id = $1 AND rp.user_id != $1 AND rp.status = 'confirmed' AND r.activity_type = 'ride'`,
+    [userId]
+  );
+  if (parseInt(rideParticipants.rows[0]?.cnt) >= 20) await awardSlug(userId, "ride_community_leader");
+
+  const nightRideRes = await pool.query(
+    `SELECT COUNT(*) as cnt FROM run_participants rp JOIN runs r ON r.id = rp.run_id
+     WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND r.activity_type = 'ride'
+     AND EXTRACT(HOUR FROM r.date AT TIME ZONE 'UTC') >= 20`,
+    [userId]
+  );
+  if (parseInt(nightRideRes.rows[0]?.cnt) >= 5) await awardSlug(userId, "night_rider");
+
+  const morningRideRes = await pool.query(
+    `SELECT COUNT(*) as cnt FROM run_participants rp JOIN runs r ON r.id = rp.run_id
+     WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND r.activity_type = 'ride'
+     AND EXTRACT(HOUR FROM r.date AT TIME ZONE 'UTC') < 7`,
+    [userId]
+  );
+  if (parseInt(morningRideRes.rows[0]?.cnt) >= 10) await awardSlug(userId, "morning_cyclist");
 }
 
 export async function rateHost(data: {

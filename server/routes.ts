@@ -202,6 +202,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await Promise.all([
         storage.checkAndAwardAchievements(userId, stats.total_miles ?? 0),
         storage.checkFriendAchievements(userId),
+        storage.checkAndAwardRideAchievements(userId),
       ]);
       const earnedRows = await storage.getUserAchievements(userId);
       const earned_slugs = earnedRows.map((r: any) => r.slug).filter(Boolean);
