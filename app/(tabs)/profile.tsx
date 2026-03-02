@@ -20,6 +20,7 @@ import * as Haptics from "expo-haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
+import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest } from "@/lib/query-client";
 import C from "@/constants/colors";
 import { MARKER_ICONS } from "@/constants/markerIcons";
@@ -115,9 +116,21 @@ const RANK_COLORS = ["#FFD700", "#C0C0C0", "#CD7F32", C.textMuted, C.textMuted] 
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
+interface SoloRunItem {
+  id: string;
+  distance_miles: number;
+  pace_min_per_mile: number | null;
+  duration_seconds: number | null;
+  completed: boolean;
+  planned: boolean;
+  date: string;
+  activity_type: string;
+}
+
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { user, logout, refreshUser } = useAuth();
+  const { activityFilter } = useActivity();
   const qc = useQueryClient();
 
   const [showGoals, setShowGoals] = useState(false);
@@ -275,6 +288,30 @@ export default function ProfileScreen() {
     queryKey: ["/api/users/me/top-runs"],
     enabled: !!user,
   });
+
+  const { data: soloRuns = [] } = useQuery<SoloRunItem[]>({
+    queryKey: ["/api/solo-runs"],
+    enabled: !!user,
+    staleTime: 30_000,
+  });
+
+  const actStats = React.useMemo(() => {
+    const filtered = soloRuns.filter((r) => (r.activity_type ?? "run") === activityFilter && r.completed);
+    const now = new Date();
+    const thisMonth = filtered.filter((r) => {
+      const d = new Date(r.date);
+      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    });
+    const thisYear = filtered.filter((r) => new Date(r.date).getFullYear() === now.getFullYear());
+    const totalMiles = filtered.reduce((s, r) => s + r.distance_miles, 0);
+    const monthMiles = thisMonth.reduce((s, r) => s + r.distance_miles, 0);
+    const yearMiles = thisYear.reduce((s, r) => s + r.distance_miles, 0);
+    const withPace = filtered.filter((r) => r.pace_min_per_mile != null);
+    const avgPace = withPace.length > 0
+      ? withPace.reduce((s, r) => s + r.pace_min_per_mile!, 0) / withPace.length
+      : null;
+    return { totalMiles, monthMiles, yearMiles, count: filtered.length, avgPace };
+  }, [soloRuns, activityFilter]);
 
   const nameMutation = useMutation({
     mutationFn: async (name: string) => {
@@ -551,12 +588,12 @@ export default function ProfileScreen() {
       {/* ── Stats Grid ────────────────────────────────────────────────────── */}
       <View style={styles.statsGrid}>
         <View style={styles.statCard}>
-          <Text style={styles.statNum}>{formatDistance(user.total_miles)}</Text>
+          <Text style={styles.statNum}>{formatDistance(actStats.totalMiles)}</Text>
           <Text style={styles.statName}>Total Miles</Text>
         </View>
         <View style={styles.statCard}>
-          <Text style={styles.statNum}>{user.completed_runs}</Text>
-          <Text style={styles.statName}>Runs Done</Text>
+          <Text style={styles.statNum}>{actStats.count}</Text>
+          <Text style={styles.statName}>{activityFilter === "ride" ? "Rides Done" : "Runs Done"}</Text>
         </View>
         <View style={styles.statCard}>
           <Text style={styles.statNum}>{user.hosted_runs}</Text>
@@ -603,11 +640,11 @@ export default function ProfileScreen() {
         </View>
         <View style={styles.statsRow}>
           <View style={styles.statsItem}>
-            <Ionicons name="walk" size={16} color={C.orange} />
+            <Ionicons name={activityFilter === "ride" ? "bicycle" : "walk"} size={16} color={C.orange} />
             <View>
               <Text style={styles.statsVal}>
-                {user.avg_pace
-                  ? `${Math.floor(user.avg_pace)}:${Math.round((user.avg_pace % 1) * 60).toString().padStart(2, "0")}/mi`
+                {actStats.avgPace != null
+                  ? `${Math.floor(actStats.avgPace)}:${Math.round((actStats.avgPace % 1) * 60).toString().padStart(2, "0")}/mi`
                   : "—"}
               </Text>
               <Text style={styles.statsLabel}>Avg Pace</Text>
@@ -676,21 +713,21 @@ export default function ProfileScreen() {
         <View style={styles.goalCard}>
           <View style={styles.goalHeader}>
             <Text style={styles.goalLabel}>This Month</Text>
-            <Text style={styles.goalValues}>{formatDistance(user.miles_this_month)} / {user.monthly_goal} mi</Text>
+            <Text style={styles.goalValues}>{formatDistance(actStats.monthMiles)} / {user.monthly_goal} mi</Text>
           </View>
-          <ProgressBar value={user.miles_this_month} total={user.monthly_goal} />
+          <ProgressBar value={actStats.monthMiles} total={user.monthly_goal} />
           <Text style={styles.goalRemain}>
-            {formatDistance(Math.max(0, user.monthly_goal - user.miles_this_month))} mi remaining
+            {formatDistance(Math.max(0, user.monthly_goal - actStats.monthMiles))} mi remaining
           </Text>
         </View>
         <View style={[styles.goalCard, { marginTop: 10 }]}>
           <View style={styles.goalHeader}>
             <Text style={styles.goalLabel}>This Year</Text>
-            <Text style={styles.goalValues}>{formatDistance(user.miles_this_year)} / {user.yearly_goal} mi</Text>
+            <Text style={styles.goalValues}>{formatDistance(actStats.yearMiles)} / {user.yearly_goal} mi</Text>
           </View>
-          <ProgressBar value={user.miles_this_year} total={user.yearly_goal} color={C.blue} />
+          <ProgressBar value={actStats.yearMiles} total={user.yearly_goal} color={C.blue} />
           <Text style={styles.goalRemain}>
-            {formatDistance(Math.max(0, user.yearly_goal - user.miles_this_year))} mi remaining
+            {formatDistance(Math.max(0, user.yearly_goal - actStats.yearMiles))} mi remaining
           </Text>
         </View>
       </View>

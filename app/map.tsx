@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
+import { useActivity } from "@/contexts/ActivityContext";
 import C from "@/constants/colors";
 import RangeSlider from "@/components/RangeSlider";
 import { formatDistance } from "@/lib/formatDistance";
@@ -70,6 +71,7 @@ interface Run {
   is_locked?: boolean;
   privacy?: string;
   is_active?: boolean;
+  activity_type?: string;
 }
 
 interface CommunityPath {
@@ -260,6 +262,7 @@ const mk = StyleSheet.create({
 export default function MapScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { activityFilter } = useActivity();
   const mapRef = useRef<MapView>(null);
   const params = useLocalSearchParams<{ styles?: string }>();
 
@@ -328,24 +331,26 @@ export default function MapScreen() {
     placeholderData: (prev) => prev,
   });
 
-  // Only runs whose pins are currently visible in the map viewport
+  // Only runs/rides matching the activity filter and visible in the map viewport
   const visibleRuns = useMemo(() => {
     if (!bounds) return [];
     return runs.filter(
       (r) =>
+        (r.activity_type ?? "run") === activityFilter &&
         r.location_lat >= bounds.swLat &&
         r.location_lat <= bounds.neLat &&
         r.location_lng >= bounds.swLng &&
         r.location_lng <= bounds.neLng
     );
-  }, [runs, bounds]);
+  }, [runs, bounds, activityFilter]);
 
   const insights = useMemo(() => {
     if (visibleRuns.length === 0) return [];
     const now = Date.now();
     const result: Array<{ icon: string; lib: "feather" | "ion"; text: string; color: string }> = [];
 
-    result.push({ icon: "map-pin", lib: "feather", text: `${visibleRuns.length} run${visibleRuns.length !== 1 ? "s" : ""} on map`, color: C.primary });
+    const label = activityFilter === "ride" ? "ride" : "run";
+    result.push({ icon: "map-pin", lib: "feather", text: `${visibleRuns.length} ${label}${visibleRuns.length !== 1 ? "s" : ""} on map`, color: C.primary });
 
     const upcoming = visibleRuns
       .filter((r) => new Date(r.date).getTime() > now)
