@@ -898,7 +898,7 @@ export async function getUserRuns(userId: string) {
        AND (
          r.date > NOW()
          OR r.host_id = $1
-         OR EXISTS (SELECT 1 FROM run_participants rp4 WHERE rp4.run_id = r.id AND rp4.user_id = $1 AND rp4.is_present = true)
+         OR EXISTS (SELECT 1 FROM run_participants rp4 WHERE rp4.run_id = r.id AND rp4.user_id = $1 AND rp4.status != 'cancelled')
        )
      ORDER BY r.date DESC`,
     [userId]

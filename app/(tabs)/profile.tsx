@@ -451,7 +451,7 @@ export default function ProfileScreen() {
     const groupPart: UnifiedHistoryItem[] = runs
       .filter((r) => {
         const isPast = new Date(r.date) < now;
-        const wasInvolved = r.is_host || r.my_is_present;
+        const wasInvolved = r.is_host || r.my_is_present || r.my_status === "joined";
         return isPast && wasInvolved && (r.activity_type ?? "run") === historyActivityFilter;
       })
       .map((r) => {
