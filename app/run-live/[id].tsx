@@ -89,6 +89,16 @@ export default function RunLiveScreen() {
     restore();
   }, []);
 
+  // Auto-start tracking when host activates run and participant is already on this screen
+  useEffect(() => {
+    if (!liveState?.isActive) return;
+    if (!run || !user) return;
+    if (run.host_id === user.id) return;
+    if (phase !== "idle") return;
+    if (Platform.OS === "web") return;
+    handleStartTracking();
+  }, [liveState?.isActive]);
+
   // Show toast when presence is confirmed by context
   useEffect(() => {
     if (presentConfirmed) {

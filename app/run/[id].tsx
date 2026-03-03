@@ -82,6 +82,7 @@ export default function RunDetailScreen() {
   const liveTracking = useLiveTracking();
   const qc = useQueryClient();
   const pillPulse = useRef(new Animated.Value(1)).current;
+  const wasLiveRef = useRef(false);
   const [joining, setJoining] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [showRulesModal, setShowRulesModal] = useState(false);
@@ -323,6 +324,19 @@ export default function RunDetailScreen() {
     });
     return () => { sub?.remove(); };
   }, [user?.id, run?.id, isParticipant, isHost, isPastRun, proximityTriggered]);
+
+  // ── Auto-start tracking for participants when host activates the run ──────
+  useEffect(() => {
+    const nowLive = isLive;
+    const justWentLive = nowLive && !wasLiveRef.current;
+    wasLiveRef.current = nowLive;
+    if (!justWentLive) return;
+    if (!user || !id || !run || isHost || !isParticipant) return;
+    if (Platform.OS === "web") return;
+    if (liveTracking.phase !== "idle" || liveTracking.runId === id) return;
+    liveTracking.startTracking(id, (run.activity_type ?? "run") as "run" | "ride");
+    liveTracking.minimize();
+  }, [isLive]);
 
   async function handleStartRun() {
     if (!user) return;

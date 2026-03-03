@@ -1010,6 +1010,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const run = await storage.startGroupRun(req.params.id, req.session.userId!);
       res.json(run);
+      const verb = run.activity_type === "ride" ? "Ride" : "Run";
+      storage.getRunParticipantTokensFiltered(req.params.id, "notif_run_reminders").then((tokens) => {
+        if (!tokens.length) return;
+        sendPushNotification(
+          tokens,
+          `${verb} has started — Let's go! 🚀`,
+          run.title,
+          { screen: "run-live", runId: req.params.id }
+        );
+      }).catch(() => {});
     } catch (e: any) {
       const status = e.message === "Only the host can start the run" ? 403
         : e.message === "Run already started" ? 409 : 500;

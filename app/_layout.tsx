@@ -92,8 +92,12 @@ function RootLayoutNav() {
     let sub: { remove: () => void } | null = null;
     try {
       sub = Notifications.addNotificationResponseReceivedListener((response) => {
-        const runId = response.notification.request.content.data?.runId;
-        if (runId) {
+        const data = response.notification.request.content.data;
+        const runId = data?.runId;
+        if (!runId) return;
+        if (data?.screen === "run-live") {
+          router.push(`/run-live/${runId}`);
+        } else {
           router.push(`/run/${runId}`);
         }
       });
