@@ -1897,7 +1897,7 @@ export async function getCrewsByUser(userId: string) {
        (SELECT COUNT(*) FROM crew_members WHERE crew_id = c.id AND status = 'member') AS member_count,
        u.name AS created_by_name,
        CASE WHEN c.created_by = $1
-         THEN (SELECT COUNT(*) FROM crew_members WHERE crew_id = c.id AND status = 'pending')
+         THEN (SELECT COUNT(*) FROM crew_members WHERE crew_id = c.id AND status = 'pending' AND invited_by = user_id)
          ELSE 0
        END AS pending_request_count
      FROM crews c
@@ -1914,7 +1914,7 @@ export async function getCrewJoinRequests(crewId: string) {
     `SELECT cm.user_id, cm.joined_at AS requested_at, u.name, u.username, u.photo_url, u.avg_pace, u.completed_runs
      FROM crew_members cm
      JOIN users u ON u.id = cm.user_id
-     WHERE cm.crew_id = $1 AND cm.status = 'pending'
+     WHERE cm.crew_id = $1 AND cm.status = 'pending' AND cm.invited_by = cm.user_id
      ORDER BY cm.joined_at ASC`,
     [crewId]
   );
