@@ -29,8 +29,14 @@ import RangeSlider from "@/components/RangeSlider";
 import { formatDistance } from "@/lib/formatDistance";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActivity } from "@/contexts/ActivityContext";
-import { apiRequest } from "@/lib/query-client";
+import { apiRequest, getApiUrl } from "@/lib/query-client";
 import WebFAB from "@/components/WebFAB";
+
+function resolveImgUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (url.startsWith("http")) return url;
+  return new URL(url, getApiUrl()).toString();
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -90,6 +96,7 @@ interface Run {
   privacy: string;
   host_hosted_runs?: number;
   host_photo?: string;
+  crew_photo_url?: string | null;
   is_active?: boolean;
   run_style?: string;
   activity_type?: string;
@@ -426,15 +433,20 @@ function RunCard({
       testID={`run-card-${run.id}`}
     >
       <View style={s.cardBody}>
-        {/* ── Left: Host column ── */}
+        {/* ── Left: Host/Crew column ── */}
         <View style={s.hostColumn}>
-          {run.host_photo ? (
-            <Image source={{ uri: run.host_photo }} style={s.hostAvatar} />
-          ) : (
-            <View style={s.hostAvatarFallback}>
-              <Text style={s.hostAvatarLetter}>{run.host_name?.charAt(0).toUpperCase()}</Text>
-            </View>
-          )}
+          {(() => {
+            const avatarUri = run.crew_id
+              ? resolveImgUrl(run.crew_photo_url) ?? resolveImgUrl(run.host_photo)
+              : resolveImgUrl(run.host_photo);
+            return avatarUri ? (
+              <Image source={{ uri: avatarUri }} style={s.hostAvatar} />
+            ) : (
+              <View style={s.hostAvatarFallback}>
+                <Text style={s.hostAvatarLetter}>{run.host_name?.charAt(0).toUpperCase()}</Text>
+              </View>
+            );
+          })()}
           <Text style={s.hostColumnName} numberOfLines={2}>{run.host_name}</Text>
           {run.host_rating > 0 && (
             <Text style={s.hostColumnRating}>★ {run.host_rating.toFixed(1)}</Text>

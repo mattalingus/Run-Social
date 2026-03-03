@@ -19,7 +19,7 @@ import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
@@ -1009,9 +1009,18 @@ export default function CrewScreen() {
     queryKey: ["/api/crews"],
   });
 
-  const { data: invites = [] } = useQuery<CrewInvite[]>({
+  const { data: invites = [], refetch: refetchInvites } = useQuery<CrewInvite[]>({
     queryKey: ["/api/crew-invites"],
+    refetchInterval: 15_000,
+    staleTime: 10_000,
   });
+
+  useFocusEffect(
+    useCallback(() => {
+      refetchInvites();
+      qc.invalidateQueries({ queryKey: ["/api/crews"] });
+    }, [refetchInvites, qc])
+  );
 
   const { data: searchResults = [], isFetching: searchFetching } = useQuery<any[]>({
     queryKey: [searchUrl],
