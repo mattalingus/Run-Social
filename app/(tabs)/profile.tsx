@@ -13,6 +13,8 @@ import {
   Image,
   Share,
 } from "react-native";
+import MapView, { Polyline } from "react-native-maps";
+import MAP_STYLE from "@/lib/mapStyle";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons } from "@expo/vector-icons";
@@ -87,6 +89,62 @@ function formatDate(s: string) {
   return new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+function formatDisplayDate(d: string) {
+  return new Date(d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+}
+
+function formatPaceSolo(p: number) {
+  const m = Math.floor(p);
+  const s = Math.round((p - m) * 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+function formatDurationSolo(seconds: number) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+type RoutePoint = { latitude: number; longitude: number };
+
+function ProfileMiniRouteMap({ path }: { path: RoutePoint[] }) {
+  if (Platform.OS === "web") return null;
+  const lats = path.map((p) => p.latitude);
+  const lngs = path.map((p) => p.longitude);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs);
+  const maxLng = Math.max(...lngs);
+  const latDelta = Math.max((maxLat - minLat) * 1.6, 0.006);
+  const lngDelta = Math.max((maxLng - minLng) * 1.6, 0.006);
+  return (
+    <MapView
+      style={{ height: 130, borderRadius: 14, marginTop: 12, overflow: "hidden" }}
+      initialRegion={{ latitude: (minLat + maxLat) / 2, longitude: (minLng + maxLng) / 2, latitudeDelta: latDelta, longitudeDelta: lngDelta }}
+      customMapStyle={MAP_STYLE}
+      mapType="mutedStandard"
+      scrollEnabled={false}
+      zoomEnabled={false}
+      rotateEnabled={false}
+      pitchEnabled={false}
+      showsUserLocation={false}
+      showsCompass={false}
+      showsScale={false}
+      showsTraffic={false}
+      showsBuildings={false}
+      showsPointsOfInterest={false}
+      userInterfaceStyle="dark"
+      toolbarEnabled={false}
+      pointerEvents="none"
+    >
+      <Polyline coordinates={path} strokeColor={C.primary} strokeWidth={3} lineCap="round" lineJoin="round" />
+    </MapView>
+  );
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface TopRun {
@@ -120,6 +178,7 @@ const RANK_COLORS = ["#FFD700", "#C0C0C0", "#CD7F32", C.textMuted, C.textMuted] 
 
 interface SoloRunItem {
   id: string;
+  title: string | null;
   distance_miles: number;
   pace_min_per_mile: number | null;
   duration_seconds: number | null;
@@ -127,6 +186,7 @@ interface SoloRunItem {
   planned: boolean;
   date: string;
   activity_type: string;
+  route_path: Array<{ latitude: number; longitude: number }> | null;
 }
 
 export default function ProfileScreen() {
@@ -147,6 +207,7 @@ export default function ProfileScreen() {
   const [uploadingProfile, setUploadingProfile] = useState(false);
   const [uploadingPin, setUploadingPin] = useState(false);
   const [topRunsModal, setTopRunsModal] = useState<"longest" | "fastest" | null>(null);
+  const [showSoloHistory, setShowSoloHistory] = useState(false);
   const [friendSearch, setFriendSearch] = useState("");
   const [showAddFriend, setShowAddFriend] = useState(false);
   const [viewProfileId, setViewProfileId] = useState<string | null>(null);
@@ -660,6 +721,18 @@ export default function ProfileScreen() {
           <Feather name="chevron-right" size={10} color={C.textMuted} style={{ marginTop: 2 }} />
         </Pressable>
       </View>
+
+      {/* ── View Past Runs / Rides ────────────────────────────────────────── */}
+      <Pressable
+        style={({ pressed }) => [styles.viewPastBtn, { opacity: pressed ? 0.8 : 1 }]}
+        onPress={() => { setShowSoloHistory(true); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+      >
+        <Ionicons name={profileActivity === "ride" ? "bicycle-outline" : "walk-outline"} size={16} color={C.primary} />
+        <Text style={styles.viewPastBtnTxt}>
+          {profileActivity === "ride" ? "View Past Rides" : "View Past Runs"}
+        </Text>
+        <Feather name="chevron-right" size={16} color={C.primary} />
+      </Pressable>
 
       {/* ── My Stats ──────────────────────────────────────────────────────── */}
       <View style={styles.section}>
@@ -1214,6 +1287,67 @@ export default function ProfileScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* ── Solo Run / Ride History Modal ──────────────────────────────────── */}
+      <Modal visible={showSoloHistory} transparent animationType="slide" onRequestClose={() => setShowSoloHistory(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setShowSoloHistory(false)} />
+        <View style={[styles.modalSheet, styles.friendModalSheet, { paddingBottom: insets.bottom + 24 }]}>
+          <View style={styles.modalTitleRow}>
+            <Text style={styles.modalTitle}>
+              {profileActivity === "ride" ? "Past Rides" : "Past Runs"}
+            </Text>
+            <Pressable onPress={() => setShowSoloHistory(false)} hitSlop={12}>
+              <Feather name="x" size={20} color={C.textMuted} />
+            </Pressable>
+          </View>
+          {(() => {
+            const history = soloRuns.filter((r) => (r.activity_type ?? "run") === profileActivity && r.completed);
+            if (history.length === 0) {
+              return (
+                <View style={styles.emptyState}>
+                  <Ionicons name={profileActivity === "ride" ? "bicycle-outline" : "walk-outline"} size={32} color={C.textMuted} />
+                  <Text style={styles.emptyStateTxt}>
+                    {profileActivity === "ride" ? "No completed rides yet" : "No completed runs yet"}
+                  </Text>
+                </View>
+              );
+            }
+            return (
+              <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+                {history.map((run) => {
+                  const label = run.title || `${formatDistance(run.distance_miles)} mi ${run.activity_type === "ride" ? "ride" : "run"}`;
+                  return (
+                    <View key={run.id} style={styles.soloHistCard}>
+                      <View style={styles.soloHistRow}>
+                        <View style={styles.soloHistLeft}>
+                          <View style={styles.soloHistCheck}>
+                            <Feather name="check" size={12} color={C.primary} />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.soloHistTitle} numberOfLines={1}>{label}</Text>
+                            <Text style={styles.soloHistMeta}>
+                              {formatDisplayDate(run.date)}
+                              {run.pace_min_per_mile ? ` · ${formatPaceSolo(run.pace_min_per_mile)}/mi` : ""}
+                              {run.duration_seconds ? ` · ${formatDurationSolo(run.duration_seconds)}` : ""}
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={styles.soloHistRight}>
+                          <Text style={styles.soloHistDist}>{formatDistance(run.distance_miles)}</Text>
+                          <Text style={styles.soloHistDistUnit}>mi</Text>
+                        </View>
+                      </View>
+                      {run.route_path && run.route_path.length > 1 && (
+                        <ProfileMiniRouteMap path={run.route_path} />
+                      )}
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            );
+          })()}
+        </View>
+      </Modal>
+
       {/* ── Top Runs Modal ─────────────────────────────────────────────────── */}
       {topRunsModal !== null && (
         <Modal visible transparent animationType="slide" onRequestClose={() => setTopRunsModal(null)}>
@@ -1625,6 +1759,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 9, flexShrink: 0,
   },
   inviteShareBtnTxt: { fontFamily: "Outfit_700Bold", fontSize: 13, color: C.bg },
+
+  viewPastBtn: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: C.surface, borderRadius: 14,
+    paddingHorizontal: 16, paddingVertical: 14,
+    borderWidth: 1, borderColor: C.primary + "44",
+    marginBottom: 4,
+  },
+  viewPastBtnTxt: {
+    flex: 1, fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.primary,
+  },
+  soloHistCard: {
+    backgroundColor: C.surface, borderRadius: 14,
+    padding: 14, marginBottom: 10,
+    borderWidth: 1, borderColor: C.border,
+  },
+  soloHistRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  soloHistLeft: { flex: 1, flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  soloHistCheck: {
+    width: 24, height: 24, borderRadius: 8, backgroundColor: C.primary + "22",
+    alignItems: "center", justifyContent: "center", marginTop: 1,
+  },
+  soloHistTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text },
+  soloHistMeta: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary, marginTop: 2 },
+  soloHistRight: { alignItems: "flex-end" },
+  soloHistDist: { fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text },
+  soloHistDistUnit: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted },
 
 });
 

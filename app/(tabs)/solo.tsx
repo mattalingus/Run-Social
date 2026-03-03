@@ -726,7 +726,7 @@ export default function SoloScreen() {
         )}
 
         {/* ─── Run / Ride History ──────────────────────────────────────── */}
-        <View style={s.section}>
+        <View style={[s.section, { marginTop: 5 }]}>
           <Text style={s.sectionTitle}>{activityFilter === "ride" ? "Ride History" : "Run History"}</Text>
 
           {isLoading ? (
