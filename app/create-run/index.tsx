@@ -64,6 +64,10 @@ export default function CreateRunScreen() {
   const [amPm, setAmPm] = useState<"AM" | "PM">("AM");
   const [plannedDistance, setPlannedDistance] = useState(params.pathDistance ?? "3");
   const [plannedPace, setPlannedPace] = useState("9");
+  const [locationPickerOpen, setLocationPickerOpen] = useState(false);
+  const [pickerLat, setPickerLat] = useState(parseFloat(locationLat) || 37.7749);
+  const [pickerLng, setPickerLng] = useState(parseFloat(locationLng) || -122.4194);
+  const [pickerName, setPickerName] = useState(locationName);
 
   const isCrew = !!params.crewId;
 
@@ -710,4 +714,28 @@ const styles = StyleSheet.create({
   inviteShareTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.bg },
   inviteDoneBtn: { width: "100%", alignItems: "center", paddingVertical: 12, borderTopWidth: 1, borderTopColor: C.border, marginTop: 4 },
   inviteDoneTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.textSecondary },
+  locationBtn: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: C.card, borderRadius: 12, borderWidth: 1, borderColor: C.border,
+    paddingHorizontal: 14, paddingVertical: 13,
+  },
+  locationBtnTxt: { flex: 1, fontFamily: "Outfit_400Regular", fontSize: 15, color: C.textMuted },
+  pickerSheet: { flex: 1, backgroundColor: C.bg },
+  pickerHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: C.border, alignSelf: "center", marginTop: 8, marginBottom: 4 },
+  pickerHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.border },
+  pickerTitle: { fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text },
+  pickerHint: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary, textAlign: "center", paddingVertical: 10 },
+  pickerMap: { flex: 1 },
+  pickerWebFields: { padding: 20, gap: 10 },
+  pickerLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary, marginBottom: 4 },
+  pickerInput: {
+    backgroundColor: C.card, borderRadius: 12, borderWidth: 1, borderColor: C.border,
+    paddingHorizontal: 14, paddingVertical: 12, fontFamily: "Outfit_400Regular", fontSize: 15, color: C.text,
+  },
+  pickerBottom: { paddingHorizontal: 16, paddingTop: 12, gap: 10, borderTopWidth: 1, borderTopColor: C.border },
+  pickerConfirm: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: C.primary, borderRadius: 14, paddingVertical: 14,
+  },
+  pickerConfirmTxt: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.bg },
 });

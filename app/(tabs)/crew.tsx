@@ -1410,7 +1410,7 @@ const s = StyleSheet.create({
     color: C.bg,
   },
   chipVibeActive: {
-    backgroundColor: C.primaryMuted,
+    backgroundColor: C.primary + "22",
     borderColor: C.primary,
   },
   chipVibeActiveTxt: {
