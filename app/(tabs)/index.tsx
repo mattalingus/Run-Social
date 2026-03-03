@@ -144,10 +144,10 @@ function formatPace(pace: number) {
 }
 
 function getPaceColor(minPace: number, maxPace: number, C: { orange: string; gold: string; primary: string }): string {
-  if (maxPace >= 15 || (maxPace - minPace) >= 10) return C.gold;
+  if (maxPace >= 15 || (maxPace - minPace) >= 10) return C.primary;
   if (minPace < 6) return "#C0392B";
   if (minPace < 9) return C.orange;
-  return C.primary;
+  return C.gold;
 }
 
 function formatDate(dateStr: string) {
