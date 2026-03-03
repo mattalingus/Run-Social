@@ -311,6 +311,8 @@ export async function initDb() {
     );
     CREATE INDEX IF NOT EXISTS idx_dm_sender_recipient ON direct_messages(sender_id, recipient_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_dm_recipient ON direct_messages(recipient_id, created_at DESC);
+    ALTER TABLE direct_messages ADD COLUMN IF NOT EXISTS message_type TEXT DEFAULT 'text';
+    ALTER TABLE direct_messages ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT NULL;
   `);
 }
 
@@ -2578,7 +2580,13 @@ export async function getDmThread(userId: string, friendId: string, limit = 50) 
   return res.rows;
 }
 
-export async function sendDm(senderId: string, recipientId: string, message: string) {
+export async function sendDm(
+  senderId: string,
+  recipientId: string,
+  message: string,
+  messageType = "text",
+  metadata?: Record<string, any>
+) {
   const friendCheck = await pool.query(
     `SELECT id FROM friends
      WHERE ((requester_id = $1 AND addressee_id = $2) OR (requester_id = $2 AND addressee_id = $1))
@@ -2587,9 +2595,9 @@ export async function sendDm(senderId: string, recipientId: string, message: str
   );
   if (friendCheck.rows.length === 0) throw new Error("Not friends");
   const res = await pool.query(
-    `INSERT INTO direct_messages (sender_id, recipient_id, message)
-     VALUES ($1, $2, $3) RETURNING *`,
-    [senderId, recipientId, message]
+    `INSERT INTO direct_messages (sender_id, recipient_id, message, message_type, metadata)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [senderId, recipientId, message, messageType, metadata ? JSON.stringify(metadata) : null]
   );
   return res.rows[0];
 }

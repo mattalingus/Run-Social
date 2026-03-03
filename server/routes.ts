@@ -1386,9 +1386,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/dm/:friendId", requireAuth, async (req, res) => {
     try {
-      const { message } = req.body;
-      if (!message?.trim()) return res.status(400).json({ message: "Message required" });
-      const dm = await storage.sendDm(req.session.userId!, req.params.friendId, message.trim());
+      const { message, gif_url, gif_preview_url } = req.body;
+      const isGif = !!gif_url;
+      if (!message?.trim() && !isGif) return res.status(400).json({ message: "Message required" });
+      const messageType = isGif ? "gif" : "text";
+      const metadata = isGif ? { gif_url, gif_preview_url } : undefined;
+      const dm = await storage.sendDm(
+        req.session.userId!,
+        req.params.friendId,
+        (message ?? "").trim(),
+        messageType,
+        metadata
+      );
       res.json(dm);
     } catch (e: any) {
       if (e.message === "Not friends") return res.status(403).json({ message: "Not friends" });

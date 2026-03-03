@@ -6,18 +6,23 @@ import {
   FlatList,
   TouchableOpacity,
   Modal,
-  TextInput,
   Platform,
   ActivityIndicator,
-  Pressable,
 } from "react-native";
+import { Image as ExpoImage } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons, Feather } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useTheme } from "@/contexts/ThemeContext";
 import { darkColors, type ColorScheme } from "@/constants/colors";
-import { apiRequest } from "@/lib/query-client";
+import { apiRequest, getApiUrl } from "@/lib/query-client";
+
+function resolveImgUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (url.startsWith("http")) return url;
+  return new URL(url, getApiUrl()).toString();
+}
 
 const C_FALLBACK = darkColors;
 
@@ -326,7 +331,15 @@ export default function MessagesScreen() {
                 testID={`dm-convo-${item.friend_id}`}
               >
                 <View style={s.avatarCircle}>
-                  <Text style={s.avatarLetter}>{avatarLetter(item.friend_name)}</Text>
+                  {resolveImgUrl(item.friend_photo) ? (
+                    <ExpoImage
+                      source={{ uri: resolveImgUrl(item.friend_photo)! }}
+                      style={{ width: 50, height: 50, borderRadius: 25 }}
+                      contentFit="cover"
+                    />
+                  ) : (
+                    <Text style={s.avatarLetter}>{avatarLetter(item.friend_name)}</Text>
+                  )}
                 </View>
                 <View style={s.convoMeta}>
                   <View style={s.convoNameRow}>
@@ -377,7 +390,15 @@ export default function MessagesScreen() {
             renderItem={({ item }) => (
               <TouchableOpacity style={s.friendRow} onPress={() => openThread(item.id, item.name)}>
                 <View style={s.avatarCircle}>
-                  <Text style={s.avatarLetter}>{avatarLetter(item.name)}</Text>
+                  {resolveImgUrl(item.photo_url) ? (
+                    <ExpoImage
+                      source={{ uri: resolveImgUrl(item.photo_url)! }}
+                      style={{ width: 50, height: 50, borderRadius: 25 }}
+                      contentFit="cover"
+                    />
+                  ) : (
+                    <Text style={s.avatarLetter}>{avatarLetter(item.name)}</Text>
+                  )}
                 </View>
                 <Text style={s.friendName}>{item.name}</Text>
               </TouchableOpacity>
