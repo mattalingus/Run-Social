@@ -431,7 +431,7 @@ export default function RunDetailScreen() {
       qc.invalidateQueries({ queryKey: ["/api/runs"] });
       Alert.alert("You're in!", "You've been added to the live count for this run.");
     } catch (e: any) {
-      Alert.alert("Can't Join", e.message || "Unable to join run");
+      Alert.alert("Can't Join", e.message || `Unable to join ${run?.activity_type === "ride" ? "ride" : "run"}`);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setJoining(false);
@@ -439,7 +439,7 @@ export default function RunDetailScreen() {
   }
 
   async function handleLeave() {
-    Alert.alert("Leave Run", "Are you sure you want to leave this run?", [
+    Alert.alert(`Leave ${run?.activity_type === "ride" ? "Ride" : "Run"}`, `Are you sure you want to leave this ${run?.activity_type === "ride" ? "ride" : "run"}?`, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Leave",
@@ -681,7 +681,7 @@ export default function RunDetailScreen() {
           {parseInt(run.plan_count) > 0 && (
             <View style={styles.planCountRow}>
               <Feather name="calendar" size={13} color={C.textMuted} />
-              <Text style={styles.planCountText}>{run.plan_count} {parseInt(run.plan_count) === 1 ? "person" : "people"} planning to run</Text>
+              <Text style={styles.planCountText}>{run.plan_count} {parseInt(run.plan_count) === 1 ? "person" : "people"} planning to {run.activity_type === "ride" ? "ride" : "run"}</Text>
             </View>
           )}
           {user && run.is_strict && (() => {
@@ -690,7 +690,7 @@ export default function RunDetailScreen() {
               return (
                 <View style={[styles.eligibilityRow, { backgroundColor: C.primaryMuted, borderColor: C.primary + "44" }]}>
                   <Feather name="check-circle" size={14} color={C.primary} />
-                  <Text style={[styles.eligibilityText, { color: C.primary }]}>No run history yet — you can still join this run</Text>
+                  <Text style={[styles.eligibilityText, { color: C.primary }]}>No history yet — you can still join this {run.activity_type === "ride" ? "ride" : "run"}</Text>
                 </View>
               );
             }
@@ -918,7 +918,7 @@ export default function RunDetailScreen() {
             onPress={() => router.push(`/run-live/${id}`)}
           >
             <View style={styles.liveDot} />
-            <Text style={styles.liveBtnText}>Join Live Run</Text>
+            <Text style={styles.liveBtnText}>{run?.activity_type === "ride" ? "Join Live Ride" : "Join Live Run"}</Text>
           </Pressable>
         )}
         {isPastRun && isParticipant && !hasConfirmed && (
