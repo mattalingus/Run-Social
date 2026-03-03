@@ -11,6 +11,7 @@ import {
   Alert,
   Linking,
   ActivityIndicator,
+  Share,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons, FontAwesome5 } from "@expo/vector-icons";
@@ -122,6 +123,7 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
   const notifFriendRequests: boolean = (user as any)?.notif_friend_requests ?? true;
   const notifCrewActivity: boolean = (user as any)?.notif_crew_activity ?? true;
   const notifWeeklySummary: boolean = (user as any)?.notif_weekly_summary ?? true;
+  const showRunRoutes: boolean = (user as any)?.show_run_routes ?? true;
 
   const stravaConnected = !!(user as any)?.strava_id;
   const appleHealthConnected = !!(user as any)?.apple_health_id;
@@ -201,9 +203,21 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
           text: "Delete Account",
           style: "destructive",
           onPress: () =>
-            Alert.alert("Are you sure?", "All your data will be permanently deleted.", [
+            Alert.alert("Final confirmation", "All your data will be permanently deleted. Are you absolutely sure?", [
               { text: "Cancel", style: "cancel" },
-              { text: "Yes, Delete", style: "destructive", onPress: () => Alert.alert("Coming soon", "Account deletion will be available in a future update. Contact support to remove your account.") },
+              {
+                text: "Yes, Delete Everything",
+                style: "destructive",
+                onPress: async () => {
+                  try {
+                    await apiRequest("DELETE", "/api/users/me", undefined);
+                    onClose();
+                    onSignOut();
+                  } catch (e: any) {
+                    Alert.alert("Error", e.message || "Could not delete account. Please try again.");
+                  }
+                },
+              },
             ]),
         },
       ]
@@ -211,10 +225,14 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
   }
 
   function handleChangePassword() {
-    Alert.alert("Change Password", "A password reset link will be sent to your registered email address.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Send Email", onPress: () => Alert.alert("Sent", "Check your inbox for a password reset link.") },
-    ]);
+    Alert.alert(
+      "Change Password",
+      "To reset your password, email us at support@fara.run with your account username and we'll send you a reset link.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Email Support", onPress: () => Linking.openURL("mailto:support@fara.run?subject=Password%20Reset%20Request") },
+      ]
+    );
   }
 
   const privacyLabel: Record<Privacy, string> = {
@@ -409,9 +427,14 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
               iconBg="#1A1A1A"
               icon={<Feather name="map-pin" size={17} color={C.textMuted} />}
               label="Show Run Routes"
-              sublabel="Friends can see your GPS route maps"
-              right={<Feather name="chevron-right" size={16} color={C.textMuted} />}
-              onPress={() => Alert.alert("Coming soon", "Route privacy controls are coming in the next update.")}
+              sublabel={showRunRoutes ? "Friends can see your GPS route maps" : "Route maps hidden from others"}
+              right={
+                <Toggle
+                  value={showRunRoutes}
+                  fieldKey="showRunRoutes"
+                  onToggle={() => updateUser({ showRunRoutes: !showRunRoutes }, "showRunRoutes")}
+                />
+              }
             />
           </SectionCard>
 
@@ -564,10 +587,10 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 const msg = "Join me on FARA — the social running app! Download it here: https://fara.run";
                 if (Platform.OS === "web") {
-                  navigator.clipboard?.writeText(msg);
+                  (navigator as any).clipboard?.writeText(msg);
                   Alert.alert("Copied!", "Invite link copied to clipboard.");
                 } else {
-                  import("react-native").then(({ Share }) => Share.share({ message: msg, title: "Join FARA" }));
+                  Share.share({ message: msg, title: "Join FARA" }).catch(() => {});
                 }
               }}
             />

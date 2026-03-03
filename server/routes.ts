@@ -7,7 +7,7 @@ import multer from "multer";
 import * as storage from "./storage";
 import { generateDummyRuns, clearAndReseedRuns, getRunCount } from "./seed";
 import { uploadPhotoBuffer, streamObject } from "./objectStorage";
-import { sendPushNotification } from "./notifications";
+import { sendPushNotification, userWantsNotif } from "./notifications";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 
@@ -99,7 +99,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/users/me", requireAuth, async (req, res) => {
     try {
-      const allowed = ["name", "avgPace", "avgDistance", "photoUrl", "notificationsEnabled", "distanceUnit", "profilePrivacy", "notifRunReminders", "notifFriendRequests", "notifCrewActivity", "notifWeeklySummary"];
+      const allowed = ["name", "avgPace", "avgDistance", "photoUrl", "notificationsEnabled", "distanceUnit", "profilePrivacy", "notifRunReminders", "notifFriendRequests", "notifCrewActivity", "notifWeeklySummary", "showRunRoutes"];
       const updates: Record<string, any> = {};
       for (const key of allowed) {
         if (req.body[key] !== undefined) updates[key] = req.body[key];
@@ -108,6 +108,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!user) return res.status(404).json({ message: "User not found" });
       const { password: _, ...safeUser } = user;
       res.json(safeUser);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+
+  app.delete("/api/users/me", requireAuth, async (req, res) => {
+    try {
+      await storage.deleteUser(req.session.userId!);
+      req.session.destroy(() => {});
+      res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
@@ -357,12 +368,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(201).json(run);
       // Notify — crew runs notify crew members; regular runs notify friends (fire-and-forget)
       if (run.crew_id) {
-        storage.getCrewMemberPushTokens(run.crew_id).then((tokens) => {
-          const filtered = tokens.filter(Boolean);
-          if (filtered.length) {
+        storage.getCrewMemberPushTokensFiltered(run.crew_id, 'notif_crew_activity').then((tokens) => {
+          if (tokens.length) {
             const actLabel = run.activity_type === "ride" ? "ride" : "run";
             sendPushNotification(
-              filtered,
+              tokens,
               `New crew ${actLabel} scheduled 🏃`,
               `${run.host_name} posted "${run.title}" for your crew`,
               { runId: run.id }
@@ -370,8 +380,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }).catch(() => {});
       } else {
-        storage.getFriendsWithPushTokens(req.session.userId!).then((friends) => {
-          const tokens = friends.map((f: any) => f.push_token).filter(Boolean);
+        storage.getFriendsWithPushTokensFiltered(req.session.userId!, 'notif_run_reminders').then((tokens) => {
           if (tokens.length) {
             const privacy = run.privacy === "private" ? "private" : "public";
             sendPushNotification(
@@ -490,10 +499,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Notify host only when planning (not unplanning), fire-and-forget
       if (result.planned) {
         storage.getUserById(run.host_id).then(async (host) => {
-          if (host?.push_token) {
+          if (userWantsNotif(host, 'run_reminders')) {
             const planner = await storage.getUserById(req.session.userId!);
             sendPushNotification(
-              host.push_token,
+              host!.push_token,
               `Someone plans to ${run.activity_type === "ride" ? "ride" : "run"} with you 📅`,
               `${planner?.name ?? "Someone"} is planning to join "${run.title}"`,
               { runId: run.id }
@@ -569,9 +578,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(participant);
       // Notify host (fire-and-forget)
       storage.getUserById(run.host_id).then((host) => {
-        if (host?.push_token) {
+        if (userWantsNotif(host, 'run_reminders')) {
           sendPushNotification(
-            host.push_token,
+            host!.push_token,
             `Someone joined your ${run.activity_type === "ride" ? "ride" : "run"} 🎉`,
             `${user.name} joined "${run.title}"`,
             { runId: run.id }
@@ -593,12 +602,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { date } = req.body;
       if (!date) return res.status(400).json({ message: "date is required" });
       const updated = await storage.updateRunDateTime(req.params.id, req.session.userId!, date);
-      const tokens = await storage.getRunParticipantTokens(req.params.id);
+      const tokens = await storage.getRunParticipantTokensFiltered(req.params.id, 'notif_run_reminders');
       if (tokens.length) {
         const newDate = new Date(updated.date);
         const label = `${newDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} at ${newDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
         sendPushNotification(
-          tokens.map((t) => t.push_token).filter(Boolean),
+          tokens,
           "Run time updated ⏰",
           `"${updated.title}" has been rescheduled to ${label}`,
           { runId: req.params.id }
@@ -613,14 +622,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/runs/:id", requireAuth, async (req, res) => {
     try {
       const result = await storage.cancelRun(req.params.id, req.session.userId!);
-      if (result.tokens.length) {
-        sendPushNotification(
-          result.tokens.map((t) => t.push_token).filter(Boolean),
-          "Run cancelled ❌",
-          `"${result.title}" has been cancelled by the host`,
-          {}
-        );
-      }
+      storage.getRunParticipantTokensFiltered(req.params.id, 'notif_run_reminders').then((filteredTokens) => {
+        if (filteredTokens.length) {
+          sendPushNotification(
+            filteredTokens,
+            "Run cancelled ❌",
+            `"${result.title}" has been cancelled by the host`,
+            {}
+          );
+        }
+      }).catch(() => {});
       res.json({ success: true });
     } catch (e: any) {
       res.status(e.message.includes("Only the host") ? 403 : 500).json({ message: e.message });
@@ -1023,9 +1034,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (crew) {
         const chief = await storage.getUserById(crew.created_by);
         const requester = await storage.getUserById(req.session.userId!);
-        if (chief?.push_token) {
+        if (userWantsNotif(chief, 'crew_activity')) {
           sendPushNotification(
-            chief.push_token,
+            chief!.push_token,
             `New join request for ${crew.name}`,
             `${requester?.name ?? "Someone"} wants to join your crew`,
             { crewId: crew.id, screen: "crew-requests" }
@@ -1054,9 +1065,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { accept } = req.body;
       await storage.respondToCrewJoinRequest(req.params.id, req.params.requesterId, !!accept);
       const requester = await storage.getUserById(req.params.requesterId);
-      if (requester?.push_token) {
+      if (userWantsNotif(requester, 'crew_activity')) {
         sendPushNotification(
-          requester.push_token,
+          requester!.push_token,
           accept ? `You're in! 🎉` : `Join request for ${crew.name}`,
           accept
             ? `${crew.name} accepted your request to join`
@@ -1083,10 +1094,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.inviteUserToCrew(req.params.id, userId, req.session.userId!);
       const invitedUser = await storage.getUserById(userId);
       const crew = await storage.getCrewById(req.params.id);
-      if (invitedUser?.push_token && crew) {
+      if (crew && userWantsNotif(invitedUser, 'crew_activity')) {
         const inviter = await storage.getUserById(req.session.userId!);
         sendPushNotification(
-          invitedUser.push_token,
+          invitedUser!.push_token,
           `You've been invited to ${crew.name} 🏃`,
           `${inviter?.name ?? "Someone"} invited you to join their crew`,
           { crewId: req.params.id }

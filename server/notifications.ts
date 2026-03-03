@@ -40,3 +40,20 @@ export async function sendPushNotification(
     console.error("[push] Failed to send notification:", err);
   }
 }
+
+export type NotifType = "run_reminders" | "crew_activity" | "weekly_summary" | "friend_requests";
+
+const notifFieldMap: Record<NotifType, string> = {
+  run_reminders: "notif_run_reminders",
+  crew_activity: "notif_crew_activity",
+  weekly_summary: "notif_weekly_summary",
+  friend_requests: "notif_friend_requests",
+};
+
+export function userWantsNotif(user: any, type: NotifType): boolean {
+  if (!user) return false;
+  if (user.notifications_enabled === false) return false;
+  if (!user.push_token) return false;
+  const field = notifFieldMap[type];
+  return user[field] !== false;
+}

@@ -22,13 +22,15 @@ import C from "@/constants/colors";
 
 SplashScreen.preventAutoHideAsync();
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+try {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  });
+} catch (_) {}
 
 async function registerPushToken(userId: string) {
   try {
@@ -86,13 +88,16 @@ function RootLayoutNav() {
 
   // Open run when notification is tapped
   useEffect(() => {
-    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-      const runId = response.notification.request.content.data?.runId;
-      if (runId) {
-        router.push(`/run/${runId}`);
-      }
-    });
-    return () => sub.remove();
+    let sub: { remove: () => void } | null = null;
+    try {
+      sub = Notifications.addNotificationResponseReceivedListener((response) => {
+        const runId = response.notification.request.content.data?.runId;
+        if (runId) {
+          router.push(`/run/${runId}`);
+        }
+      });
+    } catch (_) {}
+    return () => { try { sub?.remove(); } catch (_) {} };
   }, []);
 
   if (isLoading || !fontsLoaded) return null;

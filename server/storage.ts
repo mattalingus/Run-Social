@@ -105,6 +105,7 @@ export async function initDb() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS notif_friend_requests BOOLEAN DEFAULT true;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS notif_crew_activity BOOLEAN DEFAULT true;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS notif_weekly_summary BOOLEAN DEFAULT true;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS show_run_routes BOOLEAN DEFAULT true;
     ALTER TABLE runs ADD COLUMN IF NOT EXISTS is_strict BOOLEAN DEFAULT false;
     ALTER TABLE runs ADD COLUMN IF NOT EXISTS run_style TEXT DEFAULT NULL;
     ALTER TABLE runs ADD COLUMN IF NOT EXISTS activity_type TEXT DEFAULT 'run';
@@ -2145,4 +2146,77 @@ export async function searchUsersForInvite(query: string, excludeIds: string[]) 
     [`%${query}%`, excludeIds]
   );
   return res.rows;
+}
+
+export async function getCrewMemberPushTokensFiltered(crewId: string, notifField: string): Promise<string[]> {
+  const res = await pool.query(
+    `SELECT u.push_token FROM users u
+     JOIN crew_members cm ON cm.user_id = u.id
+     WHERE cm.crew_id = $1 AND cm.status = 'member'
+       AND u.push_token IS NOT NULL
+       AND u.notifications_enabled = true
+       AND u.${notifField} = true`,
+    [crewId]
+  );
+  return res.rows.map((r: any) => r.push_token);
+}
+
+export async function getFriendsWithPushTokensFiltered(userId: string, notifField: string): Promise<string[]> {
+  const result = await pool.query(
+    `SELECT u.push_token
+     FROM friends f
+     JOIN users u ON (CASE WHEN f.requester_id = $1 THEN f.addressee_id ELSE f.requester_id END) = u.id
+     WHERE (f.requester_id = $1 OR f.addressee_id = $1)
+       AND f.status = 'accepted'
+       AND u.push_token IS NOT NULL
+       AND u.notifications_enabled = true
+       AND u.${notifField} = true`,
+    [userId]
+  );
+  return result.rows.map((r: any) => r.push_token);
+}
+
+export async function getRunParticipantTokensFiltered(runId: string, notifField: string): Promise<string[]> {
+  const result = await pool.query(
+    `SELECT u.push_token
+     FROM run_participants rp
+     JOIN users u ON rp.user_id = u.id
+     WHERE rp.run_id = $1 AND rp.status != 'cancelled'
+       AND u.push_token IS NOT NULL
+       AND u.notifications_enabled = true
+       AND u.${notifField} = true`,
+    [runId]
+  );
+  return result.rows.map((r: any) => r.push_token);
+}
+
+export async function deleteUser(userId: string): Promise<void> {
+  await pool.query(`DELETE FROM users WHERE id = $1`, [userId]);
+}
+
+export async function getUsersForWeeklySummary(): Promise<{ id: string; name: string; push_token: string }[]> {
+  const res = await pool.query(
+    `SELECT id, name, push_token FROM users
+     WHERE notifications_enabled = true
+       AND notif_weekly_summary = true
+       AND push_token IS NOT NULL`
+  );
+  return res.rows;
+}
+
+export async function getWeeklyStatsForUser(userId: string): Promise<{ runs: number; totalMi: number; totalSeconds: number }> {
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const res = await pool.query(
+    `SELECT COUNT(*) as runs,
+            COALESCE(SUM(distance_mi), 0) as total_mi,
+            COALESCE(SUM(duration_seconds), 0) as total_seconds
+     FROM solo_runs
+     WHERE user_id = $1 AND completed_at >= $2`,
+    [userId, since]
+  );
+  return {
+    runs: parseInt(res.rows[0].runs, 10),
+    totalMi: parseFloat(res.rows[0].total_mi),
+    totalSeconds: parseInt(res.rows[0].total_seconds, 10),
+  };
 }
