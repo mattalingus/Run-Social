@@ -20,6 +20,7 @@ import * as Location from "expo-location";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLiveTracking } from "@/contexts/LiveTrackingContext";
+import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import C from "@/constants/colors";
 import MAP_STYLE from "@/lib/mapStyle";
@@ -131,6 +132,28 @@ export default function RunLiveScreen() {
   });
 
   const isHost = run?.host_id === user?.id;
+  const { setActivityFilter } = useActivity();
+
+  // ── Start Solo (leave group → go solo) ───────────────────────────────────
+
+  function handleStartSolo() {
+    const type = run?.activity_type === "ride" ? "ride" : "run";
+    Alert.alert(
+      `Start Solo ${type === "ride" ? "Ride" : "Run"}`,
+      `Leave this group event and start a solo ${type} instead?`,
+      [
+        { text: "Stay", style: "cancel" },
+        {
+          text: "Start Solo",
+          onPress: async () => {
+            try { await apiRequest("POST", `/api/runs/${id}/leave`); } catch (_) {}
+            setActivityFilter(run?.activity_type ?? "run");
+            router.replace("/run-tracking" as any);
+          },
+        },
+      ]
+    );
+  }
 
   // ── Start tracking ────────────────────────────────────────────────────────
 
@@ -426,11 +449,24 @@ export default function RunLiveScreen() {
               </Pressable>
             )}
             {phase === "idle" && !!run && !isHost && (
-              <View style={s.waitingRow}>
-                <ActivityIndicator size="small" color={C.primary} />
-                <Text style={s.waitingText}>
-                  {liveState?.isActive ? "Starting your tracking…" : "Waiting for host to start…"}
-                </Text>
+              <View style={s.waitingColumn}>
+                <View style={s.waitingRow}>
+                  <ActivityIndicator size="small" color={C.primary} />
+                  <Text style={s.waitingText}>
+                    {liveState?.isActive ? "Starting your tracking…" : "Waiting for host to start…"}
+                  </Text>
+                </View>
+                {!liveState?.isActive && (
+                  <Pressable
+                    style={({ pressed }) => [s.startSoloBtn, { opacity: pressed ? 0.75 : 1 }]}
+                    onPress={handleStartSolo}
+                  >
+                    <Feather name="user" size={14} color={C.textSecondary} />
+                    <Text style={s.startSoloBtnText}>
+                      {run?.activity_type === "ride" ? "Start Solo Ride" : "Start Solo Run"}
+                    </Text>
+                  </Pressable>
+                )}
               </View>
             )}
             {phase === "active" && (
@@ -606,8 +642,20 @@ const s = StyleSheet.create({
   finishBtnText: { fontFamily: "Outfit_700Bold", fontSize: 16, color: "#fff" },
   savingRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, height: 52 },
   savingText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.textSecondary },
+  waitingColumn: { alignItems: "center", gap: 10 },
   waitingRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, height: 52 },
   waitingText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.textSecondary },
+  startSoloBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  startSoloBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary },
 
   legendContainer: { marginHorizontal: 10, marginTop: 10 },
   legend: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
