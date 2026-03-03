@@ -872,10 +872,13 @@ export default function DiscoverScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setShowHostModal(false);
       resetHostForm();
+      const isRide = run?.activity_type === "ride";
+      const label = isRide ? "Ride" : "Run";
+      const participants = isRide ? "riders" : "runners";
       if (run?.privacy === "private" && run?.invite_token) {
-        Alert.alert("Run Created!", `Share this invite code with your runners:\n\n${run.invite_token}`);
+        Alert.alert(`${label} Created!`, `Share this invite code with your ${participants}:\n\n${run.invite_token}`);
       } else {
-        Alert.alert("Run Created!", "Your run is now live on the map.");
+        Alert.alert(`${label} Created!`, `Your ${label.toLowerCase()} is now live on the map.`);
       }
     },
     onError: (e: any) => {
