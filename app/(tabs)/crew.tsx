@@ -682,6 +682,7 @@ function CrewDetailSheet({
   const outerScrollRef = useRef<ScrollView>(null);
   const chatSectionY = useRef(0);
   const isChatFocused = useRef(false);
+  const chatInputRef = useRef<TextInput>(null);
   const [showGifPicker, setShowGifPicker] = useState(false);
   const [gifSearch, setGifSearch] = useState("");
   const [gifResults, setGifResults] = useState<GifItem[]>([]);
@@ -1070,6 +1071,7 @@ function CrewDetailSheet({
                   {/* Input row */}
                   <View style={s.inlineChatInputRow}>
                     <TextInput
+                      ref={chatInputRef}
                       style={s.inlineChatInput}
                       value={chatInput}
                       onChangeText={setChatInput}
@@ -1086,10 +1088,10 @@ function CrewDetailSheet({
                       testID="gif-btn"
                       style={s.gifPickerBtn}
                       onPress={() => {
-                        Keyboard.dismiss();
                         setGifSearch("");
                         setGifResults([]);
-                        setShowGifPicker(true);
+                        Keyboard.dismiss();
+                        setTimeout(() => setShowGifPicker(true), 320);
                       }}
                     >
                       <Text style={s.gifPickerBtnTxt}>GIF</Text>
@@ -1298,7 +1300,7 @@ function CrewDetailSheet({
               {/* Header */}
               <View style={s.gifPickerHeader}>
                 <Text style={s.gifPickerTitle}>GIFs</Text>
-                <TouchableOpacity onPress={() => setShowGifPicker(false)} style={s.gifPickerClose}>
+                <TouchableOpacity onPress={() => { setShowGifPicker(false); setTimeout(() => chatInputRef.current?.focus(), 50); }} style={s.gifPickerClose}>
                   <Ionicons name="close" size={20} color={C.textMuted} />
                 </TouchableOpacity>
               </View>
@@ -1366,6 +1368,7 @@ function CrewDetailSheet({
                       onPress={() => {
                         setSelectedGif(item);
                         setShowGifPicker(false);
+                        setTimeout(() => chatInputRef.current?.focus(), 50);
                       }}
                     >
                       <ExpoImage
