@@ -745,7 +745,7 @@ function CrewDetailSheet({
   return (
     <>
       <Modal visible={!!crew} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-        <View style={s.sheet}>
+        <KeyboardAvoidingView style={s.sheet} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <View style={s.sheetHandle} />
           {!crew ? null : (
             <>
@@ -1273,12 +1273,15 @@ function CrewDetailSheet({
           {/* GIF Picker Overlay — inside the sheet so it works on iOS (no nested modals) */}
           {showGifPicker && (
             <View style={s.gifPickerOverlay}>
+              {/* Drag handle */}
+              <View style={{ alignItems: "center", paddingTop: 8, paddingBottom: 4 }}>
+                <View style={{ width: 32, height: 4, borderRadius: 2, backgroundColor: C.border }} />
+              </View>
               {/* Header */}
               <View style={s.gifPickerHeader}>
-                <View style={{ width: 36 }} />
                 <Text style={s.gifPickerTitle}>GIFs</Text>
                 <TouchableOpacity onPress={() => setShowGifPicker(false)} style={s.gifPickerClose}>
-                  <Ionicons name="close" size={22} color={C.textMuted} />
+                  <Ionicons name="close" size={20} color={C.textMuted} />
                 </TouchableOpacity>
               </View>
 
@@ -1358,7 +1361,7 @@ function CrewDetailSheet({
               )}
             </View>
           )}
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </>
   );
@@ -2697,21 +2700,29 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   // GIF picker overlay (inside crew detail modal — avoids nested modal iOS limitation)
   gifPickerOverlay: {
     position: "absolute",
-    top: 0,
+    top: "48%",
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: C.bg,
+    backgroundColor: C.surface,
     zIndex: 99,
-    borderRadius: 12,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    borderTopWidth: 1,
+    borderColor: C.border,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 16,
   },
   gifPickerHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingTop: 20,
-    paddingBottom: 12,
+    paddingTop: 12,
+    paddingBottom: 8,
     borderBottomWidth: 1,
     borderBottomColor: C.border,
   },
