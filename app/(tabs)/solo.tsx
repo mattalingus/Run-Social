@@ -45,6 +45,8 @@ interface SoloRun {
   route_path: Array<{ latitude: number; longitude: number }> | null;
   created_at: string;
   activity_type: "run" | "ride";
+  is_starred: boolean;
+  elevation_gain_ft: number | null;
 }
 
 interface SavedPath {
@@ -410,6 +412,17 @@ export default function SoloScreen() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/solo-runs"] }),
   });
 
+  const starMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("PATCH", `/api/solo-runs/${id}/star`);
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/solo-runs"] });
+      qc.invalidateQueries({ queryKey: ["/api/solo-runs/starred"] });
+    },
+  });
+
   const goalsMutation = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiRequest("PUT", "/api/users/me/solo-goals", data);
@@ -750,51 +763,94 @@ export default function SoloScreen() {
               const label = run.title || `${formatDistance(run.distance_miles)} mi ${run.activity_type === "ride" ? "ride" : "run"}`;
               const isExpanded = expandedRunId === run.id;
               return (
-                <Pressable
-                  key={run.id}
-                  style={({ pressed }) => [s.historyCard, { opacity: pressed ? 0.85 : 1 }]}
-                  onPress={() => run.completed && setExpandedRunId(isExpanded ? null : run.id)}
-                  onLongPress={() => confirmDelete(run.id)}
-                >
-                  <View style={s.historyRow}>
-                    <View style={s.historyLeft}>
-                      <View style={[
-                        s.historyStatus,
-                        { backgroundColor: run.completed ? C.primary + "22" : run.planned ? C.blue + "22" : C.border },
-                      ]}>
-                        <Feather
-                          name={run.completed ? "check" : run.planned ? "calendar" : "circle"}
-                          size={12}
-                          color={run.completed ? C.primary : run.planned ? C.blue : C.textMuted}
-                        />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <View style={s.historyTitleRow}>
-                          <Text style={s.historyTitle} numberOfLines={1}>{label}</Text>
-                          {badge && (
-                            <Text style={s.historyBadge}>{RANK_EMOJI[badge.rank - 1]}</Text>
-                          )}
+                <View key={run.id} style={s.historyCard}>
+                  <Pressable
+                    style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
+                    onPress={() => run.completed && setExpandedRunId(isExpanded ? null : run.id)}
+                    onLongPress={() => confirmDelete(run.id)}
+                  >
+                    <View style={s.historyRow}>
+                      <View style={s.historyLeft}>
+                        <View style={[
+                          s.historyStatus,
+                          { backgroundColor: run.completed ? C.primary + "22" : run.planned ? C.blue + "22" : C.border },
+                        ]}>
+                          <Feather
+                            name={run.completed ? "check" : run.planned ? "calendar" : "circle"}
+                            size={12}
+                            color={run.completed ? C.primary : run.planned ? C.blue : C.textMuted}
+                          />
                         </View>
-                        <Text style={s.historyMeta}>
-                          {formatDisplayDate(run.date)}
-                          {run.pace_min_per_mile ? ` · ${formatPace(run.pace_min_per_mile)}/mi` : ""}
-                          {run.duration_seconds ? ` · ${formatDuration(run.duration_seconds)}` : ""}
-                        </Text>
+                        <View style={{ flex: 1 }}>
+                          <View style={s.historyTitleRow}>
+                            <Text style={s.historyTitle} numberOfLines={1}>{label}</Text>
+                            {badge && (
+                              <Text style={s.historyBadge}>{RANK_EMOJI[badge.rank - 1]}</Text>
+                            )}
+                          </View>
+                          <Text style={s.historyMeta}>
+                            {formatDisplayDate(run.date)}
+                            {run.pace_min_per_mile ? ` · ${formatPace(run.pace_min_per_mile)}/mi` : ""}
+                            {run.duration_seconds ? ` · ${formatDuration(run.duration_seconds)}` : ""}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={s.historyRight}>
+                        <Pressable
+                          onPress={() => starMutation.mutate(run.id)}
+                          hitSlop={10}
+                          style={{ marginRight: 6 }}
+                        >
+                          <Ionicons
+                            name={run.is_starred ? "star" : "star-outline"}
+                            size={18}
+                            color={run.is_starred ? C.gold : C.textMuted}
+                          />
+                        </Pressable>
+                        <Text style={s.historyDist}>{formatDistance(run.distance_miles)}</Text>
+                        <Text style={s.historyDistUnit}>mi</Text>
+                        {run.completed && (
+                          <Feather name={isExpanded ? "chevron-up" : "chevron-down"} size={14} color={C.textMuted} />
+                        )}
                       </View>
                     </View>
-                    <View style={s.historyRight}>
-                      <Text style={s.historyDist}>{formatDistance(run.distance_miles)}</Text>
-                      <Text style={s.historyDistUnit}>mi</Text>
-                      {run.completed && (
-                        <Feather name={isExpanded ? "chevron-up" : "image"} size={14} color={C.textMuted} />
-                      )}
-                    </View>
-                  </View>
+                  </Pressable>
                   {run.route_path && run.route_path.length > 1 && Platform.OS !== "web" && (
                     <MiniRouteMap path={run.route_path} />
                   )}
-                  {isExpanded && <SoloRunPhotos runId={run.id} />}
-                </Pressable>
+                  {isExpanded && (
+                    <View style={s.statsPanel}>
+                      <View style={s.statRow}>
+                        {run.duration_seconds != null && (
+                          <View style={s.statItem}>
+                            <Feather name="clock" size={13} color={C.primary} />
+                            <Text style={s.statLabel}>Time</Text>
+                            <Text style={s.statValue}>{formatDuration(run.duration_seconds)}</Text>
+                          </View>
+                        )}
+                        {run.pace_min_per_mile != null && (
+                          <View style={s.statItem}>
+                            <Feather name="zap" size={13} color={C.primary} />
+                            <Text style={s.statLabel}>Pace</Text>
+                            <Text style={s.statValue}>{formatPace(run.pace_min_per_mile)}/mi</Text>
+                          </View>
+                        )}
+                        <View style={s.statItem}>
+                          <Feather name="map-pin" size={13} color={C.primary} />
+                          <Text style={s.statLabel}>Distance</Text>
+                          <Text style={s.statValue}>{formatDistance(run.distance_miles)} mi</Text>
+                        </View>
+                        {run.elevation_gain_ft != null && (
+                          <View style={s.statItem}>
+                            <Feather name="trending-up" size={13} color={C.primary} />
+                            <Text style={s.statLabel}>Elevation</Text>
+                            <Text style={s.statValue}>{Math.round(run.elevation_gain_ft)} ft</Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  )}
+                </View>
               );
             })
           )}
@@ -1136,9 +1192,27 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   historyTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text, flex: 1 },
   historyBadge: { fontSize: 14 },
   historyMeta: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary, marginTop: 3 },
-  historyRight: { alignItems: "flex-end" },
+  historyRight: { flexDirection: "row", alignItems: "center", gap: 4 },
   historyDist: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.primary },
   historyDistUnit: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textMuted },
+
+  statsPanel: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+  },
+  statRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+  },
+  statItem: {
+    alignItems: "center",
+    gap: 3,
+    flex: 1,
+  },
+  statLabel: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted, marginTop: 2 },
+  statValue: { fontFamily: "Outfit_700Bold", fontSize: 14, color: C.text },
 
   emptyCard: {
     backgroundColor: C.surface,

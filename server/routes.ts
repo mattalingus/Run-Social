@@ -680,6 +680,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/solo-runs/starred", requireAuth, async (req, res) => {
+    try {
+      const runs = await storage.getStarredSoloRuns(req.session.userId!);
+      res.json(runs);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.patch("/api/solo-runs/:id/star", requireAuth, async (req, res) => {
+    try {
+      const run = await storage.toggleStarSoloRun(req.params.id, req.session.userId!);
+      if (!run) return res.status(404).json({ message: "Run not found" });
+      res.json(run);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.post("/api/solo-runs", requireAuth, async (req, res) => {
     try {
       const { title, date, distanceMiles, paceMinPerMile, durationSeconds, completed, planned, notes, routePath, activityType } = req.body;

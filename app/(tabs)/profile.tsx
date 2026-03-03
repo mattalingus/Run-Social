@@ -183,10 +183,12 @@ interface SoloRunItem {
   distance_miles: number;
   pace_min_per_mile: number | null;
   duration_seconds: number | null;
+  elevation_gain_ft: number | null;
   completed: boolean;
   planned: boolean;
   date: string;
   activity_type: string;
+  is_starred: boolean;
   route_path: Array<{ latitude: number; longitude: number }> | null;
 }
 
@@ -360,6 +362,12 @@ export default function ProfileScreen() {
 
   const { data: soloRuns = [] } = useQuery<SoloRunItem[]>({
     queryKey: ["/api/solo-runs"],
+    enabled: !!user,
+    staleTime: 30_000,
+  });
+
+  const { data: starredRuns = [] } = useQuery<SoloRunItem[]>({
+    queryKey: ["/api/solo-runs/starred"],
     enabled: !!user,
     staleTime: 30_000,
   });
@@ -871,6 +879,50 @@ export default function ProfileScreen() {
         </View>
       </View>
 
+
+      {/* ── Favorite Runs/Rides ───────────────────────────────────────────── */}
+      {starredRuns.filter((r) => (r.activity_type ?? "run") === profileActivity).length > 0 && (
+        <View style={styles.section}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 12 }}>
+            <Ionicons name="star" size={16} color={C.gold} />
+            <Text style={styles.sectionTitle}>
+              {profileActivity === "ride" ? "Favorite Rides" : "Favorite Runs"}
+            </Text>
+          </View>
+          {starredRuns
+            .filter((r) => (r.activity_type ?? "run") === profileActivity)
+            .map((run) => {
+              const label = run.title || `${formatDistance(run.distance_miles)} mi ${run.activity_type === "ride" ? "ride" : "run"}`;
+              return (
+                <View key={run.id} style={styles.soloHistCard}>
+                  <View style={styles.soloHistRow}>
+                    <View style={styles.soloHistLeft}>
+                      <View style={[styles.soloHistCheck, { backgroundColor: C.gold + "22", borderColor: C.gold + "55" }]}>
+                        <Ionicons name="star" size={12} color={C.gold} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.soloHistTitle} numberOfLines={1}>{label}</Text>
+                        <Text style={styles.soloHistMeta}>
+                          {formatDisplayDate(run.date)}
+                          {run.pace_min_per_mile ? ` · ${formatPaceSolo(run.pace_min_per_mile)}/mi` : ""}
+                          {run.duration_seconds ? ` · ${formatDurationSolo(run.duration_seconds)}` : ""}
+                          {run.elevation_gain_ft ? ` · ${Math.round(run.elevation_gain_ft)}ft gain` : ""}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.soloHistRight}>
+                      <Text style={styles.soloHistDist}>{formatDistance(run.distance_miles)}</Text>
+                      <Text style={styles.soloHistDistUnit}>mi</Text>
+                    </View>
+                  </View>
+                  {run.route_path && run.route_path.length > 1 && (
+                    <ProfileMiniRouteMap path={run.route_path} />
+                  )}
+                </View>
+              );
+            })}
+        </View>
+      )}
 
       {/* ── Run / Ride Schedule ───────────────────────────────────────────── */}
       <View style={styles.section}>

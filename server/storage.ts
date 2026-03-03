@@ -121,6 +121,8 @@ export async function initDb() {
 
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS route_path JSONB DEFAULT NULL;
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS activity_type TEXT DEFAULT 'run';
+    ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS is_starred BOOLEAN DEFAULT false;
+    ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS elevation_gain_ft REAL;
 
     CREATE TABLE IF NOT EXISTS friends (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -622,8 +624,24 @@ export async function createSoloRun(data: {
   return result.rows[0];
 }
 
+export async function getStarredSoloRuns(userId: string) {
+  const result = await pool.query(
+    `SELECT * FROM solo_runs WHERE user_id = $1 AND is_starred = true AND completed = true ORDER BY date DESC`,
+    [userId]
+  );
+  return result.rows;
+}
+
+export async function toggleStarSoloRun(id: string, userId: string) {
+  const result = await pool.query(
+    `UPDATE solo_runs SET is_starred = NOT is_starred WHERE id = $1 AND user_id = $2 RETURNING *`,
+    [id, userId]
+  );
+  return result.rows[0] || null;
+}
+
 export async function updateSoloRun(id: string, userId: string, updates: Record<string, any>) {
-  const allowed = ["title", "date", "distance_miles", "pace_min_per_mile", "duration_seconds", "completed", "planned", "notes", "route_path"];
+  const allowed = ["title", "date", "distance_miles", "pace_min_per_mile", "duration_seconds", "completed", "planned", "notes", "route_path", "is_starred", "elevation_gain_ft"];
   const entries = Object.entries(updates).filter(([k]) => allowed.includes(k));
   if (!entries.length) return null;
   const fields = entries.map(([k], i) => `${k} = $${i + 3}`).join(", ");
