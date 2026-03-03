@@ -6,7 +6,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 
 const PILL_H      = 64;
 const PILL_RADIUS = 30;
-const PILL_MX     = 56;
+const PILL_MX     = 48;
 
 function PillBackground({ bg, border }: { bg: string; border: string }) {
   return <View style={[styles.pill, { backgroundColor: bg, borderColor: border }]} />;
