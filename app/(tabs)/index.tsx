@@ -1738,8 +1738,8 @@ export default function DiscoverScreen() {
               <Switch
                 value={hStrict}
                 onValueChange={(v) => { setHStrict(v); Haptics.selectionAsync(); }}
-                trackColor={{ false: C.border, true: C.primary }}
-                thumbColor={C.text}
+                trackColor={{ false: C.textMuted, true: C.primary }}
+                thumbColor="#FFFFFF"
               />
             </View>
 

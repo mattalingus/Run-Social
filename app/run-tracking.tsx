@@ -899,8 +899,8 @@ export default function RunTrackingScreen() {
                 <Switch
                   value={coachEnabled}
                   onValueChange={toggleCoach}
-                  trackColor={{ false: C.border, true: C.primary }}
-                  thumbColor={Platform.OS === "ios" ? undefined : (coachEnabled ? C.bg : C.textMuted)}
+                  trackColor={{ false: C.textMuted, true: C.primary }}
+                  thumbColor="#FFFFFF"
                 />
               </View>
               {coachEnabled && (
