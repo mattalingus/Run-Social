@@ -1616,7 +1616,7 @@ export default function ProfileScreen() {
       {/* ── Favorites Modal ────────────────────────────────────────────────── */}
       <Modal visible={showFavorites} transparent animationType="slide" onRequestClose={() => setShowFavorites(false)}>
         <Pressable style={styles.modalOverlay} onPress={() => setShowFavorites(false)} />
-        <View style={[styles.modalSheet, styles.friendModalSheet, { paddingBottom: insets.bottom + 16 }]}>
+        <View style={[styles.modalSheet, styles.friendModalSheet, { paddingBottom: insets.bottom + 16, height: "70%" }]}>
           {/* Header */}
           <View style={styles.modalTitleRow}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
