@@ -1090,8 +1090,15 @@ function CrewDetailSheet({
                       onPress={() => {
                         setGifSearch("");
                         setGifResults([]);
+                        if (!isChatFocused.current) {
+                          setShowGifPicker(true);
+                          return;
+                        }
+                        let done = false;
+                        const open = () => { if (done) return; done = true; setShowGifPicker(true); };
+                        const sub = Keyboard.addListener("keyboardDidHide", () => { sub.remove(); open(); });
                         Keyboard.dismiss();
-                        setTimeout(() => setShowGifPicker(true), 320);
+                        setTimeout(() => { sub.remove(); open(); }, 400);
                       }}
                     >
                       <Text style={s.gifPickerBtnTxt}>GIF</Text>
@@ -1315,7 +1322,7 @@ function CrewDetailSheet({
                   placeholder="Search GIFs…"
                   placeholderTextColor={C.textMuted}
                   returnKeyType="search"
-                  autoFocus
+                  autoFocus={false}
                 />
                 {!!gifSearch && (
                   <TouchableOpacity onPress={() => setGifSearch("")}>
