@@ -38,8 +38,8 @@ export default function RegisterScreen() {
       setError("Password must be at least 6 characters");
       return;
     }
-    if (!/^[a-zA-Z0-9_]+$/.test(username.trim())) {
-      setError("Username can only contain letters, numbers, and underscores");
+    if (!/^[^\s@]{2,30}$/.test(username.trim())) {
+      setError("Username cannot contain spaces or @ and must be 2–30 characters");
       return;
     }
     setError("");
