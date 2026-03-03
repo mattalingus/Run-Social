@@ -778,18 +778,18 @@ export default function MapScreen() {
                     {selectedRun.min_distance === selectedRun.max_distance ? formatDistance(selectedRun.min_distance) : `${formatDistance(selectedRun.min_distance)}–${formatDistance(selectedRun.max_distance)}`} mi
                   </Text>
                 </View>
-                <View style={[s.chip, (selectedRun.is_active && selectedRun.participant_count > 0) && s.chipLive]}>
-                  {selectedRun.is_active && selectedRun.participant_count > 0 ? (
+                <View style={[s.chip, selectedRun.is_active && s.chipLive]}>
+                  {selectedRun.is_active ? (
                     <View style={s.chipLiveDot} />
                   ) : (
                     <Feather name="users" size={11} color={C.textSecondary} />
                   )}
-                  <Text style={[s.chipTxt, (selectedRun.is_active && selectedRun.participant_count > 0) && { color: C.primary }]}>
-                    {selectedRun.is_active && selectedRun.participant_count > 0
+                  <Text style={[s.chipTxt, selectedRun.is_active && { color: C.primary }]}>
+                    {selectedRun.is_active
                       ? `${selectedRun.participant_count} arrived`
                       : selectedRun.crew_id
-                        ? `${Math.max(1, selectedRun.participant_count)} going`
-                        : `${Math.max(1, selectedRun.participant_count)}/${selectedRun.max_participants}`}
+                        ? `${selectedRun.participant_count} going`
+                        : `${selectedRun.participant_count}/${selectedRun.max_participants}`}
                   </Text>
                 </View>
                 {selectedRun.tags?.[0] && (
@@ -895,8 +895,8 @@ export default function MapScreen() {
                     <Feather name="users" size={10} color={C.textSecondary} />
                     <Text style={[s.miniStatTxt, { color: C.textSecondary }]}>
                       {run.crew_id
-                        ? `${Math.max(1, run.participant_count)} going`
-                        : `${Math.max(1, run.participant_count)}/${run.max_participants}`}
+                        ? `${run.participant_count} going`
+                        : `${run.participant_count}/${run.max_participants}`}
                     </Text>
                   </View>
                 </View>

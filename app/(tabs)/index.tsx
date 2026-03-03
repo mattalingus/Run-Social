@@ -552,7 +552,7 @@ function RunCard({
           <View style={s.cardTitleRow}>
             <Text style={s.cardTitle} numberOfLines={2}>{run.title}</Text>
             <View style={s.cardTitleRight}>
-              {run.is_active && run.participant_count > 0 && (
+              {run.is_active && (
                 <View style={s.livePill}>
                   <Text style={s.livePillTxt}>LIVE</Text>
                 </View>
@@ -605,13 +605,13 @@ function RunCard({
             </View>
             <View style={s.statDiv} />
             <View style={s.stat}>
-              <Ionicons name="people" size={12} color={run.is_active && run.participant_count > 0 ? C.primary : C.textMuted} />
-              <Text style={[s.statLabel, run.is_active && run.participant_count > 0 && { color: C.primary }]}>
-                {run.is_active && run.participant_count > 0
+              <Ionicons name="people" size={12} color={run.is_active ? C.primary : C.textMuted} />
+              <Text style={[s.statLabel, run.is_active && { color: C.primary }]}>
+                {run.is_active
                   ? `${run.participant_count} arrived`
                   : run.crew_id
-                    ? `${Math.max(1, run.participant_count)} going`
-                    : `${Math.max(1, run.participant_count)}/${run.max_participants}`}
+                    ? `${run.participant_count} going`
+                    : `${run.participant_count}/${run.max_participants}`}
               </Text>
             </View>
           </View>

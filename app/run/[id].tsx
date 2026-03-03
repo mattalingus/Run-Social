@@ -695,7 +695,7 @@ export default function RunDetailScreen() {
               {run.crew_id ? (
                 <>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                    <Text style={styles.reqValue}>{Math.max(1, run.participant_count ?? 0)}</Text>
+                    <Text style={styles.reqValue}>{run.participant_count ?? 1}</Text>
                     {parseInt(run.plan_count) > 0 && (
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 2, backgroundColor: C.card, borderRadius: 6, paddingHorizontal: 5, paddingVertical: 2 }}>
                         <Feather name="calendar" size={10} color={C.textMuted} />
@@ -708,7 +708,7 @@ export default function RunDetailScreen() {
               ) : (
                 <>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                    <Text style={styles.reqValue}>{Math.max(1, run.participant_count ?? 0)}/{run.max_participants}</Text>
+                    <Text style={styles.reqValue}>{run.participant_count ?? 1}/{run.max_participants}</Text>
                     {parseInt(run.plan_count) > 0 && (
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 2, backgroundColor: C.card, borderRadius: 6, paddingHorizontal: 5, paddingVertical: 2 }}>
                         <Feather name="calendar" size={10} color={C.textMuted} />
@@ -792,7 +792,7 @@ export default function RunDetailScreen() {
 
         {participants.length > 0 && (
           <View style={styles.participantsSection}>
-            <Text style={styles.sectionTitle}>Participants ({Math.max(1, run.participant_count ?? 0)})</Text>
+            <Text style={styles.sectionTitle}>Participants ({run.participant_count ?? 1})</Text>
             <View style={styles.participantsList}>
               {participants.slice(0, 8).map((p: any) => (
                 <Pressable

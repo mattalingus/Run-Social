@@ -627,7 +627,7 @@ export async function getFriendPrivateRuns(userId: string, bounds?: { swLat: num
   let query = `SELECT r.id, r.title, r.date, r.location_lat, r.location_lng, r.location_name,
     r.min_pace, r.max_pace, r.min_distance, r.max_distance, r.max_participants, r.privacy,
     u.name as host_name, u.photo_url as host_photo, u.marker_icon as host_marker_icon, u.avg_rating as host_rating, u.rating_count as host_rating_count, u.hosted_runs as host_hosted_runs,
-    (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled') as participant_count,
+    (1 + (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled')) as participant_count,
     (SELECT COUNT(*) FROM planned_runs pr WHERE pr.run_id = r.id) as plan_count,
     true as is_locked
   FROM runs r
@@ -650,7 +650,7 @@ export async function getFriendPrivateRuns(userId: string, bounds?: { swLat: num
 
 export async function getInvitedPrivateRuns(userId: string, bounds?: { swLat: number; neLat: number; swLng: number; neLng: number }) {
   let query = `SELECT r.*, u.name as host_name, u.avg_rating as host_rating, u.rating_count as host_rating_count, u.photo_url as host_photo, u.marker_icon as host_marker_icon, u.hosted_runs as host_hosted_runs,
-    (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled') as participant_count,
+    (1 + (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled')) as participant_count,
     (SELECT COUNT(*) FROM planned_runs pr WHERE pr.run_id = r.id) as plan_count,
     false as is_locked
   FROM runs r
@@ -693,7 +693,7 @@ export async function isCrewMember(crewId: string, userId: string): Promise<bool
 export async function getCrewVisibleRuns(userId: string, bounds?: { swLat: number; neLat: number; swLng: number; neLng: number }) {
   let query = `SELECT r.*, u.name as host_name, u.avg_rating as host_rating, u.rating_count as host_rating_count, u.photo_url as host_photo,
       u.marker_icon as host_marker_icon, u.hosted_runs as host_hosted_runs,
-      (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled') as participant_count,
+      (1 + (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled')) as participant_count,
       false as is_locked,
       c.image_url as crew_photo_url
     FROM runs r
@@ -850,7 +850,7 @@ export async function getPublicRuns(filters?: {
   neLng?: number;
 }) {
   let query = `SELECT r.*, u.name as host_name, u.avg_rating as host_rating, u.rating_count as host_rating_count, u.photo_url as host_photo, u.marker_icon as host_marker_icon, u.hosted_runs as host_hosted_runs,
-    (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled') as participant_count,
+    (1 + (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled')) as participant_count,
     (SELECT COUNT(*) FROM planned_runs pr WHERE pr.run_id = r.id) as plan_count
     FROM runs r JOIN users u ON u.id = r.host_id
     WHERE r.privacy = 'public' AND r.date > NOW() - INTERVAL '2 hours' AND r.is_completed = false AND r.crew_id IS NULL`;
@@ -881,7 +881,7 @@ export async function getPublicRuns(filters?: {
 export async function getRunById(id: string) {
   const result = await pool.query(
     `SELECT r.*, u.name as host_name, u.avg_rating as host_rating, u.rating_count as host_rating_count, u.photo_url as host_photo, u.avg_pace as host_avg_pace, u.hosted_runs as host_hosted_runs,
-      (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled') as participant_count,
+      (1 + (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled')) as participant_count,
       (SELECT COUNT(*) FROM planned_runs pr WHERE pr.run_id = r.id) as plan_count
      FROM runs r JOIN users u ON u.id = r.host_id WHERE r.id = $1`,
     [id]
@@ -1998,7 +1998,7 @@ export async function getPlannedRuns(userId: string) {
   const result = await pool.query(
     `SELECT r.*, u.name as host_name, u.avg_rating as host_rating, u.rating_count as host_rating_count, u.photo_url as host_photo,
       u.marker_icon as host_marker_icon,
-      (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled') as participant_count,
+      (1 + (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled')) as participant_count,
       pr.created_at as planned_at
      FROM planned_runs pr
      JOIN runs r ON r.id = pr.run_id
@@ -2014,7 +2014,7 @@ export async function getBookmarkedRuns(userId: string) {
   const result = await pool.query(
     `SELECT r.*, u.name as host_name, u.avg_rating as host_rating, u.rating_count as host_rating_count, u.photo_url as host_photo,
       u.marker_icon as host_marker_icon,
-      (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled') as participant_count,
+      (1 + (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled')) as participant_count,
       b.created_at as bookmarked_at
      FROM bookmarked_runs b
      JOIN runs r ON r.id = b.run_id

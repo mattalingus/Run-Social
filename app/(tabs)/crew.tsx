@@ -937,7 +937,7 @@ function CrewDetailSheet({
                           ) : null}
                           <View style={s.eventMetaChip}>
                             <Ionicons name="people-outline" size={12} color={C.textMuted} />
-                            <Text style={s.eventMetaChipTxt}>{Math.max(1, run.participant_count ?? 0)} going</Text>
+                            <Text style={s.eventMetaChipTxt}>{run.participant_count ?? 1} going</Text>
                           </View>
                         </View>
                         <Text style={s.eventCardHost}>{run.host_id === crew?.created_by ? "👑 " : ""}Hosted by {run.host_name}</Text>
