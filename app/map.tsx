@@ -358,7 +358,8 @@ export default function MapScreen() {
 
   const { data: runs = [], isFetching } = useQuery<Run[]>({
     queryKey: [queryUrl],
-    staleTime: 60_000,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
     placeholderData: (prev) => prev,
   });
 

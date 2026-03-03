@@ -934,6 +934,7 @@ export default function DiscoverScreen() {
   const { data: runs = [], isLoading, refetch, isRefetching } = useQuery<Run[]>({
     queryKey: ["/api/runs"],
     staleTime: 30_000,
+    refetchInterval: 30_000,
   });
 
   const { data: friends = [] } = useQuery<{ id: string }[]>({
