@@ -78,12 +78,36 @@ interface RunHistoryItem {
   date: string;
   min_distance: number;
   max_distance: number;
+  min_pace: number;
+  max_pace: number;
   is_host: boolean;
   is_completed: boolean;
   my_is_present: boolean;
   my_status: string;
   host_name: string;
   activity_type?: string;
+  privacy?: string;
+  crew_id?: string | null;
+}
+
+type HistoryEventType = "solo" | "crew" | "public" | "friends";
+
+interface UnifiedHistoryItem {
+  id: string;
+  type: HistoryEventType;
+  title: string | null;
+  date: string;
+  distance_miles: number;
+  min_distance?: number;
+  max_distance?: number;
+  pace_min_per_mile?: number | null;
+  duration_seconds?: number | null;
+  elevation_gain_ft?: number | null;
+  route_path?: Array<{ latitude: number; longitude: number }> | null;
+  activity_type: string;
+  is_starred?: boolean;
+  host_name?: string;
+  is_host?: boolean;
 }
 
 function formatDate(s: string) {
@@ -212,6 +236,8 @@ export default function ProfileScreen() {
   const [uploadingPin, setUploadingPin] = useState(false);
   const [topRunsModal, setTopRunsModal] = useState<"longest" | "fastest" | null>(null);
   const [showSoloHistory, setShowSoloHistory] = useState(false);
+  const [historyActivityFilter, setHistoryActivityFilter] = useState<"run" | "ride">("run");
+  const [historyTypeFilter, setHistoryTypeFilter] = useState<"all" | HistoryEventType>("all");
   const [friendSearch, setFriendSearch] = useState("");
   const [showAddFriend, setShowAddFriend] = useState(false);
   const [viewProfileId, setViewProfileId] = useState<string | null>(null);
@@ -403,6 +429,56 @@ export default function ProfileScreen() {
       .map((r) => ({ dist: r.distance_miles, pace: r.pace_min_per_mile, date: r.date, title: null, run_type: "solo" as const }));
     return { longest, fastest };
   }, [soloRuns, profileActivity]);
+
+  const combinedHistory = React.useMemo((): UnifiedHistoryItem[] => {
+    const now = new Date();
+    const soloPart: UnifiedHistoryItem[] = soloRuns
+      .filter((r) => r.completed && (r.activity_type ?? "run") === historyActivityFilter)
+      .map((r) => ({
+        id: r.id,
+        type: "solo" as const,
+        title: r.title,
+        date: r.date,
+        distance_miles: r.distance_miles,
+        pace_min_per_mile: r.pace_min_per_mile,
+        duration_seconds: r.duration_seconds,
+        elevation_gain_ft: r.elevation_gain_ft,
+        route_path: r.route_path,
+        activity_type: r.activity_type ?? "run",
+        is_starred: r.is_starred,
+      }));
+
+    const groupPart: UnifiedHistoryItem[] = runs
+      .filter((r) => {
+        const isPast = new Date(r.date) < now;
+        const wasInvolved = r.is_host || r.my_is_present;
+        return isPast && wasInvolved && (r.activity_type ?? "run") === historyActivityFilter;
+      })
+      .map((r) => {
+        let type: HistoryEventType = "public";
+        if (r.crew_id) type = "crew";
+        else if (r.privacy === "friends") type = "friends";
+        return {
+          id: r.id,
+          type,
+          title: r.title,
+          date: r.date,
+          distance_miles: (r.min_distance + r.max_distance) / 2,
+          min_distance: r.min_distance,
+          max_distance: r.max_distance,
+          pace_min_per_mile: r.min_pace != null ? (r.min_pace + r.max_pace) / 2 : null,
+          duration_seconds: null,
+          elevation_gain_ft: null,
+          route_path: null,
+          activity_type: r.activity_type ?? "run",
+          is_starred: false,
+          host_name: r.host_name,
+          is_host: r.is_host,
+        };
+      });
+
+    return [...soloPart, ...groupPart].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [soloRuns, runs, historyActivityFilter]);
 
   const nameMutation = useMutation({
     mutationFn: async (name: string) => {
@@ -747,7 +823,12 @@ export default function ProfileScreen() {
       {/* ── View Past Runs / Rides ────────────────────────────────────────── */}
       <Pressable
         style={({ pressed }) => [styles.viewPastBtn, { opacity: pressed ? 0.8 : 1 }]}
-        onPress={() => { setShowSoloHistory(true); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+        onPress={() => {
+          setHistoryActivityFilter(profileActivity);
+          setHistoryTypeFilter("all");
+          setShowSoloHistory(true);
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }}
       >
         <Ionicons name={profileActivity === "ride" ? "bicycle-outline" : "walk-outline"} size={16} color={C.primary} />
         <Text style={styles.viewPastBtnTxt}>
@@ -1435,53 +1516,120 @@ export default function ProfileScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* ── Solo Run / Ride History Modal ──────────────────────────────────── */}
+      {/* ── Past Activity History Modal ─────────────────────────────────────── */}
       <Modal visible={showSoloHistory} transparent animationType="slide" onRequestClose={() => setShowSoloHistory(false)}>
         <Pressable style={styles.modalOverlay} onPress={() => setShowSoloHistory(false)} />
-        <View style={[styles.modalSheet, styles.friendModalSheet, { paddingBottom: insets.bottom + 24 }]}>
+        <View style={[styles.modalSheet, styles.friendModalSheet, { paddingBottom: insets.bottom + 16 }]}>
+          {/* Header */}
           <View style={styles.modalTitleRow}>
-            <Text style={styles.modalTitle}>
-              {profileActivity === "ride" ? "Past Rides" : "Past Runs"}
-            </Text>
+            <Text style={styles.modalTitle}>Activity History</Text>
             <Pressable onPress={() => setShowSoloHistory(false)} hitSlop={12}>
               <Feather name="x" size={20} color={C.textMuted} />
             </Pressable>
           </View>
+
+          {/* Activity toggle: Runs / Rides */}
+          <View style={styles.histToggleRow}>
+            {(["run", "ride"] as const).map((act) => (
+              <Pressable
+                key={act}
+                style={[styles.histToggleChip, historyActivityFilter === act && styles.histToggleChipActive]}
+                onPress={() => { Haptics.selectionAsync(); setHistoryActivityFilter(act); }}
+              >
+                <Ionicons
+                  name={act === "ride" ? "bicycle-outline" : "walk-outline"}
+                  size={13}
+                  color={historyActivityFilter === act ? C.bg : C.textSecondary}
+                  style={{ marginRight: 4 }}
+                />
+                <Text style={[styles.histToggleChipTxt, historyActivityFilter === act && styles.histToggleChipTxtActive]}>
+                  {act === "ride" ? "Rides" : "Runs"}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
+          {/* Type filter: All / Solo / Crew / Public / Friends */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.histTypeRow} contentContainerStyle={{ gap: 8, paddingHorizontal: 20, paddingVertical: 4 }}>
+            {(["all", "solo", "crew", "public", "friends"] as const).map((t) => {
+              const active = historyTypeFilter === t;
+              const TYPE_COLORS: Record<string, string> = { solo: C.primary, crew: C.gold, public: C.blue, friends: "#C084FC" };
+              const color = t === "all" ? C.textSecondary : TYPE_COLORS[t];
+              return (
+                <Pressable
+                  key={t}
+                  style={[styles.histTypeChip, active && { backgroundColor: color + "22", borderColor: color }]}
+                  onPress={() => { Haptics.selectionAsync(); setHistoryTypeFilter(t); }}
+                >
+                  <Text style={[styles.histTypeChipTxt, active && { color }]}>
+                    {t.charAt(0).toUpperCase() + t.slice(1)}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          {/* List */}
           {(() => {
-            const history = soloRuns.filter((r) => (r.activity_type ?? "run") === profileActivity && r.completed);
-            if (history.length === 0) {
+            const TYPE_COLORS: Record<string, string> = { solo: C.primary, crew: C.gold, public: C.blue, friends: "#C084FC" };
+            const filtered = historyTypeFilter === "all"
+              ? combinedHistory
+              : combinedHistory.filter((r) => r.type === historyTypeFilter);
+
+            if (filtered.length === 0) {
               return (
                 <View style={styles.emptyState}>
-                  <Ionicons name={profileActivity === "ride" ? "bicycle-outline" : "walk-outline"} size={32} color={C.textMuted} />
+                  <Ionicons name={historyActivityFilter === "ride" ? "bicycle-outline" : "walk-outline"} size={32} color={C.textMuted} />
                   <Text style={styles.emptyStateTxt}>
-                    {profileActivity === "ride" ? "No completed rides yet" : "No completed runs yet"}
+                    No {historyTypeFilter === "all" ? "" : historyTypeFilter + " "}{historyActivityFilter === "ride" ? "rides" : "runs"} yet
                   </Text>
                 </View>
               );
             }
+
             return (
-              <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
-                {history.map((run) => {
+              <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 4, paddingBottom: 8 }}>
+                {filtered.map((run) => {
+                  const isSolo = run.type === "solo";
+                  const typeColor = TYPE_COLORS[run.type];
                   const label = run.title || `${formatDistance(run.distance_miles)} mi ${run.activity_type === "ride" ? "ride" : "run"}`;
                   return (
-                    <View key={run.id} style={styles.soloHistCard}>
+                    <View key={`${run.type}-${run.id}`} style={styles.soloHistCard}>
                       <View style={styles.soloHistRow}>
                         <View style={styles.soloHistLeft}>
-                          <View style={styles.soloHistCheck}>
-                            <Feather name="check" size={12} color={C.primary} />
+                          {/* Status dot with type color */}
+                          <View style={[styles.soloHistCheck, { backgroundColor: typeColor + "22", borderColor: typeColor + "55" }]}>
+                            <Feather name="check" size={12} color={typeColor} />
                           </View>
                           <View style={{ flex: 1 }}>
-                            <Text style={styles.soloHistTitle} numberOfLines={1}>{label}</Text>
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                              <Text style={styles.soloHistTitle} numberOfLines={1}>{label}</Text>
+                              {/* Type badge */}
+                              <View style={[styles.histEventBadge, { backgroundColor: typeColor + "22" }]}>
+                                <Text style={[styles.histEventBadgeTxt, { color: typeColor }]}>{run.type}</Text>
+                              </View>
+                            </View>
                             <Text style={styles.soloHistMeta}>
                               {formatDisplayDate(run.date)}
-                              {run.pace_min_per_mile ? ` · ${formatPaceSolo(run.pace_min_per_mile)}/mi` : ""}
-                              {run.duration_seconds ? ` · ${formatDurationSolo(run.duration_seconds)}` : ""}
+                              {isSolo && run.pace_min_per_mile ? ` · ${formatPaceSolo(run.pace_min_per_mile)}/mi` : ""}
+                              {isSolo && run.duration_seconds ? ` · ${formatDurationSolo(run.duration_seconds)}` : ""}
+                              {!isSolo && run.host_name ? ` · ${run.is_host ? "You hosted" : `by ${run.host_name}`}` : ""}
                             </Text>
                           </View>
                         </View>
                         <View style={styles.soloHistRight}>
-                          <Text style={styles.soloHistDist}>{formatDistance(run.distance_miles)}</Text>
-                          <Text style={styles.soloHistDistUnit}>mi</Text>
+                          {isSolo ? (
+                            <>
+                              <Text style={styles.soloHistDist}>{formatDistance(run.distance_miles)}</Text>
+                              <Text style={styles.soloHistDistUnit}>mi</Text>
+                            </>
+                          ) : (
+                            <>
+                              <Text style={styles.soloHistDist}>{formatDistance(run.min_distance ?? run.distance_miles)}</Text>
+                              <Text style={styles.soloHistDistUnit}>mi</Text>
+                            </>
+                          )}
+                          {run.is_starred && <Ionicons name="star" size={12} color={C.gold} style={{ marginLeft: 2 }} />}
                         </View>
                       </View>
                       {run.route_path && run.route_path.length > 1 && (
@@ -1934,6 +2082,40 @@ function makeStyles(C: ReturnType<typeof import("@/contexts/ThemeContext").useTh
   soloHistRight: { alignItems: "flex-end" },
   soloHistDist: { fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text },
   soloHistDistUnit: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted },
+
+  histToggleRow: {
+    flexDirection: "row", gap: 8, paddingHorizontal: 20, paddingBottom: 10,
+  },
+  histToggleChip: {
+    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
+    paddingVertical: 8, borderRadius: 10,
+    backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
+  },
+  histToggleChipActive: {
+    backgroundColor: C.primary, borderColor: C.primary,
+  },
+  histToggleChipTxt: {
+    fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary,
+  },
+  histToggleChipTxtActive: {
+    color: C.bg,
+  },
+  histTypeRow: {
+    flexGrow: 0, marginBottom: 8,
+  },
+  histTypeChip: {
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20,
+    backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
+  },
+  histTypeChipTxt: {
+    fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.textSecondary,
+  },
+  histEventBadge: {
+    paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6,
+  },
+  histEventBadgeTxt: {
+    fontFamily: "Outfit_600SemiBold", fontSize: 10,
+  },
 
 }); }
 
