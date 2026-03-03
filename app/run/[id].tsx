@@ -92,6 +92,7 @@ export default function RunDetailScreen() {
   const [showEditSheet, setShowEditSheet] = useState(false);
   const [editDate, setEditDate] = useState("");
   const [editTime, setEditTime] = useState("");
+  const [editAmPm, setEditAmPm] = useState<"AM" | "PM">("AM");
   const [editSaving, setEditSaving] = useState(false);
   const [cancelling, setCancelling] = useState(false);
 
@@ -319,14 +320,47 @@ export default function RunDetailScreen() {
   function handleOpenEdit() {
     if (!run) return;
     const d = new Date(run.date);
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    const hours = String(d.getHours()).padStart(2, "0");
-    const minutes = String(d.getMinutes()).padStart(2, "0");
-    setEditDate(`${year}-${month}-${day}`);
-    setEditTime(`${hours}:${minutes}`);
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    const yy = String(d.getFullYear()).slice(2);
+    setEditDate(`${mm}/${dd}/${yy}`);
+    const raw24h = d.getHours();
+    const mins = String(d.getMinutes()).padStart(2, "0");
+    const ap: "AM" | "PM" = raw24h >= 12 ? "PM" : "AM";
+    const h12 = raw24h % 12 === 0 ? 12 : raw24h % 12;
+    setEditTime(`${h12}:${mins}`);
+    setEditAmPm(ap);
     setShowEditSheet(true);
+  }
+
+  function parseDMY(raw: string): Date | null {
+    const parts = raw.split("/");
+    if (parts.length !== 3) return null;
+    const [mo, dy, yr] = parts.map(Number);
+    if (isNaN(mo) || isNaN(dy) || isNaN(yr)) return null;
+    const year = yr < 100 ? 2000 + yr : yr;
+    const d = new Date(year, mo - 1, dy);
+    if (d.getMonth() !== mo - 1) return null;
+    return d;
+  }
+
+  function parseHHMMAMPM(raw: string, ap: "AM" | "PM"): { hours: number; minutes: number } | null {
+    const parts = raw.split(":");
+    if (parts.length !== 2) return null;
+    let hours = parseInt(parts[0], 10);
+    const minutes = parseInt(parts[1], 10);
+    if (isNaN(hours) || isNaN(minutes) || minutes < 0 || minutes > 59) return null;
+    if (hours < 1 || hours > 12) return null;
+    if (ap === "AM") { if (hours === 12) hours = 0; }
+    else { if (hours !== 12) hours += 12; }
+    return { hours, minutes };
+  }
+
+  function autoFormatEditTime(digits: string): string {
+    if (digits.length <= 1) return digits;
+    if (digits.length === 2) return parseInt(digits[0], 10) > 1 ? digits[0] + ":" + digits[1] : digits;
+    if (digits.length === 3) return parseInt(digits[0], 10) > 1 ? digits[0] + ":" + digits.slice(1) : digits.slice(0, 2) + ":" + digits[2];
+    return parseInt(digits[0], 10) > 1 ? digits[0] + ":" + digits.slice(1, 3) : digits.slice(0, 2) + ":" + digits.slice(2, 4);
   }
 
   async function handleSaveEdit() {
@@ -334,9 +368,14 @@ export default function RunDetailScreen() {
       Alert.alert("Missing info", "Please enter both a date and time.");
       return;
     }
-    const parsed = new Date(`${editDate}T${editTime}:00`);
+    const parsedDate = parseDMY(editDate.trim());
+    if (!parsedDate) { Alert.alert("Invalid format", "Enter date as MM/DD/YY (e.g. 06/15/26)."); return; }
+    const parsedTime = parseHHMMAMPM(editTime.trim(), editAmPm);
+    if (!parsedTime) { Alert.alert("Invalid format", "Enter time as H:MM (e.g. 7:30)."); return; }
+    parsedDate.setHours(parsedTime.hours, parsedTime.minutes, 0, 0);
+    const parsed = parsedDate;
     if (isNaN(parsed.getTime())) {
-      Alert.alert("Invalid format", "Date must be YYYY-MM-DD and time HH:MM.");
+      Alert.alert("Invalid format", "Could not parse the date or time.");
       return;
     }
     setEditSaving(true);
@@ -1169,28 +1208,56 @@ export default function RunDetailScreen() {
                   All participants will be notified of the new time.
                 </Text>
                 <View style={styles.editFieldGroup}>
-                  <Text style={styles.editFieldLabel}>Date (YYYY-MM-DD)</Text>
-                  <TextInput
-                    style={styles.editInput}
-                    value={editDate}
-                    onChangeText={setEditDate}
-                    placeholder="2025-06-15"
-                    placeholderTextColor={C.textMuted}
-                    keyboardType="numbers-and-punctuation"
-                    autoCorrect={false}
-                  />
-                </View>
-                <View style={styles.editFieldGroup}>
-                  <Text style={styles.editFieldLabel}>Time (HH:MM, 24-hr)</Text>
-                  <TextInput
-                    style={styles.editInput}
-                    value={editTime}
-                    onChangeText={setEditTime}
-                    placeholder="07:30"
-                    placeholderTextColor={C.textMuted}
-                    keyboardType="numbers-and-punctuation"
-                    autoCorrect={false}
-                  />
+                  <Text style={styles.editFieldLabel}>Date & Time</Text>
+                  <View style={{ flexDirection: "row", gap: 10 }}>
+                    <TextInput
+                      style={[styles.editInput, { flex: 1 }]}
+                      value={editDate}
+                      onChangeText={(text) => {
+                        const digits = text.replace(/\D/g, "").slice(0, 6);
+                        let fmt = digits;
+                        if (digits.length > 2) fmt = digits.slice(0, 2) + "/" + digits.slice(2);
+                        if (digits.length > 4) fmt = digits.slice(0, 2) + "/" + digits.slice(2, 4) + "/" + digits.slice(4);
+                        setEditDate(fmt);
+                      }}
+                      placeholder="MM/DD/YY"
+                      placeholderTextColor={C.textMuted}
+                      keyboardType="number-pad"
+                      maxLength={8}
+                      autoCorrect={false}
+                    />
+                    <View style={{ flex: 1, flexDirection: "row", gap: 6 }}>
+                      <TextInput
+                        style={[styles.editInput, { flex: 1 }]}
+                        value={editTime}
+                        onChangeText={(text) => {
+                          const digits = text.replace(/\D/g, "").slice(0, 4);
+                          setEditTime(autoFormatEditTime(digits));
+                        }}
+                        placeholder="7:30"
+                        placeholderTextColor={C.textMuted}
+                        keyboardType="number-pad"
+                        maxLength={5}
+                        autoCorrect={false}
+                      />
+                      <View style={{ flexDirection: "column", gap: 4 }}>
+                        {(["AM", "PM"] as const).map((period) => (
+                          <Pressable
+                            key={period}
+                            onPress={() => { setEditAmPm(period); Haptics.selectionAsync(); }}
+                            style={{
+                              flex: 1, paddingHorizontal: 10, borderRadius: 9, borderWidth: 1,
+                              alignItems: "center", justifyContent: "center",
+                              backgroundColor: editAmPm === period ? C.primary + "33" : C.surface,
+                              borderColor: editAmPm === period ? C.primary : C.border,
+                            }}
+                          >
+                            <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: editAmPm === period ? C.primary : C.textMuted }}>{period}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </View>
+                  </View>
                 </View>
                 <Pressable
                   style={({ pressed }) => [styles.primaryBtn, { opacity: pressed || editSaving ? 0.85 : 1, marginTop: 8 }]}
