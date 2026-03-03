@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useMemo } from "react";
+import React, { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import {
   View,
   Text,
@@ -200,19 +200,10 @@ function CrewCard({ crew, onPress }: { crew: Crew; onPress: () => void }) {
           ) : null}
         </View>
       </View>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
         {crew.chat_muted && (
           <Ionicons name="notifications-off-outline" size={16} color={C.textMuted} />
         )}
-        <TouchableOpacity 
-          onPress={(e) => {
-            e.stopPropagation();
-            router.push(`/crew-chat/${crew.id}`);
-          }}
-          style={{ padding: 4 }}
-        >
-          <Feather name="message-circle" size={20} color={C.primary} />
-        </TouchableOpacity>
         <Ionicons name="chevron-forward" size={18} color={C.textMuted} />
       </View>
     </TouchableOpacity>
@@ -669,11 +660,38 @@ function CrewDetailSheet({
 
   const [eventsExpanded, setEventsExpanded] = useState(false);
 
-  const { data: crewMessages = [] } = useQuery<any[]>({
+  const { data: crewMessages = [], refetch: refetchMessages } = useQuery<any[]>({
     queryKey: ["/api/crews", crew?.id, "messages"],
     enabled: !!crew?.id,
     refetchInterval: 5000,
   });
+
+  const [chatInput, setChatInput] = useState("");
+  const [chatSending, setChatSending] = useState(false);
+  const chatScrollRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    if (crewMessages.length > 0) {
+      setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: false }), 80);
+    }
+  }, [crewMessages.length]);
+
+  async function sendChatMessage() {
+    const text = chatInput.trim();
+    if (!text || chatSending) return;
+    setChatInput("");
+    setChatSending(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      await apiRequest("POST", `/api/crews/${crew?.id}/messages`, { message: text });
+      refetchMessages();
+    } catch (e: any) {
+      Alert.alert("Error", e.message ?? "Could not send message");
+      setChatInput(text);
+    } finally {
+      setChatSending(false);
+    }
+  }
 
   const filteredRuns = crewRuns.filter((r) => (r.activity_type ?? "run") === activityFilter);
   const visibleRuns = eventsExpanded ? filteredRuns : filteredRuns.slice(0, 5);
@@ -864,72 +882,110 @@ function CrewDetailSheet({
                   )}
                 </View>
 
-                {/* ── Chat Preview ── */}
+                {/* ── Inline Crew Chat ── */}
                 <View style={s.detailSection}>
                   <View style={s.detailSectionHeader}>
                     <Text style={s.detailSectionTitle}>Crew Chat</Text>
+                    {isMuted && (
+                      <Ionicons name="notifications-off-outline" size={14} color={C.textMuted} />
+                    )}
+                  </View>
+
+                  {/* Messages scroll area */}
+                  <View style={s.inlineChatBox}>
+                    {crewMessages.length === 0 ? (
+                      <View style={s.inlineChatEmpty}>
+                        <Ionicons name="chatbubble-outline" size={20} color={C.textMuted} />
+                        <Text style={s.inlineChatEmptyTxt}>No messages yet — say hello!</Text>
+                      </View>
+                    ) : (
+                      <ScrollView
+                        ref={chatScrollRef}
+                        style={{ flex: 1 }}
+                        contentContainerStyle={{ padding: 10, gap: 8 }}
+                        showsVerticalScrollIndicator={false}
+                        nestedScrollEnabled
+                        onContentSizeChange={() =>
+                          chatScrollRef.current?.scrollToEnd({ animated: false })
+                        }
+                      >
+                        {[...crewMessages].reverse().map((msg: any) => {
+                          const isMe = msg.user_id === currentUserId;
+                          const isPrompt = msg.message_type === "prompt";
+                          const isMilestone = msg.message_type === "milestone";
+
+                          if (isMilestone) {
+                            return (
+                              <View key={msg.id} style={s.inlineMilestoneRow}>
+                                <View style={s.inlineMilestoneBubble}>
+                                  <Text style={s.inlineMilestoneTxt}>{msg.message}</Text>
+                                </View>
+                              </View>
+                            );
+                          }
+
+                          return (
+                            <View key={msg.id} style={[s.inlineMsgRow, isMe && s.inlineMsgRowMe]}>
+                              {!isMe && (
+                                <View style={s.inlineMsgAvatar}>
+                                  <Text style={s.inlineMsgAvatarTxt}>
+                                    {(msg.sender_name ?? "?")[0].toUpperCase()}
+                                  </Text>
+                                </View>
+                              )}
+                              <View style={[
+                                s.inlineMsgBubble,
+                                isMe && s.inlineMsgBubbleMe,
+                                isPrompt && s.inlineMsgBubblePrompt,
+                              ]}>
+                                {!isMe && (
+                                  <Text style={s.inlineMsgSender}>{msg.sender_name}</Text>
+                                )}
+                                <Text style={[s.inlineMsgTxt, isMe && s.inlineMsgTxtMe]}>
+                                  {msg.message}
+                                </Text>
+                                {isPrompt && msg.metadata?.quickReplies?.length > 0 && (
+                                  <View style={s.inlineQuickReplyRow}>
+                                    {msg.metadata.quickReplies.map((reply: string) => (
+                                      <TouchableOpacity
+                                        key={reply}
+                                        style={s.inlineQuickReplyChip}
+                                        onPress={() => setChatInput(reply)}
+                                      >
+                                        <Text style={s.inlineQuickReplyTxt}>{reply}</Text>
+                                      </TouchableOpacity>
+                                    ))}
+                                  </View>
+                                )}
+                              </View>
+                            </View>
+                          );
+                        })}
+                      </ScrollView>
+                    )}
+                  </View>
+
+                  {/* Input row */}
+                  <View style={s.inlineChatInputRow}>
+                    <TextInput
+                      style={s.inlineChatInput}
+                      value={chatInput}
+                      onChangeText={setChatInput}
+                      placeholder="Send a message…"
+                      placeholderTextColor={C.textMuted}
+                      onSubmitEditing={sendChatMessage}
+                      blurOnSubmit={false}
+                      returnKeyType="send"
+                      editable={!chatSending}
+                    />
                     <TouchableOpacity
-                      style={s.openChatChip}
-                      onPress={() => {
-                        onClose();
-                        router.push(`/crew-chat/${crew?.id}`);
-                      }}
+                      style={[s.inlineSendBtn, (!chatInput.trim() || chatSending) && s.inlineSendBtnDisabled]}
+                      onPress={sendChatMessage}
+                      disabled={!chatInput.trim() || chatSending}
                     >
-                      <Ionicons name="chatbubble-ellipses-outline" size={13} color={C.primary} />
-                      <Text style={s.openChatChipTxt}>Open</Text>
+                      <Ionicons name="send" size={16} color={chatInput.trim() && !chatSending ? C.bg : C.textMuted} />
                     </TouchableOpacity>
                   </View>
-                  {crewMessages.length === 0 ? (
-                    <TouchableOpacity
-                      style={s.chatEmptyCard}
-                      activeOpacity={0.75}
-                      onPress={() => {
-                        onClose();
-                        router.push(`/crew-chat/${crew?.id}`);
-                      }}
-                    >
-                      <Ionicons name="chatbubble-outline" size={22} color={C.textMuted} />
-                      <Text style={s.chatEmptyTxt}>No messages yet — start the conversation!</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <View style={s.chatPreviewContainer}>
-                      {crewMessages.slice(0, 5).reverse().map((msg: any) => {
-                        const isMe = msg.user_id === currentUserId;
-                        return (
-                          <View
-                            key={msg.id}
-                            style={[s.chatPreviewRow, isMe && s.chatPreviewRowMe]}
-                          >
-                            {!isMe && (
-                              <View style={s.chatPreviewAvatar}>
-                                <Text style={s.chatPreviewAvatarTxt}>
-                                  {(msg.sender_name ?? "?")[0].toUpperCase()}
-                                </Text>
-                              </View>
-                            )}
-                            <View style={[s.chatPreviewBubble, isMe && s.chatPreviewBubbleMe]}>
-                              {!isMe && (
-                                <Text style={s.chatPreviewSender}>{msg.sender_name}</Text>
-                              )}
-                              <Text style={[s.chatPreviewMsg, isMe && s.chatPreviewMsgMe]} numberOfLines={3}>
-                                {msg.message}
-                              </Text>
-                            </View>
-                          </View>
-                        );
-                      })}
-                      <TouchableOpacity
-                        style={s.chatOpenBtn}
-                        onPress={() => {
-                          onClose();
-                          router.push(`/crew-chat/${crew?.id}`);
-                        }}
-                      >
-                        <Ionicons name="send-outline" size={14} color={C.primary} />
-                        <Text style={s.chatOpenBtnTxt}>Send a message…</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
                 </View>
 
                 {/* ── Members ── */}
@@ -2252,109 +2308,149 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     color: C.textSecondary,
     marginTop: 2,
   },
-  // Chat preview
-  openChatChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: C.primary + "18",
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: C.primary + "40",
-  },
-  openChatChipTxt: {
-    fontFamily: "Outfit_600SemiBold",
-    fontSize: 13,
-    color: C.primary,
-  },
-  chatEmptyCard: {
+  // Inline crew chat
+  inlineChatBox: {
+    height: 260,
     backgroundColor: C.card,
-    borderRadius: 14,
-    padding: 20,
-    alignItems: "center",
-    gap: 10,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: C.border,
+    overflow: "hidden",
   },
-  chatEmptyTxt: {
+  inlineChatEmpty: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    padding: 20,
+  },
+  inlineChatEmptyTxt: {
     fontFamily: "Outfit_400Regular",
     fontSize: 14,
     color: C.textMuted,
     textAlign: "center",
   },
-  chatPreviewContainer: {
-    backgroundColor: C.card,
-    borderRadius: 16,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: C.border,
-    gap: 8,
-  },
-  chatPreviewRow: {
+  inlineMsgRow: {
     flexDirection: "row",
     alignItems: "flex-end",
-    gap: 8,
+    gap: 7,
+    marginBottom: 6,
   },
-  chatPreviewRowMe: {
+  inlineMsgRowMe: {
     justifyContent: "flex-end",
   },
-  chatPreviewAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: C.primary + "25",
+  inlineMsgAvatar: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: C.primary + "22",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
-  chatPreviewAvatarTxt: {
+  inlineMsgAvatarTxt: {
     fontFamily: "Outfit_700Bold",
-    fontSize: 12,
+    fontSize: 11,
     color: C.primary,
   },
-  chatPreviewBubble: {
+  inlineMsgBubble: {
     backgroundColor: C.surface,
-    borderRadius: 12,
+    borderRadius: 14,
     borderBottomLeftRadius: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    maxWidth: "78%",
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    maxWidth: "75%",
   },
-  chatPreviewBubbleMe: {
+  inlineMsgBubbleMe: {
     backgroundColor: C.primary,
-    borderBottomLeftRadius: 12,
+    borderBottomLeftRadius: 14,
     borderBottomRightRadius: 4,
   },
-  chatPreviewSender: {
+  inlineMsgBubblePrompt: {
+    backgroundColor: C.primary + "18",
+    borderWidth: 1,
+    borderColor: C.primary + "35",
+    borderBottomLeftRadius: 4,
+  },
+  inlineMsgSender: {
     fontFamily: "Outfit_600SemiBold",
-    fontSize: 11,
+    fontSize: 10,
     color: C.textMuted,
     marginBottom: 2,
   },
-  chatPreviewMsg: {
+  inlineMsgTxt: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 13,
+    color: C.text,
+    lineHeight: 18,
+  },
+  inlineMsgTxtMe: {
+    color: "#FFFFFF",
+  },
+  inlineMilestoneRow: {
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  inlineMilestoneBubble: {
+    backgroundColor: C.gold + "18",
+    borderWidth: 1,
+    borderColor: C.gold + "40",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  inlineMilestoneTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 12,
+    color: C.gold,
+    textAlign: "center",
+  },
+  inlineQuickReplyRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 8,
+  },
+  inlineQuickReplyChip: {
+    backgroundColor: C.primary,
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  inlineQuickReplyTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 11,
+    color: C.bg,
+  },
+  inlineChatInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 8,
+    paddingHorizontal: 2,
+  },
+  inlineChatInput: {
+    flex: 1,
+    backgroundColor: C.card,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
     fontFamily: "Outfit_400Regular",
     fontSize: 14,
     color: C.text,
   },
-  chatPreviewMsgMe: {
-    color: C.bg,
-  },
-  chatOpenBtn: {
-    flexDirection: "row",
+  inlineSendBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: C.primary,
     alignItems: "center",
-    gap: 8,
-    borderTopWidth: 1,
-    borderTopColor: C.border,
-    paddingTop: 10,
-    marginTop: 2,
+    justifyContent: "center",
   },
-  chatOpenBtnTxt: {
-    fontFamily: "Outfit_400Regular",
-    fontSize: 14,
-    color: C.textMuted,
-    flex: 1,
+  inlineSendBtnDisabled: {
+    backgroundColor: C.surface,
   },
   runRow: {
     flexDirection: "row",
