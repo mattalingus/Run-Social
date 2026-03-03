@@ -11,15 +11,15 @@ interface ThemeContextValue {
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
-  theme: "dark",
+  theme: "light",
   toggleTheme: () => {},
-  C: darkColors,
+  C: lightColors,
 });
 
 const STORAGE_KEY = "@fara_theme";
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("dark");
+  const [theme, setTheme] = useState<Theme>("light");
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((saved) => {

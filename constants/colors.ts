@@ -50,6 +50,6 @@ export const lightColors = {
 
 export type ColorScheme = typeof darkColors;
 
-const C = darkColors;
+const C = lightColors;
 
 export default C;
