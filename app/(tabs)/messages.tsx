@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -8,6 +8,9 @@ import {
   Modal,
   Platform,
   ActivityIndicator,
+  Animated,
+  PanResponder,
+  Alert,
 } from "react-native";
 import { Image as ExpoImage } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -18,13 +21,14 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { darkColors, type ColorScheme } from "@/constants/colors";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 
+const SWIPE_THRESHOLD = -72;
+const DELETE_WIDTH = 72;
+
 function resolveImgUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   if (url.startsWith("http")) return url;
   return new URL(url, getApiUrl()).toString();
 }
-
-const C_FALLBACK = darkColors;
 
 interface Conversation {
   friend_id: string;
@@ -50,13 +54,9 @@ function formatTime(iso: string): string {
   const now = new Date();
   const diffMs = now.getTime() - d.getTime();
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  if (diffDays === 0) {
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  } else if (diffDays === 1) {
-    return "Yesterday";
-  } else if (diffDays < 7) {
-    return d.toLocaleDateString([], { weekday: "short" });
-  }
+  if (diffDays === 0) return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) return d.toLocaleDateString([], { weekday: "short" });
   return d.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
@@ -67,10 +67,7 @@ function avatarLetter(name: string) {
 function makeStyles(C: ColorScheme) {
   const isWeb = Platform.OS === "web";
   return StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: C.bg,
-    },
+    container: { flex: 1, backgroundColor: C.bg },
     header: {
       paddingHorizontal: 20,
       paddingBottom: 12,
@@ -79,21 +76,21 @@ function makeStyles(C: ColorScheme) {
       alignItems: "center",
       justifyContent: "space-between",
     },
-    headerTitle: {
-      fontFamily: "Outfit_700Bold",
-      fontSize: 28,
-      color: C.text,
-    },
+    headerTitle: { fontFamily: "Outfit_700Bold", fontSize: 28, color: C.text },
     composeBtn: {
-      width: 38,
-      height: 38,
-      borderRadius: 19,
+      width: 38, height: 38, borderRadius: 19,
       backgroundColor: C.card,
+      alignItems: "center", justifyContent: "center",
+    },
+    listContent: { paddingBottom: isWeb ? 34 : 100 },
+    swipeContainer: { overflow: "hidden" },
+    deleteBack: {
+      position: "absolute",
+      right: 0, top: 0, bottom: 0,
+      width: DELETE_WIDTH,
+      backgroundColor: C.danger,
       alignItems: "center",
       justifyContent: "center",
-    },
-    listContent: {
-      paddingBottom: isWeb ? 34 : 100,
     },
     convoRow: {
       flexDirection: "row",
@@ -101,170 +98,181 @@ function makeStyles(C: ColorScheme) {
       paddingHorizontal: 20,
       paddingVertical: 14,
       gap: 14,
+      backgroundColor: C.bg,
     },
-    convoRowBorder: {
-      borderBottomWidth: 1,
-      borderBottomColor: C.border,
-    },
+    convoRowBorder: { borderBottomWidth: 1, borderBottomColor: C.border },
     avatarCircle: {
-      width: 50,
-      height: 50,
-      borderRadius: 25,
+      width: 50, height: 50, borderRadius: 25,
       backgroundColor: C.primaryMuted,
-      alignItems: "center",
-      justifyContent: "center",
+      alignItems: "center", justifyContent: "center",
     },
-    avatarLetter: {
-      fontFamily: "Outfit_700Bold",
-      fontSize: 20,
-      color: C.primary,
-    },
-    convoMeta: {
-      flex: 1,
-    },
+    avatarLetter: { fontFamily: "Outfit_700Bold", fontSize: 20, color: C.primary },
+    convoMeta: { flex: 1 },
     convoNameRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      marginBottom: 3,
+      flexDirection: "row", alignItems: "center",
+      justifyContent: "space-between", marginBottom: 3,
     },
-    convoName: {
-      fontFamily: "Outfit_600SemiBold",
-      fontSize: 15,
-      color: C.text,
-    },
-    convoTime: {
-      fontFamily: "Outfit_400Regular",
-      fontSize: 12,
-      color: C.textMuted,
-    },
-    convoPreviewRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 6,
-    },
-    convoPreview: {
-      flex: 1,
-      fontFamily: "Outfit_400Regular",
-      fontSize: 13,
-      color: C.textSecondary,
-    },
-    convoPreviewUnread: {
-      fontFamily: "Outfit_600SemiBold",
-      color: C.text,
-    },
-    unreadDot: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
-      backgroundColor: C.primary,
-    },
+    convoName: { fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.text },
+    convoTime: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted },
+    convoPreviewRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+    convoPreview: { flex: 1, fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary },
+    convoPreviewUnread: { fontFamily: "Outfit_600SemiBold", color: C.text },
+    unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.primary },
     emptyWrap: {
-      flex: 1,
-      alignItems: "center",
-      justifyContent: "center",
-      paddingHorizontal: 40,
-      gap: 12,
+      flex: 1, alignItems: "center", justifyContent: "center",
+      paddingHorizontal: 40, gap: 12,
     },
     emptyIcon: {
-      width: 64,
-      height: 64,
-      borderRadius: 32,
+      width: 64, height: 64, borderRadius: 32,
       backgroundColor: C.card,
-      alignItems: "center",
-      justifyContent: "center",
-      marginBottom: 4,
+      alignItems: "center", justifyContent: "center", marginBottom: 4,
     },
-    emptyTitle: {
-      fontFamily: "Outfit_700Bold",
-      fontSize: 20,
-      color: C.text,
-      textAlign: "center",
-    },
-    emptyDesc: {
-      fontFamily: "Outfit_400Regular",
-      fontSize: 14,
-      color: C.textMuted,
-      textAlign: "center",
-      lineHeight: 20,
-    },
+    emptyTitle: { fontFamily: "Outfit_700Bold", fontSize: 20, color: C.text, textAlign: "center" },
+    emptyDesc: { fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textMuted, textAlign: "center", lineHeight: 20 },
     emptyBtn: {
-      marginTop: 8,
-      backgroundColor: C.primary,
-      borderRadius: 22,
-      paddingHorizontal: 24,
-      paddingVertical: 11,
+      marginTop: 8, backgroundColor: C.primary,
+      borderRadius: 22, paddingHorizontal: 24, paddingVertical: 11,
     },
-    emptyBtnTxt: {
-      fontFamily: "Outfit_600SemiBold",
-      fontSize: 14,
-      color: "#fff",
-    },
-    modalOverlay: {
-      flex: 1,
-      backgroundColor: C.overlay,
-      justifyContent: "flex-end",
-    },
+    emptyBtnTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: "#fff" },
+    modalOverlay: { flex: 1, backgroundColor: C.overlay, justifyContent: "flex-end" },
     modalSheet: {
       backgroundColor: C.surface,
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
-      paddingBottom: 30,
-      maxHeight: "80%",
+      borderTopLeftRadius: 20, borderTopRightRadius: 20,
+      paddingBottom: 30, maxHeight: "80%",
     },
     modalHandle: {
-      width: 36,
-      height: 4,
-      borderRadius: 2,
+      width: 36, height: 4, borderRadius: 2,
       backgroundColor: C.border,
-      alignSelf: "center",
-      marginTop: 10,
-      marginBottom: 6,
+      alignSelf: "center", marginTop: 10, marginBottom: 6,
     },
     modalHeader: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      paddingHorizontal: 20,
-      paddingVertical: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: C.border,
+      flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+      paddingHorizontal: 20, paddingVertical: 12,
+      borderBottomWidth: 1, borderBottomColor: C.border,
     },
-    modalTitle: {
-      fontFamily: "Outfit_700Bold",
-      fontSize: 17,
-      color: C.text,
-    },
-    modalClose: {
-      padding: 4,
-    },
+    modalTitle: { fontFamily: "Outfit_700Bold", fontSize: 17, color: C.text },
+    modalClose: { padding: 4 },
     friendRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      paddingHorizontal: 20,
-      paddingVertical: 14,
-      gap: 14,
-      borderBottomWidth: 1,
-      borderBottomColor: C.border,
+      flexDirection: "row", alignItems: "center",
+      paddingHorizontal: 20, paddingVertical: 14,
+      gap: 14, borderBottomWidth: 1, borderBottomColor: C.border,
     },
-    friendName: {
-      fontFamily: "Outfit_400Regular",
-      fontSize: 15,
-      color: C.text,
-    },
-    friendsEmpty: {
-      padding: 30,
-      alignItems: "center",
-    },
-    friendsEmptyTxt: {
-      fontFamily: "Outfit_400Regular",
-      fontSize: 14,
-      color: C.textMuted,
-      textAlign: "center",
-    },
+    friendName: { fontFamily: "Outfit_400Regular", fontSize: 15, color: C.text },
+    friendsEmpty: { padding: 30, alignItems: "center" },
+    friendsEmptyTxt: { fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textMuted, textAlign: "center" },
   });
 }
 
+// ─── Swipeable Row ─────────────────────────────────────────────────────────────
+function SwipeableConvoRow({
+  item,
+  index,
+  total,
+  s,
+  C,
+  onOpen,
+  onDelete,
+}: {
+  item: Conversation;
+  index: number;
+  total: number;
+  s: ReturnType<typeof makeStyles>;
+  C: ColorScheme;
+  onOpen: () => void;
+  onDelete: () => void;
+}) {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const isOpen = useRef(false);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 6 && Math.abs(g.dy) < Math.abs(g.dx),
+      onPanResponderMove: (_, g) => {
+        const newX = Math.max(SWIPE_THRESHOLD, Math.min(0, g.dx + (isOpen.current ? SWIPE_THRESHOLD : 0)));
+        translateX.setValue(newX);
+      },
+      onPanResponderRelease: (_, g) => {
+        const currentX = isOpen.current ? g.dx + SWIPE_THRESHOLD : g.dx;
+        if (currentX < SWIPE_THRESHOLD / 2) {
+          Animated.spring(translateX, { toValue: SWIPE_THRESHOLD, useNativeDriver: true }).start();
+          isOpen.current = true;
+        } else {
+          Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+          isOpen.current = false;
+        }
+      },
+    })
+  ).current;
+
+  const close = useCallback(() => {
+    Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+    isOpen.current = false;
+  }, [translateX]);
+
+  const hasUnread = Number(item.unread_count) > 0;
+
+  return (
+    <View style={s.swipeContainer}>
+      {/* Red delete background */}
+      <View style={s.deleteBack}>
+        <TouchableOpacity
+          onPress={() => {
+            close();
+            onDelete();
+          }}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <Ionicons name="trash" size={22} color="#fff" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Sliding row */}
+      <Animated.View
+        style={{ transform: [{ translateX }] }}
+        {...panResponder.panHandlers}
+      >
+        <TouchableOpacity
+          style={[s.convoRow, index < total - 1 && s.convoRowBorder]}
+          onPress={() => {
+            if (isOpen.current) { close(); return; }
+            onOpen();
+          }}
+          activeOpacity={0.85}
+          testID={`dm-convo-${item.friend_id}`}
+        >
+          <View style={s.avatarCircle}>
+            {resolveImgUrl(item.friend_photo) ? (
+              <ExpoImage
+                source={{ uri: resolveImgUrl(item.friend_photo)! }}
+                style={{ width: 50, height: 50, borderRadius: 25 }}
+                contentFit="cover"
+              />
+            ) : (
+              <Text style={s.avatarLetter}>{avatarLetter(item.friend_name)}</Text>
+            )}
+          </View>
+          <View style={s.convoMeta}>
+            <View style={s.convoNameRow}>
+              <Text style={s.convoName}>{item.friend_name}</Text>
+              <Text style={s.convoTime}>{formatTime(item.last_message_at)}</Text>
+            </View>
+            <View style={s.convoPreviewRow}>
+              <Text
+                style={[s.convoPreview, hasUnread && s.convoPreviewUnread]}
+                numberOfLines={1}
+              >
+                {item.last_message}
+              </Text>
+              {hasUnread && <View style={s.unreadDot} />}
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Animated.View>
+    </View>
+  );
+}
+
+// ─── Main Screen ───────────────────────────────────────────────────────────────
 export default function MessagesScreen() {
   const { C } = useTheme();
   const s = useMemo(() => makeStyles(C), [C]);
@@ -283,10 +291,35 @@ export default function MessagesScreen() {
     enabled: showCompose,
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async (friendId: string) => {
+      await apiRequest("DELETE", `/api/dm/${friendId}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/dm/conversations"] });
+      qc.invalidateQueries({ queryKey: ["/api/dm/unread-count"] });
+    },
+  });
+
   const openThread = useCallback((friendId: string, friendName: string, friendUsername?: string | null, friendPhoto?: string | null) => {
     setShowCompose(false);
     router.push({ pathname: "/dm/[friendId]", params: { friendId, friendName, friendUsername: friendUsername ?? "", friendPhoto: friendPhoto ?? "" } });
   }, [router]);
+
+  const handleDelete = useCallback((friendId: string, friendName: string) => {
+    Alert.alert(
+      "Delete conversation",
+      `Delete your conversation with ${friendName}? This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => deleteMutation.mutate(friendId),
+        },
+      ]
+    );
+  }, [deleteMutation]);
 
   const topPad = Platform.OS === "web" ? 0 : insets.top;
 
@@ -324,43 +357,17 @@ export default function MessagesScreen() {
           keyExtractor={(item) => item.friend_id}
           contentContainerStyle={s.listContent}
           showsVerticalScrollIndicator={false}
-          renderItem={({ item, index }) => {
-            const hasUnread = Number(item.unread_count) > 0;
-            return (
-              <TouchableOpacity
-                style={[s.convoRow, index < conversations.length - 1 && s.convoRowBorder]}
-                onPress={() => openThread(item.friend_id, item.friend_name, item.friend_username, item.friend_photo)}
-                testID={`dm-convo-${item.friend_id}`}
-              >
-                <View style={s.avatarCircle}>
-                  {resolveImgUrl(item.friend_photo) ? (
-                    <ExpoImage
-                      source={{ uri: resolveImgUrl(item.friend_photo)! }}
-                      style={{ width: 50, height: 50, borderRadius: 25 }}
-                      contentFit="cover"
-                    />
-                  ) : (
-                    <Text style={s.avatarLetter}>{avatarLetter(item.friend_name)}</Text>
-                  )}
-                </View>
-                <View style={s.convoMeta}>
-                  <View style={s.convoNameRow}>
-                    <Text style={s.convoName}>{item.friend_name}</Text>
-                    <Text style={s.convoTime}>{formatTime(item.last_message_at)}</Text>
-                  </View>
-                  <View style={s.convoPreviewRow}>
-                    <Text
-                      style={[s.convoPreview, hasUnread && s.convoPreviewUnread]}
-                      numberOfLines={1}
-                    >
-                      {item.last_message}
-                    </Text>
-                    {hasUnread && <View style={s.unreadDot} />}
-                  </View>
-                </View>
-              </TouchableOpacity>
-            );
-          }}
+          renderItem={({ item, index }) => (
+            <SwipeableConvoRow
+              item={item}
+              index={index}
+              total={conversations.length}
+              s={s}
+              C={C}
+              onOpen={() => openThread(item.friend_id, item.friend_name, item.friend_username, item.friend_photo)}
+              onDelete={() => handleDelete(item.friend_id, item.friend_name)}
+            />
+          )}
         />
       )}
 

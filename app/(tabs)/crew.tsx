@@ -1086,6 +1086,7 @@ function CrewDetailSheet({
                       testID="gif-btn"
                       style={s.gifPickerBtn}
                       onPress={() => {
+                        Keyboard.dismiss();
                         setGifSearch("");
                         setGifResults([]);
                         setShowGifPicker(true);

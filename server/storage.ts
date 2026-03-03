@@ -2611,6 +2611,15 @@ export async function markDmRead(userId: string, friendId: string) {
   );
 }
 
+export async function deleteDmThread(userId: string, friendId: string) {
+  await pool.query(
+    `DELETE FROM direct_messages
+     WHERE (sender_id = $1 AND recipient_id = $2)
+        OR (sender_id = $2 AND recipient_id = $1)`,
+    [userId, friendId]
+  );
+}
+
 export async function getDmUnreadCount(userId: string): Promise<number> {
   const res = await pool.query(
     `SELECT COUNT(*) as cnt FROM direct_messages

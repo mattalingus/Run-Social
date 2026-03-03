@@ -1412,6 +1412,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
+  app.delete("/api/dm/:friendId", requireAuth, async (req, res) => {
+    try {
+      await storage.deleteDmThread(req.session.userId!, req.params.friendId);
+      res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
   app.post("/api/admin/seed-runs", async (req, res) => {
     try {
       const { count = 20 } = req.body;
