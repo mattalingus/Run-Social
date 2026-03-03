@@ -300,6 +300,17 @@ export async function initDb() {
     ALTER TABLE crew_messages ADD COLUMN IF NOT EXISTS message_type TEXT DEFAULT 'text';
     ALTER TABLE crew_messages ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT NULL;
     ALTER TABLE crew_members ADD COLUMN IF NOT EXISTS chat_muted BOOLEAN DEFAULT false;
+
+    CREATE TABLE IF NOT EXISTS direct_messages (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      sender_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      recipient_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      message TEXT NOT NULL,
+      read_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_dm_sender_recipient ON direct_messages(sender_id, recipient_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_dm_recipient ON direct_messages(recipient_id, created_at DESC);
   `);
 }
 
@@ -2512,4 +2523,90 @@ export async function getWeeklyStatsForUser(userId: string): Promise<{ runs: num
     totalMi: parseFloat(res.rows[0].total_mi),
     totalSeconds: parseInt(res.rows[0].total_seconds, 10),
   };
+}
+
+export async function getDmConversations(userId: string) {
+  const res = await pool.query(
+    `SELECT
+       other_user.id as friend_id,
+       other_user.name as friend_name,
+       other_user.photo_url as friend_photo,
+       last_msg.message as last_message,
+       last_msg.created_at as last_message_at,
+       last_msg.sender_id as last_sender_id,
+       COUNT(unread.id) as unread_count
+     FROM (
+       SELECT DISTINCT
+         CASE WHEN sender_id = $1 THEN recipient_id ELSE sender_id END as other_id
+       FROM direct_messages
+       WHERE sender_id = $1 OR recipient_id = $1
+     ) pairs
+     JOIN users other_user ON other_user.id = pairs.other_id
+     JOIN LATERAL (
+       SELECT message, created_at, sender_id
+       FROM direct_messages
+       WHERE (sender_id = $1 AND recipient_id = pairs.other_id)
+          OR (sender_id = pairs.other_id AND recipient_id = $1)
+       ORDER BY created_at DESC
+       LIMIT 1
+     ) last_msg ON true
+     LEFT JOIN direct_messages unread
+       ON unread.recipient_id = $1
+      AND unread.sender_id = pairs.other_id
+      AND unread.read_at IS NULL
+     GROUP BY other_user.id, other_user.name, other_user.photo_url,
+              last_msg.message, last_msg.created_at, last_msg.sender_id
+     ORDER BY last_msg.created_at DESC`,
+    [userId]
+  );
+  return res.rows;
+}
+
+export async function getDmThread(userId: string, friendId: string, limit = 50) {
+  const res = await pool.query(
+    `SELECT dm.*, 
+       sender.name as sender_name,
+       sender.photo_url as sender_photo
+     FROM direct_messages dm
+     JOIN users sender ON sender.id = dm.sender_id
+     WHERE (dm.sender_id = $1 AND dm.recipient_id = $2)
+        OR (dm.sender_id = $2 AND dm.recipient_id = $1)
+     ORDER BY dm.created_at DESC
+     LIMIT $3`,
+    [userId, friendId, limit]
+  );
+  return res.rows;
+}
+
+export async function sendDm(senderId: string, recipientId: string, message: string) {
+  const friendCheck = await pool.query(
+    `SELECT id FROM friends
+     WHERE ((requester_id = $1 AND addressee_id = $2) OR (requester_id = $2 AND addressee_id = $1))
+       AND status = 'accepted'`,
+    [senderId, recipientId]
+  );
+  if (friendCheck.rows.length === 0) throw new Error("Not friends");
+  const res = await pool.query(
+    `INSERT INTO direct_messages (sender_id, recipient_id, message)
+     VALUES ($1, $2, $3) RETURNING *`,
+    [senderId, recipientId, message]
+  );
+  return res.rows[0];
+}
+
+export async function markDmRead(userId: string, friendId: string) {
+  await pool.query(
+    `UPDATE direct_messages SET read_at = NOW()
+     WHERE recipient_id = $1 AND sender_id = $2 AND read_at IS NULL`,
+    [userId, friendId]
+  );
+}
+
+export async function getDmUnreadCount(userId: string): Promise<number> {
+  const res = await pool.query(
+    `SELECT COUNT(*) as cnt FROM direct_messages
+     WHERE recipient_id = $1 AND read_at IS NULL`,
+    [userId]
+  );
+  return parseInt(res.rows[0].cnt, 10);
 }

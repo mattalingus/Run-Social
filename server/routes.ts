@@ -1362,6 +1362,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
+  app.get("/api/dm/conversations", requireAuth, async (req, res) => {
+    try {
+      const convos = await storage.getDmConversations(req.session.userId!);
+      res.json(convos);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/dm/unread-count", requireAuth, async (req, res) => {
+    try {
+      const count = await storage.getDmUnreadCount(req.session.userId!);
+      res.json({ count });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/dm/:friendId", requireAuth, async (req, res) => {
+    try {
+      const limit = Math.min(Number(req.query.limit) || 50, 100);
+      const messages = await storage.getDmThread(req.session.userId!, req.params.friendId, limit);
+      res.json(messages);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/dm/:friendId", requireAuth, async (req, res) => {
+    try {
+      const { message } = req.body;
+      if (!message?.trim()) return res.status(400).json({ message: "Message required" });
+      const dm = await storage.sendDm(req.session.userId!, req.params.friendId, message.trim());
+      res.json(dm);
+    } catch (e: any) {
+      if (e.message === "Not friends") return res.status(403).json({ message: "Not friends" });
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/dm/:friendId/read", requireAuth, async (req, res) => {
+    try {
+      await storage.markDmRead(req.session.userId!, req.params.friendId);
+      res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
   app.post("/api/admin/seed-runs", async (req, res) => {
     try {
       const { count = 20 } = req.body;
