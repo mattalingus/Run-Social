@@ -1097,7 +1097,7 @@ export default function DiscoverScreen() {
                       </View>
                       <View style={s.savedCardMeta}>
                         <Feather name="calendar" size={11} color={C.textMuted} />
-                        <Text style={s.savedCardMetaTxt}>{formatDate(r.date)}</Text>
+                        <Text style={s.savedCardMetaTxt}>{formatDate(r.date)} · {formatTime(r.date)}</Text>
                       </View>
                       <View style={s.savedCardMeta}>
                         <Feather name="map-pin" size={11} color={C.textMuted} />
@@ -1138,7 +1138,7 @@ export default function DiscoverScreen() {
                       <Text style={s.plannedCardTitle} numberOfLines={2}>{r.title}</Text>
                       <View style={s.savedCardMeta}>
                         <Feather name="calendar" size={12} color={C.textMuted} />
-                        <Text style={s.savedCardMetaTxt}>{formatDate(r.date)}</Text>
+                        <Text style={s.savedCardMetaTxt}>{formatDate(r.date)} · {formatTime(r.date)}</Text>
                       </View>
                       <View style={s.savedCardMeta}>
                         <Feather name="map-pin" size={12} color={C.textMuted} />
