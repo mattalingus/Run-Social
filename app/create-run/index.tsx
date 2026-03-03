@@ -10,6 +10,7 @@ import {
   Platform,
   Modal,
   Share,
+  KeyboardAvoidingView,
 } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import * as Location from "expo-location";
@@ -124,12 +125,26 @@ export default function CreateRunScreen() {
       if (results.length > 0) {
         const r = results[0];
         const parts = [r.name, r.street, r.city, r.region].filter(Boolean);
-        setLocationName(parts.join(", "));
+        setPickerName(parts.join(", "));
       }
     } catch { } finally {
       setIsGeocodingPin(false);
     }
   }
+
+  useEffect(() => {
+    if (!locationPickerOpen) return;
+    if (parseFloat(locationLat) && parseFloat(locationLng)) return;
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") return;
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        setPickerLat(loc.coords.latitude);
+        setPickerLng(loc.coords.longitude);
+      } catch {}
+    })();
+  }, [locationPickerOpen]);
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -540,8 +555,10 @@ export default function CreateRunScreen() {
                     longitudeDelta: 0.01,
                   }}
                   onPress={(e) => {
-                    setPickerLat(e.nativeEvent.coordinate.latitude);
-                    setPickerLng(e.nativeEvent.coordinate.longitude);
+                    const { latitude, longitude } = e.nativeEvent.coordinate;
+                    setPickerLat(latitude);
+                    setPickerLng(longitude);
+                    reverseGeocode(latitude, longitude);
                     Haptics.selectionAsync();
                   }}
                 >
@@ -569,29 +586,38 @@ export default function CreateRunScreen() {
               </View>
             )}
 
-            <View style={[styles.pickerBottom, { paddingBottom: insets.bottom + 16 }]}>
-              <TextInput
-                style={styles.pickerInput}
-                value={pickerName}
-                onChangeText={setPickerName}
-                placeholder="Location name (e.g. Central Park South Entrance)"
-                placeholderTextColor={C.textMuted}
-              />
-              <Pressable
-                style={({ pressed }) => [styles.pickerConfirm, { opacity: pressed ? 0.85 : 1 }]}
-                onPress={() => {
-                  if (!pickerName.trim()) { Alert.alert("Name required", "Type a name for this location"); return; }
-                  setLocationLat(String(pickerLat));
-                  setLocationLng(String(pickerLng));
-                  setLocationName(pickerName.trim());
-                  setLocationPickerOpen(false);
-                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                }}
-              >
-                <Feather name="check" size={16} color={C.bg} />
-                <Text style={styles.pickerConfirmTxt}>Use This Location</Text>
-              </Pressable>
-            </View>
+            <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"}>
+              <View style={[styles.pickerBottom, { paddingBottom: insets.bottom + 16 }]}>
+                {isGeocodingPin && (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                    <ActivityIndicator size="small" color={C.primary} />
+                    <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted }}>Finding location name…</Text>
+                  </View>
+                )}
+                <TextInput
+                  style={styles.pickerInput}
+                  value={pickerName}
+                  onChangeText={setPickerName}
+                  placeholder="Location name (e.g. Central Park South Entrance)"
+                  placeholderTextColor={C.textMuted}
+                  returnKeyType="done"
+                />
+                <Pressable
+                  style={({ pressed }) => [styles.pickerConfirm, { opacity: pressed ? 0.85 : 1 }]}
+                  onPress={() => {
+                    if (!pickerName.trim()) { Alert.alert("Name required", "Type a name for this location"); return; }
+                    setLocationLat(String(pickerLat));
+                    setLocationLng(String(pickerLng));
+                    setLocationName(pickerName.trim());
+                    setLocationPickerOpen(false);
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                  }}
+                >
+                  <Feather name="check" size={16} color={C.bg} />
+                  <Text style={styles.pickerConfirmTxt}>Use This Location</Text>
+                </Pressable>
+              </View>
+            </KeyboardAvoidingView>
           </View>
         </Modal>
       )}
