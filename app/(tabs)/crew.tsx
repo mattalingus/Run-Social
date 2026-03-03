@@ -692,6 +692,13 @@ function CrewDetailSheet({
     }
   }, [crewMessages.length]);
 
+  useEffect(() => {
+    const sub = Keyboard.addListener("keyboardDidShow", () => {
+      detailScrollRef.current?.scrollToEnd({ animated: false });
+    });
+    return () => sub.remove();
+  }, []);
+
   async function fetchGifs(query: string) {
     setGifLoading(true);
     try {
@@ -1066,11 +1073,6 @@ function CrewDetailSheet({
                       blurOnSubmit={false}
                       returnKeyType="send"
                       editable={!chatSending}
-                      onFocus={() => {
-                        setTimeout(() => {
-                          detailScrollRef.current?.scrollToEnd({ animated: true });
-                        }, 350);
-                      }}
                     />
                     <TouchableOpacity
                       testID="gif-btn"
