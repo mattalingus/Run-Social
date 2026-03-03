@@ -55,7 +55,7 @@ interface FilterState {
   distMax: number;
   maxDistFromMe: number | null;
   styles: string[];
-  visibility: "all" | "public" | "friends";
+  visibility: "all" | "public" | "crew" | "friends";
 }
 
 const DEFAULT_FILTERS: FilterState = {
@@ -93,6 +93,7 @@ interface Run {
   is_active?: boolean;
   run_style?: string;
   activity_type?: string;
+  crew_id?: string | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -313,8 +314,8 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
           <View style={fm.section}>
             <Text style={fm.sectionTitle}>Visibility</Text>
             <View style={fm.proxRow}>
-              {(["all", "public", "friends"] as const).map((opt) => {
-                const labels = { all: "All", public: "Public", friends: "Friends" };
+              {(["all", "public", "crew", "friends"] as const).map((opt) => {
+                const labels = { all: "All", public: "Public", crew: "Crew", friends: "Friends" };
                 const active = draft.visibility === opt;
                 return (
                   <Pressable
@@ -843,8 +844,9 @@ export default function DiscoverScreen() {
       // Visibility
       const matchVisibility =
         applied.visibility === "all" ||
-        (applied.visibility === "public" && r.privacy === "public") ||
-        (applied.visibility === "friends" && friendIdSet.has(r.host_id));
+        (applied.visibility === "public" && r.privacy === "public" && !r.crew_id) ||
+        (applied.visibility === "crew" && !!r.crew_id) ||
+        (applied.visibility === "friends" && friendIdSet.has(r.host_id) && !r.crew_id);
 
       const matchActivity = (r.activity_type ?? "run") === activityFilter;
       return matchSearch && matchPace && matchDist && matchProx && matchStyle && matchVisibility && matchActivity;

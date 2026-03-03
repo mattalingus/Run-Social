@@ -53,6 +53,7 @@ const DEFAULT_FILTERS = {
   distMin: 1,
   distMax: 20,
   styles: [] as string[],
+  visibility: "all" as "all" | "public" | "crew" | "friends",
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -80,6 +81,7 @@ interface Run {
   is_active?: boolean;
   activity_type?: string;
   crew_photo_url?: string | null;
+  crew_id?: string | null;
 }
 
 interface CommunityPath {
@@ -300,7 +302,8 @@ export default function MapScreen() {
     applied.paceMax !== DEFAULT_FILTERS.paceMax ||
     applied.distMin !== DEFAULT_FILTERS.distMin ||
     applied.distMax !== DEFAULT_FILTERS.distMax ||
-    applied.styles.length > 0;
+    applied.styles.length > 0 ||
+    applied.visibility !== "all";
 
   const queryUrl = useMemo(() => {
     const p = new URLSearchParams();
@@ -343,15 +346,16 @@ export default function MapScreen() {
   // Only runs/rides matching the activity filter and visible in the map viewport
   const visibleRuns = useMemo(() => {
     if (!bounds) return [];
-    return runs.filter(
-      (r) =>
-        (r.activity_type ?? "run") === activityFilter &&
-        r.location_lat >= bounds.swLat &&
-        r.location_lat <= bounds.neLat &&
-        r.location_lng >= bounds.swLng &&
-        r.location_lng <= bounds.neLng
-    );
-  }, [runs, bounds, activityFilter]);
+    return runs.filter((r) => {
+      if ((r.activity_type ?? "run") !== activityFilter) return false;
+      if (r.location_lat < bounds.swLat || r.location_lat > bounds.neLat) return false;
+      if (r.location_lng < bounds.swLng || r.location_lng > bounds.neLng) return false;
+      if (applied.visibility === "public" && (r.privacy !== "public" || !!r.crew_id)) return false;
+      if (applied.visibility === "crew" && !r.crew_id) return false;
+      if (applied.visibility === "friends" && (!!r.crew_id || r.privacy === "public")) return false;
+      return true;
+    });
+  }, [runs, bounds, activityFilter, applied.visibility]);
 
   const insights = useMemo(() => {
     if (visibleRuns.length === 0) return [];
@@ -919,6 +923,27 @@ export default function MapScreen() {
                     >
                       {on && <Feather name="check" size={12} color={C.primary} style={{ marginRight: 4 }} />}
                       <Text style={[s.styleTxt, on && s.styleTxtOn]}>{st}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View style={s.section}>
+              <Text style={s.sectionLabel}>Visibility</Text>
+              <View style={{ height: 12 }} />
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                {(["all", "public", "crew", "friends"] as const).map((opt) => {
+                  const labels = { all: "All", public: "Public", crew: "Crew", friends: "Friends" };
+                  const active = draft.visibility === opt;
+                  return (
+                    <Pressable
+                      key={opt}
+                      style={[s.stylePill, active && s.stylePillOn]}
+                      onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setDraft((p) => ({ ...p, visibility: opt })); }}
+                    >
+                      {active && <Feather name="check" size={12} color={C.primary} style={{ marginRight: 4 }} />}
+                      <Text style={[s.styleTxt, active && s.styleTxtOn]}>{labels[opt]}</Text>
                     </Pressable>
                   );
                 })}
