@@ -655,7 +655,7 @@ export default function RunDetailScreen() {
 
         <View style={styles.requirementsCard}>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-            <Text style={styles.requirementsTitle}>Requirements</Text>
+            <Text style={styles.requirementsTitle}>Plan</Text>
             {run.is_strict && (
               <View style={{ backgroundColor: C.orange + "22", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: C.orange + "55" }}>
                 <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.orange }}>Strict</Text>
@@ -677,8 +677,17 @@ export default function RunDetailScreen() {
             <View style={styles.reqDivider} />
             <View style={styles.reqItem}>
               <Ionicons name="people" size={20} color={C.textSecondary} />
-              <Text style={styles.reqValue}>{run.participant_count}/{run.max_participants}</Text>
-              <Text style={styles.reqLabel}>Participants</Text>
+              {run.privacy === "crew" ? (
+                <>
+                  <Text style={styles.reqValue}>{Math.max(1, run.participant_count ?? 0)}</Text>
+                  <Text style={styles.reqLabel}>Coming</Text>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.reqValue}>{run.participant_count}/{run.max_participants}</Text>
+                  <Text style={styles.reqLabel}>Participants</Text>
+                </>
+              )}
             </View>
           </View>
           {parseInt(run.plan_count) > 0 && (
