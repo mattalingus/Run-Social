@@ -1000,7 +1000,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const result = await storage.requestToJoinCrew(req.params.id, req.session.userId!);
       if ("error" in result) return res.status(400).json({ message: result.error });
+      const crew = await storage.getCrewById(req.params.id);
+      if (crew) {
+        const chief = await storage.getUserById(crew.created_by);
+        const requester = await storage.getUserById(req.session.userId!);
+        if (chief?.push_token) {
+          sendPushNotification(
+            chief.push_token,
+            `New join request for ${crew.name}`,
+            `${requester?.name ?? "Someone"} wants to join your crew`,
+            { crewId: crew.id, screen: "crew-requests" }
+          );
+        }
+      }
       res.json(result);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/crews/:id/join-requests", requireAuth, async (req, res) => {
+    try {
+      const crew = await storage.getCrewById(req.params.id);
+      if (!crew) return res.status(404).json({ message: "Crew not found" });
+      if (crew.created_by !== req.session.userId!) return res.status(403).json({ message: "Only the Crew Chief can view requests" });
+      const requests = await storage.getCrewJoinRequests(req.params.id);
+      res.json(requests);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/crews/:id/join-requests/:requesterId/respond", requireAuth, async (req, res) => {
+    try {
+      const crew = await storage.getCrewById(req.params.id);
+      if (!crew) return res.status(404).json({ message: "Crew not found" });
+      if (crew.created_by !== req.session.userId!) return res.status(403).json({ message: "Only the Crew Chief can respond to requests" });
+      const { accept } = req.body;
+      await storage.respondToCrewJoinRequest(req.params.id, req.params.requesterId, !!accept);
+      const requester = await storage.getUserById(req.params.requesterId);
+      if (requester?.push_token) {
+        sendPushNotification(
+          requester.push_token,
+          accept ? `You're in! 🎉` : `Join request for ${crew.name}`,
+          accept
+            ? `${crew.name} accepted your request to join`
+            : `Your request to join ${crew.name} was declined`,
+          { crewId: crew.id }
+        );
+      }
+      res.json({ ok: true });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 

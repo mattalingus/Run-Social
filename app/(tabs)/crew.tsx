@@ -59,6 +59,17 @@ interface Crew {
   created_by_name: string;
   run_style?: string;
   tags?: string[];
+  pending_request_count?: number;
+}
+
+interface JoinRequest {
+  user_id: string;
+  name: string;
+  username?: string;
+  photo_url?: string;
+  avg_pace?: number;
+  completed_runs?: number;
+  requested_at: string;
 }
 
 interface CrewMember {
@@ -148,6 +159,7 @@ function InviteBanner({ invite, onAccept, onDecline }: { invite: CrewInvite; onA
 // ─── Crew Card ────────────────────────────────────────────────────────────────
 function CrewCard({ crew, onPress }: { crew: Crew; onPress: () => void }) {
   const vibes = crew.tags ?? [];
+  const pendingCount = parseInt(String(crew.pending_request_count ?? 0));
   return (
     <TouchableOpacity style={s.crewCard} onPress={onPress} activeOpacity={0.75} testID={`crew-card-${crew.id}`}>
       <View style={s.crewCardLeft}>
@@ -156,6 +168,11 @@ function CrewCard({ crew, onPress }: { crew: Crew; onPress: () => void }) {
             <Image source={{ uri: resolveImgUrl(crew.image_url)! }} style={{ width: 52, height: 52, borderRadius: 26 }} />
           ) : (
             <Text style={s.crewEmojiText}>{crew.emoji}</Text>
+          )}
+          {pendingCount > 0 && (
+            <View style={s.requestBadge}>
+              <Text style={s.requestBadgeTxt}>{pendingCount}</Text>
+            </View>
           )}
         </View>
         <View style={s.crewCardInfo}>
@@ -380,10 +397,12 @@ function InviteUserSheet({
   onClose,
   crewId,
   existingMemberIds,
+  pendingRequestIds,
 }: {
   onClose: () => void;
   crewId: string;
   existingMemberIds: string[];
+  pendingRequestIds: string[];
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<UserSearchResult[]>([]);
@@ -474,7 +493,12 @@ function InviteUserSheet({
                   {(u.hosted_runs ?? 0) > 0 ? `${u.hosted_runs} hosted` : ""}
                 </Text>
               </View>
-              {invited.has(u.id) ? (
+              {pendingRequestIds.includes(u.id) ? (
+                <View style={[s.invitedBadge, { borderColor: C.orange + "88" }]}>
+                  <Ionicons name="time-outline" size={14} color={C.orange} />
+                  <Text style={[s.invitedBadgeTxt, { color: C.orange }]}>Requested</Text>
+                </View>
+              ) : invited.has(u.id) ? (
                 <View style={s.invitedBadge}>
                   <Ionicons name="checkmark" size={14} color={C.primary} />
                   <Text style={s.invitedBadgeTxt}>Invited</Text>
@@ -524,6 +548,24 @@ function CrewDetailSheet({
   const { data: crewHistory = [] } = useQuery<CrewHistoryRun[]>({
     queryKey: ["/api/crews", crew?.id, "history"],
     enabled: !!crew?.id,
+  });
+
+  const isCreatorLocal = crew?.created_by === currentUserId;
+
+  const { data: joinRequests = [], refetch: refetchRequests } = useQuery<JoinRequest[]>({
+    queryKey: ["/api/crews", crew?.id, "join-requests"],
+    enabled: !!crew?.id && isCreatorLocal,
+  });
+
+  const respondMutation = useMutation({
+    mutationFn: ({ userId, accept }: { userId: string; accept: boolean }) =>
+      apiRequest("POST", `/api/crews/${crew?.id}/join-requests/${userId}/respond`, { accept }).then((r) => r.json()),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/crews", crew?.id, "join-requests"] });
+      qc.invalidateQueries({ queryKey: ["/api/crews", crew?.id] });
+      qc.invalidateQueries({ queryKey: ["/api/crews"] });
+    },
+    onError: (e: any) => Alert.alert("Error", e.message ?? "Could not respond to request"),
   });
 
   const leaveMutation = useMutation({
@@ -620,6 +662,52 @@ function CrewDetailSheet({
               </View>
 
               <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
+
+                {/* Join Requests — crew chief only */}
+                {isCreatorLocal && joinRequests.length > 0 && (
+                  <View style={[s.detailSection, s.requestsSection]}>
+                    <View style={s.detailSectionHeader}>
+                      <Text style={s.detailSectionTitle}>
+                        Join Requests
+                      </Text>
+                      <View style={s.requestCountBadge}>
+                        <Text style={s.requestCountBadgeTxt}>{joinRequests.length}</Text>
+                      </View>
+                    </View>
+                    {joinRequests.map((req) => (
+                      <View key={req.user_id} style={s.requestRow}>
+                        {resolveImgUrl(req.photo_url) ? (
+                          <Image
+                            source={{ uri: resolveImgUrl(req.photo_url)! }}
+                            style={[s.memberAvatar, { overflow: "hidden" }]}
+                          />
+                        ) : (
+                          <View style={s.memberAvatar}>
+                            <Text style={s.memberAvatarText}>{req.name[0]?.toUpperCase()}</Text>
+                          </View>
+                        )}
+                        <View style={s.requestInfo}>
+                          <Text style={s.memberName}>{req.name}</Text>
+                          {req.username ? <Text style={s.memberMeta}>@{req.username}</Text> : null}
+                        </View>
+                        <TouchableOpacity
+                          style={s.requestAcceptBtn}
+                          onPress={() => respondMutation.mutate({ userId: req.user_id, accept: true })}
+                          disabled={respondMutation.isPending}
+                        >
+                          <Text style={s.requestAcceptTxt}>Accept</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={s.requestDeclineBtn}
+                          onPress={() => respondMutation.mutate({ userId: req.user_id, accept: false })}
+                          disabled={respondMutation.isPending}
+                        >
+                          <Ionicons name="close" size={16} color={C.danger} />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                )}
 
                 {/* Members */}
                 <View style={s.detailSection}>
@@ -839,6 +927,7 @@ function CrewDetailSheet({
               onClose={() => setShowInvite(false)}
               crewId={crew.id}
               existingMemberIds={memberIds}
+              pendingRequestIds={joinRequests.map((r) => r.user_id)}
             />
           )}
         </View>
@@ -1984,5 +2073,57 @@ const s = StyleSheet.create({
     fontFamily: "Outfit_600SemiBold",
     fontSize: 13,
     color: C.primary,
+  },
+  requestsSection: {
+    borderWidth: 1,
+    borderColor: C.primary + "30",
+    borderRadius: 14,
+    backgroundColor: C.surface,
+  },
+  requestCountBadge: {
+    backgroundColor: C.danger,
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 6,
+  },
+  requestCountBadgeTxt: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 11,
+    color: "#fff",
+  },
+  requestRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 2,
+    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: C.card,
+  },
+  requestInfo: {
+    flex: 1,
+  },
+  requestAcceptBtn: {
+    backgroundColor: C.primary,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  requestAcceptTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 13,
+    color: C.bg,
+  },
+  requestDeclineBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: C.danger + "60",
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

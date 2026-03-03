@@ -376,7 +376,9 @@ export async function getUserRecentDistances(userId: string, limit = 10): Promis
 
 export async function searchUsers(query: string, currentUserId: string) {
   const result = await pool.query(
-    `SELECT id, name, username, photo_url, completed_runs, total_miles FROM users WHERE id != $1 AND username ILIKE $2 LIMIT 20`,
+    `SELECT id, name, username, photo_url, completed_runs, total_miles FROM users
+     WHERE id != $1 AND (username ILIKE $2 OR name ILIKE $2)
+     LIMIT 20`,
     [currentUserId, `%${query}%`]
   );
   return result.rows;
@@ -1893,7 +1895,11 @@ export async function getCrewsByUser(userId: string) {
   const res = await pool.query(
     `SELECT c.*, cm.status,
        (SELECT COUNT(*) FROM crew_members WHERE crew_id = c.id AND status = 'member') AS member_count,
-       u.name AS created_by_name
+       u.name AS created_by_name,
+       CASE WHEN c.created_by = $1
+         THEN (SELECT COUNT(*) FROM crew_members WHERE crew_id = c.id AND status = 'pending')
+         ELSE 0
+       END AS pending_request_count
      FROM crews c
      JOIN crew_members cm ON cm.crew_id = c.id AND cm.user_id = $1 AND cm.status = 'member'
      JOIN users u ON u.id = c.created_by
@@ -1901,6 +1907,32 @@ export async function getCrewsByUser(userId: string) {
     [userId]
   );
   return res.rows;
+}
+
+export async function getCrewJoinRequests(crewId: string) {
+  const res = await pool.query(
+    `SELECT cm.user_id, cm.joined_at AS requested_at, u.name, u.username, u.photo_url, u.avg_pace, u.completed_runs
+     FROM crew_members cm
+     JOIN users u ON u.id = cm.user_id
+     WHERE cm.crew_id = $1 AND cm.status = 'pending'
+     ORDER BY cm.joined_at ASC`,
+    [crewId]
+  );
+  return res.rows;
+}
+
+export async function respondToCrewJoinRequest(crewId: string, requesterId: string, accept: boolean) {
+  if (accept) {
+    await pool.query(
+      `UPDATE crew_members SET status = 'member', invited_by = invited_by WHERE crew_id = $1 AND user_id = $2 AND status = 'pending'`,
+      [crewId, requesterId]
+    );
+  } else {
+    await pool.query(
+      `DELETE FROM crew_members WHERE crew_id = $1 AND user_id = $2 AND status = 'pending'`,
+      [crewId, requesterId]
+    );
+  }
 }
 
 export async function getCrewById(crewId: string) {
