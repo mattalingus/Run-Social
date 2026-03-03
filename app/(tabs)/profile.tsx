@@ -838,9 +838,9 @@ export default function ProfileScreen() {
       </View>
 
 
-      {/* ── Run / Ride History ────────────────────────────────────────────── */}
+      {/* ── Run / Ride Schedule ───────────────────────────────────────────── */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{profileActivity === "ride" ? "Ride History" : "Run History"}</Text>
+        <Text style={styles.sectionTitle}>{profileActivity === "ride" ? "Ride Schedule" : "Run Schedule"}</Text>
         {runsLoading ? (
           <ActivityIndicator color={C.primary} />
         ) : runs.filter((r) => (r.activity_type ?? "run") === profileActivity).length === 0 ? (
