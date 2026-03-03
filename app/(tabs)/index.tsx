@@ -143,6 +143,13 @@ function formatPace(pace: number) {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
+function getPaceColor(minPace: number, maxPace: number, C: { orange: string; gold: string; primary: string }): string {
+  if (maxPace >= 15 || (maxPace - minPace) >= 10) return C.gold;
+  if (minPace < 6) return "#C0392B";
+  if (minPace < 9) return C.orange;
+  return C.primary;
+}
+
 function formatDate(dateStr: string) {
   const d = new Date(dateStr);
   const days = Math.floor((d.getTime() - Date.now()) / 86400000);
@@ -566,8 +573,8 @@ function RunCard({
 
           <View style={s.cardStats}>
             <View style={s.stat}>
-              <Ionicons name={run.activity_type === "ride" ? "bicycle" : "walk"} size={12} color={C.orange} />
-              <Text style={s.statLabel}>{formatPace(run.min_pace)}–{formatPace(run.max_pace)}</Text>
+              <Ionicons name={run.activity_type === "ride" ? "bicycle" : "walk"} size={12} color={getPaceColor(run.min_pace, run.max_pace, C)} />
+              <Text style={[s.statLabel, { color: getPaceColor(run.min_pace, run.max_pace, C) }]}>{formatPace(run.min_pace)}–{formatPace(run.max_pace)}</Text>
               <Text style={s.statUnit}>/mi</Text>
             </View>
             <View style={s.statDiv} />
