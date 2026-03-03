@@ -130,6 +130,8 @@ function avatarUrl(name: string) {
 // ─── Custom Marker ─────────────────────────────────────────────────────────
 
 function LockedRunMarker({ run, isSelected, onPress }: { run: Run; isSelected: boolean; onPress: () => void }) {
+  const { C } = useTheme();
+  const mk = useMemo(() => makeMkStyles(C), [C]);
   const scale = useRef(new Animated.Value(1)).current;
 
   function handlePress() {
@@ -159,6 +161,8 @@ function LockedRunMarker({ run, isSelected, onPress }: { run: Run; isSelected: b
 }
 
 function RunMarker({ run, isSelected, isFriend, onPress }: { run: Run; isSelected: boolean; isFriend?: boolean; onPress: () => void }) {
+  const { C } = useTheme();
+  const mk = useMemo(() => makeMkStyles(C), [C]);
   const scale = useRef(new Animated.Value(1)).current;
   const frozen = useRef(false);
   const [tracksViewChanges, setTracksViewChanges] = useState(true);
@@ -1092,8 +1096,8 @@ function makeSStyles(C: ColorScheme) { return StyleSheet.create({
   chipLiveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.primary },
   cardAvatarLocked: {
     width: 48, height: 48, borderRadius: 24,
-    backgroundColor: "#1C1C1C", alignItems: "center", justifyContent: "center",
-    borderWidth: 2, borderColor: "#333",
+    backgroundColor: C.card, alignItems: "center", justifyContent: "center",
+    borderWidth: 2, borderColor: C.border,
   },
   lockedHint: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10, marginTop: -6 },
   lockedHintTxt: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted, flex: 1 },
@@ -1157,10 +1161,10 @@ function makeSStyles(C: ColorScheme) { return StyleSheet.create({
     alignItems: "center",
     gap: 10,
     width: 136,
-    backgroundColor: "#1A2E21",
+    backgroundColor: C.card,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#2A3D30",
+    borderColor: C.border,
     paddingHorizontal: 10,
     paddingVertical: 10,
     height: 70,
@@ -1169,9 +1173,9 @@ function makeSStyles(C: ColorScheme) { return StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: "#0F2018",
+    backgroundColor: C.surface,
     borderWidth: 1,
-    borderColor: "#00D97E44",
+    borderColor: C.primary + "44",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -1185,7 +1189,7 @@ function makeSStyles(C: ColorScheme) { return StyleSheet.create({
   miniAvatarTxt: {
     fontFamily: "Outfit_700Bold",
     fontSize: 15,
-    color: "#00D97E",
+    color: C.primary,
   },
   miniStatRow: {
     flexDirection: "row",
@@ -1195,7 +1199,7 @@ function makeSStyles(C: ColorScheme) { return StyleSheet.create({
   miniStatTxt: {
     fontFamily: "Outfit_600SemiBold",
     fontSize: 11,
-    color: "#C2DAC8",
+    color: C.textSecondary,
   },
 
   insightArea: { height: 54, justifyContent: "center" },
