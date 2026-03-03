@@ -434,7 +434,7 @@ export default function RunDetailScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       qc.invalidateQueries({ queryKey: ["/api/runs", id, "participants"] });
       qc.invalidateQueries({ queryKey: ["/api/runs"] });
-      Alert.alert("You're in!", "You've been added to the live count for this run.");
+      Alert.alert("You're in! 🎉", `You've been added to the live count.\n\nNow tap "Join Live Run" to check in with your host and let them know you're ready.`);
     } catch (e: any) {
       Alert.alert("Can't Join", e.message || `Unable to join ${run?.activity_type === "ride" ? "ride" : "run"}`);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -1034,8 +1034,13 @@ export default function RunDetailScreen() {
         )}
         {isParticipant && !run.is_completed && isLive && (
           <View style={styles.joinedBanner}>
-            <Feather name="map-pin" size={14} color={C.primary} />
-            <Text style={styles.joinedText}>You've arrived — you're in the live count</Text>
+            <Feather name="map-pin" size={14} color={C.primary} style={{ marginTop: 2 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.joinedText}>You've arrived — you're in the live count</Text>
+              <Text style={styles.joinedHint}>
+                Tap {run?.activity_type === "ride" ? "Join Live Ride" : "Join Live Run"} above to check in with your host
+              </Text>
+            </View>
           </View>
         )}
       </View>
@@ -1413,8 +1418,9 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   rateBtnText: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.gold },
   ratedBanner: { flexDirection: "row", alignItems: "center", gap: 8, justifyContent: "center", padding: 12 },
   ratedText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary },
-  joinedBanner: { flexDirection: "row", alignItems: "center", gap: 8, justifyContent: "center", padding: 8 },
+  joinedBanner: { flexDirection: "row", alignItems: "flex-start", gap: 8, justifyContent: "center", padding: 8 },
   joinedText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.primary },
+  joinedHint: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary, marginTop: 2 },
   waitingBanner: { flexDirection: "row", alignItems: "center", gap: 8, justifyContent: "center", padding: 12, backgroundColor: C.gold + "18", borderRadius: 12, borderWidth: 1, borderColor: C.gold + "44" },
   waitingText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.gold },
   liveBtn: { backgroundColor: "#0A3A1F", borderRadius: 14, height: 52, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, borderWidth: 1.5, borderColor: C.primary },
