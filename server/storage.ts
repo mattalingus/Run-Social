@@ -2187,6 +2187,17 @@ export async function inviteUserToCrew(crewId: string, userId: string, invitedBy
   );
 }
 
+export async function removeCrewMember(crewId: string, requesterId: string, targetUserId: string) {
+  const crew = await pool.query(`SELECT created_by FROM crews WHERE id = $1`, [crewId]);
+  if (!crew.rows[0]) throw new Error("Crew not found");
+  if (crew.rows[0].created_by !== requesterId) throw new Error("Only the Crew Chief can remove members");
+  if (targetUserId === requesterId) throw new Error("You cannot remove yourself — use Leave Crew instead");
+  await pool.query(
+    `DELETE FROM crew_members WHERE crew_id = $1 AND user_id = $2`,
+    [crewId, targetUserId]
+  );
+}
+
 export async function leaveCrewById(crewId: string, userId: string) {
   const countRes = await pool.query(
     `SELECT COUNT(*) as cnt FROM crew_members WHERE crew_id = $1 AND status = 'member' AND user_id != $2`,

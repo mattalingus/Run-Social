@@ -587,6 +587,30 @@ function CrewDetailSheet({
     onError: (e: any) => Alert.alert("Error", e.message ?? "Could not disband crew"),
   });
 
+  const removeMemberMutation = useMutation({
+    mutationFn: (memberId: string) => apiRequest("DELETE", `/api/crews/${crew?.id}/members/${memberId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/crews", crew?.id, "members"] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    onError: (e: any) => Alert.alert("Error", e.message ?? "Could not remove member"),
+  });
+
+  function handleRemoveMember(memberId: string, memberName: string) {
+    Alert.alert(
+      "Remove Member",
+      `Remove ${memberName} from ${crew?.name}? They will need to be re-invited to rejoin.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => removeMemberMutation.mutate(memberId),
+        },
+      ]
+    );
+  }
+
   const handleLeave = () => {
     const isCreatorWithOthers = isCreator && members.length > 1;
     Alert.alert(
@@ -750,6 +774,15 @@ function CrewDetailSheet({
                             <Text style={s.memberMeta}>{formatPace(m.avg_pace)} avg</Text>
                           ) : null}
                         </View>
+                        {isCreator && m.user_id !== currentUserId && (
+                          <Pressable
+                            onPress={() => handleRemoveMember(m.user_id, m.name)}
+                            hitSlop={10}
+                            style={s.removeMemberBtn}
+                          >
+                            <Feather name="user-minus" size={15} color="#FF6B35" />
+                          </Pressable>
+                        )}
                       </View>
                     ))
                   )}
@@ -1942,6 +1975,12 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: C.border,
+  },
+  removeMemberBtn: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: "#FF6B3512",
+    marginLeft: 4,
   },
   memberAvatar: {
     width: 38,

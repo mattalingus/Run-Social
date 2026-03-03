@@ -1230,6 +1230,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (e: any) { res.status(e.message?.includes("Only the creator") ? 403 : 500).json({ message: e.message }); }
   });
 
+  app.delete("/api/crews/:id/members/:memberId", requireAuth, async (req, res) => {
+    try {
+      await storage.removeCrewMember(req.params.id, req.session.userId!, req.params.memberId);
+      res.json({ ok: true });
+    } catch (e: any) {
+      const status = e.message?.includes("Only the Crew Chief") ? 403 : e.message?.includes("not found") ? 404 : 500;
+      res.status(status).json({ message: e.message });
+    }
+  });
+
   app.delete("/api/crews/:id/leave", requireAuth, async (req, res) => {
     try {
       const result = await storage.leaveCrewById(req.params.id, req.session.userId!);
