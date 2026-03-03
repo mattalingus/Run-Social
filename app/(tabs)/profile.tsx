@@ -1472,7 +1472,7 @@ export default function ProfileScreen() {
       {/* ── Past Activity History Modal ─────────────────────────────────────── */}
       <Modal visible={showSoloHistory} transparent animationType="slide" onRequestClose={() => setShowSoloHistory(false)}>
         <Pressable style={styles.modalOverlay} onPress={() => setShowSoloHistory(false)} />
-        <View style={[styles.modalSheet, styles.friendModalSheet, { paddingBottom: insets.bottom + 16 }]}>
+        <View style={[styles.modalSheet, styles.friendModalSheet, { paddingBottom: insets.bottom + 16, height: "75%", flexDirection: "column" }]}>
           {/* Header */}
           <View style={styles.modalTitleRow}>
             <Text style={styles.modalTitle}>Activity History</Text>
