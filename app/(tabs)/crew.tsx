@@ -902,7 +902,7 @@ function CrewDetailSheet({
                       <ScrollView
                         ref={chatScrollRef}
                         style={{ flex: 1 }}
-                        contentContainerStyle={{ padding: 10, gap: 8 }}
+                        contentContainerStyle={{ padding: 10, gap: 8, flexGrow: 1, justifyContent: "flex-end" }}
                         showsVerticalScrollIndicator={false}
                         nestedScrollEnabled
                         onContentSizeChange={() =>
