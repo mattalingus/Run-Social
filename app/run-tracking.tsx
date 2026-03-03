@@ -12,6 +12,7 @@ import {
   ScrollView,
   Image,
 } from "react-native";
+import ShareActivityModal from "@/components/ShareActivityModal";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons } from "@expo/vector-icons";
@@ -99,6 +100,7 @@ export default function RunTrackingScreen() {
   const [savedRunId, setSavedRunId] = useState<string | null>(null);
   const [runPhotos, setRunPhotos] = useState<any[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [showShare, setShowShare] = useState(false);
 
   const { data: savedPaths = [] } = useQuery<any[]>({
     queryKey: ["/api/saved-paths"],
@@ -468,6 +470,14 @@ export default function RunTrackingScreen() {
                 )
               )}
 
+              <Pressable
+                style={t.shareBtn}
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowShare(true); }}
+              >
+                <Feather name="share-2" size={16} color={C.primary} />
+                <Text style={t.shareBtnTxt}>{activityFilter === "ride" ? "Share Ride" : "Share Run"}</Text>
+              </Pressable>
+
               <Pressable style={t.saveBtn} onPress={finishAndNavigate}>
                 <Text style={t.saveBtnTxt}>Done</Text>
               </Pressable>
@@ -530,6 +540,19 @@ export default function RunTrackingScreen() {
             </KeyboardAvoidingView>
           </Modal>
         )}
+
+        {/* ─── Share activity modal ─────────────────────────────────────────── */}
+        <ShareActivityModal
+          visible={showShare}
+          onClose={() => setShowShare(false)}
+          runData={{
+            distanceMi: totalDistRef.current,
+            paceMinPerMile: pace,
+            durationSeconds: elapsed,
+            routePath: routePathRef.current,
+            activityType: activityFilter,
+          }}
+        />
       </View>
     );
   }
@@ -995,6 +1018,20 @@ const t = StyleSheet.create({
     marginHorizontal: 4,
   },
   saveBtnTxt: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.bg },
+  shareBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderRadius: 16,
+    paddingVertical: 14,
+    borderWidth: 1.5,
+    borderColor: C.primary + "88",
+    alignSelf: "stretch",
+    marginHorizontal: 4,
+    backgroundColor: C.primary + "11",
+  },
+  shareBtnTxt: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.primary },
 
   discardBtn: { paddingVertical: 10 },
   discardTxt: {

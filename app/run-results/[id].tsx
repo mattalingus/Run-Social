@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -11,10 +11,12 @@ import {
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/query-client";
 import C from "@/constants/colors";
+import ShareActivityModal from "@/components/ShareActivityModal";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -42,6 +44,7 @@ export default function RunResultsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const [showShare, setShowShare] = useState(false);
 
   const { data: results = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/runs", id, "results"],
@@ -79,12 +82,24 @@ export default function RunResultsScreen() {
           <Text style={s.headerTitle}>Run Results</Text>
           {run?.title && <Text style={s.headerSub}>{run.title}</Text>}
         </View>
-        <Pressable
-          style={s.doneBtn}
-          onPress={() => router.push(`/run/${id}`)}
-        >
-          <Text style={s.doneBtnText}>Done</Text>
-        </Pressable>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Pressable
+            style={s.backBtn}
+            hitSlop={12}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setShowShare(true);
+            }}
+          >
+            <Feather name="share-2" size={18} color={C.primary} />
+          </Pressable>
+          <Pressable
+            style={s.doneBtn}
+            onPress={() => router.push(`/run/${id}`)}
+          >
+            <Text style={s.doneBtnText}>Done</Text>
+          </Pressable>
+        </View>
       </View>
 
       {isLoading ? (
@@ -209,6 +224,26 @@ export default function RunResultsScreen() {
           )}
         </ScrollView>
       )}
+
+      {/* ── Share Activity Modal ──────────────────────────────────────────────── */}
+      {(() => {
+        const myResult = results.find((r: any) => r.user_id === user?.id);
+        return (
+          <ShareActivityModal
+            visible={showShare}
+            onClose={() => setShowShare(false)}
+            runData={{
+              distanceMi: myResult?.final_distance ?? run?.min_distance ?? 0,
+              paceMinPerMile: myResult?.final_pace ?? null,
+              durationSeconds: null,
+              routePath: [],
+              activityType: (run?.activity_type ?? "run") as "run" | "ride",
+              participantCount: results.length > 0 ? results.length : undefined,
+              eventTitle: run?.title,
+            }}
+          />
+        );
+      })()}
     </View>
   );
 }

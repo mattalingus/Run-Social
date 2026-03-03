@@ -148,6 +148,16 @@ shared/
 ## Future Integrations (Structured)
 Database columns exist for: `strava_id`, `apple_health_id`, `garmin_id`
 
+## Share Activity Feature
+- `components/ShareCard.tsx` — always-dark branded card (360×640pt) with FARA branding, SVG GPS route, stats row, group badge, caption, footer strip. forwardRef for captureRef capture. Supports optional photo background for route panel.
+- `components/ShareActivityModal.tsx` — full-screen modal: card preview, photo background picker (ImagePicker), caption input (live updates card), Share/Save/Copy actions using captureRef + native Share sheet.
+- Integrated in `app/run-tracking.tsx` (solo run post-save) and `app/run-results/[id].tsx` (group results header).
+
+## Metro Config Notes
+- `metro.config.js` stubs `expo-sharing` → `stubs/expo-sharing.js` (uses React Native `Share` API) and `expo-media-library` → `stubs/expo-media-library.js` (uses native share sheet for saves). These v55 packages shipped ESM-only builds incompatible with Metro for SDK 54.
+- `transformIgnorePatterns` overridden to include `react-native-view-shot` for Babel transpilation (Flow ESM source).
+- `react-native-maps` is stubbed on web platform via `stubs/react-native-maps.js`.
+
 ## Development Notes
 - React Native Maps requires react-native-maps@1.18.0 (Expo Go compatible)
 - Session cookies use sameSite: "lax" in development, "none" in production
