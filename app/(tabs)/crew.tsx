@@ -28,8 +28,18 @@ import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { useTheme } from "@/contexts/ThemeContext";
 import { darkColors, type ColorScheme } from "@/constants/colors";
+import { Image as ExpoImage } from "expo-image";
 
 const C = darkColors;
+
+interface GifItem {
+  id: string;
+  title: string;
+  gif_url: string;
+  preview_url: string;
+}
+
+const GIF_TOPICS = ["Running", "Celebrate", "Hype", "Let's go", "Tired", "Stretch"];
 
 function resolveImgUrl(url: string | null | undefined): string | null {
   if (!url) return null;
@@ -669,6 +679,11 @@ function CrewDetailSheet({
   const [chatInput, setChatInput] = useState("");
   const [chatSending, setChatSending] = useState(false);
   const chatScrollRef = useRef<ScrollView>(null);
+  const [showGifPicker, setShowGifPicker] = useState(false);
+  const [gifSearch, setGifSearch] = useState("");
+  const [gifResults, setGifResults] = useState<GifItem[]>([]);
+  const [gifLoading, setGifLoading] = useState(false);
+  const [selectedGif, setSelectedGif] = useState<GifItem | null>(null);
 
   useEffect(() => {
     if (crewMessages.length > 0) {
@@ -676,18 +691,46 @@ function CrewDetailSheet({
     }
   }, [crewMessages.length]);
 
+  async function fetchGifs(query: string) {
+    setGifLoading(true);
+    try {
+      const url = new URL("/api/gifs/search", getApiUrl());
+      if (query.trim()) url.searchParams.set("q", query.trim());
+      url.searchParams.set("limit", "20");
+      const resp = await fetch(url.toString(), { credentials: "include" });
+      const data = await resp.json();
+      setGifResults(Array.isArray(data) ? data : []);
+    } catch {
+      setGifResults([]);
+    } finally {
+      setGifLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!showGifPicker) return;
+    const t = setTimeout(() => fetchGifs(gifSearch), gifSearch ? 400 : 0);
+    return () => clearTimeout(t);
+  }, [gifSearch, showGifPicker]);
+
   async function sendChatMessage() {
     const text = chatInput.trim();
-    if (!text || chatSending) return;
+    if (!text && !selectedGif || chatSending) return;
+    const gifToSend = selectedGif;
     setChatInput("");
+    setSelectedGif(null);
     setChatSending(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
-      await apiRequest("POST", `/api/crews/${crew?.id}/messages`, { message: text });
+      await apiRequest("POST", `/api/crews/${crew?.id}/messages`, {
+        message: text,
+        ...(gifToSend ? { gif_url: gifToSend.gif_url, gif_preview_url: gifToSend.preview_url } : {}),
+      });
       refetchMessages();
     } catch (e: any) {
       Alert.alert("Error", e.message ?? "Could not send message");
       setChatInput(text);
+      setSelectedGif(gifToSend);
     } finally {
       setChatSending(false);
     }
@@ -913,12 +956,43 @@ function CrewDetailSheet({
                           const isMe = msg.user_id === currentUserId;
                           const isPrompt = msg.message_type === "prompt";
                           const isMilestone = msg.message_type === "milestone";
+                          const isGif = msg.message_type === "gif";
 
                           if (isMilestone) {
                             return (
                               <View key={msg.id} style={s.inlineMilestoneRow}>
                                 <View style={s.inlineMilestoneBubble}>
                                   <Text style={s.inlineMilestoneTxt}>{msg.message}</Text>
+                                </View>
+                              </View>
+                            );
+                          }
+
+                          if (isGif) {
+                            return (
+                              <View key={msg.id} style={[s.inlineMsgRow, isMe && s.inlineMsgRowMe]}>
+                                {!isMe && (
+                                  <View style={s.inlineMsgAvatar}>
+                                    <Text style={s.inlineMsgAvatarTxt}>
+                                      {(msg.sender_name ?? "?")[0].toUpperCase()}
+                                    </Text>
+                                  </View>
+                                )}
+                                <View style={[s.inlineGifBubble, isMe && s.inlineGifBubbleMe]}>
+                                  {!isMe && <Text style={s.inlineMsgSender}>{msg.sender_name}</Text>}
+                                  {msg.metadata?.gif_url ? (
+                                    <ExpoImage
+                                      source={{ uri: msg.metadata.gif_url }}
+                                      style={s.inlineGifImage}
+                                      contentFit="cover"
+                                      autoplay
+                                    />
+                                  ) : null}
+                                  {!!msg.message && (
+                                    <Text style={[s.inlineMsgTxt, isMe && s.inlineMsgTxtMe, { marginTop: 4 }]}>
+                                      {msg.message}
+                                    </Text>
+                                  )}
                                 </View>
                               </View>
                             );
@@ -965,6 +1039,20 @@ function CrewDetailSheet({
                     )}
                   </View>
 
+                  {/* Selected GIF preview */}
+                  {selectedGif && (
+                    <View style={s.gifPreviewRow}>
+                      <ExpoImage
+                        source={{ uri: selectedGif.preview_url }}
+                        style={s.gifPreviewThumb}
+                        contentFit="cover"
+                      />
+                      <TouchableOpacity style={s.gifPreviewRemove} onPress={() => setSelectedGif(null)}>
+                        <Ionicons name="close-circle" size={18} color={C.textMuted} />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
                   {/* Input row */}
                   <View style={s.inlineChatInputRow}>
                     <TextInput
@@ -979,11 +1067,22 @@ function CrewDetailSheet({
                       editable={!chatSending}
                     />
                     <TouchableOpacity
-                      style={[s.inlineSendBtn, (!chatInput.trim() || chatSending) && s.inlineSendBtnDisabled]}
-                      onPress={sendChatMessage}
-                      disabled={!chatInput.trim() || chatSending}
+                      testID="gif-btn"
+                      style={s.gifPickerBtn}
+                      onPress={() => {
+                        setGifSearch("");
+                        setGifResults([]);
+                        setShowGifPicker(true);
+                      }}
                     >
-                      <Ionicons name="send" size={16} color={chatInput.trim() && !chatSending ? C.bg : C.textMuted} />
+                      <Text style={s.gifPickerBtnTxt}>GIF</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[s.inlineSendBtn, (!chatInput.trim() && !selectedGif || chatSending) && s.inlineSendBtnDisabled]}
+                      onPress={sendChatMessage}
+                      disabled={(!chatInput.trim() && !selectedGif) || chatSending}
+                    >
+                      <Ionicons name="send" size={16} color={(chatInput.trim() || selectedGif) && !chatSending ? C.bg : C.textMuted} />
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -1168,6 +1267,100 @@ function CrewDetailSheet({
               crewId={crew.id}
               existingMemberIds={memberIds}
               pendingRequestIds={joinRequests.map((r) => r.user_id)}
+            />
+          )}
+        </View>
+      </Modal>
+
+      {/* GIF Picker Modal */}
+      <Modal
+        visible={showGifPicker}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowGifPicker(false)}
+      >
+        <View style={s.gifPickerSheet}>
+          {/* Header */}
+          <View style={s.gifPickerHeader}>
+            <View style={{ width: 36 }} />
+            <Text style={s.gifPickerTitle}>GIFs</Text>
+            <TouchableOpacity onPress={() => setShowGifPicker(false)} style={s.gifPickerClose}>
+              <Ionicons name="close" size={22} color={C.textMuted} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Search bar */}
+          <View style={s.gifSearchRow}>
+            <Ionicons name="search" size={16} color={C.textMuted} style={{ marginRight: 8 }} />
+            <TextInput
+              style={s.gifSearchInput}
+              value={gifSearch}
+              onChangeText={setGifSearch}
+              placeholder="Search GIFs…"
+              placeholderTextColor={C.textMuted}
+              returnKeyType="search"
+              autoFocus
+            />
+            {!!gifSearch && (
+              <TouchableOpacity onPress={() => setGifSearch("")}>
+                <Ionicons name="close-circle" size={16} color={C.textMuted} />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Topic pills (when no search) */}
+          {!gifSearch && gifResults.length === 0 && !gifLoading && (
+            <View style={s.gifTopicRow}>
+              {GIF_TOPICS.map((topic) => (
+                <TouchableOpacity
+                  key={topic}
+                  style={s.gifTopicPill}
+                  onPress={() => setGifSearch(topic)}
+                >
+                  <Text style={s.gifTopicTxt}>{topic}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
+          {/* Loading */}
+          {gifLoading && (
+            <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+              <ActivityIndicator color={C.primary} size="large" />
+            </View>
+          )}
+
+          {/* Empty */}
+          {!gifLoading && gifResults.length === 0 && !!gifSearch && (
+            <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 8 }}>
+              <Ionicons name="sad-outline" size={40} color={C.textMuted} />
+              <Text style={s.gifEmptyTxt}>No GIFs found for "{gifSearch}"</Text>
+            </View>
+          )}
+
+          {/* Grid */}
+          {!gifLoading && gifResults.length > 0 && (
+            <FlatList
+              data={gifResults}
+              numColumns={2}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={{ padding: 8, gap: 6 }}
+              columnWrapperStyle={{ gap: 6 }}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={s.gifGridCell}
+                  onPress={() => {
+                    setSelectedGif(item);
+                    setShowGifPicker(false);
+                  }}
+                >
+                  <ExpoImage
+                    source={{ uri: item.preview_url }}
+                    style={s.gifGridImg}
+                    contentFit="cover"
+                  />
+                </TouchableOpacity>
+              )}
             />
           )}
         </View>
@@ -2451,6 +2644,142 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   },
   inlineSendBtnDisabled: {
     backgroundColor: C.surface,
+  },
+  // GIF button in input row
+  gifPickerBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  gifPickerBtnTxt: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 11,
+    color: C.textMuted,
+    letterSpacing: 0.5,
+  },
+  // Selected GIF preview strip
+  gifPreviewRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
+    paddingHorizontal: 2,
+  },
+  gifPreviewThumb: {
+    width: 52,
+    height: 52,
+    borderRadius: 8,
+  },
+  gifPreviewRemove: {
+    padding: 2,
+  },
+  // GIF message bubble
+  inlineGifBubble: {
+    backgroundColor: C.surface,
+    borderRadius: 14,
+    borderBottomLeftRadius: 4,
+    overflow: "hidden",
+    maxWidth: "75%",
+    padding: 4,
+  },
+  inlineGifBubbleMe: {
+    borderWidth: 1,
+    borderColor: C.primary + "60",
+    backgroundColor: "transparent",
+    borderBottomLeftRadius: 14,
+    borderBottomRightRadius: 4,
+  },
+  inlineGifImage: {
+    width: 200,
+    height: 140,
+    borderRadius: 10,
+  },
+  // GIF picker modal
+  gifPickerSheet: {
+    flex: 1,
+    backgroundColor: C.bg,
+  },
+  gifPickerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingTop: 20,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+  },
+  gifPickerTitle: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 18,
+    color: C.text,
+  },
+  gifPickerClose: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: C.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  gifSearchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: C.card,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    margin: 12,
+  },
+  gifSearchInput: {
+    flex: 1,
+    fontFamily: "Outfit_400Regular",
+    fontSize: 15,
+    color: C.text,
+  },
+  gifTopicRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+  },
+  gifTopicPill: {
+    backgroundColor: C.card,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  gifTopicTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 13,
+    color: C.text,
+  },
+  gifGridCell: {
+    flex: 1,
+    borderRadius: 10,
+    overflow: "hidden",
+    aspectRatio: 1,
+    backgroundColor: C.card,
+  },
+  gifGridImg: {
+    width: "100%",
+    height: "100%",
+  },
+  gifEmptyTxt: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 14,
+    color: C.textMuted,
+    textAlign: "center",
   },
   runRow: {
     flexDirection: "row",

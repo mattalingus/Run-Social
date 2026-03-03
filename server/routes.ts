@@ -522,16 +522,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const isMember = await storage.isCrewMember(crewId, userId);
       if (!isMember) return res.status(403).json({ message: "Not a crew member" });
 
-      const { message } = req.body;
-      if (!message) return res.status(400).json({ message: "Message required" });
+      const { message = "", gif_url, gif_preview_url } = req.body;
+      if (!message && !gif_url) return res.status(400).json({ message: "Message or GIF required" });
 
       const user = await storage.getUserById(userId);
+      const messageType = gif_url ? "gif" : "text";
+      const metadata = gif_url ? { gif_url, gif_preview_url } : undefined;
       const newMessage = await storage.createCrewMessage(
         crewId,
         userId,
         user.name,
         user.photo_url,
-        message
+        message || "",
+        messageType,
+        metadata
       );
       res.status(201).json(newMessage);
     } catch (e: any) {
@@ -1334,6 +1338,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const history = await storage.getCrewRunHistory(req.params.id);
       res.json(history);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/gifs/search", requireAuth, async (req, res) => {
+    try {
+      const q = String(req.query.q || "").trim();
+      const limit = Math.min(Number(req.query.limit) || 20, 50);
+      const apiKey = process.env.GIPHY_API_KEY;
+      if (!apiKey) return res.status(500).json({ message: "GIPHY API key not configured" });
+      const url = q
+        ? `https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${encodeURIComponent(q)}&limit=${limit}&rating=g`
+        : `https://api.giphy.com/v1/gifs/trending?api_key=${apiKey}&limit=${limit}&rating=g`;
+      const resp = await fetch(url);
+      const json = await resp.json() as any;
+      const gifs = (json.data || []).map((item: any) => ({
+        id: item.id,
+        title: item.title,
+        gif_url: item.images?.fixed_height?.url || item.images?.original?.url || "",
+        preview_url: item.images?.fixed_height_still?.url || item.images?.fixed_height?.url || "",
+      }));
+      res.json(gifs);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
