@@ -43,13 +43,11 @@ function resolveImgUrl(url: string | null | undefined): string | null {
 
 const PACE_STEP = 5 / 60; // 5-second increments
 
-type SortOption = "nearest" | "soonest" | "dist_asc" | "dist_desc";
+type SortOption = "nearest" | "soonest";
 
 const SORT_OPTIONS: { key: SortOption; label: string }[] = [
-  { key: "nearest",  label: "Nearest"              },
-  { key: "soonest",  label: "Soonest"               },
-  { key: "dist_asc", label: "Distance: Low → High"  },
-  { key: "dist_desc",label: "Distance: High → Low"  },
+  { key: "nearest", label: "Nearest" },
+  { key: "soonest", label: "Soonest" },
 ];
 
 const HOST_STYLES = [
@@ -78,7 +76,7 @@ const DEFAULT_FILTERS: FilterState = {
   paceMin: 4.0,
   paceMax: 15.0,
   distMin: 1,
-  distMax: 20,
+  distMax: 999,
   maxDistFromMe: 10,
   styles: [],
   visibility: "all",
@@ -229,8 +227,6 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
                 const labels: Record<string, string> = {
                   soonest: "Soonest",
                   nearest: "Nearest",
-                  dist_asc: "Distance ↑",
-                  dist_desc: "Distance ↓"
                 };
                 return (
                   <Pressable
@@ -308,11 +304,11 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
             <View style={fm.sectionHead}>
               <Text style={fm.sectionTitle}>Run Length</Text>
               <Text style={fm.sectionValue}>
-                {formatDistance(draft.distMin)} – {formatDistance(draft.distMax)} mi
+                {formatDistance(draft.distMin)} – {draft.distMax >= 999 ? "Unlimited" : `${formatDistance(draft.distMax)} mi`}
               </Text>
             </View>
             <RangeSlider
-              min={1} max={20} step={0.5}
+              min={1} max={999} step={0.5}
               low={draft.distMin} high={draft.distMax}
               onLowChange={(v) => setDraft((p) => ({ ...p, distMin: v }))}
               onHighChange={(v) => setDraft((p) => ({ ...p, distMax: v }))}
@@ -321,7 +317,7 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
             />
             <View style={fm.edgeRow}>
               <Text style={fm.edgeLabel}>1 mi</Text>
-              <Text style={fm.edgeLabel}>20 mi</Text>
+              <Text style={fm.edgeLabel}>Unlimited</Text>
             </View>
           </View>
 
@@ -1031,12 +1027,6 @@ export default function DiscoverScreen() {
         break;
       case "soonest":
         list.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-        break;
-      case "dist_asc":
-        list.sort((a, b) => a.min_distance - b.min_distance);
-        break;
-      case "dist_desc":
-        list.sort((a, b) => b.min_distance - a.min_distance);
         break;
     }
     // Float friend runs to the top, maintaining their relative order
