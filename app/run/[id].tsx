@@ -677,7 +677,7 @@ export default function RunDetailScreen() {
             <View style={styles.reqDivider} />
             <View style={styles.reqItem}>
               <Ionicons name="people" size={20} color={C.textSecondary} />
-              {run.privacy === "crew" ? (
+              {run.crew_id ? (
                 <>
                   <Text style={styles.reqValue}>{Math.max(1, run.participant_count ?? 0)}</Text>
                   <Text style={styles.reqLabel}>Coming</Text>
