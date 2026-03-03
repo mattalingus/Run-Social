@@ -58,19 +58,16 @@ function isPhotoUrl(v: string | null | undefined): boolean {
   return v.startsWith("http") || v.startsWith("/api/objects");
 }
 
-function ProgressBar({ value, total, color = C.primary }: { value: number; total: number; color?: string }) {
+function ProgressBar({ value, total, color }: { value: number; total: number; color?: string }) {
+  const { C: TC } = useTheme();
   const pct = Math.min(1, total > 0 ? value / total : 0);
+  const fillColor = color ?? TC.primary;
   return (
-    <View style={pbarStyles.track}>
-      <View style={[pbarStyles.fill, { width: `${pct * 100}%` as any, backgroundColor: color }]} />
+    <View style={{ height: 6, backgroundColor: TC.border, borderRadius: 3, overflow: "hidden" }}>
+      <View style={{ height: "100%", borderRadius: 3, width: `${pct * 100}%` as any, backgroundColor: fillColor }} />
     </View>
   );
 }
-
-const pbarStyles = StyleSheet.create({
-  track: { height: 6, backgroundColor: C.border, borderRadius: 3, overflow: "hidden" },
-  fill: { height: "100%", borderRadius: 3 },
-});
 
 interface RunHistoryItem {
   id: string;

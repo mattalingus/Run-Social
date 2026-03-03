@@ -1777,7 +1777,7 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   },
   cardCrew: {
     backgroundColor: C.card,
-    borderColor: "#FFFFFFCC",
+    borderColor: C.text + "BB",
     borderWidth: 2,
   },
   cardBody: { flexDirection: "row", alignItems: "stretch", gap: 12 },
