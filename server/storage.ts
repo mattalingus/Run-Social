@@ -22,9 +22,11 @@ export async function initDb() {
         CREATE TYPE user_role AS ENUM ('runner', 'host');
       END IF;
       IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'participant_status') THEN
-        CREATE TYPE participant_status AS ENUM ('joined', 'confirmed', 'cancelled');
+        CREATE TYPE participant_status AS ENUM ('joined', 'confirmed', 'cancelled', 'pending');
       END IF;
     END $$;
+
+    ALTER TYPE participant_status ADD VALUE IF NOT EXISTS 'pending';
 
     CREATE TABLE IF NOT EXISTS users (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
