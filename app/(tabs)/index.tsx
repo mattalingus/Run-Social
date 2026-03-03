@@ -1735,7 +1735,8 @@ const s = StyleSheet.create({
   },
   cardCrew: {
     backgroundColor: C.card,
-    borderColor: "#FFFFFF55",
+    borderColor: "#FFFFFFCC",
+    borderWidth: 2,
   },
   cardBody: { flexDirection: "row", alignItems: "stretch", gap: 12 },
   hostColumn: { width: 66, alignItems: "center", gap: 4, paddingTop: 2 },
