@@ -409,7 +409,8 @@ export default function RunDetailScreen() {
               await apiRequest("DELETE", `/api/runs/${id}`);
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
               qc.invalidateQueries({ queryKey: ["/api/runs"] });
-              router.back();
+              if (router.canGoBack()) router.back();
+              else router.replace("/(tabs)/");
             } catch (e: any) {
               Alert.alert("Error", e.message || "Could not cancel the run.");
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
