@@ -416,6 +416,7 @@ function RunCard({
   isBookmarked,
   onBookmark,
   isFriend,
+  isCrew,
 }: {
   run: Run;
   onPress: () => void;
@@ -423,12 +424,13 @@ function RunCard({
   isBookmarked?: boolean;
   onBookmark?: () => void;
   isFriend?: boolean;
+  isCrew?: boolean;
 }) {
   const spotsLeft = run.max_participants - run.participant_count;
   const badge = getHostBadge(run.host_hosted_runs);
   return (
     <Pressable
-      style={({ pressed }) => [s.card, isFriend && s.cardFriend, { opacity: pressed ? 0.85 : 1 }]}
+      style={({ pressed }) => [s.card, isFriend && s.cardFriend, isCrew && s.cardCrew, { opacity: pressed ? 0.85 : 1 }]}
       onPress={onPress}
       testID={`run-card-${run.id}`}
     >
@@ -1162,6 +1164,7 @@ export default function DiscoverScreen() {
               distanceMi={userLocation ? distanceMap[item.id] : undefined}
               isBookmarked={bookmarkedIds.has(item.id)}
               isFriend={friendIdSet.has(item.host_id)}
+              isCrew={!!item.crew_id}
               onBookmark={user ? () => bookmarkMutation.mutate(item.id) : undefined}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -1729,6 +1732,10 @@ const s = StyleSheet.create({
   cardFriend: {
     backgroundColor: C.card,
     borderColor: C.primary + "44",
+  },
+  cardCrew: {
+    backgroundColor: C.card,
+    borderColor: "#FFFFFF55",
   },
   cardBody: { flexDirection: "row", alignItems: "stretch", gap: 12 },
   hostColumn: { width: 66, alignItems: "center", gap: 4, paddingTop: 2 },

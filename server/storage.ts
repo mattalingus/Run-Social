@@ -532,11 +532,6 @@ export async function getCrewVisibleRuns(userId: string, bounds?: { swLat: numbe
     LEFT JOIN crews c ON c.id = r.crew_id
     WHERE r.crew_id IS NOT NULL AND r.date > NOW() - INTERVAL '2 hours' AND r.is_completed = false`;
   const params: any[] = [userId];
-  let idx = 2;
-  if (bounds) {
-    query += ` AND r.location_lat BETWEEN $${idx++} AND $${idx++} AND r.location_lng BETWEEN $${idx++} AND $${idx++}`;
-    params.push(bounds.swLat, bounds.neLat, bounds.swLng, bounds.neLng);
-  }
   query += ` ORDER BY r.date ASC LIMIT 100`;
   const result = await pool.query(query, params);
   return result.rows;
