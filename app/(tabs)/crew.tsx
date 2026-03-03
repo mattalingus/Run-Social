@@ -874,16 +874,18 @@ export default function CrewScreen() {
         <Text style={s.headerTitle}>Crew</Text>
       </View>
 
-      {/* Create A Crew CTA */}
-      <TouchableOpacity
-        style={s.createCrewBtn}
-        onPress={() => setShowCreate(true)}
-        testID="open-create-crew"
-        activeOpacity={0.88}
-      >
-        <Ionicons name="people" size={20} color={C.bg} />
-        <Text style={s.createCrewBtnTxt}>Create A Crew</Text>
-      </TouchableOpacity>
+      {/* Create A Crew CTA — only when user already has crews */}
+      {crews.length > 0 && (
+        <TouchableOpacity
+          style={s.createCrewBtn}
+          onPress={() => setShowCreate(true)}
+          testID="open-create-crew"
+          activeOpacity={0.88}
+        >
+          <Ionicons name="people" size={20} color={C.bg} />
+          <Text style={s.createCrewBtnTxt}>Create A Crew</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Search bar */}
       <View style={s.searchRow}>
