@@ -256,7 +256,7 @@ export default function RunDetailScreen() {
   const isParticipant = participants.some((p) => p.id === user?.id);
   const myParticipation = participants.find((p) => p.id === user?.id);
   const isPastRun = run ? new Date(run.date) < new Date() : false;
-  const canRate = isPastRun && isParticipant && !isHost && !myRating;
+  const canRate = !!run?.is_completed && isParticipant && !isHost && !myRating;
   const hasConfirmed = myParticipation?.status === "confirmed";
   const isLive = !!run?.is_active && !run?.is_completed;
 
