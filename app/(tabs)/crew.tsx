@@ -935,12 +935,10 @@ function CrewDetailSheet({
                               <Text style={s.eventMetaChipTxt}>{run.min_distance} mi</Text>
                             </View>
                           ) : null}
-                          {run.participant_count ? (
-                            <View style={s.eventMetaChip}>
-                              <Ionicons name="people-outline" size={12} color={C.textMuted} />
-                              <Text style={s.eventMetaChipTxt}>{run.participant_count} going</Text>
-                            </View>
-                          ) : null}
+                          <View style={s.eventMetaChip}>
+                            <Ionicons name="people-outline" size={12} color={C.textMuted} />
+                            <Text style={s.eventMetaChipTxt}>{Math.max(1, run.participant_count ?? 0)} going</Text>
+                          </View>
                         </View>
                         <Text style={s.eventCardHost}>Hosted by {run.host_name}</Text>
                       </TouchableOpacity>
