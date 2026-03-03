@@ -881,10 +881,15 @@ export async function getPublicRuns(filters?: {
 
 export async function getRunById(id: string) {
   const result = await pool.query(
-    `SELECT r.*, u.name as host_name, u.avg_rating as host_rating, u.rating_count as host_rating_count, u.photo_url as host_photo, u.avg_pace as host_avg_pace, u.hosted_runs as host_hosted_runs,
+    `SELECT r.*, u.name as host_name, u.avg_rating as host_rating, u.rating_count as host_rating_count,
+      u.photo_url as host_photo, u.avg_pace as host_avg_pace, u.hosted_runs as host_hosted_runs,
+      c.name as crew_name,
       (1 + (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled')) as participant_count,
       (SELECT COUNT(*) FROM planned_runs pr WHERE pr.run_id = r.id) as plan_count
-     FROM runs r JOIN users u ON u.id = r.host_id WHERE r.id = $1`,
+     FROM runs r
+     JOIN users u ON u.id = r.host_id
+     LEFT JOIN crews c ON c.id = r.crew_id
+     WHERE r.id = $1`,
     [id]
   );
   return result.rows[0] || null;
@@ -1035,6 +1040,18 @@ export async function startGroupRun(runId: string, hostId: string) {
 
   await pool.query(`UPDATE runs SET is_active = true, started_at = NOW() WHERE id = $1`, [runId]);
 
+  // Guarantee the host has a participant row with is_present = true from the moment the run starts
+  await pool.query(
+    `INSERT INTO run_participants (run_id, user_id, status, is_present)
+     SELECT $1, $2, 'joined', true
+     WHERE NOT EXISTS (SELECT 1 FROM run_participants WHERE run_id = $1 AND user_id = $2)`,
+    [runId, hostId]
+  );
+  await pool.query(
+    `UPDATE run_participants SET is_present = true WHERE run_id = $1 AND user_id = $2`,
+    [runId, hostId]
+  );
+
   const latestPings = await pool.query(
     `SELECT DISTINCT ON (user_id) user_id, latitude, longitude
      FROM run_tracking_points WHERE run_id = $1 ORDER BY user_id, recorded_at DESC`,
@@ -1128,10 +1145,20 @@ export async function getLiveRunState(runId: string) {
 }
 
 export async function finishRunnerRun(runId: string, userId: string, finalDistance: number, finalPace: number) {
+  // Ensure the user has a participant row before writing final data
+  await pool.query(
+    `INSERT INTO run_participants (run_id, user_id, status, is_present)
+     SELECT $1, $2, 'joined', true
+     WHERE NOT EXISTS (SELECT 1 FROM run_participants WHERE run_id = $1 AND user_id = $2)`,
+    [runId, userId]
+  );
+
   await pool.query(
     `UPDATE run_participants SET final_distance = $3, final_pace = $4 WHERE run_id = $1 AND user_id = $2`,
     [runId, userId, finalDistance, finalPace]
   );
+
+  // Recompute leaderboard ranks for everyone who has finished
   const finishedRes = await pool.query(
     `SELECT user_id, final_pace FROM run_participants
      WHERE run_id = $1 AND final_pace IS NOT NULL ORDER BY final_pace ASC`,
@@ -1143,6 +1170,28 @@ export async function finishRunnerRun(runId: string, userId: string, finalDistan
       [runId, finishedRes.rows[i].user_id, i + 1]
     );
   }
+
+  // Auto-complete the run when the host finishes OR when every present participant has submitted
+  const runRes = await pool.query(`SELECT host_id FROM runs WHERE id = $1`, [runId]);
+  if (runRes.rows.length) {
+    const isHost = runRes.rows[0].host_id === userId;
+    let shouldComplete = isHost;
+    if (!shouldComplete) {
+      const remaining = await pool.query(
+        `SELECT COUNT(*) FROM run_participants
+         WHERE run_id = $1 AND is_present = true AND final_pace IS NULL AND status != 'cancelled'`,
+        [runId]
+      );
+      shouldComplete = parseInt(remaining.rows[0].count) === 0;
+    }
+    if (shouldComplete) {
+      await pool.query(
+        `UPDATE runs SET is_completed = true, is_active = false WHERE id = $1`,
+        [runId]
+      );
+    }
+  }
+
   return { success: true };
 }
 

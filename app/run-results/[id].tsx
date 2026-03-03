@@ -239,7 +239,7 @@ export default function RunResultsScreen() {
               routePath: [],
               activityType: (run?.activity_type ?? "run") as "run" | "ride",
               participantCount: results.length > 0 ? results.length : undefined,
-              eventTitle: run?.title,
+              eventTitle: run?.crew_id && run?.crew_name ? run.crew_name : run?.title,
             }}
           />
         );

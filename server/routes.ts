@@ -1065,9 +1065,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { finalDistance, finalPace } = req.body;
       if (finalDistance == null || finalPace == null) return res.status(400).json({ message: "finalDistance and finalPace required" });
+      const parsedDist = parseFloat(finalDistance);
+      const parsedPace = parseFloat(finalPace);
+      const safeDist = Number.isFinite(parsedDist) && parsedDist > 0 ? parsedDist : 0;
+      const safePace = Number.isFinite(parsedPace) && parsedPace > 0 ? parsedPace : 0;
       const result = await storage.finishRunnerRun(
         req.params.id, req.session.userId!,
-        parseFloat(finalDistance), parseFloat(finalPace)
+        safeDist, safePace
       );
       res.json(result);
     } catch (e: any) {
@@ -1418,6 +1422,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         metadata
       );
       res.json(dm);
+      // Fire push notification to recipient (non-blocking)
+      Promise.all([
+        storage.getUserById(req.session.userId!),
+        storage.getUserById(req.params.friendId),
+      ]).then(([sender, recipient]) => {
+        if (sender && recipient?.push_token && recipient.notifications_enabled !== false) {
+          const body = isGif ? "Sent you a GIF 🏃" : (message ?? "").trim();
+          sendPushNotification(
+            recipient.push_token,
+            sender.name,
+            body,
+            { screen: "dm", friendId: req.session.userId! }
+          );
+        }
+      }).catch(() => {});
     } catch (e: any) {
       if (e.message === "Not friends") return res.status(403).json({ message: "Not friends" });
       res.status(500).json({ message: e.message });
