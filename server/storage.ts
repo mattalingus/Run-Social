@@ -525,7 +525,7 @@ export async function getCrewVisibleRuns(userId: string, bounds?: { swLat: numbe
       u.marker_icon as host_marker_icon, u.hosted_runs as host_hosted_runs,
       (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled') as participant_count,
       false as is_locked,
-      c.photo_url as crew_photo_url
+      c.image_url as crew_photo_url
     FROM runs r
     JOIN users u ON u.id = r.host_id
     JOIN crew_members cm ON cm.crew_id = r.crew_id AND cm.user_id = $1 AND cm.status = 'member'

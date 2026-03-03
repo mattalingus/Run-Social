@@ -28,9 +28,9 @@ import C from "@/constants/colors";
 const RUN_TAGS = ["Talkative", "Quiet", "Motivational", "Training", "Ministry", "Recovery"];
 const RUN_STYLES = ["Easy Pace", "Chill", "Steady", "Tempo", "Fast", "Recovery", "Long Run", "Progressive", "Intervals", "Race Prep"];
 const PRIVACY_OPTIONS = [
-  { value: "public", label: "Public", icon: "globe", desc: "Anyone can join" },
-  { value: "private", label: "Private", icon: "lock", desc: "Invite only" },
-  { value: "solo", label: "Solo", icon: "user", desc: "Just you" },
+  { value: "public",  label: "Public",       icon: "globe",   desc: "Anyone can join" },
+  { value: "friends", label: "Friends Only",  icon: "users",   desc: "Your friends see this" },
+  { value: "crew",    label: "Crew",          icon: "shield",  desc: "Crew members only" },
 ];
 
 export default function CreateRunScreen() {
@@ -70,8 +70,16 @@ export default function CreateRunScreen() {
   const [pickerLng, setPickerLng] = useState(parseFloat(locationLng) || 0);
   const [pickerName, setPickerName] = useState(locationName);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [selectedCrewId, setSelectedCrewId] = useState<string | null>(params.crewId ?? null);
 
-  const isCrew = !!params.crewId;
+  const { data: myCrews = [] } = useQuery<{ id: string; name: string; emoji?: string }[]>({
+    queryKey: ["/api/crews"],
+    staleTime: 60_000,
+    enabled: !!user,
+  });
+
+  const isCrew = !!(params.crewId || (privacy === "crew" && selectedCrewId));
+  const effectiveCrewId = params.crewId || (privacy === "crew" ? selectedCrewId : null);
 
   function autoFormatTime(digits: string): string {
     if (digits.length <= 1) return digits;
@@ -165,10 +173,11 @@ export default function CreateRunScreen() {
       const pace = isCrew ? parseFloat(plannedPace) || 9 : parseFloat(minPace);
       const paceMax = isCrew ? pace : parseFloat(maxPace);
 
+      if (privacy === "crew" && !selectedCrewId && !params.crewId) throw new Error("Please select a crew for this run");
       const res = await apiRequest("POST", "/api/runs", {
         title: title.trim(),
         description: description.trim() || undefined,
-        privacy: isCrew ? "public" : privacy,
+        privacy: isCrew ? "private" : (privacy === "public" ? "public" : "private"),
         date: dateTime.toISOString(),
         locationLat: parseFloat(locationLat),
         locationLng: parseFloat(locationLng),
@@ -179,10 +188,9 @@ export default function CreateRunScreen() {
         maxPace: paceMax,
         tags: isCrew ? [] : selectedTags,
         maxParticipants: isCrew ? 9999 : parseInt(maxParticipants),
-        invitePassword: !isCrew && privacy === "private" && invitePassword.trim() ? invitePassword.trim() : undefined,
         runStyle: isCrew ? undefined : (runStyle ?? undefined),
         activityType,
-        crewId: params.crewId || undefined,
+        crewId: effectiveCrewId || undefined,
         isStrict: false,
       });
       return res.json();
@@ -190,8 +198,8 @@ export default function CreateRunScreen() {
     onSuccess: (run: any) => {
       qc.invalidateQueries({ queryKey: ["/api/runs"] });
       qc.invalidateQueries({ queryKey: ["/api/runs/mine"] });
-      if (params.crewId) {
-        qc.invalidateQueries({ queryKey: ["/api/crews", params.crewId, "runs"] });
+      if (effectiveCrewId) {
+        qc.invalidateQueries({ queryKey: ["/api/crews", effectiveCrewId, "runs"] });
         qc.invalidateQueries({ queryKey: ["/api/crews"] });
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -303,7 +311,11 @@ export default function CreateRunScreen() {
                 <Pressable
                   key={opt.value}
                   style={[styles.privacyOption, privacy === opt.value && styles.privacyOptionActive]}
-                  onPress={() => { setPrivacy(opt.value); Haptics.selectionAsync(); }}
+                  onPress={() => {
+                    setPrivacy(opt.value);
+                    if (opt.value !== "crew") setSelectedCrewId(null);
+                    Haptics.selectionAsync();
+                  }}
                 >
                   <Feather name={opt.icon as any} size={16} color={privacy === opt.value ? C.primary : C.textSecondary} />
                   <Text style={[styles.privacyLabel, privacy === opt.value && styles.privacyLabelActive]}>{opt.label}</Text>
@@ -314,22 +326,31 @@ export default function CreateRunScreen() {
           </View>
         )}
 
-        {!params.crewId && privacy === "private" && (
+        {!params.crewId && privacy === "crew" && (
           <View style={styles.field}>
-            <View style={styles.passwordHeader}>
-              <Feather name="key" size={14} color={C.textSecondary} />
-              <Text style={styles.label}>Join Password (optional)</Text>
-            </View>
-            <TextInput
-              style={styles.input}
-              value={invitePassword}
-              onChangeText={setInvitePassword}
-              placeholder="Set a password runners must enter to join"
-              placeholderTextColor={C.textMuted}
-              secureTextEntry={false}
-              autoCapitalize="none"
-            />
-            <Text style={styles.passwordHint}>If left blank, only invited runners with the invite code can join.</Text>
+            <Text style={styles.label}>Select Crew</Text>
+            {myCrews.length === 0 ? (
+              <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textMuted }}>
+                You're not in any crews yet. Join or create one from the Crew tab.
+              </Text>
+            ) : (
+              <View style={{ gap: 8 }}>
+                {myCrews.map((crew) => {
+                  const active = selectedCrewId === crew.id;
+                  return (
+                    <Pressable
+                      key={crew.id}
+                      style={[styles.crewPickRow, active && styles.crewPickRowActive]}
+                      onPress={() => { setSelectedCrewId(crew.id); Haptics.selectionAsync(); }}
+                    >
+                      <Text style={{ fontSize: 18 }}>{crew.emoji ?? "🏃"}</Text>
+                      <Text style={[styles.crewPickName, active && { color: C.primary }]}>{crew.name}</Text>
+                      {active && <Feather name="check-circle" size={16} color={C.primary} />}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
           </View>
         )}
 
@@ -718,6 +739,19 @@ const styles = StyleSheet.create({
   privacyLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary },
   privacyLabelActive: { color: C.primary },
   privacyDesc: { fontFamily: "Outfit_400Regular", fontSize: 10, color: C.textMuted, textAlign: "center" },
+  crewPickRow: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 10,
+    backgroundColor: C.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  crewPickRowActive: { borderColor: C.primary, backgroundColor: C.primaryMuted },
+  crewPickName: { flex: 1, fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text },
   activityRow: { flexDirection: "row", gap: 8 },
   activityPill: {
     flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,

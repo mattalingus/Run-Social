@@ -554,7 +554,7 @@ export default function DiscoverScreen() {
   const [hLocation, setHLocation] = useState("");
   const [hDate, setHDate] = useState("");
   const [hTime, setHTime] = useState("");
-  const [hPrivacy, setHPrivacy] = useState("public");
+  const [hPrivacy, setHPrivacy] = useState<"public" | "friends" | "crew">("public");
   const [hPassword, setHPassword] = useState("");
   const [hMaxParticipants, setHMaxParticipants] = useState(20);
   const [hTags, setHTags] = useState<string[]>(["General"]);
@@ -569,13 +569,14 @@ export default function DiscoverScreen() {
   const [hAmPm, setHAmPm] = useState<"AM" | "PM">("AM");
   const [hStrict, setHStrict] = useState(false);
   const [hActivityType, setHActivityType] = useState<"run" | "ride">("run");
+  const [hCrewId, setHCrewId] = useState<string | null>(null);
 
   function resetHostForm() {
     setHTitle(""); setHLocation(""); setHDate(""); setHTime("");
     setHPrivacy("public"); setHPassword(""); setHMaxParticipants(20);
     setHTags(["General"]); setHDist("3"); setHMinPace(8); setHMaxPace(12);
     setHLocationLat(null); setHLocationLng(null); setPinCoord(null); setHostPage("form");
-    setHAmPm("AM"); setHStrict(false); setHActivityType("run");
+    setHAmPm("AM"); setHStrict(false); setHActivityType("run"); setHCrewId(null);
   }
 
   function handleDateChange(text: string) {
@@ -693,9 +694,10 @@ export default function DiscoverScreen() {
       parsedDate.setHours(parsedTime.hours, parsedTime.minutes, 0, 0);
       if (isNaN(parsedDate.getTime())) throw new Error("Invalid date or time");
       if (parsedDate.getTime() < Date.now() - 5 * 60 * 1000) throw new Error("Run date must be in the future");
+      if (hPrivacy === "crew" && !hCrewId) throw new Error("Please select a crew for this run");
       const res = await apiRequest("POST", "/api/runs", {
         title: hTitle.trim(),
-        privacy: hPrivacy,
+        privacy: hPrivacy === "public" ? "public" : "private",
         date: parsedDate.toISOString(),
         locationLat: hLocationLat,
         locationLng: hLocationLng,
@@ -706,9 +708,9 @@ export default function DiscoverScreen() {
         maxPace: hMaxPace,
         tags: hTags,
         maxParticipants: hMaxParticipants === 0 ? 9999 : hMaxParticipants,
-        invitePassword: hPrivacy === "private" && hPassword.trim() ? hPassword.trim() : undefined,
         isStrict: hStrict,
         activityType: hActivityType,
+        crewId: hPrivacy === "crew" ? hCrewId : undefined,
       });
       return res.json();
     },
@@ -752,6 +754,12 @@ export default function DiscoverScreen() {
 
   const { data: friends = [] } = useQuery<{ id: string }[]>({
     queryKey: ["/api/friends"],
+    staleTime: 60_000,
+    enabled: !!user,
+  });
+
+  const { data: myCrews = [] } = useQuery<{ id: string; name: string; emoji?: string }[]>({
+    queryKey: ["/api/crews"],
     staleTime: 60_000,
     enabled: !!user,
   });
@@ -1353,36 +1361,54 @@ export default function DiscoverScreen() {
 
             {/* Privacy */}
             <Text style={s.hLabel}>Visibility</Text>
-            <View style={{ flexDirection: "row", gap: 10, marginBottom: 4 }}>
-              {[
-                { val: "public",  icon: "globe" as const,  label: "Public",  desc: "Anyone can join" },
-                { val: "private", icon: "lock"  as const,  label: "Private", desc: "Invite only" },
-              ].map((opt) => (
+            <View style={{ flexDirection: "row", gap: 8, marginBottom: 4 }}>
+              {([
+                { val: "public",  icon: "globe"   as const, label: "Public",       desc: "Anyone can join" },
+                { val: "friends", icon: "users"   as const, label: "Friends Only",  desc: "Your friends see this" },
+                { val: "crew",    icon: "shield"  as const, label: "Crew",          desc: "Crew members only" },
+              ] as { val: "public" | "friends" | "crew"; icon: "globe" | "users" | "shield"; label: string; desc: string }[]).map((opt) => (
                 <Pressable
                   key={opt.val}
-                  style={[s.hPrivOpt, hPrivacy === opt.val && s.hPrivOptActive]}
-                  onPress={() => { setHPrivacy(opt.val); Haptics.selectionAsync(); }}
+                  style={[s.hPrivOpt, { flex: 1 }, hPrivacy === opt.val && s.hPrivOptActive]}
+                  onPress={() => {
+                    setHPrivacy(opt.val);
+                    if (opt.val !== "crew") setHCrewId(null);
+                    Haptics.selectionAsync();
+                  }}
                 >
                   <Feather name={opt.icon} size={15} color={hPrivacy === opt.val ? C.primary : C.textSecondary} />
-                  <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: hPrivacy === opt.val ? C.primary : C.textSecondary, marginTop: 4 }}>{opt.label}</Text>
-                  <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted, marginTop: 2 }}>{opt.desc}</Text>
+                  <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: hPrivacy === opt.val ? C.primary : C.textSecondary, marginTop: 4 }}>{opt.label}</Text>
+                  <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 10, color: C.textMuted, marginTop: 2, textAlign: "center" }}>{opt.desc}</Text>
                 </Pressable>
               ))}
             </View>
 
-            {/* Password (private only) */}
-            {hPrivacy === "private" && (
+            {/* Crew picker (crew only) */}
+            {hPrivacy === "crew" && myCrews.length > 0 && (
               <>
-                <Text style={[s.hLabel, { marginTop: 10 }]}>Join Password <Text style={{ color: C.textMuted, fontFamily: "Outfit_400Regular" }}>(optional)</Text></Text>
-                <TextInput
-                  style={s.hInput}
-                  value={hPassword}
-                  onChangeText={setHPassword}
-                  placeholder="Leave blank to use invite code only"
-                  placeholderTextColor={C.textMuted}
-                  autoCapitalize="none"
-                />
+                <Text style={[s.hLabel, { marginTop: 12 }]}>Select Crew</Text>
+                <View style={{ gap: 6, marginBottom: 4 }}>
+                  {myCrews.map((crew) => {
+                    const active = hCrewId === crew.id;
+                    return (
+                      <Pressable
+                        key={crew.id}
+                        style={[s.crewPickRow, active && s.crewPickRowActive]}
+                        onPress={() => { setHCrewId(crew.id); Haptics.selectionAsync(); }}
+                      >
+                        <Text style={s.crewPickEmoji}>{crew.emoji ?? "🏃"}</Text>
+                        <Text style={[s.crewPickName, active && { color: C.primary }]}>{crew.name}</Text>
+                        {active && <Feather name="check-circle" size={16} color={C.primary} />}
+                      </Pressable>
+                    );
+                  })}
+                </View>
               </>
+            )}
+            {hPrivacy === "crew" && myCrews.length === 0 && (
+              <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, marginTop: 6, marginBottom: 4 }}>
+                You're not in any crews yet. Join or create one from the Crew tab.
+              </Text>
             )}
 
             {/* Strict Mode */}
@@ -1893,6 +1919,30 @@ const s = StyleSheet.create({
   hPrivOptActive: {
     backgroundColor: C.primaryMuted,
     borderColor: C.primary,
+  },
+  crewPickRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: C.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  crewPickRowActive: {
+    borderColor: C.primary,
+    backgroundColor: C.primaryMuted,
+  },
+  crewPickEmoji: {
+    fontSize: 18,
+  },
+  crewPickName: {
+    flex: 1,
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 14,
+    color: C.text,
   },
   hStepper: {
     flexDirection: "row",
