@@ -203,7 +203,7 @@ function RunMarker({ run, isSelected, onPress }: { run: Run; isSelected: boolean
       <Animated.View style={[mk.wrap, { transform: [{ scale }] }]}>
         {soon && <View style={mk.glow} />}
         {run.is_active && run.participant_count > 0 && <View style={mk.liveRing} />}
-        <View style={[mk.circle, isSelected && mk.circleSelected]}>
+        <View style={[mk.circle, !!run.crew_id && mk.circleCrew, isSelected && mk.circleSelected]}>
           {isEmojiIcon ? (
             <Text style={mk.emoji}>{icon}</Text>
           ) : (
@@ -214,7 +214,7 @@ function RunMarker({ run, isSelected, onPress }: { run: Run; isSelected: boolean
             />
           )}
         </View>
-        <View style={mk.pin} />
+        <View style={[mk.pin, !!run.crew_id && mk.pinCrew]} />
         {run.is_active && run.participant_count > 0 && (
           <View style={mk.liveBadge}>
             <Text style={mk.liveBadgeText}>LIVE</Text>
@@ -243,6 +243,7 @@ const mk = StyleSheet.create({
     elevation: 10,
   },
   circleSelected: { borderColor: "#FFFFFF", shadowColor: C.primary, shadowOpacity: 1, shadowRadius: 16 },
+  circleCrew: { borderColor: "#FFFFFF", shadowColor: "#FFFFFF", shadowOpacity: 0.45, shadowRadius: 8 },
   circleGray: { borderColor: "#444", shadowColor: "#000", shadowOpacity: 0.2 },
   circleGraySelected: { borderColor: "#888" },
   img: { width: "100%", height: "100%" },
@@ -253,6 +254,7 @@ const mk = StyleSheet.create({
     shadowColor: C.primary, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 4,
     elevation: 3,
   },
+  pinCrew: { backgroundColor: "#FFFFFF", shadowColor: "#FFFFFF", shadowOpacity: 0.9, shadowRadius: 4 },
   pinGray: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#555", marginTop: 3 },
   liveRing: {
     position: "absolute", top: -5,
