@@ -679,6 +679,7 @@ function CrewDetailSheet({
   const [chatInput, setChatInput] = useState("");
   const [chatSending, setChatSending] = useState(false);
   const chatScrollRef = useRef<ScrollView>(null);
+  const detailScrollRef = useRef<ScrollView>(null);
   const [showGifPicker, setShowGifPicker] = useState(false);
   const [gifSearch, setGifSearch] = useState("");
   const [gifResults, setGifResults] = useState<GifItem[]>([]);
@@ -802,7 +803,7 @@ function CrewDetailSheet({
                 </TouchableOpacity>
               </View>
 
-              <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
+              <ScrollView ref={detailScrollRef} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
 
                 {/* Join Requests — crew chief only */}
                 {isCreatorLocal && joinRequests.length > 0 && (
@@ -1065,6 +1066,11 @@ function CrewDetailSheet({
                       blurOnSubmit={false}
                       returnKeyType="send"
                       editable={!chatSending}
+                      onFocus={() => {
+                        setTimeout(() => {
+                          detailScrollRef.current?.scrollToEnd({ animated: true });
+                        }, 350);
+                      }}
                     />
                     <TouchableOpacity
                       testID="gif-btn"

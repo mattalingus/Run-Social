@@ -1341,7 +1341,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
-  app.get("/api/gifs/search", requireAuth, async (req, res) => {
+  app.get("/api/gifs/search", async (req, res) => {
     try {
       const q = String(req.query.q || "").trim();
       const limit = Math.min(Number(req.query.limit) || 20, 50);
