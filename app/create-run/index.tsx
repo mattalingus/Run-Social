@@ -66,9 +66,10 @@ export default function CreateRunScreen() {
   const [plannedDistance, setPlannedDistance] = useState(params.pathDistance ?? "3");
   const [plannedPace, setPlannedPace] = useState("9");
   const [locationPickerOpen, setLocationPickerOpen] = useState(false);
-  const [pickerLat, setPickerLat] = useState(parseFloat(locationLat) || 37.7749);
-  const [pickerLng, setPickerLng] = useState(parseFloat(locationLng) || -122.4194);
+  const [pickerLat, setPickerLat] = useState(parseFloat(locationLat) || 0);
+  const [pickerLng, setPickerLng] = useState(parseFloat(locationLng) || 0);
   const [pickerName, setPickerName] = useState(locationName);
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
 
   const isCrew = !!params.crewId;
 
@@ -133,14 +134,12 @@ export default function CreateRunScreen() {
   }
 
   useEffect(() => {
-    if (parseFloat(locationLat) && parseFloat(locationLng)) return;
     (async () => {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== "granted") return;
         const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        setPickerLat(loc.coords.latitude);
-        setPickerLng(loc.coords.longitude);
+        setUserLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
       } catch {}
     })();
   }, []);
@@ -382,8 +381,13 @@ export default function CreateRunScreen() {
           <Pressable
             style={({ pressed }) => [styles.locationBtn, { opacity: pressed ? 0.8 : 1 }]}
             onPress={() => {
-              setPickerLat(parseFloat(locationLat) || 37.7749);
-              setPickerLng(parseFloat(locationLng) || -122.4194);
+              if (parseFloat(locationLat) && parseFloat(locationLng)) {
+                setPickerLat(parseFloat(locationLat));
+                setPickerLng(parseFloat(locationLng));
+              } else if (userLocation) {
+                setPickerLat(userLocation.latitude);
+                setPickerLng(userLocation.longitude);
+              }
               setPickerName(locationName);
               setLocationPickerOpen(true);
             }}
