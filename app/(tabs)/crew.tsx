@@ -940,7 +940,7 @@ function CrewDetailSheet({
                             <Text style={s.eventMetaChipTxt}>{Math.max(1, run.participant_count ?? 0)} going</Text>
                           </View>
                         </View>
-                        <Text style={s.eventCardHost}>Hosted by {run.host_name}</Text>
+                        <Text style={s.eventCardHost}>{run.host_id === crew?.created_by ? "👑 " : ""}Hosted by {run.host_name}</Text>
                       </TouchableOpacity>
                     ))
                   )}
