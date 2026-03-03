@@ -822,6 +822,7 @@ export default function CrewScreen() {
   const [searchText, setSearchText] = useState("");
   const [friendsOnly, setFriendsOnly] = useState(false);
   const [searchActive, setSearchActive] = useState(false);
+  const searchInputRef = useRef<TextInput>(null);
 
   const isSearching = searchText.trim().length > 0 || friendsOnly;
   const searchUrl = `/api/crews/search?q=${encodeURIComponent(searchText.trim())}&friends=${friendsOnly}`;
@@ -892,6 +893,7 @@ export default function CrewScreen() {
         <View style={s.searchBar}>
           <Ionicons name="search" size={15} color={C.textMuted} />
           <TextInput
+            ref={searchInputRef}
             style={s.searchInput}
             value={searchText}
             onChangeText={setSearchText}
@@ -1007,7 +1009,7 @@ export default function CrewScreen() {
                   <Ionicons name="people" size={20} color={C.bg} />
                   <Text style={s.createCrewBtnTxt}>Create a Crew</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[s.joinCrewBtn, { alignSelf: "stretch" }]} onPress={() => setSearchActive(true)} activeOpacity={0.88}>
+                <TouchableOpacity style={[s.joinCrewBtn, { alignSelf: "stretch" }]} onPress={() => { setSearchActive(true); setTimeout(() => searchInputRef.current?.focus(), 100); }} activeOpacity={0.88}>
                   <Ionicons name="search" size={20} color={C.primary} />
                   <Text style={s.joinCrewBtnTxt}>Join a Crew</Text>
                 </TouchableOpacity>
