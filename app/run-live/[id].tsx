@@ -17,7 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLiveTracking } from "@/contexts/LiveTrackingContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
@@ -55,6 +55,7 @@ export default function RunLiveScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const qc = useQueryClient();
   const mapRef = useRef<MapView>(null);
 
   // ── Tracking context (survives minimize/navigation) ──────────────────────
@@ -129,6 +130,8 @@ export default function RunLiveScreen() {
     },
   });
 
+  const isHost = run?.host_id === user?.id;
+
   // ── Start tracking ────────────────────────────────────────────────────────
 
   async function handleStartTracking() {
@@ -137,6 +140,16 @@ export default function RunLiveScreen() {
       if (!perm.granted) {
         const type = run?.activity_type === "ride" ? "ride" : "run";
         Alert.alert("Location Required", `Enable location access to track your ${type}.`);
+        return;
+      }
+    }
+    // Host activates the run the moment they start tracking
+    if (isHost && !run?.is_active) {
+      try {
+        await apiRequest("POST", `/api/runs/${id}/start`);
+        qc.invalidateQueries({ queryKey: ["/api/runs", id] });
+      } catch (e: any) {
+        Alert.alert("Error", e.message || "Could not start event");
         return;
       }
     }
@@ -405,11 +418,19 @@ export default function RunLiveScreen() {
 
           {/* Bottom action */}
           <View style={[s.bottomBar, { paddingBottom: botPad + 16 }]}>
-            {phase === "idle" && (
+            {phase === "idle" && isHost && (
               <Pressable style={({ pressed }) => [s.startBtn, { opacity: pressed ? 0.85 : 1 }]} onPress={handleStartTracking}>
                 <Feather name="play" size={20} color={C.bg} />
                 <Text style={s.startBtnText}>{run?.activity_type === "ride" ? "Start Ride" : "Start Run"}</Text>
               </Pressable>
+            )}
+            {phase === "idle" && !!run && !isHost && (
+              <View style={s.waitingRow}>
+                <ActivityIndicator size="small" color={C.primary} />
+                <Text style={s.waitingText}>
+                  {liveState?.isActive ? "Starting your tracking…" : "Waiting for host to start…"}
+                </Text>
+              </View>
             )}
             {phase === "active" && (
               <Pressable style={({ pressed }) => [s.finishBtn, { opacity: pressed ? 0.85 : 1 }]} onPress={handleFinishRun}>
@@ -584,6 +605,8 @@ const s = StyleSheet.create({
   finishBtnText: { fontFamily: "Outfit_700Bold", fontSize: 16, color: "#fff" },
   savingRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, height: 52 },
   savingText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.textSecondary },
+  waitingRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, height: 52 },
+  waitingText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.textSecondary },
 
   legendContainer: { marginHorizontal: 10, marginTop: 10 },
   legend: { flexDirection: "row", flexWrap: "wrap", gap: 8 },

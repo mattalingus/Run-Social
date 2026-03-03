@@ -1063,14 +1063,24 @@ export async function pingRunLocation(
     [runId, userId, latitude, longitude, cumulativeDistance, pace]
   );
 
-  const runRes = await pool.query(`SELECT location_lat, location_lng, is_active FROM runs WHERE id = $1`, [runId]);
+  const runRes = await pool.query(`SELECT host_id, location_lat, location_lng, is_active FROM runs WHERE id = $1`, [runId]);
   if (!runRes.rows.length) return { isPresent: false, isActive: false };
   const run = runRes.rows[0];
+
+  // Ensure the host has a participant row so they appear in live state and results
+  if (userId === run.host_id) {
+    await pool.query(
+      `INSERT INTO run_participants (run_id, user_id, status, is_present)
+       SELECT $1, $2, 'joined', true
+       WHERE NOT EXISTS (SELECT 1 FROM run_participants WHERE run_id = $1 AND user_id = $2)`,
+      [runId, userId]
+    );
+  }
 
   let isPresent = false;
   if (run.is_active) {
     const dist = haversineKm(latitude, longitude, run.location_lat, run.location_lng);
-    if (dist <= 0.1524) {
+    if (dist <= 0.1524 || userId === run.host_id) {
       await pool.query(
         `UPDATE run_participants SET is_present = true WHERE run_id = $1 AND user_id = $2 AND status != 'cancelled'`,
         [runId, userId]
@@ -1141,9 +1151,24 @@ export async function getRunResults(runId: string) {
     `SELECT rp.user_id, u.name, u.photo_url, rp.final_distance, rp.final_pace, rp.final_rank, rp.is_present
      FROM run_participants rp
      JOIN users u ON u.id = rp.user_id
-     WHERE rp.run_id = $1 AND rp.is_present = true
+     WHERE rp.run_id = $1
+       AND rp.status != 'cancelled'
+       AND (rp.is_present = true OR rp.final_distance IS NOT NULL)
      ORDER BY rp.final_rank ASC NULLS LAST, rp.joined_at ASC`,
     [runId]
+  );
+  return result.rows;
+}
+
+export async function getHostRoutePath(runId: string): Promise<{ latitude: number; longitude: number }[]> {
+  const runRes = await pool.query(`SELECT host_id FROM runs WHERE id = $1`, [runId]);
+  if (!runRes.rows.length) return [];
+  const hostId = runRes.rows[0].host_id;
+  const result = await pool.query(
+    `SELECT latitude, longitude FROM run_tracking_points
+     WHERE run_id = $1 AND user_id = $2
+     ORDER BY recorded_at ASC`,
+    [runId, hostId]
   );
   return result.rows;
 }

@@ -89,8 +89,6 @@ export default function RunDetailScreen() {
   const [proximityTriggered, setProximityTriggered] = useState(false);
   const [showPlanInfoModal, setShowPlanInfoModal] = useState(false);
   const [planInfoPage, setPlanInfoPage] = useState(0);
-  const [starting, setStarting] = useState(false);
-  const [hostDist, setHostDist] = useState<number | null>(null);
   const [passwordInput, setPasswordInput] = useState("");
   const [tokenInput, setTokenInput] = useState(token || "");
   const [accessError, setAccessError] = useState("");
@@ -280,22 +278,6 @@ export default function RunDetailScreen() {
     return () => pillPulse.stopAnimation();
   }, [isMyTracking]);
 
-  useEffect(() => {
-    if (!isHost || !run || Platform.OS === "web") return;
-    Location.getForegroundPermissionsAsync().then(async (perm) => {
-      try {
-        let granted = perm.granted;
-        if (!granted) {
-          const req = await Location.requestForegroundPermissionsAsync();
-          granted = req.granted;
-        }
-        if (!granted) return;
-        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        const d = haversineKmDetail(loc.coords.latitude, loc.coords.longitude, run.location_lat, run.location_lng);
-        setHostDist(d);
-      } catch { setHostDist(null); }
-    });
-  }, [isHost, run?.id]);
 
   // Geo-proximity auto-trigger: show rules modal when non-participant arrives within 1 km
   useEffect(() => {
@@ -338,21 +320,6 @@ export default function RunDetailScreen() {
     liveTracking.minimize();
   }, [isLive]);
 
-  async function handleStartRun() {
-    if (!user) return;
-    setStarting(true);
-    try {
-      await apiRequest("POST", `/api/runs/${id}/start`);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      qc.invalidateQueries({ queryKey: ["/api/runs", id] });
-      router.push(`/run-live/${id}`);
-    } catch (e: any) {
-      Alert.alert(`Can't Start ${run?.activity_type === "ride" ? "Ride" : "Run"}`, e.message || `Failed to start ${run?.activity_type === "ride" ? "ride" : "run"}`);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } finally {
-      setStarting(false);
-    }
-  }
 
   function handleOpenEdit() {
     if (!run) return;
@@ -921,17 +888,8 @@ export default function RunDetailScreen() {
 
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
         {isHost && !run.is_completed && (
-          isLive ? (
-            <Pressable
-              style={({ pressed }) => [styles.liveBtn, { opacity: pressed ? 0.85 : 1 }]}
-              onPress={() => router.push(`/run-live/${id}`)}
-            >
-              <View style={styles.liveDot} />
-              <Text style={styles.liveBtnText}>{run?.activity_type === "ride" ? "Ready to Ride" : "Ready to Run"}</Text>
-            </Pressable>
-          ) : (
-            <>
-              {/* Host management: Edit time & Cancel */}
+          <>
+            {!isLive && (
               <View style={styles.hostMgmtRow}>
                 <Pressable
                   style={({ pressed }) => [styles.hostMgmtBtn, { opacity: pressed ? 0.75 : 1 }]}
@@ -950,43 +908,25 @@ export default function RunDetailScreen() {
                   {cancelling ? <ActivityIndicator size="small" color={C.danger} /> : (
                     <>
                       <Feather name="x-circle" size={15} color={C.danger} />
-                      <Text style={styles.hostMgmtDangerTxt}>Cancel Run</Text>
+                      <Text style={styles.hostMgmtDangerTxt}>Cancel {run?.activity_type === "ride" ? "Ride" : "Run"}</Text>
                     </>
                   )}
                 </Pressable>
               </View>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.primaryBtn,
-                  (hostDist === null || hostDist > 1) && styles.btnDisabled,
-                  { opacity: pressed || starting ? 0.85 : 1 },
-                ]}
-                onPress={handleStartRun}
-                disabled={starting || hostDist === null || hostDist > 1}
-              >
-                {starting ? <ActivityIndicator color={C.text} /> : (
-                  <>
-                    <Feather name="play" size={18} color={C.text} />
-                    <Text style={styles.primaryBtnText}>{run?.activity_type === "ride" ? "Start Ride" : "Start Run"}</Text>
-                  </>
-                )}
-              </Pressable>
-              {hostDist !== null && hostDist > 1 && (
-                <View style={styles.proximityWarn}>
-                  <Feather name="map-pin" size={13} color={C.textSecondary} />
-                  <Text style={styles.proximityText}>
-                    Move within 1 km of the start pin ({hostDist.toFixed(1)} km away)
-                  </Text>
-                </View>
-              )}
-              {hostDist === null && Platform.OS !== "web" && (
-                <View style={styles.proximityWarn}>
-                  <Feather name="map-pin" size={13} color={C.textSecondary} />
-                  <Text style={styles.proximityText}>Checking your location…</Text>
-                </View>
-              )}
-            </>
-          )
+            )}
+            <Pressable
+              style={({ pressed }) => [styles.liveBtn, { opacity: pressed ? 0.85 : 1 }]}
+              onPress={() => router.push(`/run-live/${id}`)}
+            >
+              {isLive && <View style={styles.liveDot} />}
+              <Feather name={isLive ? "radio" : "play-circle"} size={18} color={C.text} />
+              <Text style={styles.liveBtnText}>
+                {isLive
+                  ? (run?.activity_type === "ride" ? "Ready to Ride" : "Ready to Run")
+                  : (run?.activity_type === "ride" ? "Host Ride" : "Host Run")}
+              </Text>
+            </Pressable>
+          </>
         )}
         {!isHost && isLive && isParticipant && !run.is_completed && (
           <Pressable
