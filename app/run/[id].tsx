@@ -694,23 +694,33 @@ export default function RunDetailScreen() {
               <Ionicons name="people" size={20} color={C.textSecondary} />
               {run.crew_id ? (
                 <>
-                  <Text style={styles.reqValue}>{Math.max(1, run.participant_count ?? 0)}</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                    <Text style={styles.reqValue}>{Math.max(1, run.participant_count ?? 0)}</Text>
+                    {parseInt(run.plan_count) > 0 && (
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 2, backgroundColor: C.card, borderRadius: 6, paddingHorizontal: 5, paddingVertical: 2 }}>
+                        <Feather name="calendar" size={10} color={C.textMuted} />
+                        <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 10, color: C.textMuted }}>{run.plan_count}</Text>
+                      </View>
+                    )}
+                  </View>
                   <Text style={styles.reqLabel}>Coming</Text>
                 </>
               ) : (
                 <>
-                  <Text style={styles.reqValue}>{Math.max(1, run.participant_count ?? 0)}/{run.max_participants}</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                    <Text style={styles.reqValue}>{Math.max(1, run.participant_count ?? 0)}/{run.max_participants}</Text>
+                    {parseInt(run.plan_count) > 0 && (
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 2, backgroundColor: C.card, borderRadius: 6, paddingHorizontal: 5, paddingVertical: 2 }}>
+                        <Feather name="calendar" size={10} color={C.textMuted} />
+                        <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 10, color: C.textMuted }}>{run.plan_count}</Text>
+                      </View>
+                    )}
+                  </View>
                   <Text style={styles.reqLabel}>Participants</Text>
                 </>
               )}
             </View>
           </View>
-          {parseInt(run.plan_count) > 0 && (
-            <View style={styles.planCountRow}>
-              <Feather name="calendar" size={13} color={C.textMuted} />
-              <Text style={styles.planCountText}>{run.plan_count} {parseInt(run.plan_count) === 1 ? "person" : "people"} planning to {run.activity_type === "ride" ? "ride" : "run"}</Text>
-            </View>
-          )}
           {user && run.is_strict && (() => {
             const hasHistory = (recentDistances ?? []).length > 0;
             if (!hasHistory) {
