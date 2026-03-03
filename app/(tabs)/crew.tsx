@@ -1269,99 +1269,94 @@ function CrewDetailSheet({
               pendingRequestIds={joinRequests.map((r) => r.user_id)}
             />
           )}
-        </View>
-      </Modal>
 
-      {/* GIF Picker Modal */}
-      <Modal
-        visible={showGifPicker}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowGifPicker(false)}
-      >
-        <View style={s.gifPickerSheet}>
-          {/* Header */}
-          <View style={s.gifPickerHeader}>
-            <View style={{ width: 36 }} />
-            <Text style={s.gifPickerTitle}>GIFs</Text>
-            <TouchableOpacity onPress={() => setShowGifPicker(false)} style={s.gifPickerClose}>
-              <Ionicons name="close" size={22} color={C.textMuted} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Search bar */}
-          <View style={s.gifSearchRow}>
-            <Ionicons name="search" size={16} color={C.textMuted} style={{ marginRight: 8 }} />
-            <TextInput
-              style={s.gifSearchInput}
-              value={gifSearch}
-              onChangeText={setGifSearch}
-              placeholder="Search GIFs…"
-              placeholderTextColor={C.textMuted}
-              returnKeyType="search"
-              autoFocus
-            />
-            {!!gifSearch && (
-              <TouchableOpacity onPress={() => setGifSearch("")}>
-                <Ionicons name="close-circle" size={16} color={C.textMuted} />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Topic pills (when no search) */}
-          {!gifSearch && gifResults.length === 0 && !gifLoading && (
-            <View style={s.gifTopicRow}>
-              {GIF_TOPICS.map((topic) => (
-                <TouchableOpacity
-                  key={topic}
-                  style={s.gifTopicPill}
-                  onPress={() => setGifSearch(topic)}
-                >
-                  <Text style={s.gifTopicTxt}>{topic}</Text>
+          {/* GIF Picker Overlay — inside the sheet so it works on iOS (no nested modals) */}
+          {showGifPicker && (
+            <View style={s.gifPickerOverlay}>
+              {/* Header */}
+              <View style={s.gifPickerHeader}>
+                <View style={{ width: 36 }} />
+                <Text style={s.gifPickerTitle}>GIFs</Text>
+                <TouchableOpacity onPress={() => setShowGifPicker(false)} style={s.gifPickerClose}>
+                  <Ionicons name="close" size={22} color={C.textMuted} />
                 </TouchableOpacity>
-              ))}
-            </View>
-          )}
+              </View>
 
-          {/* Loading */}
-          {gifLoading && (
-            <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-              <ActivityIndicator color={C.primary} size="large" />
-            </View>
-          )}
+              {/* Search bar */}
+              <View style={s.gifSearchRow}>
+                <Ionicons name="search" size={16} color={C.textMuted} style={{ marginRight: 8 }} />
+                <TextInput
+                  style={s.gifSearchInput}
+                  value={gifSearch}
+                  onChangeText={setGifSearch}
+                  placeholder="Search GIFs…"
+                  placeholderTextColor={C.textMuted}
+                  returnKeyType="search"
+                  autoFocus
+                />
+                {!!gifSearch && (
+                  <TouchableOpacity onPress={() => setGifSearch("")}>
+                    <Ionicons name="close-circle" size={16} color={C.textMuted} />
+                  </TouchableOpacity>
+                )}
+              </View>
 
-          {/* Empty */}
-          {!gifLoading && gifResults.length === 0 && !!gifSearch && (
-            <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 8 }}>
-              <Ionicons name="sad-outline" size={40} color={C.textMuted} />
-              <Text style={s.gifEmptyTxt}>No GIFs found for "{gifSearch}"</Text>
-            </View>
-          )}
-
-          {/* Grid */}
-          {!gifLoading && gifResults.length > 0 && (
-            <FlatList
-              data={gifResults}
-              numColumns={2}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={{ padding: 8, gap: 6 }}
-              columnWrapperStyle={{ gap: 6 }}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={s.gifGridCell}
-                  onPress={() => {
-                    setSelectedGif(item);
-                    setShowGifPicker(false);
-                  }}
-                >
-                  <ExpoImage
-                    source={{ uri: item.preview_url }}
-                    style={s.gifGridImg}
-                    contentFit="cover"
-                  />
-                </TouchableOpacity>
+              {/* Topic pills (when no search) */}
+              {!gifSearch && gifResults.length === 0 && !gifLoading && (
+                <View style={s.gifTopicRow}>
+                  {GIF_TOPICS.map((topic) => (
+                    <TouchableOpacity
+                      key={topic}
+                      style={s.gifTopicPill}
+                      onPress={() => setGifSearch(topic)}
+                    >
+                      <Text style={s.gifTopicTxt}>{topic}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
               )}
-            />
+
+              {/* Loading */}
+              {gifLoading && (
+                <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+                  <ActivityIndicator color={C.primary} size="large" />
+                </View>
+              )}
+
+              {/* Empty */}
+              {!gifLoading && gifResults.length === 0 && !!gifSearch && (
+                <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 8 }}>
+                  <Ionicons name="sad-outline" size={40} color={C.textMuted} />
+                  <Text style={s.gifEmptyTxt}>No GIFs found for "{gifSearch}"</Text>
+                </View>
+              )}
+
+              {/* Grid */}
+              {!gifLoading && gifResults.length > 0 && (
+                <FlatList
+                  data={gifResults}
+                  numColumns={2}
+                  keyExtractor={(item) => item.id}
+                  contentContainerStyle={{ padding: 8, gap: 6 }}
+                  columnWrapperStyle={{ gap: 6 }}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={s.gifGridCell}
+                      onPress={() => {
+                        setSelectedGif(item);
+                        setShowGifPicker(false);
+                      }}
+                    >
+                      <ExpoImage
+                        source={{ uri: item.preview_url }}
+                        style={s.gifGridImg}
+                        contentFit="cover"
+                      />
+                    </TouchableOpacity>
+                  )}
+                />
+              )}
+            </View>
           )}
         </View>
       </Modal>
@@ -2699,10 +2694,16 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     height: 140,
     borderRadius: 10,
   },
-  // GIF picker modal
-  gifPickerSheet: {
-    flex: 1,
+  // GIF picker overlay (inside crew detail modal — avoids nested modal iOS limitation)
+  gifPickerOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: C.bg,
+    zIndex: 99,
+    borderRadius: 12,
   },
   gifPickerHeader: {
     flexDirection: "row",
