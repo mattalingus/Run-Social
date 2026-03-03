@@ -875,7 +875,7 @@ export default function DiscoverScreen() {
       return af - bf;
     });
     return list;
-  }, [runs, search, applied, sortOption, distanceMap, userLocation, friendIdSet]);
+  }, [runs, search, applied, sortOption, distanceMap, userLocation, friendIdSet, activityFilter]);
 
   // ─── Filter state helpers ──────────────────────────────────────────────────
 
@@ -1493,7 +1493,7 @@ export default function DiscoverScreen() {
         <View style={[s.modalSheet, { paddingBottom: insets.bottom + 24 }]}>
           <View style={s.sheetHandle} />
           <View style={s.sheetHeader}>
-            <Text style={s.sheetTitle}>Host Guidelines</Text>
+            <Text style={s.sheetTitle}>{activityFilter === "ride" ? "Ride Host Guidelines" : "Run Host Guidelines"}</Text>
             <Pressable style={s.sheetHeaderBtn} onPress={() => setShowRulesModal(false)}>
               <Feather name="x" size={18} color={C.textSecondary} />
             </Pressable>
@@ -1501,17 +1501,26 @@ export default function DiscoverScreen() {
 
           <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
             <Text style={s.rulesIntro}>
-              By hosting a run on FARA, you agree to uphold these community standards. Every runner deserves a safe and welcoming experience.
+              {activityFilter === "ride"
+                ? "By hosting a ride on FARA, you agree to uphold these community standards. Every rider deserves a safe and welcoming experience."
+                : "By hosting a run on FARA, you agree to uphold these community standards. Every runner deserves a safe and welcoming experience."}
             </Text>
 
-            {[
+            {(activityFilter === "ride" ? [
+              { icon: "heart" as const,      title: "Be kind and respectful",       body: "Treat every rider with courtesy. No one should feel unwelcome or judged on your ride." },
+              { icon: "clock" as const,       title: "Be on time",                   body: "Start and finish as scheduled. If something comes up, notify your group as early as possible." },
+              { icon: "target" as const,      title: "Set honest expectations",      body: "List accurate pace and distance ranges. Don't drop riders who joined based on your stated criteria." },
+              { icon: "shield" as const,      title: "Prioritize safety",            body: "Choose safe routes. Call out hazards, watch for traffic, and look after the wellbeing of all riders." },
+              { icon: "users" as const,       title: "Ride together",                body: "Wait at intersections and regroup regularly. A great host makes sure everyone arrives, not just the front." },
+              { icon: "x-circle" as const,    title: "Cancel responsibly",           body: "If you can't make it, cancel your ride well in advance so riders can adjust their plans." },
+            ] : [
               { icon: "heart" as const,      title: "Be kind and respectful",       body: "Treat every participant with courtesy. No runner should feel unwelcome or judged." },
               { icon: "clock" as const,       title: "Be on time",                   body: "Start and finish as scheduled. If something comes up, notify your group as early as possible." },
               { icon: "target" as const,      title: "Set honest expectations",      body: "List accurate pace and distance ranges. Don't leave runners behind who joined based on your stated criteria." },
               { icon: "shield" as const,      title: "Prioritize safety",            body: "Choose safe routes. Watch out for traffic, uneven terrain, and the wellbeing of all participants." },
               { icon: "users" as const,       title: "Leave no one behind",          body: "Check in on slower runners. A great host makes sure everyone finishes, not just the front of the pack." },
               { icon: "x-circle" as const,    title: "Cancel responsibly",           body: "If you can't make it, cancel your run well in advance so participants can adjust their plans." },
-            ].map((rule) => (
+            ]).map((rule) => (
               <View key={rule.title} style={s.ruleRow}>
                 <View style={s.ruleIcon}>
                   <Feather name={rule.icon} size={16} color={C.primary} />
