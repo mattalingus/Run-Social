@@ -1,0 +1,29 @@
+Objective
+Two changes to the group run/ride live screen, plus a note confirming existing non-host behavior:
+
+Confirm non-host finish works — non-hosts CAN always tap "Finish My Run/Ride" the moment the host starts the event. Their data saves immediately and results show right away. The group session only gets marked "complete" after the host also finishes (this is correct behavior — it doesn't block anyone). No code change needed here.
+
+"Start Solo" button on the waiting screen — when a non-host is on the waiting screen (before the host presses Start), show a small secondary "Start Solo Run" or "Start Solo Ride" button. Tapping lets them leave the group event and go straight into solo tracking instead.
+
+Ride support — all labels and dialog text dynamically read "Run" or "Ride" based on the group event's activity_type. This is already the pattern throughout the file; the new button follows the same convention.
+
+Tasks
+T001: Add "Start Solo" button to the non-host waiting screen
+Blocked By: []
+Files: app/run-live/[id].tsx
+Details:
+Import useActivity from @/contexts/ActivityContext.
+Destructure setActivityFilter from useActivity().
+Add a handleStartSolo() async function:
+Show Alert.alert("Start Solo [Run/Ride]", "Leave this group event and start a solo [run/ride] instead?", [{ text: "Stay", style: "cancel" }, { text: "Start Solo", onPress: ... }])
+On confirm: call apiRequest("POST", \/api/runs/${id}/leave`)(best-effort, swallow error so it doesn't block navigation), then callsetActivityFilter(run?.activity_type ?? "run"), thenrouter.replace("/run-tracking" as any)`.
+Update the non-host idle section of the bottom bar (phase === "idle" && !isHost && !!run):
+Keep the existing spinner + waiting text row unchanged.
+Below it, add a small secondary "Start Solo Run" (or "Start Solo Ride") button, but only when !liveState?.isActive — once the host starts the event the auto-start fires and this option no longer makes sense.
+Style: muted, small pill outline button — clearly not the primary action.
+Acceptance:
+Non-host waiting (before host starts) sees spinner row + small "Start Solo Run/Ride" button below.
+Tapping shows a confirm dialog with correct activity-type wording.
+Confirming: best-effort leave → activity filter set to match the event → navigates to /run-tracking.
+Button is hidden once the host starts the event.
+Works for both runs and rides.

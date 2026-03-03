@@ -256,6 +256,13 @@ function formatDisplayDate(d: string) {
   return new Date(d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
 
+function formatScheduledDateTime(d: string) {
+  const date = new Date(d);
+  const datePart = date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  const timePart = date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  return `${datePart} · ${timePart}`;
+}
+
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -759,20 +766,59 @@ export default function SoloScreen() {
           </View>
         )}
 
+        {/* ─── Scheduled Runs ──────────────────────────────────────────── */}
+        {scheduledRuns.length > 0 && (
+          <View style={[s.section, { marginTop: 5 }]}>
+            <Text style={s.sectionTitle}>{activityFilter === "ride" ? "Scheduled Rides" : "Scheduled Runs"}</Text>
+            {scheduledRuns.map((run) => {
+              const label = run.title || `${formatDistance(run.distance_miles)} mi ${run.activity_type === "ride" ? "ride" : "run"}`;
+              return (
+                <Pressable
+                  key={run.id}
+                  style={({ pressed }) => [s.scheduledCard, { opacity: pressed ? 0.85 : 1 }]}
+                  onPress={() => { Haptics.selectionAsync(); setSelectedScheduled(run); }}
+                  onLongPress={() => confirmDelete(run.id)}
+                >
+                  <View style={s.scheduledIconWrap}>
+                    <Feather name="calendar" size={16} color={C.blue} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.scheduledTitle} numberOfLines={1}>{label}</Text>
+                    <Text style={s.scheduledDate}>{formatScheduledDateTime(run.date)}</Text>
+                    <View style={s.scheduledChips}>
+                      <View style={s.scheduledChip}>
+                        <Feather name="map-pin" size={11} color={C.textMuted} />
+                        <Text style={s.scheduledChipTxt}>{formatDistance(run.distance_miles)} mi</Text>
+                      </View>
+                      {run.pace_min_per_mile ? (
+                        <View style={s.scheduledChip}>
+                          <Feather name="zap" size={11} color={C.textMuted} />
+                          <Text style={s.scheduledChipTxt}>{formatPace(run.pace_min_per_mile)}/mi</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  </View>
+                  <Feather name="chevron-right" size={18} color={C.blue} />
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+
         {/* ─── Run / Ride History ──────────────────────────────────────── */}
         <View style={[s.section, { marginTop: 5 }]}>
           <Text style={s.sectionTitle}>{activityFilter === "ride" ? "Ride History" : "Run History"}</Text>
 
           {isLoading ? (
             <ActivityIndicator color={C.primary} style={{ marginTop: 20 }} />
-          ) : filteredSoloRuns.length === 0 ? (
+          ) : historyRuns.length === 0 ? (
             <View style={s.emptyCard}>
               <Ionicons name={activityFilter === "ride" ? "bicycle-outline" : "walk-outline"} size={44} color={C.textMuted} />
               <Text style={s.emptyTitle}>{activityFilter === "ride" ? "No solo rides yet" : "No solo runs yet"}</Text>
               <Text style={s.emptyBody}>{activityFilter === "ride" ? "Plan your first ride and start tracking your progress" : "Plan your first run and start tracking your progress"}</Text>
             </View>
           ) : (
-            filteredSoloRuns.map((run) => {
+            historyRuns.map((run) => {
               const badge = runBadges[run.id];
               const label = run.title || `${formatDistance(run.distance_miles)} mi ${run.activity_type === "ride" ? "ride" : "run"}`;
               const isExpanded = expandedRunId === run.id;
@@ -1069,6 +1115,80 @@ export default function SoloScreen() {
         </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* ─── Start Scheduled Run Modal ────────────────────────────────── */}
+      <Modal
+        visible={!!selectedScheduled}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSelectedScheduled(null)}
+      >
+        <Pressable style={s.overlay} onPress={() => setSelectedScheduled(null)} />
+        {selectedScheduled && (
+          <View style={[s.sheet, { paddingBottom: insets.bottom + 28 }]}>
+            <View style={s.sheetHandle} />
+
+            {/* Header */}
+            <View style={s.sheetHeader}>
+              <View style={s.scheduledModalIcon}>
+                <Feather name="calendar" size={18} color={C.blue} />
+              </View>
+              <Pressable onPress={() => setSelectedScheduled(null)} hitSlop={12}>
+                <Feather name="x" size={22} color={C.textSecondary} />
+              </Pressable>
+            </View>
+
+            {/* Title */}
+            <Text style={s.scheduledModalTitle} numberOfLines={2}>
+              {selectedScheduled.title ||
+                `${formatDistance(selectedScheduled.distance_miles)} mi solo ${selectedScheduled.activity_type === "ride" ? "ride" : "run"}`}
+            </Text>
+            <Text style={s.scheduledModalDate}>{formatScheduledDateTime(selectedScheduled.date)}</Text>
+
+            {/* Stats row */}
+            <View style={s.scheduledModalStats}>
+              <View style={s.scheduledModalStat}>
+                <Feather name="map-pin" size={14} color={C.primary} />
+                <Text style={s.scheduledModalStatLabel}>Distance</Text>
+                <Text style={s.scheduledModalStatValue}>{formatDistance(selectedScheduled.distance_miles)} mi</Text>
+              </View>
+              {selectedScheduled.pace_min_per_mile ? (
+                <View style={s.scheduledModalStat}>
+                  <Feather name="zap" size={14} color={C.primary} />
+                  <Text style={s.scheduledModalStatLabel}>Target Pace</Text>
+                  <Text style={s.scheduledModalStatValue}>{formatPace(selectedScheduled.pace_min_per_mile)}/mi</Text>
+                </View>
+              ) : null}
+            </View>
+
+            {/* Start Now */}
+            <Pressable
+              style={({ pressed }) => [s.startNowBtn, { opacity: pressed ? 0.88 : 1 }]}
+              onPress={() => {
+                setActivityFilter(selectedScheduled.activity_type ?? "run");
+                setSelectedScheduled(null);
+                router.push("/run-tracking" as any);
+              }}
+            >
+              <Ionicons name="play-circle" size={22} color={C.bg} />
+              <Text style={s.startNowBtnTxt}>
+                {selectedScheduled.activity_type === "ride" ? "Start Ride Now" : "Start Run Now"}
+              </Text>
+            </Pressable>
+
+            {/* Delete */}
+            <Pressable
+              style={s.deleteScheduledBtn}
+              onPress={() => {
+                setSelectedScheduled(null);
+                setTimeout(() => confirmDelete(selectedScheduled.id), 300);
+              }}
+            >
+              <Text style={s.deleteScheduledTxt}>Delete Scheduled {selectedScheduled.activity_type === "ride" ? "Ride" : "Run"}</Text>
+            </Pressable>
+          </View>
+        )}
+      </Modal>
     </View>
   );
 }
@@ -1345,4 +1465,77 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     color: C.textSecondary,
     marginTop: 2,
   },
+
+  scheduledCard: {
+    backgroundColor: C.surface,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: C.blue + "44",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  scheduledIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: C.blue + "22",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  scheduledTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text },
+  scheduledDate: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.blue, marginTop: 2 },
+  scheduledChips: { flexDirection: "row", gap: 10, marginTop: 6 },
+  scheduledChip: { flexDirection: "row", alignItems: "center", gap: 4 },
+  scheduledChipTxt: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted },
+
+  scheduledModalIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: C.blue + "22",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  scheduledModalTitle: { fontFamily: "Outfit_700Bold", fontSize: 22, color: C.text, marginBottom: 6 },
+  scheduledModalDate: { fontFamily: "Outfit_400Regular", fontSize: 14, color: C.blue, marginBottom: 20 },
+  scheduledModalStats: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 24,
+  },
+  scheduledModalStat: {
+    flex: 1,
+    backgroundColor: C.card,
+    borderRadius: 14,
+    padding: 14,
+    alignItems: "center",
+    gap: 4,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  scheduledModalStatLabel: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted, marginTop: 2 },
+  scheduledModalStatValue: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.text },
+
+  startNowBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: C.primary,
+    borderRadius: 16,
+    paddingVertical: 16,
+    marginBottom: 12,
+  },
+  startNowBtnTxt: { fontFamily: "Outfit_700Bold", fontSize: 17, color: C.bg },
+
+  deleteScheduledBtn: {
+    alignItems: "center",
+    paddingVertical: 10,
+  },
+  deleteScheduledTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.textMuted },
 }); }
