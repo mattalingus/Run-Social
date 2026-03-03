@@ -182,7 +182,34 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
           contentContainerStyle={fm.scrollContent}
           bounces={false}
         >
-          {/* ── A. Pace ─────────────────────────────────────────────────── */}
+          {/* ── A. Visibility ────────────────────────────────────────────── */}
+          <View style={fm.section}>
+            <Text style={fm.sectionTitle}>Visibility</Text>
+            <View style={fm.proxRow}>
+              {(["all", "public", "crew", "friends"] as const).map((opt) => {
+                const labels = { all: "All", public: "Public", crew: "Crew", friends: "Friends" };
+                const active = draft.visibility === opt;
+                return (
+                  <Pressable
+                    key={opt}
+                    style={[fm.proxChip, active && fm.proxChipActive]}
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      setDraft((p) => ({ ...p, visibility: opt }));
+                    }}
+                  >
+                    <Text style={[fm.proxChipTxt, active && fm.proxChipTxtActive]}>
+                      {labels[opt]}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={fm.divider} />
+
+          {/* ── B. Pace ─────────────────────────────────────────────────── */}
           <View style={fm.section}>
             <View style={fm.sectionHead}>
               <Text style={fm.sectionTitle}>Pace</Text>
@@ -302,33 +329,6 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
                       <Feather name="check" size={11} color={C.primary} style={{ marginRight: 4 }} />
                     )}
                     <Text style={[fm.stylePillTxt, active && fm.stylePillTxtActive]}>{style}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
-          <View style={fm.divider} />
-
-          {/* ── E. Visibility ────────────────────────────────────────────── */}
-          <View style={fm.section}>
-            <Text style={fm.sectionTitle}>Visibility</Text>
-            <View style={fm.proxRow}>
-              {(["all", "public", "crew", "friends"] as const).map((opt) => {
-                const labels = { all: "All", public: "Public", crew: "Crew", friends: "Friends" };
-                const active = draft.visibility === opt;
-                return (
-                  <Pressable
-                    key={opt}
-                    style={[fm.proxChip, active && fm.proxChipActive]}
-                    onPress={() => {
-                      Haptics.selectionAsync();
-                      setDraft((p) => ({ ...p, visibility: opt }));
-                    }}
-                  >
-                    <Text style={[fm.proxChipTxt, active && fm.proxChipTxtActive]}>
-                      {labels[opt]}
-                    </Text>
                   </Pressable>
                 );
               })}

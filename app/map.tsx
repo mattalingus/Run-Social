@@ -857,6 +857,27 @@ export default function MapScreen() {
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
             <View style={s.section}>
+              <Text style={s.sectionLabel}>Visibility</Text>
+              <View style={{ height: 12 }} />
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                {(["all", "public", "crew", "friends"] as const).map((opt) => {
+                  const labels = { all: "All", public: "Public", crew: "Crew", friends: "Friends" };
+                  const active = draft.visibility === opt;
+                  return (
+                    <Pressable
+                      key={opt}
+                      style={[s.stylePill, active && s.stylePillOn]}
+                      onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setDraft((p) => ({ ...p, visibility: opt })); }}
+                    >
+                      {active && <Feather name="check" size={12} color={C.primary} style={{ marginRight: 4 }} />}
+                      <Text style={[s.styleTxt, active && s.styleTxtOn]}>{labels[opt]}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View style={s.section}>
               <View style={s.sectionHead}>
                 <Text style={s.sectionLabel}>Pace</Text>
                 <Text style={s.sectionValue}>{formatPace(draft.paceMin)} – {formatPace(draft.paceMax)} /mi</Text>
@@ -929,26 +950,6 @@ export default function MapScreen() {
               </View>
             </View>
 
-            <View style={s.section}>
-              <Text style={s.sectionLabel}>Visibility</Text>
-              <View style={{ height: 12 }} />
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                {(["all", "public", "crew", "friends"] as const).map((opt) => {
-                  const labels = { all: "All", public: "Public", crew: "Crew", friends: "Friends" };
-                  const active = draft.visibility === opt;
-                  return (
-                    <Pressable
-                      key={opt}
-                      style={[s.stylePill, active && s.stylePillOn]}
-                      onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setDraft((p) => ({ ...p, visibility: opt })); }}
-                    >
-                      {active && <Feather name="check" size={12} color={C.primary} style={{ marginRight: 4 }} />}
-                      <Text style={[s.styleTxt, active && s.styleTxtOn]}>{labels[opt]}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
           </ScrollView>
 
           <View style={s.sheetFooter}>
