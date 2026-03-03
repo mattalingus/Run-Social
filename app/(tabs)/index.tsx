@@ -589,6 +589,15 @@ function RunCard({
             </View>
           </View>
 
+          {parseInt(run.plan_count) > 0 && (
+            <View style={s.metaItem}>
+              <Feather name="calendar" size={11} color={C.textMuted} />
+              <Text style={s.metaText}>
+                {run.plan_count} {parseInt(run.plan_count) === 1 ? "person" : "people"} planning to {run.activity_type === "ride" ? "ride" : "run"}
+              </Text>
+            </View>
+          )}
+
           {run.tags?.length > 0 && (
             <View style={s.tags}>
               {run.tags.slice(0, 3).map((t) => (
