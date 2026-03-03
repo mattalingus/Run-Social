@@ -320,28 +320,45 @@ export default function CreateRunScreen() {
           </View>
         )}
 
-        <View style={styles.row}>
-          <View style={[styles.field, { flex: 1 }]}>
-            <Text style={styles.label}>Date * (YYYY-MM-DD)</Text>
+        <View style={styles.field}>
+          <Text style={styles.label}>Date & Time *</Text>
+          <View style={{ flexDirection: "row", gap: 10 }}>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { flex: 1 }]}
               value={date}
-              onChangeText={setDate}
-              placeholder="2026-03-15"
+              onChangeText={handleDateChange}
+              placeholder="MM/DD/YY"
               placeholderTextColor={C.textMuted}
-              keyboardType="numbers-and-punctuation"
+              keyboardType="number-pad"
+              maxLength={8}
             />
-          </View>
-          <View style={[styles.field, { flex: 1 }]}>
-            <Text style={styles.label}>Time * (HH:MM)</Text>
-            <TextInput
-              style={styles.input}
-              value={time}
-              onChangeText={setTime}
-              placeholder="07:00"
-              placeholderTextColor={C.textMuted}
-              keyboardType="numbers-and-punctuation"
-            />
+            <View style={{ flex: 1, flexDirection: "row", gap: 6 }}>
+              <TextInput
+                style={[styles.input, { flex: 1 }]}
+                value={time}
+                onChangeText={handleTimeChange}
+                placeholder="7:30"
+                placeholderTextColor={C.textMuted}
+                keyboardType="number-pad"
+                maxLength={5}
+              />
+              <View style={{ flexDirection: "column", gap: 4 }}>
+                {(["AM", "PM"] as const).map((period) => (
+                  <Pressable
+                    key={period}
+                    onPress={() => { setAmPm(period); Haptics.selectionAsync(); }}
+                    style={{
+                      flex: 1, paddingHorizontal: 10, borderRadius: 9, borderWidth: 1,
+                      alignItems: "center", justifyContent: "center",
+                      backgroundColor: amPm === period ? C.primary + "33" : C.surface,
+                      borderColor: amPm === period ? C.primary : C.border,
+                    }}
+                  >
+                    <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: amPm === period ? C.primary : C.textMuted }}>{period}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
           </View>
         </View>
 

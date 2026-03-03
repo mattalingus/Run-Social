@@ -258,7 +258,47 @@ function todayStr() {
 function tomorrowStr() {
   const d = new Date();
   d.setDate(d.getDate() + 1);
-  return d.toISOString().slice(0, 10);
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const yy = String(d.getFullYear()).slice(2);
+  return `${mm}/${dd}/${yy}`;
+}
+
+function parseDMY(raw: string): Date | null {
+  const parts = raw.split("/");
+  if (parts.length !== 3) return null;
+  const [mm, dd, yy] = parts.map(Number);
+  if (isNaN(mm) || isNaN(dd) || isNaN(yy)) return null;
+  const year = yy < 100 ? 2000 + yy : yy;
+  const d = new Date(year, mm - 1, dd);
+  if (d.getMonth() !== mm - 1) return null;
+  return d;
+}
+
+function parseHHMMAMPM(raw: string, ampm: "AM" | "PM"): { hours: number; minutes: number } | null {
+  const parts = raw.split(":");
+  if (parts.length !== 2) return null;
+  let hours = parseInt(parts[0], 10);
+  const minutes = parseInt(parts[1], 10);
+  if (isNaN(hours) || isNaN(minutes) || minutes < 0 || minutes > 59) return null;
+  if (hours < 1 || hours > 12) return null;
+  if (ampm === "AM") { if (hours === 12) hours = 0; }
+  else { if (hours !== 12) hours += 12; }
+  return { hours, minutes };
+}
+
+function autoFormatTime(digits: string): string {
+  if (digits.length <= 1) return digits;
+  if (digits.length === 2) {
+    if (parseInt(digits[0], 10) > 1) return digits[0] + ":" + digits[1];
+    return digits;
+  }
+  if (digits.length === 3) {
+    if (parseInt(digits[0], 10) > 1) return digits[0] + ":" + digits.slice(1);
+    return digits.slice(0, 2) + ":" + digits[2];
+  }
+  if (parseInt(digits[0], 10) > 1) return digits[0] + ":" + digits.slice(1, 3);
+  return digits.slice(0, 2) + ":" + digits.slice(2, 4);
 }
 
 async function scheduleRunNotifications(runDate: Date, label: string) {
@@ -322,7 +362,8 @@ export default function SoloScreen() {
   // Plan form state
   const [pTitle, setPTitle] = useState("");
   const [pDate, setPDate] = useState(tomorrowStr());
-  const [pTime, setPTime] = useState("07:00");
+  const [pTime, setPTime] = useState("7:00");
+  const [pAmPm, setPAmPm] = useState<"AM" | "PM">("AM");
   const [pDist, setPDist] = useState("");
   const [pPace, setPPace] = useState("");
   const [pNotify, setPNotify] = useState(true);
@@ -430,9 +471,13 @@ export default function SoloScreen() {
   async function savePlan() {
     const dist = parseFloat(pDist);
     if (isNaN(dist) || dist <= 0) { Alert.alert("Invalid", "Enter a valid distance"); return; }
-    const dateStr = `${pDate}T${pTime}:00`;
-    const runDate = new Date(dateStr);
-    if (isNaN(runDate.getTime())) { Alert.alert("Invalid", "Enter a valid date (YYYY-MM-DD) and time (HH:MM)"); return; }
+    const parsedDate = parseDMY(pDate.trim());
+    if (!parsedDate) { Alert.alert("Invalid", "Enter a valid date (MM/DD/YY)"); return; }
+    const parsedTime = parseHHMMAMPM(pTime.trim(), pAmPm);
+    if (!parsedTime) { Alert.alert("Invalid", "Enter a valid time (e.g. 7:30)"); return; }
+    parsedDate.setHours(parsedTime.hours, parsedTime.minutes, 0, 0);
+    const runDate = parsedDate;
+    if (isNaN(runDate.getTime())) { Alert.alert("Invalid", "Invalid date or time"); return; }
 
     setSaving(true);
     try {
@@ -449,7 +494,7 @@ export default function SoloScreen() {
       });
       if (pNotify) await scheduleRunNotifications(runDate, label);
       setShowPlan(false);
-      setPTitle(""); setPDate(tomorrowStr()); setPTime("07:00"); setPDist(""); setPPace("");
+      setPTitle(""); setPDate(tomorrowStr()); setPTime("7:00"); setPAmPm("AM"); setPDist(""); setPPace("");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e: any) {
       Alert.alert("Error", e.message);
@@ -838,25 +883,54 @@ export default function SoloScreen() {
               placeholderTextColor={C.textMuted}
             />
 
-            <Text style={s.inputLabel}>Date (YYYY-MM-DD)</Text>
-            <TextInput
-              style={s.input}
-              value={pDate}
-              onChangeText={setPDate}
-              placeholder={tomorrowStr()}
-              placeholderTextColor={C.textMuted}
-              keyboardType="numbers-and-punctuation"
-            />
-
-            <Text style={s.inputLabel}>Time (HH:MM, 24h)</Text>
-            <TextInput
-              style={s.input}
-              value={pTime}
-              onChangeText={setPTime}
-              placeholder="07:00"
-              placeholderTextColor={C.textMuted}
-              keyboardType="numbers-and-punctuation"
-            />
+            <Text style={s.inputLabel}>Date & Time *</Text>
+            <View style={{ flexDirection: "row", gap: 10, marginBottom: 12 }}>
+              <TextInput
+                style={[s.input, { flex: 1, marginBottom: 0 }]}
+                value={pDate}
+                onChangeText={(text) => {
+                  const digits = text.replace(/\D/g, "").slice(0, 6);
+                  let fmt = digits;
+                  if (digits.length > 2) fmt = digits.slice(0, 2) + "/" + digits.slice(2);
+                  if (digits.length > 4) fmt = digits.slice(0, 2) + "/" + digits.slice(2, 4) + "/" + digits.slice(4);
+                  setPDate(fmt);
+                }}
+                placeholder="MM/DD/YY"
+                placeholderTextColor={C.textMuted}
+                keyboardType="number-pad"
+                maxLength={8}
+              />
+              <View style={{ flex: 1, flexDirection: "row", gap: 6 }}>
+                <TextInput
+                  style={[s.input, { flex: 1, marginBottom: 0 }]}
+                  value={pTime}
+                  onChangeText={(text) => {
+                    const digits = text.replace(/\D/g, "").slice(0, 4);
+                    setPTime(autoFormatTime(digits));
+                  }}
+                  placeholder="7:30"
+                  placeholderTextColor={C.textMuted}
+                  keyboardType="number-pad"
+                  maxLength={5}
+                />
+                <View style={{ flexDirection: "column", gap: 4 }}>
+                  {(["AM", "PM"] as const).map((period) => (
+                    <Pressable
+                      key={period}
+                      onPress={() => { setPAmPm(period); Haptics.selectionAsync(); }}
+                      style={{
+                        flex: 1, paddingHorizontal: 10, borderRadius: 9, borderWidth: 1,
+                        alignItems: "center", justifyContent: "center",
+                        backgroundColor: pAmPm === period ? C.primary + "33" : C.surface,
+                        borderColor: pAmPm === period ? C.primary : C.border,
+                      }}
+                    >
+                      <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: pAmPm === period ? C.primary : C.textMuted }}>{period}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            </View>
 
             <Text style={s.inputLabel}>Distance (miles)</Text>
             <TextInput
