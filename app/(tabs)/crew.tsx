@@ -1003,7 +1003,7 @@ function CrewDetailSheet({
                                     />
                                   ) : null}
                                   {!!msg.message && (
-                                    <Text style={[s.inlineMsgTxt, isMe && s.inlineMsgTxtMe, { marginTop: 4 }]}>
+                                    <Text style={[s.inlineMsgTxt, { marginTop: 4 }]}>
                                       {msg.message}
                                     </Text>
                                   )}
