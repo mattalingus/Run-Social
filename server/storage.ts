@@ -2442,7 +2442,7 @@ export async function disbandCrewById(crewId: string, userId: string) {
 export async function getCrewRuns(crewId: string) {
   const res = await pool.query(
     `SELECT r.*, u.name AS host_name, u.photo_url AS host_photo,
-       (SELECT COUNT(*) FROM run_participants WHERE run_id = r.id) AS participant_count
+       (1 + (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled')) AS participant_count
      FROM runs r
      JOIN users u ON u.id = r.host_id
      WHERE r.crew_id = $1
