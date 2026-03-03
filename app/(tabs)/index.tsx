@@ -1749,7 +1749,10 @@ export default function DiscoverScreen() {
             </View>
 
             {/* Host Style */}
-            <Text style={s.hLabel}>Host Style</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+              <Text style={s.hLabel}>Host Style</Text>
+              <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted }}>(select all that apply)</Text>
+            </View>
             <View style={s.hTagRow}>
               {HOST_STYLES.map((tag) => (
                 <Pressable
