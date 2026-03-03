@@ -699,7 +699,7 @@ export default function RunDetailScreen() {
                 </>
               ) : (
                 <>
-                  <Text style={styles.reqValue}>{run.participant_count}/{run.max_participants}</Text>
+                  <Text style={styles.reqValue}>{Math.max(1, run.participant_count ?? 0)}/{run.max_participants}</Text>
                   <Text style={styles.reqLabel}>Participants</Text>
                 </>
               )}
@@ -782,7 +782,7 @@ export default function RunDetailScreen() {
 
         {participants.length > 0 && (
           <View style={styles.participantsSection}>
-            <Text style={styles.sectionTitle}>Participants ({run.participant_count})</Text>
+            <Text style={styles.sectionTitle}>Participants ({Math.max(1, run.participant_count ?? 0)})</Text>
             <View style={styles.participantsList}>
               {participants.slice(0, 8).map((p: any) => (
                 <Pressable
