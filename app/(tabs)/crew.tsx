@@ -2331,6 +2331,7 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   detailSection: {
     paddingHorizontal: 24,
     paddingTop: 24,
+    paddingBottom: 16,
   },
   detailSectionHeader: {
     flexDirection: "row",
