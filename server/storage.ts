@@ -1155,10 +1155,11 @@ export async function finishRunnerRun(runId: string, userId: string, finalDistan
     [runId, userId, finalDistance, finalPace]
   );
 
-  // Recompute leaderboard ranks for everyone who has finished
+  // Recompute leaderboard ranks for everyone who has finished with a valid pace (> 0)
+  // 0-pace finishers (GPS failure / 0 distance) are excluded from ranking but still count as done
   const finishedRes = await pool.query(
     `SELECT user_id, final_pace FROM run_participants
-     WHERE run_id = $1 AND final_pace IS NOT NULL ORDER BY final_pace ASC`,
+     WHERE run_id = $1 AND final_pace IS NOT NULL AND final_pace > 0 ORDER BY final_pace ASC`,
     [runId]
   );
   for (let i = 0; i < finishedRes.rows.length; i++) {

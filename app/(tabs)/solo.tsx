@@ -363,6 +363,7 @@ export default function SoloScreen() {
   const [showGoals, setShowGoals] = useState(false);
   const [showPlan, setShowPlan] = useState(false);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
+  const [selectedScheduled, setSelectedScheduled] = useState<SoloRun | null>(null);
 
   // Goals form state
   const [gPace, setGPace] = useState("");
@@ -438,6 +439,18 @@ export default function SoloScreen() {
   const filteredSoloRuns = useMemo(
     () => soloRuns.filter((r) => (r.activity_type ?? "run") === activityFilter),
     [soloRuns, activityFilter]
+  );
+
+  const scheduledRuns = useMemo(
+    () => filteredSoloRuns.filter((r) => r.planned && !r.completed).sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    ),
+    [filteredSoloRuns]
+  );
+
+  const historyRuns = useMemo(
+    () => filteredSoloRuns.filter((r) => r.completed),
+    [filteredSoloRuns]
   );
 
   const completedRuns = useMemo(
