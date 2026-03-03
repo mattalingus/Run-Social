@@ -24,6 +24,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 
+function resolveImgUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (url.startsWith("http")) return url;
+  return new URL(url, getApiUrl()).toString();
+}
+
 const C = {
   bg: "#080F0C",
   surface: "#111A15",
@@ -146,8 +152,8 @@ function CrewCard({ crew, onPress }: { crew: Crew; onPress: () => void }) {
     <TouchableOpacity style={s.crewCard} onPress={onPress} activeOpacity={0.75} testID={`crew-card-${crew.id}`}>
       <View style={s.crewCardLeft}>
         <View style={s.crewEmojiBadge}>
-          {crew.image_url ? (
-            <Image source={{ uri: crew.image_url }} style={{ width: 52, height: 52, borderRadius: 26 }} />
+          {resolveImgUrl(crew.image_url) ? (
+            <Image source={{ uri: resolveImgUrl(crew.image_url)! }} style={{ width: 52, height: 52, borderRadius: 26 }} />
           ) : (
             <Text style={s.crewEmojiText}>{crew.emoji}</Text>
           )}
@@ -543,7 +549,7 @@ function CrewDetailSheet({
     Alert.alert(
       "Leave Crew",
       isCreatorWithOthers
-        ? `You created ${crew?.name}. If you leave, the next member to join will become the new creator and the crew stays active.`
+        ? `You are the Crew Chief of ${crew?.name}. If you leave, the next member to join will become the new Crew Chief and the crew stays active.`
         : `Are you sure you want to leave ${crew?.name}?`,
       [
         { text: "Cancel", style: "cancel" },
@@ -585,7 +591,7 @@ function CrewDetailSheet({
               {/* Hero title */}
               <View style={s.detailHero}>
                 {crew.image_url ? (
-                  <Image source={{ uri: crew.image_url }} style={s.detailHeroImage} />
+                  <Image source={{ uri: resolveImgUrl(crew.image_url)! }} style={s.detailHeroImage} />
                 ) : (
                   <Text style={s.detailHeroEmoji}>{crew.emoji}</Text>
                 )}
@@ -634,14 +640,21 @@ function CrewDetailSheet({
                   ) : (
                     members.map((m) => (
                       <View key={m.user_id} style={s.memberRow}>
-                        <View style={s.memberAvatar}>
-                          <Text style={s.memberAvatarText}>{m.name[0]?.toUpperCase()}</Text>
-                        </View>
+                        {resolveImgUrl(m.photo_url) ? (
+                          <Image
+                            source={{ uri: resolveImgUrl(m.photo_url)! }}
+                            style={[s.memberAvatar, { overflow: "hidden" }]}
+                          />
+                        ) : (
+                          <View style={s.memberAvatar}>
+                            <Text style={s.memberAvatarText}>{m.name[0]?.toUpperCase()}</Text>
+                          </View>
+                        )}
                         <View style={s.memberInfo}>
                           <Text style={s.memberName}>
                             {m.name}
                             {m.user_id === crew.created_by && (
-                              <Text style={s.creatorBadge}> · Creator</Text>
+                              <Text style={s.creatorBadge}> · Crew Chief</Text>
                             )}
                           </Text>
                           {m.avg_pace && m.avg_pace > 0 ? (
@@ -854,8 +867,8 @@ function SearchResultCard({
       onPress={isMember ? onOpen : undefined}
       activeOpacity={isMember ? 0.75 : 1}
     >
-      {crew.image_url ? (
-        <Image source={{ uri: crew.image_url }} style={s.searchCardEmojiImg} />
+      {resolveImgUrl(crew.image_url) ? (
+        <Image source={{ uri: resolveImgUrl(crew.image_url)! }} style={s.searchCardEmojiImg} />
       ) : (
         <Text style={s.searchCardEmoji}>{crew.emoji}</Text>
       )}
