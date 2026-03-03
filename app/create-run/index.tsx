@@ -26,7 +26,13 @@ import { apiRequest } from "@/lib/query-client";
 import { darkColors as C, type ColorScheme } from "@/constants/colors";
 import { useTheme } from "@/contexts/ThemeContext";
 
-const RUN_TAGS = ["Talkative", "Quiet", "Motivational", "Training", "Ministry", "Recovery"];
+const TAG_GROUPS = [
+  { label: "Vibe",         tags: ["Talkative", "Quiet", "Motivational", "Social", "Ministry", "Recovery"] },
+  { label: "Pace & Style", tags: ["Beginner Friendly", "Training", "No-Drop", "PR Chaser"] },
+  { label: "Who",          tags: ["Women Only", "Men Only", "Young Adults", "College", "Seniors"] },
+  { label: "Activity",     tags: ["Trail", "Morning Run", "Night Run"] },
+  { label: "Extras",       tags: ["Dog Friendly", "Stroller Friendly"] },
+];
 const RUN_STYLES = ["Easy Pace", "Chill", "Steady", "Tempo", "Fast", "Recovery", "Long Run", "Progressive", "Intervals", "Race Prep"];
 const PRIVACY_OPTIONS = [
   { value: "public",  label: "Public",       icon: "globe",   desc: "Anyone can join" },
@@ -549,18 +555,23 @@ export default function CreateRunScreen() {
 
             <View style={styles.field}>
               <Text style={styles.label}>Group Vibe</Text>
-              <Text style={styles.fieldHint}>What's the vibe of your group?</Text>
-              <View style={styles.tagsGrid}>
-                {RUN_TAGS.map((tag) => (
-                  <Pressable
-                    key={tag}
-                    style={[styles.tagChip, selectedTags.includes(tag) && styles.tagChipActive]}
-                    onPress={() => toggleTag(tag)}
-                  >
-                    <Text style={[styles.tagChipText, selectedTags.includes(tag) && styles.tagChipTextActive]}>{tag}</Text>
-                  </Pressable>
-                ))}
-              </View>
+              <Text style={styles.fieldHint}>What's the vibe of your group? (select all that apply)</Text>
+              {TAG_GROUPS.map((group) => (
+                <View key={group.label} style={styles.tagGroupWrapper}>
+                  <Text style={styles.tagGroupLabel}>{group.label}</Text>
+                  <View style={styles.tagsGrid}>
+                    {group.tags.map((tag) => (
+                      <Pressable
+                        key={tag}
+                        style={[styles.tagChip, selectedTags.includes(tag) && styles.tagChipActive]}
+                        onPress={() => toggleTag(tag)}
+                      >
+                        <Text style={[styles.tagChipText, selectedTags.includes(tag) && styles.tagChipTextActive]}>{tag}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              ))}
             </View>
           </>
         )}
@@ -826,6 +837,8 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   sectionDivider: { borderTopWidth: 1, borderTopColor: C.border, paddingTop: 16 },
   sectionLabel: { fontFamily: "Outfit_700Bold", fontSize: 14, color: C.text },
   tagsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  tagGroupWrapper: { marginTop: 12, gap: 8 },
+  tagGroupLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.textMuted, textTransform: "uppercase", letterSpacing: 0.6 },
   tagChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,

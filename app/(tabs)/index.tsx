@@ -52,7 +52,14 @@ const SORT_OPTIONS: { key: SortOption; label: string }[] = [
   { key: "dist_desc",label: "Distance: High → Low"  },
 ];
 
-const HOST_STYLES = ["General", "Talkative", "Quiet", "Motivational", "Training", "Ministry", "Recovery", "Girlies", "Bros"];
+const HOST_STYLES = [
+  "General",
+  "Talkative", "Quiet", "Motivational", "Social", "Ministry", "Recovery",
+  "Beginner Friendly", "Training", "No-Drop", "PR Chaser",
+  "Women Only", "Men Only", "Young Adults", "College", "Seniors",
+  "Trail", "Morning Run", "Night Run",
+  "Dog Friendly", "Stroller Friendly",
+];
 const PROX_STEPS  = [1, 5, 10, 25, 50]; // miles (null = Nationwide)
 
 interface FilterState {
