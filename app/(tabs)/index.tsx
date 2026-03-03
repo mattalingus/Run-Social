@@ -181,6 +181,7 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
   const { C } = useTheme();
   const fm = useMemo(() => makeFmStyles(C), [C]);
   const insets = useSafeAreaInsets();
+  const { activityFilter } = useActivity();
 
   function toggleStyle(s: string) {
     setDraft((p) => ({
@@ -309,7 +310,7 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
 
           {/* ── B. Distance (Run length) ────────────────────────────────── */}
           <View style={fm.section}>
-            <Text style={fm.sectionTitle}>Run Length</Text>
+            <Text style={fm.sectionTitle}>{activityFilter === "ride" ? "Ride Length" : "Run Length"}</Text>
             <View style={fm.distRow}>
               <View style={fm.distField}>
                 <Text style={fm.distLabel}>Min (mi)</Text>
