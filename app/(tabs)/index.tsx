@@ -714,7 +714,7 @@ export default function DiscoverScreen() {
   function resetHostForm() {
     setHTitle(""); setHLocation(""); setHDate(""); setHTime("");
     setHPrivacy("public"); setHPassword(""); setHMaxParticipants(20);
-    setHTags(["General"]); setHDist("3"); setHMinPace(8); setHMaxPace(12);
+    setHTags(["General"]); setHDist("3"); setHMinPace(4); setHMaxPace(20);
     setHLocationLat(null); setHLocationLng(null); setPinCoord(null); setHostPage("form");
     setHAmPm("AM"); setHStrict(false); setHActivityType("run"); setHCrewId(null);
   }
