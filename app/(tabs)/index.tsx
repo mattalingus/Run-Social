@@ -1529,6 +1529,7 @@ export default function DiscoverScreen() {
               style={s.rulesAgreeBtn}
               onPress={() => {
                 setShowRulesModal(false);
+                setHActivityType(activityFilter);
                 setShowHostModal(true);
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
               }}
