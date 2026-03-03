@@ -167,9 +167,11 @@ function RunMarker({ run, isSelected, isFriend, onPress }: { run: Run; isSelecte
   const { C } = useTheme();
   const mk = useMemo(() => makeMkStyles(C), [C]);
   const scale = useRef(new Animated.Value(1)).current;
+  const pulseAnim = useRef(new Animated.Value(0.3)).current;
   const frozen = useRef(false);
   const [tracksViewChanges, setTracksViewChanges] = useState(true);
   const soon = isWithin24h(run.date);
+  const isLiveNow = !!run.is_active && (run.participant_count ?? 0) > 0;
   const icon = run.host_marker_icon;
   const isEmojiIcon = !!icon && !icon.startsWith("http") && !icon.startsWith("/api/objects");
   const isUrlIcon = !!icon && (icon.startsWith("http") || icon.startsWith("/api/objects"));
@@ -177,6 +179,8 @@ function RunMarker({ run, isSelected, isFriend, onPress }: { run: Run; isSelecte
   const photoSrc = isUrlIcon ? icon : (crewPhoto || run.host_photo || avatarUrl(run.host_name));
 
   function freeze() {
+    // Don't freeze live markers — animation requires tracksViewChanges=true
+    if (isLiveNow) return;
     if (!frozen.current) {
       frozen.current = true;
       setTracksViewChanges(false);
@@ -184,10 +188,24 @@ function RunMarker({ run, isSelected, isFriend, onPress }: { run: Run; isSelecte
   }
 
   useEffect(() => {
-    if (isEmojiIcon) { frozen.current = true; setTracksViewChanges(false); return; }
-    const t = setTimeout(freeze, 1500);
-    return () => clearTimeout(t);
+    if (isEmojiIcon && !isLiveNow) { frozen.current = true; setTracksViewChanges(false); return; }
+    if (!isLiveNow) {
+      const t = setTimeout(freeze, 1500);
+      return () => clearTimeout(t);
+    }
   }, []);
+
+  useEffect(() => {
+    if (!isLiveNow) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1, duration: 750, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 0.15, duration: 750, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [isLiveNow]);
 
   if (run.is_locked) {
     return <LockedRunMarker run={run} isSelected={isSelected} onPress={onPress} />;
@@ -211,7 +229,7 @@ function RunMarker({ run, isSelected, isFriend, onPress }: { run: Run; isSelecte
     >
       <Animated.View style={[mk.wrap, { transform: [{ scale }] }]}>
         {soon && <View style={mk.glow} />}
-        {run.is_active && run.participant_count > 0 && <View style={mk.liveRing} />}
+        {isLiveNow && <Animated.View style={[mk.liveRing, { opacity: pulseAnim }]} />}
         <View style={[mk.circle, isFriend && mk.circleFriend, !!run.crew_id && mk.circleCrew, isSelected && mk.circleSelected]}>
           {isEmojiIcon ? (
             <Text style={mk.emoji}>{icon}</Text>
@@ -224,7 +242,7 @@ function RunMarker({ run, isSelected, isFriend, onPress }: { run: Run; isSelecte
           )}
         </View>
         <View style={[mk.pin, isFriend && mk.pinFriend, !!run.crew_id && mk.pinCrew]} />
-        {run.is_active && run.participant_count > 0 && (
+        {isLiveNow && (
           <View style={mk.liveBadge}>
             <Text style={mk.liveBadgeText}>LIVE</Text>
           </View>
@@ -270,8 +288,8 @@ function makeMkStyles(C: ColorScheme) { return StyleSheet.create({
   liveRing: {
     position: "absolute", top: -5,
     width: 62, height: 62, borderRadius: 31,
-    borderWidth: 2, borderColor: C.primary,
-    opacity: 0.8,
+    borderWidth: 2.5, borderColor: "#C0392B",
+    shadowColor: "#C0392B", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: 8,
   },
   liveBadge: {
     position: "absolute", top: -8, right: -6,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import {
   Switch,
   Alert,
   Image,
+  Animated,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { router, useFocusEffect } from "expo-router";
@@ -494,7 +495,26 @@ function RunCard({
   const s = useMemo(() => makeStyles(C), [C]);
   const spotsLeft = run.max_participants - run.participant_count;
   const badge = getHostBadge(run.host_hosted_runs);
+  const isLiveNow = !!run.is_active && !run.is_completed;
+  const pulseAnim = useRef(new Animated.Value(0.3)).current;
+
+  useEffect(() => {
+    if (!isLiveNow) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1, duration: 750, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 0.15, duration: 750, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [isLiveNow]);
+
   return (
+    <View style={{ position: "relative" }}>
+      {isLiveNow && (
+        <Animated.View style={[s.liveCardGlow, { opacity: pulseAnim }]} />
+      )}
     <Pressable
       style={({ pressed }) => [s.card, isFriend && s.cardFriend, isCrew && s.cardCrew, { opacity: pressed ? 0.85 : 1 }]}
       onPress={onPress}
@@ -617,6 +637,7 @@ function RunCard({
         </View>
       </View>
     </Pressable>
+    </View>
   );
 }
 
@@ -2072,6 +2093,12 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   list: { paddingHorizontal: 16, paddingTop: 10, gap: 10 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
 
+  liveCardGlow: {
+    position: "absolute", top: -2, left: -2, right: -2, bottom: -2,
+    borderRadius: 16, borderWidth: 2, borderColor: "#C0392B",
+    shadowColor: "#C0392B", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: 10,
+    zIndex: 1,
+  },
   card: {
     backgroundColor: C.surface,
     borderRadius: 14,
