@@ -23,7 +23,7 @@ import { router } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
-import C from "@/constants/colors";
+import { darkColors as C, type ColorScheme } from "@/constants/colors";
 import { useTheme } from "@/contexts/ThemeContext";
 import { formatDistance } from "@/lib/formatDistance";
 import MAP_STYLE from "@/lib/mapStyle";
@@ -100,6 +100,8 @@ function MiniRouteMap({ path }: { path: RoutePoint[] }) {
 // ─── Solo Run Photo Section ───────────────────────────────────────────────────
 
 function SoloRunPhotos({ runId }: { runId: string }) {
+  const { C } = useTheme();
+  const soloPhotoStyles = useMemo(() => makeSoloPhotoStyles(C), [C]);
   const [uploading, setUploading] = useState(false);
 
   const { data: photos = [], refetch } = useQuery<any[]>({
@@ -176,7 +178,7 @@ function SoloRunPhotos({ runId }: { runId: string }) {
   );
 }
 
-const soloPhotoStyles = StyleSheet.create({
+function makeSoloPhotoStyles(C: ColorScheme) { return StyleSheet.create({
   container: {
     marginTop: 12,
     borderTopWidth: 1,
@@ -199,7 +201,7 @@ const soloPhotoStyles = StyleSheet.create({
   addBtnTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.primary },
   emptyTxt: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, marginTop: 8 },
   thumb: { width: 75, height: 75, borderRadius: 9, marginRight: 7, backgroundColor: C.card },
-});
+}); }
 
 interface RankingCategory {
   label: string;
@@ -329,17 +331,19 @@ async function scheduleRunNotifications(runDate: Date, label: string) {
 
 // ─── Progress Bar ─────────────────────────────────────────────────────────────
 
-function Bar({ value, total, color = C.primary }: { value: number; total: number; color?: string }) {
+function Bar({ value, total, color }: { value: number; total: number; color?: string }) {
+  const { C } = useTheme();
   const pct = Math.min(1, total > 0 ? value / total : 0);
+  const barColor = color ?? C.primary;
   return (
-    <View style={bar.track}>
-      <View style={[bar.fill, { width: `${pct * 100}%` as any, backgroundColor: color }]} />
+    <View style={[barStyle.track, { backgroundColor: C.border }]}>
+      <View style={[barStyle.fill, { width: `${pct * 100}%` as any, backgroundColor: barColor }]} />
     </View>
   );
 }
 
-const bar = StyleSheet.create({
-  track: { height: 8, backgroundColor: C.border, borderRadius: 4, overflow: "hidden" },
+const barStyle = StyleSheet.create({
+  track: { height: 8, borderRadius: 4, overflow: "hidden" },
   fill: { height: "100%", borderRadius: 4 },
 });
 
@@ -349,7 +353,8 @@ export default function SoloScreen() {
   const insets = useSafeAreaInsets();
   const { user, refreshUser } = useAuth();
   const { activityFilter, setActivityFilter } = useActivity();
-  const { C: themeC } = useTheme();
+  const { C } = useTheme();
+  const s = useMemo(() => makeStyles(C), [C]);
   const qc = useQueryClient();
 
   const [showGoals, setShowGoals] = useState(false);
@@ -535,7 +540,7 @@ export default function SoloScreen() {
   const periodLabel = period === "monthly" ? "This Month" : "This Year";
 
   return (
-    <View style={[s.container, { backgroundColor: themeC.bg }]}>
+    <View style={[s.container, { backgroundColor: C.bg }]}>
       <ScrollView
         contentContainerStyle={[
           s.scroll,
@@ -992,7 +997,7 @@ export default function SoloScreen() {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const s = StyleSheet.create({
+function makeStyles(C: ColorScheme) { return StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   scroll: { paddingHorizontal: 16 },
 
@@ -1244,4 +1249,4 @@ const s = StyleSheet.create({
     color: C.textSecondary,
     marginTop: 2,
   },
-});
+}); }

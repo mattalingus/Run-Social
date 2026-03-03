@@ -15,7 +15,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
-import C from "@/constants/colors";
+import { darkColors as C, type ColorScheme } from "@/constants/colors";
+import { useTheme } from "@/contexts/ThemeContext";
 import RangeSlider from "@/components/RangeSlider";
 import { formatDistance } from "@/lib/formatDistance";
 
@@ -86,6 +87,9 @@ function formatTime(dateStr: string) {
 export default function DiscoverScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { C } = useTheme();
+  const st = useMemo(() => makeStStyles(C), [C]);
+  const fm = useMemo(() => makeFmStyles(C), [C]);
   const [search, setSearch]       = useState("");
   const [sortOption, setSortOption] = useState<SortOption>("soonest");
   const [showSort, setShowSort]   = useState(false);
@@ -453,7 +457,7 @@ export default function DiscoverScreen() {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const st = StyleSheet.create({
+function makeStStyles(C: ColorScheme) { return StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   header: { paddingHorizontal: 20, paddingBottom: 12 },
   titleRow: {
@@ -534,9 +538,9 @@ const st = StyleSheet.create({
   empty: { alignItems: "center", gap: 10, paddingTop: 80 },
   emptyTitle: { fontFamily: "Outfit_700Bold", fontSize: 17, color: C.text },
   emptyText: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary, textAlign: "center" },
-});
+}); }
 
-const fm = StyleSheet.create({
+function makeFmStyles(C: ColorScheme) { return StyleSheet.create({
   overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)" },
   sheet: {
     backgroundColor: C.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24,
@@ -580,4 +584,4 @@ const fm = StyleSheet.create({
   resetTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.textSecondary },
   applyBtn: { flex: 2, height: 50, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: C.primary },
   applyTxt: { fontFamily: "Outfit_700Bold", fontSize: 14, color: C.bg },
-});
+}); }

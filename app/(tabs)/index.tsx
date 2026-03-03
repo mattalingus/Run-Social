@@ -25,7 +25,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import MapView, { Marker } from "react-native-maps";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "@/contexts/ThemeContext";
-import C from "@/constants/colors";
+import { darkColors as C, type ColorScheme } from "@/constants/colors";
 import RangeSlider from "@/components/RangeSlider";
 import { formatDistance } from "@/lib/formatDistance";
 import { useAuth } from "@/contexts/AuthContext";
@@ -158,6 +158,8 @@ interface FilterModalProps {
 }
 
 function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, userLocation }: FilterModalProps) {
+  const { C } = useTheme();
+  const fm = useMemo(() => makeFmStyles(C), [C]);
   const insets = useSafeAreaInsets();
 
   function toggleStyle(s: string) {
@@ -427,6 +429,8 @@ function RunCard({
   isFriend?: boolean;
   isCrew?: boolean;
 }) {
+  const { C } = useTheme();
+  const s = useMemo(() => makeStyles(C), [C]);
   const spotsLeft = run.max_participants - run.participant_count;
   const badge = getHostBadge(run.host_hosted_runs);
   return (
@@ -554,7 +558,8 @@ export default function DiscoverScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const qc = useQueryClient();
-  const { C: themeC } = useTheme();
+  const { C } = useTheme();
+  const s = useMemo(() => makeStyles(C), [C]);
 
   const [search, setSearch] = useState("");
   const [sortOption, setSortOption] = useState<SortOption>("soonest");
@@ -946,7 +951,7 @@ export default function DiscoverScreen() {
   // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <View style={[s.container, { backgroundColor: themeC.bg }]}>
+    <View style={[s.container, { backgroundColor: C.bg }]}>
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <View style={[s.header, { paddingTop: headerTopPad }]}>
         <View style={s.titleRow}>
@@ -1618,7 +1623,7 @@ export default function DiscoverScreen() {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const s = StyleSheet.create({
+function makeStyles(C: ColorScheme) { return StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
 
   header: { paddingHorizontal: 20, paddingBottom: 12 },
@@ -2061,11 +2066,11 @@ const s = StyleSheet.create({
     backgroundColor: C.primary,
   },
   rulesAgreeTxt: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.bg },
-});
+}); }
 
 // ─── Filter Modal Styles ──────────────────────────────────────────────────────
 
-const fm = StyleSheet.create({
+function makeFmStyles(C: ColorScheme) { return StyleSheet.create({
   overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)" },
   sheet: {
     backgroundColor: C.surface,
@@ -2221,4 +2226,4 @@ const fm = StyleSheet.create({
     backgroundColor: C.primary,
   },
   applyTxt: { fontFamily: "Outfit_700Bold", fontSize: 14, color: C.bg },
-});
+}); }

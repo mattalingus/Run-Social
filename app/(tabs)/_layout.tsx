@@ -2,28 +2,27 @@ import { Tabs } from "expo-router";
 import { Platform, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTheme } from "@/contexts/ThemeContext";
 
-const TAB_BG      = "#0B1A16";
-const ACTIVE_TINT = "#4EB082";
-const MUTED_TINT  = "#3A5847";
 const PILL_H      = 64;
 const PILL_RADIUS = 30;
 const PILL_MX     = 40;
 
-function PillBackground() {
-  return <View style={styles.pill} />;
+function PillBackground({ bg, border }: { bg: string; border: string }) {
+  return <View style={[styles.pill, { backgroundColor: bg, borderColor: border }]} />;
 }
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const isWeb  = Platform.OS === "web";
+  const { C }  = useTheme();
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor:   ACTIVE_TINT,
-        tabBarInactiveTintColor: MUTED_TINT,
+        tabBarActiveTintColor:   C.tint,
+        tabBarInactiveTintColor: C.tabIconDefault,
         tabBarStyle: {
           position:     "absolute",
           height:       PILL_H,
@@ -39,7 +38,7 @@ export default function TabLayout() {
           shadowRadius: 16,
           shadowOffset: { width: 0, height: 6 },
         },
-        tabBarBackground: () => <PillBackground />,
+        tabBarBackground: () => <PillBackground bg={C.tabBar} border={C.borderLight} />,
         tabBarLabelStyle: {
           fontFamily:   "Outfit_600SemiBold",
           fontSize:     13,
@@ -91,11 +90,9 @@ export default function TabLayout() {
 
 const styles = StyleSheet.create({
   pill: {
-    flex:            1,
-    backgroundColor: TAB_BG,
-    borderRadius:    PILL_RADIUS,
-    overflow:        "hidden",
-    borderWidth:     1,
-    borderColor:     "#1E3528",
+    flex:         1,
+    borderRadius: PILL_RADIUS,
+    overflow:     "hidden",
+    borderWidth:  1,
   },
 });

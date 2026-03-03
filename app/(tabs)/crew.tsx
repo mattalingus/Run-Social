@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useMemo } from "react";
 import {
   View,
   Text,
@@ -24,7 +24,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { useTheme } from "@/contexts/ThemeContext";
-import { darkColors } from "@/constants/colors";
+import { darkColors, type ColorScheme } from "@/constants/colors";
 
 const C = darkColors;
 
@@ -130,6 +130,8 @@ function formatPace(p?: number) {
 
 // ─── Invite Banner ────────────────────────────────────────────────────────────
 function InviteBanner({ invite, onAccept, onDecline }: { invite: CrewInvite; onAccept: () => void; onDecline: () => void }) {
+  const { C } = useTheme();
+  const s = useMemo(() => makeStyles(C), [C]);
   return (
     <View style={s.inviteBanner}>
       <Text style={s.inviteEmoji}>{invite.emoji}</Text>
@@ -149,6 +151,8 @@ function InviteBanner({ invite, onAccept, onDecline }: { invite: CrewInvite; onA
 
 // ─── Crew Card ────────────────────────────────────────────────────────────────
 function CrewCard({ crew, onPress }: { crew: Crew; onPress: () => void }) {
+  const { C } = useTheme();
+  const s = useMemo(() => makeStyles(C), [C]);
   const vibes = crew.tags ?? [];
   const pendingCount = parseInt(String(crew.pending_request_count ?? 0));
   return (
@@ -197,6 +201,8 @@ function CrewCard({ crew, onPress }: { crew: Crew; onPress: () => void }) {
 
 // ─── Create Crew Sheet ────────────────────────────────────────────────────────
 function CreateCrewSheet({ visible, onClose, onCreated }: { visible: boolean; onClose: () => void; onCreated: (crew: Crew) => void }) {
+  const { C } = useTheme();
+  const s = useMemo(() => makeStyles(C), [C]);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [emoji, setEmoji] = useState("🏃");
@@ -395,6 +401,8 @@ function InviteUserSheet({
   existingMemberIds: string[];
   pendingRequestIds: string[];
 }) {
+  const { C } = useTheme();
+  const s = useMemo(() => makeStyles(C), [C]);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<UserSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -522,6 +530,8 @@ function CrewDetailSheet({
   onClose: () => void;
   currentUserId: string;
 }) {
+  const { C } = useTheme();
+  const s = useMemo(() => makeStyles(C), [C]);
   const { activityFilter, setActivityFilter } = useActivity();
   const [showInvite, setShowInvite] = useState(false);
   const qc = useQueryClient();
@@ -941,6 +951,8 @@ function SearchResultCard({
   onOpen: () => void;
   onRequest: () => void;
 }) {
+  const { C } = useTheme();
+  const s = useMemo(() => makeStyles(C), [C]);
   return (
     <TouchableOpacity
       style={s.searchCard}
@@ -984,6 +996,7 @@ export default function CrewScreen() {
   const insets = useSafeAreaInsets();
   const isWeb = Platform.OS === "web";
   const { C } = useTheme();
+  const s = useMemo(() => makeStyles(C), [C]);
   const qc = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [selectedCrew, setSelectedCrew] = useState<Crew | null>(null);
@@ -1217,7 +1230,7 @@ export default function CrewScreen() {
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
-const s = StyleSheet.create({
+function makeStyles(C: ColorScheme) { return StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: C.bg,
@@ -2127,4 +2140,4 @@ const s = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-});
+}); }
