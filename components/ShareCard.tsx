@@ -114,12 +114,20 @@ export interface ShareCardProps {
   routePath?: { latitude: number; longitude: number }[];
   activityType?: "run" | "ride" | string;
   participantCount?: number;
+  finishRank?: number;
   eventTitle?: string;
   caption?: string;
   backgroundPhoto?: string | null;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
+
+function ordinal(n: number): string {
+  if (n === 1) return "1st";
+  if (n === 2) return "2nd";
+  if (n === 3) return "3rd";
+  return `${n}th`;
+}
 
 const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
   {
@@ -129,6 +137,7 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
     routePath = [],
     activityType = "run",
     participantCount,
+    finishRank,
     eventTitle,
     caption,
     backgroundPhoto,
@@ -265,6 +274,12 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
               {participantCount} {isRide ? "Riders" : "Runners"}
             </Text>
           </View>
+          {finishRank != null && (
+            <View style={s.rankPill}>
+              <Ionicons name="trophy" size={11} color={PRIMARY} style={{ marginRight: 4 }} />
+              <Text style={s.rankPillTxt}>{ordinal(finishRank)}</Text>
+            </View>
+          )}
           {eventTitle && (
             <Text style={s.eventTitle} numberOfLines={1}>{eventTitle}</Text>
           )}
@@ -474,6 +489,21 @@ const s = StyleSheet.create({
     fontFamily: "Outfit_700Bold",
     fontSize: 12,
     color: GOLD,
+  },
+  rankPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: PRIMARY + "22",
+    borderWidth: 1,
+    borderColor: PRIMARY + "55",
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  rankPillTxt: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 12,
+    color: PRIMARY,
   },
   eventTitle: {
     fontFamily: "Outfit_600SemiBold",

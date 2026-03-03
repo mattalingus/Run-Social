@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -41,10 +41,11 @@ const RANK_COLORS: Record<number, string> = {
 // ─── Screen ──────────────────────────────────────────────────────────────────
 
 export default function RunResultsScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, autoShare } = useLocalSearchParams<{ id: string; autoShare?: string }>();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const [showShare, setShowShare] = useState(false);
+  const autoShownRef = useRef(false);
 
   const { data: results = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/runs", id, "results"],
@@ -55,6 +56,14 @@ export default function RunResultsScreen() {
     refetchInterval: 10000,
     staleTime: 0,
   });
+
+  useEffect(() => {
+    if (autoShare === "1" && !autoShownRef.current && !isLoading) {
+      autoShownRef.current = true;
+      const timer = setTimeout(() => setShowShare(true), 600);
+      return () => clearTimeout(timer);
+    }
+  }, [autoShare, isLoading]);
 
   const { data: run } = useQuery<any>({
     queryKey: ["/api/runs", id],
@@ -228,6 +237,7 @@ export default function RunResultsScreen() {
       {/* ── Share Activity Modal ──────────────────────────────────────────────── */}
       {(() => {
         const myResult = results.find((r: any) => r.user_id === user?.id);
+        const isGroupRun = results.length > 1;
         return (
           <ShareActivityModal
             visible={showShare}
@@ -238,7 +248,8 @@ export default function RunResultsScreen() {
               durationSeconds: null,
               routePath: [],
               activityType: (run?.activity_type ?? "run") as "run" | "ride",
-              participantCount: results.length > 0 ? results.length : undefined,
+              participantCount: isGroupRun ? results.length : undefined,
+              finishRank: isGroupRun && myResult?.final_rank ? myResult.final_rank : undefined,
               eventTitle: run?.crew_id && run?.crew_name ? run.crew_name : run?.title,
             }}
           />

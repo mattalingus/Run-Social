@@ -31,6 +31,7 @@ export interface ShareRunData {
   routePath?: { latitude: number; longitude: number }[];
   activityType?: "run" | "ride" | string;
   participantCount?: number;
+  finishRank?: number;
   eventTitle?: string;
 }
 
