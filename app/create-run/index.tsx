@@ -178,7 +178,7 @@ export default function CreateRunScreen() {
         minPace: pace,
         maxPace: paceMax,
         tags: isCrew ? [] : selectedTags,
-        maxParticipants: parseInt(maxParticipants),
+        maxParticipants: isCrew ? 9999 : parseInt(maxParticipants),
         invitePassword: !isCrew && privacy === "private" && invitePassword.trim() ? invitePassword.trim() : undefined,
         runStyle: isCrew ? undefined : (runStyle ?? undefined),
         activityType,
@@ -485,17 +485,19 @@ export default function CreateRunScreen() {
           </>
         )}
 
-        <View style={styles.field}>
-          <Text style={styles.label}>Max Participants</Text>
-          <TextInput
-            style={styles.input}
-            value={maxParticipants}
-            onChangeText={setMaxParticipants}
-            keyboardType="number-pad"
-            placeholder="20"
-            placeholderTextColor={C.textMuted}
-          />
-        </View>
+        {!isCrew && (
+          <View style={styles.field}>
+            <Text style={styles.label}>Max Participants</Text>
+            <TextInput
+              style={styles.input}
+              value={maxParticipants}
+              onChangeText={setMaxParticipants}
+              keyboardType="number-pad"
+              placeholder="20"
+              placeholderTextColor={C.textMuted}
+            />
+          </View>
+        )}
 
         {!isCrew && (
           <>
