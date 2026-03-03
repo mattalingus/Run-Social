@@ -404,8 +404,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/users/:id/starred-runs", requireAuth, async (req, res) => {
+    try {
+      const runs = await storage.getStarredRunsForUser(req.params.id, 3);
+      res.json(runs);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.post("/api/runs", requireAuth, async (req, res) => {
     try {
+      const host = await storage.getUserById(req.session.userId!);
+      if (host && host.rating_count >= 5 && parseFloat(host.avg_rating ?? "5") < 3.5) {
+        return res.status(403).json({
+          message: "Your host rating is below the minimum required to host new runs. Attend runs as a participant — your rating may recover over time.",
+        });
+      }
       const run = await storage.createRun({ ...req.body, hostId: req.session.userId! });
       res.status(201).json(run);
       // Notify — crew runs notify crew members; regular runs notify friends (fire-and-forget)

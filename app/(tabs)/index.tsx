@@ -505,8 +505,8 @@ function RunCard({
             );
           })()}
           <Text style={s.hostColumnName} numberOfLines={2}>{run.host_name}</Text>
-          {run.host_rating > 0 && (
-            <Text style={s.hostColumnRating}>★ {run.host_rating.toFixed(1)}</Text>
+          {false && (
+            <Text style={s.hostColumnRating}>★ {run.host_rating?.toFixed(1)}</Text>
           )}
           {badge && (
             <Text style={[s.hostColumnBadge, { color: badge.color }]}>{badge.label}</Text>

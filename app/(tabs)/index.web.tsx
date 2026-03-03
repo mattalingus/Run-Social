@@ -270,7 +270,7 @@ export default function DiscoverScreen() {
                       )}
                     </View>
                     <Text style={st.hostName}>
-                      {run.host_name}{run.host_rating > 0 ? ` · ★${run.host_rating.toFixed(1)}` : ""}
+                      {run.host_name}
                     </Text>
                   </View>
                   <View style={st.cardMeta}>

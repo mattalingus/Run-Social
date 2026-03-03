@@ -794,8 +794,11 @@ export default function ProfileScreen() {
         </View>
         {user.avg_rating > 0 && (
           <View style={styles.statCard}>
-            <Text style={[styles.statNum, { color: C.gold }]}>{user.avg_rating.toFixed(1)}</Text>
-            <Text style={styles.statName}>Rating</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+              <Text style={[styles.statNum, { color: C.gold }]}>{user.avg_rating.toFixed(1)}</Text>
+              <Feather name="lock" size={10} color={C.gold} />
+            </View>
+            <Text style={styles.statName}>Host Rating</Text>
           </View>
         )}
         <Pressable
@@ -819,6 +822,18 @@ export default function ProfileScreen() {
           <Feather name="chevron-right" size={10} color={C.textMuted} style={{ marginTop: 2 }} />
         </Pressable>
       </View>
+
+      {/* ── Host Rating Warning ──────────────────────────────────────────────── */}
+      {user.avg_rating > 0 && user.avg_rating < 4.0 && user.rating_count >= 1 && (
+        <View style={[styles.ratingWarningCard, { borderColor: user.avg_rating < 3.5 ? "#FF6B3522" : "#FFB80022" }]}>
+          <Feather name="alert-circle" size={14} color={user.avg_rating < 3.5 ? "#FF6B35" : C.gold} />
+          <Text style={[styles.ratingWarningText, { color: user.avg_rating < 3.5 ? "#FF6B35" : C.gold }]}>
+            {user.avg_rating < 3.5
+              ? "Your host rating is below the 3.5 minimum — you cannot create new runs until it recovers."
+              : "Your host rating is approaching the minimum threshold. Keep it above 3.5 to continue hosting."}
+          </Text>
+        </View>
+      )}
 
       {/* ── View Past Runs / Rides ────────────────────────────────────────── */}
       <Pressable
@@ -2083,6 +2098,15 @@ function makeStyles(C: ReturnType<typeof import("@/contexts/ThemeContext").useTh
   },
   inviteShareBtnTxt: { fontFamily: "Outfit_700Bold", fontSize: 13, color: C.bg },
 
+  ratingWarningCard: {
+    flexDirection: "row", alignItems: "flex-start", gap: 10,
+    backgroundColor: C.surface, borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 12,
+    borderWidth: 1, marginBottom: 12,
+  },
+  ratingWarningText: {
+    flex: 1, fontFamily: "Outfit_400Regular", fontSize: 13, lineHeight: 18,
+  },
   viewPastBtn: {
     flexDirection: "row", alignItems: "center", gap: 8,
     backgroundColor: C.surface, borderRadius: 14,

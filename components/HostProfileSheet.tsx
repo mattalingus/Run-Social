@@ -39,6 +39,16 @@ function formatPace(p: number) {
   return `${mins}:${secs.toString().padStart(2, "0")}/mi`;
 }
 
+function formatDate(d: string) {
+  const dt = new Date(d);
+  return dt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function formatTime(d: string) {
+  const dt = new Date(d);
+  return dt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
 export default function HostProfileSheet({ hostId, onClose }: Props) {
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
@@ -50,6 +60,11 @@ export default function HostProfileSheet({ hostId, onClose }: Props) {
 
   const { data: friendship, isLoading: friendshipLoading } = useQuery<any>({
     queryKey: [`/api/users/${hostId}/friendship`],
+    enabled: !!hostId,
+  });
+
+  const { data: starredRuns } = useQuery<any[]>({
+    queryKey: [`/api/users/${hostId}/starred-runs`],
     enabled: !!hostId,
   });
 
@@ -120,14 +135,6 @@ export default function HostProfileSheet({ hostId, onClose }: Props) {
                     <View style={[styles.badgePill, { borderColor: badge.color + "44" }]}>
                       <Text style={[styles.badgeText, { color: badge.color }]}>
                         {badge.label} Host
-                      </Text>
-                    </View>
-                  )}
-                  {profile.avg_rating > 0 && (
-                    <View style={styles.ratingRow}>
-                      <Ionicons name="star" size={12} color={C.gold ?? "#FFD700"} />
-                      <Text style={styles.ratingText}>
-                        {profile.avg_rating.toFixed(1)}
                       </Text>
                     </View>
                   )}
@@ -222,6 +229,31 @@ export default function HostProfileSheet({ hostId, onClose }: Props) {
                 </Text>
               </View>
             )}
+
+            {starredRuns && starredRuns.length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Starred Events · {starredRuns.length}</Text>
+                {starredRuns.map((r) => (
+                  <View key={r.id} style={styles.starredCard}>
+                    <View style={styles.starredLeft}>
+                      <Feather
+                        name={r.activity_type === "ride" ? "zap" : "activity"}
+                        size={14}
+                        color={C.primary}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.starredTitle} numberOfLines={1}>{r.title}</Text>
+                      <Text style={styles.starredMeta}>
+                        {r.distance_miles ? `${parseFloat(r.distance_miles).toFixed(1)} mi · ` : ""}
+                        {formatDate(r.date)} · {formatTime(r.date)}
+                      </Text>
+                    </View>
+                    <Ionicons name="star" size={13} color={C.gold} style={{ marginTop: 2 }} />
+                  </View>
+                ))}
+              </View>
+            )}
           </ScrollView>
         ) : (
           <View style={styles.loadingBox}>
@@ -309,15 +341,37 @@ const styles = StyleSheet.create({
     fontFamily: "Outfit_600SemiBold",
     fontSize: 11,
   },
-  ratingRow: {
+  starredCard: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
+    alignItems: "flex-start",
+    gap: 10,
+    backgroundColor: "#1A2E21",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "#2A3D30",
+    marginBottom: 8,
   },
-  ratingText: {
+  starredLeft: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#00D97E18",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1,
+  },
+  starredTitle: {
     fontFamily: "Outfit_600SemiBold",
-    fontSize: 12,
-    color: "#FFD700",
+    fontSize: 13,
+    color: "#E8F5EE",
+    marginBottom: 2,
+  },
+  starredMeta: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 11,
+    color: "#5A8A70",
   },
   friendBtn: {
     flexDirection: "row",

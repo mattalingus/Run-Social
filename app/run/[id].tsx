@@ -618,12 +618,6 @@ export default function RunDetailScreen() {
           <View style={styles.hostInfo}>
             <Text style={styles.hostName}>{run.host_name}</Text>
             <View style={styles.hostMeta}>
-              {run.host_rating > 0 && (
-                <View style={styles.ratingRow}>
-                  <Ionicons name="star" size={12} color={C.gold} />
-                  <Text style={styles.ratingText}>{parseFloat(run.host_rating).toFixed(1)} rating</Text>
-                </View>
-              )}
               {(() => { const b = getHostBadge(run.host_hosted_runs); return b ? <Text style={[styles.hostBadgeText, { color: b.color }]}>{b.label}</Text> : null; })()}
             </View>
             <Text style={styles.hostPlannedDist}>{formatDistance(run.min_distance)} mi planned</Text>

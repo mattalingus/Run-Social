@@ -1905,6 +1905,19 @@ export async function getBookmarkedRuns(userId: string) {
   return result.rows;
 }
 
+export async function getStarredRunsForUser(userId: string, limit = 3) {
+  const result = await pool.query(
+    `SELECT r.id, r.title, r.date, r.location, r.distance_miles, r.activity_type, r.min_pace, r.max_pace
+     FROM bookmarked_runs b
+     JOIN runs r ON r.id = b.run_id
+     WHERE b.user_id = $1
+     ORDER BY b.created_at DESC
+     LIMIT $2`,
+    [userId, limit]
+  );
+  return result.rows;
+}
+
 // ─── Run Photos ───────────────────────────────────────────────────────────────
 
 export async function getRunPhotos(runId: string) {

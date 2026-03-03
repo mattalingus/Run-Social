@@ -714,7 +714,6 @@ export default function MapScreen() {
                     <Text style={s.cardTitle} numberOfLines={1}>{selectedRun.title}</Text>
                     <Text style={s.cardHost}>
                       {selectedRun.host_name}
-                      {selectedRun.host_rating > 0 ? `  ★ ${selectedRun.host_rating.toFixed(1)}` : ""}
                     </Text>
                   </View>
                 </Pressable>
