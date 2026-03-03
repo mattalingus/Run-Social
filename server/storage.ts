@@ -554,7 +554,7 @@ export async function searchUsers(query: string, currentUserId: string) {
 
 export async function getFriends(userId: string) {
   const result = await pool.query(
-    `SELECT u.id, u.name, u.photo_url, u.completed_runs, u.total_miles,
+    `SELECT u.id, u.name, u.username, u.photo_url, u.completed_runs, u.total_miles,
        f.id as friendship_id, f.status, f.created_at as friends_since
      FROM friends f
      JOIN users u ON (CASE WHEN f.requester_id = $1 THEN f.addressee_id ELSE f.requester_id END) = u.id
@@ -2532,6 +2532,7 @@ export async function getDmConversations(userId: string) {
     `SELECT
        other_user.id as friend_id,
        other_user.name as friend_name,
+       other_user.username as friend_username,
        other_user.photo_url as friend_photo,
        last_msg.message as last_message,
        last_msg.created_at as last_message_at,
@@ -2556,7 +2557,7 @@ export async function getDmConversations(userId: string) {
        ON unread.recipient_id = $1
       AND unread.sender_id = pairs.other_id
       AND unread.read_at IS NULL
-     GROUP BY other_user.id, other_user.name, other_user.photo_url,
+     GROUP BY other_user.id, other_user.name, other_user.username, other_user.photo_url,
               last_msg.message, last_msg.created_at, last_msg.sender_id
      ORDER BY last_msg.created_at DESC`,
     [userId]

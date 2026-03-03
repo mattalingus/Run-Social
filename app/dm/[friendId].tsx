@@ -9,12 +9,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Keyboard,
 } from "react-native";
 import { Image as ExpoImage } from "expo-image";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "@/contexts/ThemeContext";
 import { darkColors, type ColorScheme } from "@/constants/colors";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
@@ -61,6 +62,33 @@ function makeStyles(C: ColorScheme) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: C.bg },
     kav: { flex: 1 },
+    headerWrap: {
+      alignItems: "center",
+      gap: 4,
+    },
+    headerAvatar: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: C.primaryMuted,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    headerAvatarImg: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+    },
+    headerAvatarLetter: {
+      fontFamily: "Outfit_600SemiBold",
+      fontSize: 15,
+      color: C.primary,
+    },
+    headerName: {
+      fontFamily: "Outfit_600SemiBold",
+      fontSize: 15,
+      color: C.text,
+    },
     messagesList: { flex: 1 },
     messagesContent: {
       paddingHorizontal: 12,
@@ -75,25 +103,25 @@ function makeStyles(C: ColorScheme) {
     msgRowMe: { justifyContent: "flex-end" },
     msgRowThem: { justifyContent: "flex-start" },
     avatar: {
-      width: 30,
-      height: 30,
-      borderRadius: 15,
+      width: 28,
+      height: 28,
+      borderRadius: 14,
       backgroundColor: C.primaryMuted,
       alignItems: "center",
       justifyContent: "center",
       flexShrink: 0,
     },
     avatarImg: {
-      width: 30,
-      height: 30,
-      borderRadius: 15,
+      width: 28,
+      height: 28,
+      borderRadius: 14,
     },
     avatarLetter: {
       fontFamily: "Outfit_600SemiBold",
-      fontSize: 13,
+      fontSize: 12,
       color: C.primary,
     },
-    avatarSpacer: { width: 30 },
+    avatarSpacer: { width: 28 },
     bubble: {
       maxWidth: "72%",
       borderRadius: 18,
@@ -211,7 +239,7 @@ function makeStyles(C: ColorScheme) {
     },
     gifOverlay: {
       position: "absolute",
-      top: "45%",
+      top: "35%",
       left: 0,
       right: 0,
       bottom: 0,
@@ -299,7 +327,12 @@ export default function DmThread() {
   const { C } = useTheme();
   const s = useMemo(() => makeStyles(C), [C]);
   const insets = useSafeAreaInsets();
-  const { friendId, friendName } = useLocalSearchParams<{ friendId: string; friendName: string }>();
+  const { friendId, friendName, friendUsername, friendPhoto } = useLocalSearchParams<{
+    friendId: string;
+    friendName: string;
+    friendUsername: string;
+    friendPhoto: string;
+  }>();
   const { user } = useAuth();
   const qc = useQueryClient();
   const [draft, setDraft] = useState("");
@@ -367,12 +400,34 @@ export default function DmThread() {
     }
   }, [draft, selectedGif, sending, friendId, refetch, qc]);
 
+  const openGifPicker = useCallback(() => {
+    Keyboard.dismiss();
+    setGifSearch("");
+    setGifResults([]);
+    setShowGifPicker(true);
+  }, []);
+
   const bottomPad = Math.max(insets.bottom, 8);
   const canSend = (!!draft.trim() || !!selectedGif) && !sending;
+  const displayUsername = friendUsername ? `@${friendUsername}` : friendName;
+  const photoUrl = resolveImgUrl(friendPhoto);
+
+  const headerTitle = useCallback(() => (
+    <View style={s.headerWrap}>
+      <View style={s.headerAvatar}>
+        {photoUrl ? (
+          <ExpoImage source={{ uri: photoUrl }} style={s.headerAvatarImg} contentFit="cover" />
+        ) : (
+          <Text style={s.headerAvatarLetter}>{avatarLetter(friendName ?? "?")}</Text>
+        )}
+      </View>
+      <Text style={s.headerName}>{displayUsername}</Text>
+    </View>
+  ), [photoUrl, displayUsername, friendName, s]);
 
   return (
     <>
-      <Stack.Screen options={{ title: friendName ?? "Message" }} />
+      <Stack.Screen options={{ headerTitle }} />
       <View style={s.root}>
         <KeyboardAvoidingView
           style={s.kav}
@@ -386,7 +441,7 @@ export default function DmThread() {
           ) : messages.length === 0 ? (
             <View style={s.emptyWrap}>
               <Text style={s.emptyTxt}>
-                No messages yet.{"\n"}Say hello to {friendName}!
+                No messages yet.{"\n"}Say hello!
               </Text>
             </View>
           ) : (
@@ -400,12 +455,12 @@ export default function DmThread() {
               renderItem={({ item }) => {
                 const isMe = item.sender_id === user?.id;
                 const isGif = item.message_type === "gif";
-                const photoUrl = resolveImgUrl(item.sender_photo);
+                const senderPhoto = resolveImgUrl(item.sender_photo);
 
-                const avatarEl = isMe ? null : (
+                const avatarEl = (
                   <View style={s.avatar}>
-                    {photoUrl ? (
-                      <ExpoImage source={{ uri: photoUrl }} style={s.avatarImg} contentFit="cover" />
+                    {senderPhoto ? (
+                      <ExpoImage source={{ uri: senderPhoto }} style={s.avatarImg} contentFit="cover" />
                     ) : (
                       <Text style={s.avatarLetter}>{avatarLetter(item.sender_name)}</Text>
                     )}
@@ -472,15 +527,7 @@ export default function DmThread() {
               returnKeyType="default"
               testID="dm-text-input"
             />
-            <TouchableOpacity
-              style={s.gifBtn}
-              onPress={() => {
-                setGifSearch("");
-                setGifResults([]);
-                setShowGifPicker(true);
-              }}
-              testID="dm-gif-btn"
-            >
+            <TouchableOpacity style={s.gifBtn} onPress={openGifPicker} testID="dm-gif-btn">
               <Text style={s.gifBtnTxt}>GIF</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -515,7 +562,6 @@ export default function DmThread() {
                 placeholder="Search GIFs…"
                 placeholderTextColor={C.textMuted}
                 returnKeyType="search"
-                autoFocus
               />
               {!!gifSearch && (
                 <TouchableOpacity onPress={() => setGifSearch("")}>
@@ -562,11 +608,7 @@ export default function DmThread() {
                       setShowGifPicker(false);
                     }}
                   >
-                    <ExpoImage
-                      source={{ uri: item.preview_url }}
-                      style={s.gifGridImg}
-                      contentFit="cover"
-                    />
+                    <ExpoImage source={{ uri: item.preview_url }} style={s.gifGridImg} contentFit="cover" />
                   </TouchableOpacity>
                 )}
               />

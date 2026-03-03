@@ -29,6 +29,7 @@ const C_FALLBACK = darkColors;
 interface Conversation {
   friend_id: string;
   friend_name: string;
+  friend_username: string | null;
   friend_photo: string | null;
   last_message: string;
   last_message_at: string;
@@ -39,6 +40,7 @@ interface Conversation {
 interface Friend {
   id: string;
   name: string;
+  username: string | null;
   photo_url: string | null;
   friendship_id: string;
 }
@@ -281,9 +283,9 @@ export default function MessagesScreen() {
     enabled: showCompose,
   });
 
-  const openThread = useCallback((friendId: string, friendName: string) => {
+  const openThread = useCallback((friendId: string, friendName: string, friendUsername?: string | null, friendPhoto?: string | null) => {
     setShowCompose(false);
-    router.push({ pathname: "/dm/[friendId]", params: { friendId, friendName } });
+    router.push({ pathname: "/dm/[friendId]", params: { friendId, friendName, friendUsername: friendUsername ?? "", friendPhoto: friendPhoto ?? "" } });
   }, [router]);
 
   const topPad = Platform.OS === "web" ? 0 : insets.top;
@@ -327,7 +329,7 @@ export default function MessagesScreen() {
             return (
               <TouchableOpacity
                 style={[s.convoRow, index < conversations.length - 1 && s.convoRowBorder]}
-                onPress={() => openThread(item.friend_id, item.friend_name)}
+                onPress={() => openThread(item.friend_id, item.friend_name, item.friend_username, item.friend_photo)}
                 testID={`dm-convo-${item.friend_id}`}
               >
                 <View style={s.avatarCircle}>
@@ -388,7 +390,7 @@ export default function MessagesScreen() {
               </View>
             }
             renderItem={({ item }) => (
-              <TouchableOpacity style={s.friendRow} onPress={() => openThread(item.id, item.name)}>
+              <TouchableOpacity style={s.friendRow} onPress={() => openThread(item.id, item.name, item.username, item.photo_url)}>
                 <View style={s.avatarCircle}>
                   {resolveImgUrl(item.photo_url) ? (
                     <ExpoImage
