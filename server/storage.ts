@@ -701,7 +701,7 @@ export async function getCrewVisibleRuns(userId: string, bounds?: { swLat: numbe
     JOIN users u ON u.id = r.host_id
     JOIN crew_members cm ON cm.crew_id = r.crew_id AND cm.user_id = $1 AND cm.status = 'member'
     LEFT JOIN crews c ON c.id = r.crew_id
-    WHERE r.crew_id IS NOT NULL AND r.date > NOW() - INTERVAL '90 minutes' AND r.is_completed = false`;
+    WHERE r.crew_id IS NOT NULL AND (r.is_active = true OR r.date > NOW() - INTERVAL '90 minutes') AND r.is_completed = false`;
   const params: any[] = [userId];
   query += ` ORDER BY r.date ASC LIMIT 100`;
   const result = await pool.query(query, params);
@@ -854,7 +854,7 @@ export async function getPublicRuns(filters?: {
     (1 + (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled')) as participant_count,
     (SELECT COUNT(*) FROM planned_runs pr WHERE pr.run_id = r.id) as plan_count
     FROM runs r JOIN users u ON u.id = r.host_id
-    WHERE r.privacy = 'public' AND r.date > NOW() - INTERVAL '90 minutes' AND r.is_completed = false AND r.crew_id IS NULL`;
+    WHERE r.privacy = 'public' AND (r.is_active = true OR r.date > NOW() - INTERVAL '90 minutes') AND r.is_completed = false AND r.crew_id IS NULL`;
   const params: any[] = [];
   let idx = 1;
   if (filters?.minPace !== undefined) { query += ` AND r.max_pace >= $${idx++}`; params.push(filters.minPace); }
