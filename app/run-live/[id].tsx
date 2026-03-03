@@ -9,7 +9,6 @@ import {
   Platform,
   FlatList,
   TextInput,
-  KeyboardAvoidingView,
 } from "react-native";
 import MapView, { Marker, Polyline, Circle } from "react-native-maps";
 import { KeyboardAvoidingView as KAV } from "react-native-keyboard-controller";
@@ -20,24 +19,12 @@ import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLiveTracking } from "@/contexts/LiveTrackingContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import C from "@/constants/colors";
 import MAP_STYLE from "@/lib/mapStyle";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371;
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-function haversineMi(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  return haversineKm(lat1, lon1, lat2, lon2) * 0.621371;
-}
 
 function formatElapsed(s: number): string {
   const h = Math.floor(s / 3600);
@@ -70,31 +57,51 @@ export default function RunLiveScreen() {
   const { user } = useAuth();
   const mapRef = useRef<MapView>(null);
 
-  // GPS tracking state
-  const [phase, setPhase] = useState<"idle" | "active" | "finishing">("idle");
-  const [elapsed, setElapsed] = useState(0);
-  const [displayDist, setDisplayDist] = useState(0);
+  // ── Tracking context (survives minimize/navigation) ──────────────────────
+  const tracking = useLiveTracking();
+  const {
+    phase,
+    elapsed,
+    displayDist,
+    routePathRef,
+    totalDistRef,
+    elapsedRef,
+    hasBeenPresent,
+    presentConfirmed,
+    startTracking,
+    beginFinishing,
+    resetTracking,
+    recoverToActive,
+    minimize,
+    restore,
+  } = tracking;
+
+  // ── Local UI state ────────────────────────────────────────────────────────
   const [presentToast, setPresentToast] = useState(false);
   const [saving, setSaving] = useState(false);
-
-  // Chat state
   const [activeTab, setActiveTab] = useState<"map" | "chat">("map");
   const [messages, setMessages] = useState<any[]>([]);
   const [messageInput, setMessageInput] = useState("");
   const [lastSeenMessageCount, setLastSeenMessageCount] = useState(0);
 
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const locationSubRef = useRef<Location.LocationSubscription | null>(null);
-  const webWatchIdRef = useRef<number | null>(null);
-  const lastCoordRef = useRef<{ latitude: number; longitude: number } | null>(null);
-  const totalDistRef = useRef(0);
-  const routePathRef = useRef<Array<{ latitude: number; longitude: number }>>([]);
-  const elapsedRef = useRef(0);
-  const markedPresentRef = useRef(false);
+  // Restore minimized state when screen mounts
+  useEffect(() => {
+    restore();
+  }, []);
 
-  // Live poll from server
-  const { data: liveState, refetch: refetchLive } = useQuery<any>({
+  // Show toast when presence is confirmed by context
+  useEffect(() => {
+    if (presentConfirmed) {
+      setPresentToast(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      const t = setTimeout(() => setPresentToast(false), 3000);
+      return () => clearTimeout(t);
+    }
+  }, [presentConfirmed]);
+
+  // ── Server data ───────────────────────────────────────────────────────────
+
+  const { data: liveState } = useQuery<any>({
     queryKey: ["/api/runs", id, "live"],
     queryFn: async () => {
       const res = await fetch(new URL(`/api/runs/${id}/live`, getApiUrl()).toString(), { credentials: "include" });
@@ -112,125 +119,21 @@ export default function RunLiveScreen() {
     },
   });
 
-  // ─── Timer ──────────────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    if (phase === "active") {
-      intervalRef.current = setInterval(() => {
-        setElapsed((e) => { elapsedRef.current = e + 1; return e + 1; });
-      }, 1000);
-    } else {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    }
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [phase]);
-
-  // ─── Ping server with location ───────────────────────────────────────────────
-
-  const pingServer = useCallback(async (lat: number, lng: number) => {
-    if (!id) return;
-    try {
-      const paceNum = calcPaceNum(totalDistRef.current, elapsedRef.current);
-      const res = await apiRequest("POST", `/api/runs/${id}/ping`, {
-        latitude: lat,
-        longitude: lng,
-        cumulativeDistance: totalDistRef.current,
-        pace: paceNum,
-      });
-      const data = await res.json();
-      if (data.isPresent && !markedPresentRef.current) {
-        markedPresentRef.current = true;
-        setPresentToast(true);
-        setTimeout(() => setPresentToast(false), 3000);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-    } catch { }
-  }, [id]);
-
-  // ─── GPS ────────────────────────────────────────────────────────────────────
-
-  function handleCoord(latitude: number, longitude: number) {
-    routePathRef.current.push({ latitude, longitude });
-    if (lastCoordRef.current) {
-      const d = haversineMi(lastCoordRef.current.latitude, lastCoordRef.current.longitude, latitude, longitude);
-      if (d >= 0 && d < 0.3) {
-        totalDistRef.current += d;
-        setDisplayDist(totalDistRef.current);
-      }
-    }
-    lastCoordRef.current = { latitude, longitude };
-  }
-
-  async function watchLocation() {
-    if (Platform.OS === "web") {
-      if (typeof navigator !== "undefined" && navigator.geolocation) {
-        webWatchIdRef.current = navigator.geolocation.watchPosition(
-          (pos) => handleCoord(pos.coords.latitude, pos.coords.longitude),
-          () => {},
-          { enableHighAccuracy: true, maximumAge: 3000 }
-        );
-      }
-      return;
-    }
-    try {
-      const sub = await Location.watchPositionAsync(
-        { accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 5, timeInterval: 5000 },
-        (loc) => handleCoord(loc.coords.latitude, loc.coords.longitude)
-      );
-      locationSubRef.current = sub;
-    } catch { }
-  }
-
-  function stopWatching() {
-    if (Platform.OS === "web") {
-      if (webWatchIdRef.current !== null) {
-        navigator.geolocation?.clearWatch(webWatchIdRef.current);
-        webWatchIdRef.current = null;
-      }
-    } else {
-      locationSubRef.current?.remove();
-      locationSubRef.current = null;
-    }
-    if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
-  }
-
-  // ─── Start tracking ─────────────────────────────────────────────────────────
+  // ── Start tracking ────────────────────────────────────────────────────────
 
   async function handleStartTracking() {
     if (Platform.OS !== "web") {
       const perm = await Location.requestForegroundPermissionsAsync();
       if (!perm.granted) {
-        Alert.alert("Location Required", "Enable location access to track your run.");
+        const type = run?.activity_type === "ride" ? "ride" : "run";
+        Alert.alert("Location Required", `Enable location access to track your ${type}.`);
         return;
       }
     }
-    lastCoordRef.current = null;
-    totalDistRef.current = 0;
-    elapsedRef.current = 0;
-    routePathRef.current = [];
-    setDisplayDist(0);
-    setElapsed(0);
-    setPhase("active");
-    await watchLocation();
-
-    // Send initial ping immediately to register presence
-    if (Platform.OS !== "web") {
-      try {
-        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        handleCoord(loc.coords.latitude, loc.coords.longitude);
-        await pingServer(loc.coords.latitude, loc.coords.longitude);
-      } catch { }
-    }
-
-    // Ping server every 10 seconds
-    pingIntervalRef.current = setInterval(async () => {
-      if (lastCoordRef.current) {
-        await pingServer(lastCoordRef.current.latitude, lastCoordRef.current.longitude);
-      }
-    }, 10000);
+    await startTracking(id!, run?.activity_type ?? "run");
   }
 
-  // ─── Finish tracking ────────────────────────────────────────────────────────
+  // ── Finish tracking ───────────────────────────────────────────────────────
 
   function handleFinishRun() {
     const type = run?.activity_type === "ride" ? "ride" : "run";
@@ -242,8 +145,7 @@ export default function RunLiveScreen() {
         {
           text: "Finish",
           onPress: async () => {
-            setPhase("finishing");
-            stopWatching();
+            beginFinishing();
             setSaving(true);
             try {
               const finalPace = calcPaceNum(totalDistRef.current, elapsedRef.current);
@@ -252,11 +154,11 @@ export default function RunLiveScreen() {
                 finalPace,
               });
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              resetTracking();
               router.replace(`/run-results/${id}`);
             } catch (e: any) {
               Alert.alert("Error", e.message || "Could not save run");
-              setPhase("active");
-            } finally {
+              recoverToActive();
               setSaving(false);
             }
           },
@@ -265,7 +167,16 @@ export default function RunLiveScreen() {
     );
   }
 
-  // ─── Chat Polling ─────────────────────────────────────────────────────────
+  // ── X / minimize button ───────────────────────────────────────────────────
+
+  function handleClose() {
+    if (phase === "active") {
+      minimize();
+    }
+    router.back();
+  }
+
+  // ── Chat Polling ──────────────────────────────────────────────────────────
 
   const fetchMessages = useCallback(async () => {
     if (!id) return;
@@ -276,9 +187,7 @@ export default function RunLiveScreen() {
       if (activeTab === "chat") {
         setLastSeenMessageCount(data.length);
       }
-    } catch (e) {
-      console.error("Error fetching messages:", e);
-    }
+    } catch {}
   }, [id, activeTab]);
 
   useEffect(() => {
@@ -308,26 +217,18 @@ export default function RunLiveScreen() {
         message: newMessage.message,
       });
       fetchMessages();
-    } catch (e) {
+    } catch {
       Alert.alert("Error", "Could not send message");
       setMessages((prev) => prev.filter((m) => m.id !== newMessage.id));
     }
   };
 
-  // ─── Cleanup ────────────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    return () => { stopWatching(); };
-  }, []);
-
-  // ─── Derived values ─────────────────────────────────────────────────────────
+  // ── Derived values ────────────────────────────────────────────────────────
 
   const presentParticipants: any[] = liveState?.participants?.filter((p: any) => p.is_present) ?? [];
   const presentCount = liveState?.presentCount ?? 0;
   const runPin = run ? { latitude: run.location_lat, longitude: run.location_lng } : null;
   const paceNum = calcPaceNum(displayDist, elapsed);
-
-  // Assign each other runner a stable color index
   const otherRunners = presentParticipants.filter((p: any) => p.user_id !== user?.id);
 
   const initialRegion = runPin
@@ -343,8 +244,12 @@ export default function RunLiveScreen() {
     <View style={s.container}>
       {/* Header */}
       <View style={[s.header, { paddingTop: topPad + 10 }]}>
-        <Pressable onPress={() => router.back()} style={s.backBtn} hitSlop={12}>
-          <Feather name="x" size={20} color={C.text} />
+        <Pressable onPress={handleClose} style={s.backBtn} hitSlop={12}>
+          <Feather
+            name={phase === "active" ? "chevron-down" : "x"}
+            size={20}
+            color={C.text}
+          />
         </Pressable>
         <View style={s.headerCenter}>
           <View style={s.livePill}>
@@ -398,7 +303,6 @@ export default function RunLiveScreen() {
                 showsUserLocation
                 showsMyLocationButton={false}
               >
-                {/* 500ft presence circle around pin */}
                 {runPin && (
                   <Circle
                     center={runPin}
@@ -408,7 +312,6 @@ export default function RunLiveScreen() {
                     strokeWidth={1.5}
                   />
                 )}
-                {/* Run pin */}
                 {runPin && (
                   <Marker coordinate={runPin} anchor={{ x: 0.5, y: 0.5 }}>
                     <View style={s.pinMarker}>
@@ -416,7 +319,6 @@ export default function RunLiveScreen() {
                     </View>
                   </Marker>
                 )}
-                {/* Other runners' dots */}
                 {otherRunners.map((runner: any, i: number) => {
                   if (!runner.latitude || !runner.longitude) return null;
                   const color = DOT_COLORS[i % DOT_COLORS.length];
@@ -433,7 +335,6 @@ export default function RunLiveScreen() {
                     </Marker>
                   );
                 })}
-                {/* Own path polyline */}
                 {routePathRef.current.length > 1 && (
                   <Polyline
                     coordinates={routePathRef.current}
@@ -451,7 +352,6 @@ export default function RunLiveScreen() {
               </View>
             )}
 
-            {/* Present toast */}
             {presentToast && (
               <View style={s.toast}>
                 <Feather name="check-circle" size={14} color={C.primary} />
@@ -498,19 +398,19 @@ export default function RunLiveScreen() {
             {phase === "idle" && (
               <Pressable style={({ pressed }) => [s.startBtn, { opacity: pressed ? 0.85 : 1 }]} onPress={handleStartTracking}>
                 <Feather name="play" size={20} color={C.bg} />
-                <Text style={s.startBtnText}>Start Tracking</Text>
+                <Text style={s.startBtnText}>{run?.activity_type === "ride" ? "Start Ride" : "Start Run"}</Text>
               </Pressable>
             )}
             {phase === "active" && (
               <Pressable style={({ pressed }) => [s.finishBtn, { opacity: pressed ? 0.85 : 1 }]} onPress={handleFinishRun}>
                 <Feather name="flag" size={20} color="#fff" />
-                <Text style={s.finishBtnText}>Finish My Run</Text>
+                <Text style={s.finishBtnText}>{run?.activity_type === "ride" ? "Finish My Ride" : "Finish My Run"}</Text>
               </Pressable>
             )}
             {phase === "finishing" && (
               <View style={s.savingRow}>
                 <ActivityIndicator color={C.primary} />
-                <Text style={s.savingText}>Saving your run…</Text>
+                <Text style={s.savingText}>Saving your {run?.activity_type === "ride" ? "ride" : "run"}…</Text>
               </View>
             )}
           </View>
@@ -518,7 +418,7 @@ export default function RunLiveScreen() {
       ) : (
         <KAV style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}>
           <View style={s.chatContainer}>
-            {!markedPresentRef.current ? (
+            {!hasBeenPresent ? (
               <View style={s.notPresentContainer}>
                 <Text style={s.notPresentText}>
                   You'll be able to chat once you arrive at the start point 📍
@@ -549,7 +449,7 @@ export default function RunLiveScreen() {
                             <Text style={[s.msgText, isOwn ? s.msgOwnText : s.msgOtherText]}>{item.message}</Text>
                           </View>
                           <Text style={s.msgTime}>
-                            {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            {new Date(item.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                           </Text>
                         </View>
                       </View>
@@ -676,9 +576,7 @@ const s = StyleSheet.create({
   savingText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.textSecondary },
 
   legendContainer: { marginHorizontal: 10, marginTop: 10 },
-  legend: {
-    flexDirection: "row", flexWrap: "wrap", gap: 8,
-  },
+  legend: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   legendItem: {
     flexDirection: "row", alignItems: "center", gap: 5,
     backgroundColor: C.card + "EE", borderRadius: 10,
@@ -691,7 +589,7 @@ const s = StyleSheet.create({
   chatContainer: { flex: 1, backgroundColor: C.bg },
   chatListContent: { padding: 16, paddingBottom: 20 },
   notPresentContainer: { flex: 1, alignItems: "center", justifyContent: "center", padding: 40 },
-  notPresentText: { fontFamily: "Outfit_500Medium", fontSize: 16, color: C.textSecondary, textAlign: "center", lineHeight: 24 },
+  notPresentText: { fontFamily: "Outfit_400Regular", fontSize: 16, color: C.textSecondary, textAlign: "center", lineHeight: 24 },
   backToMapLink: { marginTop: 16 },
   backToMapLinkText: { fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.primary },
   emptyChat: { padding: 40, alignItems: "center" },

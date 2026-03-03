@@ -11,6 +11,7 @@ import { queryClient, getApiUrl } from "@/lib/query-client";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ActivityProvider } from "@/contexts/ActivityContext";
 import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
+import { LiveTrackingProvider } from "@/contexts/LiveTrackingContext";
 import { StatusBar } from "expo-status-bar";
 import {
   useFonts,
@@ -155,11 +156,13 @@ export default function RootLayout() {
         <ThemeProvider>
           <AuthProvider>
             <ActivityProvider>
-              <GestureHandlerRootView style={{ flex: 1 }}>
-                <KeyboardProvider>
-                  <RootLayoutNav />
-                </KeyboardProvider>
-              </GestureHandlerRootView>
+              <LiveTrackingProvider>
+                <GestureHandlerRootView style={{ flex: 1 }}>
+                  <KeyboardProvider>
+                    <RootLayoutNav />
+                  </KeyboardProvider>
+                </GestureHandlerRootView>
+              </LiveTrackingProvider>
             </ActivityProvider>
           </AuthProvider>
         </ThemeProvider>

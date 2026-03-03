@@ -1,0 +1,256 @@
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { Platform } from "react-native";
+import * as Location from "expo-location";
+import { apiRequest } from "@/lib/query-client";
+
+type Phase = "idle" | "active" | "finishing";
+
+interface LiveTrackingContextValue {
+  runId: string | null;
+  activityType: "run" | "ride";
+  phase: Phase;
+  displayDist: number;
+  elapsed: number;
+  isMinimized: boolean;
+  presentConfirmed: boolean;
+  hasBeenPresent: boolean;
+  routePathRef: React.MutableRefObject<Array<{ latitude: number; longitude: number }>>;
+  totalDistRef: React.MutableRefObject<number>;
+  elapsedRef: React.MutableRefObject<number>;
+  startTracking: (runId: string, activityType: "run" | "ride") => Promise<void>;
+  beginFinishing: () => void;
+  resetTracking: () => void;
+  recoverToActive: () => void;
+  minimize: () => void;
+  restore: () => void;
+}
+
+function haversineMi(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 0.621371;
+}
+
+function calcPaceNum(distanceMi: number, elapsedSec: number): number {
+  if (distanceMi <= 0 || elapsedSec <= 0) return 0;
+  return elapsedSec / 60 / distanceMi;
+}
+
+const LiveTrackingContext = createContext<LiveTrackingContextValue | null>(null);
+
+export function LiveTrackingProvider({ children }: { children: React.ReactNode }) {
+  const [runId, setRunId] = useState<string | null>(null);
+  const [activityType, setActivityType] = useState<"run" | "ride">("run");
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [displayDist, setDisplayDist] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
+  const [isMinimized, setIsMinimized] = useState(false);
+  const [presentConfirmed, setPresentConfirmed] = useState(false);
+  const [hasBeenPresent, setHasBeenPresent] = useState(false);
+
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const locationSubRef = useRef<Location.LocationSubscription | null>(null);
+  const webWatchIdRef = useRef<number | null>(null);
+  const lastCoordRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  const totalDistRef = useRef(0);
+  const elapsedRef = useRef(0);
+  const routePathRef = useRef<Array<{ latitude: number; longitude: number }>>([]);
+  const markedPresentRef = useRef(false);
+  const activeRunIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (phase === "active") {
+      intervalRef.current = setInterval(() => {
+        setElapsed((e) => {
+          elapsedRef.current = e + 1;
+          return e + 1;
+        });
+      }, 1000);
+    } else {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    }
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [phase]);
+
+  const pingServer = useCallback(async (lat: number, lng: number) => {
+    const rid = activeRunIdRef.current;
+    if (!rid) return;
+    try {
+      const paceNum = calcPaceNum(totalDistRef.current, elapsedRef.current);
+      const res = await apiRequest("POST", `/api/runs/${rid}/ping`, {
+        latitude: lat,
+        longitude: lng,
+        cumulativeDistance: totalDistRef.current,
+        pace: paceNum,
+      });
+      const data = await res.json();
+      if (data.isPresent && !markedPresentRef.current) {
+        markedPresentRef.current = true;
+        setHasBeenPresent(true);
+        setPresentConfirmed(true);
+        setTimeout(() => setPresentConfirmed(false), 3000);
+      }
+    } catch {}
+  }, []);
+
+  function handleCoord(latitude: number, longitude: number) {
+    routePathRef.current = [...routePathRef.current, { latitude, longitude }];
+    if (lastCoordRef.current) {
+      const d = haversineMi(
+        lastCoordRef.current.latitude,
+        lastCoordRef.current.longitude,
+        latitude,
+        longitude
+      );
+      if (d >= 0 && d < 0.3) {
+        totalDistRef.current += d;
+        setDisplayDist(totalDistRef.current);
+      }
+    }
+    lastCoordRef.current = { latitude, longitude };
+  }
+
+  async function watchLocation() {
+    if (Platform.OS === "web") {
+      if (typeof navigator !== "undefined" && navigator.geolocation) {
+        webWatchIdRef.current = navigator.geolocation.watchPosition(
+          (pos) => handleCoord(pos.coords.latitude, pos.coords.longitude),
+          () => {},
+          { enableHighAccuracy: true, maximumAge: 3000 }
+        );
+      }
+      return;
+    }
+    try {
+      const sub = await Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 5, timeInterval: 5000 },
+        (loc) => handleCoord(loc.coords.latitude, loc.coords.longitude)
+      );
+      locationSubRef.current = sub;
+    } catch {}
+  }
+
+  function clearLocationAndPing() {
+    if (Platform.OS === "web") {
+      if (webWatchIdRef.current !== null) {
+        navigator.geolocation?.clearWatch(webWatchIdRef.current);
+        webWatchIdRef.current = null;
+      }
+    } else {
+      locationSubRef.current?.remove();
+      locationSubRef.current = null;
+    }
+    if (pingIntervalRef.current) {
+      clearInterval(pingIntervalRef.current);
+      pingIntervalRef.current = null;
+    }
+  }
+
+  async function startTracking(rid: string, type: "run" | "ride") {
+    lastCoordRef.current = null;
+    totalDistRef.current = 0;
+    elapsedRef.current = 0;
+    routePathRef.current = [];
+    markedPresentRef.current = false;
+    setDisplayDist(0);
+    setElapsed(0);
+    setPresentConfirmed(false);
+    setRunId(rid);
+    activeRunIdRef.current = rid;
+    setActivityType(type);
+    setIsMinimized(false);
+    setPhase("active");
+
+    await watchLocation();
+
+    if (Platform.OS !== "web") {
+      try {
+        const loc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        handleCoord(loc.coords.latitude, loc.coords.longitude);
+        await pingServer(loc.coords.latitude, loc.coords.longitude);
+      } catch {}
+    }
+
+    pingIntervalRef.current = setInterval(async () => {
+      if (lastCoordRef.current) {
+        await pingServer(lastCoordRef.current.latitude, lastCoordRef.current.longitude);
+      }
+    }, 10000);
+  }
+
+  function beginFinishing() {
+    setPhase("finishing");
+    clearLocationAndPing();
+  }
+
+  function resetTracking() {
+    clearLocationAndPing();
+    setPhase("idle");
+    setRunId(null);
+    activeRunIdRef.current = null;
+    setIsMinimized(false);
+    setDisplayDist(0);
+    setElapsed(0);
+    elapsedRef.current = 0;
+    totalDistRef.current = 0;
+    routePathRef.current = [];
+    lastCoordRef.current = null;
+    markedPresentRef.current = false;
+    setHasBeenPresent(false);
+    setPresentConfirmed(false);
+  }
+
+  function recoverToActive() {
+    setPhase("active");
+  }
+
+  function minimize() {
+    setIsMinimized(true);
+  }
+
+  function restore() {
+    setIsMinimized(false);
+  }
+
+  return (
+    <LiveTrackingContext.Provider
+      value={{
+        runId,
+        activityType,
+        phase,
+        displayDist,
+        elapsed,
+        isMinimized,
+        presentConfirmed,
+        hasBeenPresent,
+        routePathRef,
+        totalDistRef,
+        elapsedRef,
+        startTracking,
+        beginFinishing,
+        resetTracking,
+        recoverToActive,
+        minimize,
+        restore,
+      }}
+    >
+      {children}
+    </LiveTrackingContext.Provider>
+  );
+}
+
+export function useLiveTracking() {
+  const ctx = useContext(LiveTrackingContext);
+  if (!ctx) throw new Error("useLiveTracking must be used within LiveTrackingProvider");
+  return ctx;
+}

@@ -12,6 +12,7 @@ import {
   Image,
   Modal,
   Linking,
+  Animated,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { router, useLocalSearchParams } from "expo-router";
@@ -22,6 +23,7 @@ import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLiveTracking } from "@/contexts/LiveTrackingContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { darkColors as C, type ColorScheme } from "@/constants/colors";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -77,7 +79,9 @@ export default function RunDetailScreen() {
   const { id, token } = useLocalSearchParams<{ id: string; token?: string }>();
   const insets = useSafeAreaInsets();
   const { user, refreshUser } = useAuth();
+  const liveTracking = useLiveTracking();
   const qc = useQueryClient();
+  const pillPulse = useRef(new Animated.Value(1)).current;
   const [joining, setJoining] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [showRulesModal, setShowRulesModal] = useState(false);
@@ -259,6 +263,21 @@ export default function RunDetailScreen() {
   const canRate = !!run?.is_completed && isParticipant && !isHost && !myRating;
   const hasConfirmed = myParticipation?.status === "confirmed";
   const isLive = !!run?.is_active && !run?.is_completed;
+  const isMyTracking =
+    liveTracking.runId === id &&
+    liveTracking.phase === "active" &&
+    liveTracking.isMinimized;
+
+  useEffect(() => {
+    if (!isMyTracking) return;
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pillPulse, { toValue: 0.35, duration: 800, useNativeDriver: true }),
+        Animated.timing(pillPulse, { toValue: 1, duration: 800, useNativeDriver: true }),
+      ])
+    ).start();
+    return () => pillPulse.stopAnimation();
+  }, [isMyTracking]);
 
   useEffect(() => {
     if (!isHost || !run || Platform.OS === "web") return;
@@ -894,7 +913,7 @@ export default function RunDetailScreen() {
               onPress={() => router.push(`/run-live/${id}`)}
             >
               <View style={styles.liveDot} />
-              <Text style={styles.liveBtnText}>View Live Run</Text>
+              <Text style={styles.liveBtnText}>{run?.activity_type === "ride" ? "Ready to Ride" : "Ready to Run"}</Text>
             </Pressable>
           ) : (
             <>
@@ -1334,6 +1353,24 @@ export default function RunDetailScreen() {
           </View>
         </Modal>
       )}
+
+      {/* ── Floating "Back to Live" pill (shown when tracking is minimized) ── */}
+      {isMyTracking && (
+        <Pressable
+          style={[styles.livePill, { bottom: insets.bottom + 80 + (Platform.OS === "web" ? 34 : 0) }]}
+          onPress={() => {
+            liveTracking.restore();
+            router.push(`/run-live/${id}`);
+          }}
+        >
+          <Animated.View style={[styles.livePillDot, { opacity: pillPulse }]} />
+          <Text style={styles.livePillLabel}>
+            {liveTracking.activityType === "ride" ? "Back to Live Ride" : "Back to Live Run"}
+          </Text>
+          <Text style={styles.livePillDist}>{liveTracking.displayDist.toFixed(2)} mi</Text>
+          <Feather name="chevron-right" size={16} color={C.primary} />
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -1506,4 +1543,17 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   planInfoPageRow: { flexDirection: "row", justifyContent: "center", gap: 6, marginTop: 16 },
   planInfoDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.border },
   planInfoDotActive: { backgroundColor: C.primary, width: 18 },
+
+  // ─── Floating live tracking pill ─────────────────────────────────────────
+  livePill: {
+    position: "absolute", alignSelf: "center", left: 20, right: 20,
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: C.surface, borderRadius: 28,
+    paddingHorizontal: 18, paddingVertical: 12,
+    borderWidth: 1.5, borderColor: C.primary,
+    shadowColor: C.primary, shadowOpacity: 0.3, shadowRadius: 12, elevation: 8,
+  },
+  livePillDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: C.primary },
+  livePillLabel: { flex: 1, fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text },
+  livePillDist: { fontFamily: "Outfit_700Bold", fontSize: 14, color: C.primary },
 }); }
