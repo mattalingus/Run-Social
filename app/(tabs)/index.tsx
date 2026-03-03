@@ -159,9 +159,11 @@ interface FilterModalProps {
   onApply: () => void;
   onReset: () => void;
   userLocation: { latitude: number; longitude: number } | null;
+  sortOption: SortOption;
+  setSortOption: (s: SortOption) => void;
 }
 
-function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, userLocation }: FilterModalProps) {
+function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, userLocation, sortOption, setSortOption }: FilterModalProps) {
   const { C } = useTheme();
   const fm = useMemo(() => makeFmStyles(C), [C]);
   const insets = useSafeAreaInsets();
@@ -210,6 +212,38 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
           contentContainerStyle={fm.scrollContent}
           bounces={false}
         >
+          {/* ── Sort by ─────────────────────────────────────────────────── */}
+          <View style={fm.section}>
+            <Text style={fm.sectionTitle}>Sort by</Text>
+            <View style={fm.proxRow}>
+              {SORT_OPTIONS.map((opt) => {
+                const active = sortOption === opt.key;
+                const labels: Record<string, string> = {
+                  soonest: "Soonest",
+                  nearest: "Nearest",
+                  dist_asc: "Distance ↑",
+                  dist_desc: "Distance ↓"
+                };
+                return (
+                  <Pressable
+                    key={opt.key}
+                    style={[fm.proxChip, active && fm.proxChipActive]}
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      setSortOption(opt.key);
+                    }}
+                  >
+                    <Text style={[fm.proxChipTxt, active && fm.proxChipTxtActive]}>
+                      {labels[opt.key] || opt.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={fm.divider} />
+
           {/* ── A. Visibility ────────────────────────────────────────────── */}
           <View style={fm.section}>
             <Text style={fm.sectionTitle}>View</Text>
@@ -579,10 +613,79 @@ export default function DiscoverScreen() {
 
   const [search, setSearch] = useState("");
   const [sortOption, setSortOption] = useState<SortOption>("soonest");
-  const [showSort, setShowSort] = useState(false);
   const { activityFilter, setActivityFilter } = useActivity();
   const [showFilter, setShowFilter] = useState(false);
+  const [showNotifs, setShowNotifs] = useState(false);
+  const [notifCount, setNotifCount] = useState(0);
+  const [notifData, setNotifData] = useState<{
+    friendRequests: any[];
+    crewInvites: any[];
+    joinRequests: any[];
+  }>({ friendRequests: [], crewInvites: [], joinRequests: [] });
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    const fetchCount = async () => {
+      try {
+        const res = await apiRequest("GET", "/api/notifications");
+        const data = await res.json();
+        setNotifCount(data.total || 0);
+      } catch (e) {
+        console.error("Error fetching notification count:", e);
+      }
+    };
+    fetchCount();
+    const interval = setInterval(fetchCount, 30000);
+    return () => clearInterval(interval);
+  }, [user]);
+
+  const fetchNotifs = useCallback(async () => {
+    try {
+      const res = await apiRequest("GET", "/api/notifications");
+      const data = await res.json();
+      setNotifData(data);
+      setNotifCount(data.total || 0);
+    } catch (e) {
+      console.error("Error fetching notifications:", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (showNotifs) {
+      fetchNotifs();
+    }
+  }, [showNotifs, fetchNotifs]);
+
+  const respondFriend = async (friendshipId: string, action: "accept" | "reject") => {
+    try {
+      await apiRequest("POST", "/api/friends/respond", { friendshipId, action });
+      fetchNotifs();
+      qc.invalidateQueries({ queryKey: ["/api/friends"] });
+    } catch (e) {
+      Alert.alert("Error", "Could not respond to friend request");
+    }
+  };
+
+  const respondCrew = async (crewId: string, action: "accept" | "reject") => {
+    try {
+      await apiRequest("POST", "/api/crews/invites/respond", { crewId, action });
+      fetchNotifs();
+      qc.invalidateQueries({ queryKey: ["/api/crews"] });
+    } catch (e) {
+      Alert.alert("Error", "Could not respond to crew invite");
+    }
+  };
+
+  const respondJoin = async (participantId: string, action: "approve" | "deny") => {
+    try {
+      await apiRequest("POST", "/api/runs/requests/respond", { participantId, action });
+      fetchNotifs();
+      qc.invalidateQueries({ queryKey: ["/api/runs"] });
+    } catch (e) {
+      Alert.alert("Error", "Could not respond to join request");
+    }
+  };
 
   const [draft,    setDraft]    = useState<FilterState>({ ...DEFAULT_FILTERS });
   const [applied,  setApplied]  = useState<FilterState>({ ...DEFAULT_FILTERS });
@@ -960,7 +1063,6 @@ export default function DiscoverScreen() {
 
   function openFilter() {
     setDraft({ ...applied });
-    setShowSort(false);
     setShowFilter(true);
   }
 
@@ -1003,25 +1105,21 @@ export default function DiscoverScreen() {
               {isFiltered && <View style={s.dot} />}
             </Pressable>
 
-            {/* Sort */}
-            <Pressable
-              style={[s.hBtnRow, showSort && s.hBtnActive]}
-              onPress={() => { setShowSort((v) => !v); setShowFilter(false); }}
-              testID="sort-button"
-            >
-              {isNonDefaultSort && <View style={s.dot} />}
-              <Text style={s.hBtnTxt}>Sort by</Text>
-              <Feather
-                name={showSort ? "chevron-up" : "chevron-down"}
-                size={13}
-                color={C.primary}
-              />
-            </Pressable>
-
             {/* Host */}
             <Pressable style={s.hBtnRow} onPress={openHostModal} testID="host-button">
               <Feather name="plus" size={15} color={C.primary} />
               <Text style={s.hBtnTxt}>Host</Text>
+            </Pressable>
+
+            {/* Bell */}
+            <Pressable
+              style={s.hBtn}
+              onPress={() => { setShowNotifs(true); Haptics.selectionAsync(); }}
+            >
+              <View>
+                <Feather name="bell" size={18} color={C.primary} />
+                {notifCount > 0 && <View style={s.notifBadge} />}
+              </View>
             </Pressable>
           </View>
         </View>
@@ -1032,7 +1130,7 @@ export default function DiscoverScreen() {
           <TextInput
             style={s.searchInput}
             value={search}
-            onChangeText={(t) => { setSearch(t); setShowSort(false); }}
+            onChangeText={(t) => { setSearch(t); }}
             placeholder={activityFilter === "ride" ? "Search rides, hosts, locations..." : "Search runs, hosts, locations..."}
             placeholderTextColor={C.textMuted}
           />
@@ -1062,36 +1160,6 @@ export default function DiscoverScreen() {
         </View>
       </View>
 
-      {/* ── Sort dropdown ──────────────────────────────────────────────────── */}
-      {showSort && (
-        <>
-          <Pressable style={s.sortOverlay} onPress={() => setShowSort(false)} />
-          <View style={[s.sortMenu, { top: headerTopPad + 54 }]}>
-            {SORT_OPTIONS.map((opt) => {
-              const active = sortOption === opt.key;
-              return (
-                <Pressable
-                  key={opt.key}
-                  style={[s.sortItem, active && s.sortItemActive]}
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    setSortOption(opt.key);
-                    setShowSort(false);
-                  }}
-                >
-                  <Text style={[s.sortItemTxt, active && s.sortItemTxtActive]}>
-                    {opt.label}
-                  </Text>
-                  {active && (
-                    <Feather name="check" size={13} color={C.primary} />
-                  )}
-                </Pressable>
-              );
-            })}
-          </View>
-        </>
-      )}
-
       {/* ── List ───────────────────────────────────────────────────────────── */}
       {isLoading ? (
         <View style={s.center}>
@@ -1107,7 +1175,6 @@ export default function DiscoverScreen() {
           ]}
           showsVerticalScrollIndicator={false}
           scrollEnabled={!!sorted.length}
-          onScrollBeginDrag={() => setShowSort(false)}
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={C.primary} />
           }
@@ -1210,7 +1277,6 @@ export default function DiscoverScreen() {
               onBookmark={user ? () => bookmarkMutation.mutate(item.id) : undefined}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setShowSort(false);
                 router.push(`/run/${item.id}`);
               }}
             />
@@ -1238,7 +1304,132 @@ export default function DiscoverScreen() {
         onApply={applyFilters}
         onReset={resetFilters}
         userLocation={userLocation}
+        sortOption={sortOption}
+        setSortOption={setSortOption}
       />
+
+      {/* ── Notifications Modal ────────────────────────────────────────────────── */}
+      <Modal
+        visible={showNotifs}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowNotifs(false)}
+      >
+        <Pressable style={s.modalOverlay} onPress={() => setShowNotifs(false)} />
+        <View style={[s.notifSheet, { paddingBottom: insets.bottom + 20 }]}>
+          <View style={s.sheetHandle} />
+          <View style={s.sheetHeader}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Text style={s.sheetTitle}>Notifications</Text>
+              {notifCount > 0 && (
+                <View style={s.countBadge}>
+                  <Text style={s.countBadgeText}>{notifCount}</Text>
+                </View>
+              )}
+            </View>
+            <Pressable onPress={() => setShowNotifs(false)} hitSlop={12}>
+              <Feather name="x" size={20} color={C.textSecondary} />
+            </Pressable>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 20 }}>
+            {notifCount === 0 ? (
+              <View style={s.emptyNotifs}>
+                <Feather name="bell" size={48} color={C.textMuted} />
+                <Text style={s.emptyNotifsText}>You're all caught up!</Text>
+              </View>
+            ) : (
+              <>
+                {notifData.friendRequests.length > 0 && (
+                  <View style={s.notifSection}>
+                    <Text style={s.notifSectionTitle}>Friend Requests</Text>
+                    {notifData.friendRequests.map((req) => (
+                      <View key={req.id} style={s.notifItem}>
+                        {req.from_photo ? (
+                          <Image source={{ uri: resolveImgUrl(req.from_photo)! }} style={s.notifAvatar} />
+                        ) : (
+                          <View style={s.notifAvatarFallback}>
+                            <Text style={s.notifAvatarLetter}>{req.from_name?.charAt(0).toUpperCase()}</Text>
+                          </View>
+                        )}
+                        <View style={{ flex: 1 }}>
+                          <Text style={s.notifText}>
+                            <Text style={{ fontFamily: "Outfit_600SemiBold" }}>{req.from_name}</Text> wants to be your running buddy
+                          </Text>
+                          <View style={s.notifActions}>
+                            <Pressable style={[s.notifBtn, s.notifBtnPrimary]} onPress={() => respondFriend(req.id, "accept")}>
+                              <Text style={s.notifBtnText}>Accept</Text>
+                            </Pressable>
+                            <Pressable style={s.notifBtn} onPress={() => respondFriend(req.id, "reject")}>
+                              <Text style={[s.notifBtnText, { color: C.textSecondary }]}>Decline</Text>
+                            </Pressable>
+                          </View>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {notifData.crewInvites.length > 0 && (
+                  <View style={s.notifSection}>
+                    <Text style={s.notifSectionTitle}>Crew Invites</Text>
+                    {notifData.crewInvites.map((inv) => (
+                      <View key={inv.id} style={s.notifItem}>
+                        <View style={s.notifAvatarFallback}>
+                          <Text style={{ fontSize: 20 }}>{inv.emoji || "🏃"}</Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={s.notifText}>
+                            Invited you to join <Text style={{ fontFamily: "Outfit_600SemiBold" }}>{inv.crew_name}</Text>
+                          </Text>
+                          <View style={s.notifActions}>
+                            <Pressable style={[s.notifBtn, s.notifBtnPrimary]} onPress={() => respondCrew(inv.crew_id, "accept")}>
+                              <Text style={s.notifBtnText}>Join</Text>
+                            </Pressable>
+                            <Pressable style={s.notifBtn} onPress={() => respondCrew(inv.crew_id, "reject")}>
+                              <Text style={[s.notifBtnText, { color: C.textSecondary }]}>Decline</Text>
+                            </Pressable>
+                          </View>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {notifData.joinRequests.length > 0 && (
+                  <View style={s.notifSection}>
+                    <Text style={s.notifSectionTitle}>Join Requests</Text>
+                    {notifData.joinRequests.map((req) => (
+                      <View key={req.id} style={s.notifItem}>
+                        {req.user_photo ? (
+                          <Image source={{ uri: resolveImgUrl(req.user_photo)! }} style={s.notifAvatar} />
+                        ) : (
+                          <View style={s.notifAvatarFallback}>
+                            <Text style={s.notifAvatarLetter}>{req.user_name?.charAt(0).toUpperCase()}</Text>
+                          </View>
+                        )}
+                        <View style={{ flex: 1 }}>
+                          <Text style={s.notifText}>
+                            <Text style={{ fontFamily: "Outfit_600SemiBold" }}>{req.user_name}</Text> wants to join your run <Text style={{ fontFamily: "Outfit_600SemiBold" }}>"{req.run_title}"</Text>
+                          </Text>
+                          <View style={s.notifActions}>
+                            <Pressable style={[s.notifBtn, s.notifBtnPrimary]} onPress={() => respondJoin(req.id, "approve")}>
+                              <Text style={s.notifBtnText}>Approve</Text>
+                            </Pressable>
+                            <Pressable style={s.notifBtn} onPress={() => respondJoin(req.id, "deny")}>
+                              <Text style={[s.notifBtnText, { color: C.textSecondary }]}>Deny</Text>
+                            </Pressable>
+                          </View>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </>
+            )}
+          </ScrollView>
+        </View>
+      </Modal>
 
       {/* ── Host Run Modal ───────────────────────────────────────────────────── */}
       <Modal visible={showHostModal} transparent animationType="slide" onRequestClose={() => setShowHostModal(false)}>
@@ -1694,6 +1885,120 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     borderColor: C.primary + "66",
   },
   hBtnActive: { borderColor: C.primary, backgroundColor: C.primaryMuted },
+  notifBadge: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: C.primary,
+    borderWidth: 1.5,
+    borderColor: C.bg,
+  },
+  notifSheet: {
+    position: "absolute",
+    bottom: 0,
+    width: "100%",
+    backgroundColor: C.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: "75%",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 20,
+  },
+  sheetTitle: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 20,
+    color: C.text,
+  },
+  countBadge: {
+    backgroundColor: C.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  countBadgeText: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 12,
+    color: "#FFF",
+  },
+  notifSection: {
+    marginTop: 20,
+  },
+  notifSectionTitle: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 14,
+    color: C.textSecondary,
+    marginBottom: 12,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  notifItem: {
+    flexDirection: "row",
+    gap: 12,
+    backgroundColor: C.card,
+    padding: 12,
+    borderRadius: 16,
+    marginBottom: 8,
+  },
+  notifAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  notifAvatarFallback: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: C.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  notifAvatarLetter: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 16,
+    color: C.textSecondary,
+  },
+  notifText: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 14,
+    color: C.text,
+    lineHeight: 20,
+  },
+  notifActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 10,
+  },
+  notifBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: C.border,
+  },
+  notifBtnPrimary: {
+    backgroundColor: C.primary,
+  },
+  notifBtnText: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 13,
+    color: "#FFF",
+  },
+  emptyNotifs: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 60,
+  },
+  emptyNotifsText: {
+    fontFamily: "Outfit_500Medium",
+    fontSize: 16,
+    color: C.textMuted,
+    marginTop: 12,
+  },
   hBtnTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.text },
   dot: {
     width: 6,
@@ -1727,39 +2032,6 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   activityPillActive: { backgroundColor: C.primary, borderColor: C.primary },
   activityPillTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textMuted },
   activityPillTxtActive: { color: C.bg },
-
-  sortOverlay: {
-    position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
-    zIndex: 10,
-  },
-  sortMenu: {
-    position: "absolute",
-    right: 16,
-    zIndex: 11,
-    backgroundColor: C.card,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: C.primary + "55",
-    minWidth: 200,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.45,
-    shadowRadius: 16,
-    elevation: 14,
-    overflow: "hidden",
-  },
-  sortItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
-  },
-  sortItemActive: { backgroundColor: C.primaryMuted },
-  sortItemTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.textSecondary },
-  sortItemTxtActive: { color: C.primary },
 
   list: { paddingHorizontal: 16, paddingTop: 10, gap: 10 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
@@ -1946,7 +2218,6 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     paddingHorizontal: 14,
     width: "auto",
   },
-  sheetTitle: { fontFamily: "Outfit_700Bold", fontSize: 17, color: C.text },
   sheetForm: {
     paddingHorizontal: 20,
     paddingTop: 18,

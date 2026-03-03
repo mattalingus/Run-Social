@@ -68,8 +68,8 @@ shared/
 
 ## Key Features
 1. **Auth** - Email/password login & registration with session persistence
-2. **Map Discovery** - Interactive map with run pins (react-native-maps); LIVE badge + green ring on active runs
-3. **Run Discovery** - Searchable list with tag filtering
+2. **Map Discovery** - Interactive map with run pins (react-native-maps); LIVE badge + green ring on active runs; "Runs | Paths" mode toggle to switch between run event pins and community route polylines
+3. **Run Discovery** - Searchable list; Sort by is inside the filter sheet; header has Filter | Host | Notifications bell
 4. **Join Runs** - Eligibility checks based on pace & distance
 5. **Host Unlock** - Requires 3 runs with 2+ different hosts
 6. **Create Runs** - Host-only form for public/private/solo runs
@@ -78,11 +78,14 @@ shared/
 9. **Host Ratings** - 1-5 stars + feedback tags
 10. **Mileage Goals** - Monthly & yearly goals with progress bars
 11. **Solo Tab** - Personal run tracking: pace/distance goals, performance rankings by distance category (1mi/2mi/5K/5mi/10K), plan future runs with local push notifications
-12. **Live Group Run Mode** - Host starts run (must be within 1km of pin), runners auto-marked present via GPS ping, live participant dots on shared map (polling every 5s), own path polyline + stats; "Finish My Run" saves final pace & distance, triggers leaderboard ranking
-13. **Saved Paths** - After a solo GPS run, save the route as a named path. Saved paths appear in Solo tab with mini-map previews. When starting a new solo run, select a saved path to show as a faint ghost overlay on the live map.
-14. **Bookmark & Plan** - Bookmark any run from the map, detail page, or discover list. "Plan to Attend" signals soft interest in future runs. Discover tab shows "Saved Runs" horizontal scroll section. Plan count shown on run detail.
-15. **Community Paths** - When 3+ different users save the same GPS route (matched by start/end within ~0.5km + similar distance), it automatically becomes a Community Path. Purple polylines appear on the world map; tapping opens a details card with "Schedule a Run Here" button that pre-fills the create-run form with that location.
-16. **Run Photos** - After completing a solo run (save → optionally add photo before navigating away), or anytime on a past group run detail page. Group run photos are visible to all; solo run photos accessible by tapping any completed run in history. Photos stored in object storage (GCS).
+12. **Audio Pace Coach** - TTS announcements during solo runs (expo-speech); configurable interval (0.5/1/2 miles); on/off toggle in pre-run settings; announces distance + pace + elapsed time
+13. **Live Group Run Mode** - Host starts run (must be within 1km of pin), runners auto-marked present via GPS ping, live participant dots on shared map (polling every 5s), own path polyline + stats; "Finish My Run" saves final pace & distance, triggers leaderboard ranking; **Map|Chat tab toggle** — participants auto-enrolled in live chat (run_messages table, poll every 5s)
+14. **Saved Paths** - After a solo GPS run, save the route as a named path. Saved paths appear in Solo tab with mini-map previews. When starting a new solo run, select a saved path to show as a faint ghost overlay on the live map.
+15. **Bookmark & Plan** - Bookmark any run from the map, detail page, or discover list. "Plan to Attend" signals soft interest in future runs. Discover tab shows "Saved Runs" horizontal scroll section. Plan count shown on run detail.
+16. **Community Route Library** - First runner to complete a GPS route can publish it with a custom name (POST /api/solo-runs/:id/publish-route). Published routes (is_public=true) appear as green polylines on the map in Paths mode. Tap a polyline to see path details + "Start Run Here".
+17. **Crew Chat** - Per-crew persistent group chat (crew_messages table); separate screen app/crew-chat/[id].tsx; inverted FlatList bubbles; 5s polling; accessible via chat icon on each crew card.
+18. **Notifications** - Bell icon in discover header; panel shows pending friend requests, crew invites, and join requests to hosted runs; aggregated from existing tables (no new table); 30s polling badge count.
+19. **Run Photos** - After completing a solo run (save → optionally add photo before navigating away), or anytime on a past group run detail page. Group run photos are visible to all; solo run photos accessible by tapping any completed run in history. Photos stored in object storage (GCS).
 
 ## Database Tables
 - `users` - Auth, profile, goals, stats
@@ -92,7 +95,9 @@ shared/
 - `host_ratings` - Star ratings + feedback for run hosts  
 - `solo_runs` - GPS-tracked personal runs with route_path JSONB
 - `saved_paths` - Named GPS routes saved by users for future reference
-- `community_paths` - Auto-aggregated popular routes (3+ unique contributors)
+- `community_paths` - User-published GPS routes (is_public=true when first runner publishes via publish-route endpoint)
+- `crew_messages` - Per-crew chat messages (crew_id, user_id, sender_name, message, created_at)
+- `run_messages` - Live event chat messages (run_id, user_id, sender_name, message, created_at)
 - `path_contributions` - Junction: links users/saved_paths to community_paths
 - `bookmarked_runs` - User run bookmarks
 - `planned_runs` - Soft "planning to attend" commitments

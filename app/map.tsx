@@ -91,7 +91,9 @@ interface CommunityPath {
   name: string;
   route_path: Array<{ latitude: number; longitude: number }>;
   distance_miles: number | null;
-  contributor_count: number;
+  created_by_name?: string | null;
+  run_count?: number;
+  activity_type?: string;
   start_lat: number;
   start_lng: number;
   end_lat: number;
@@ -291,6 +293,7 @@ export default function MapScreen() {
   const params = useLocalSearchParams<{ styles?: string }>();
 
   const [userLoc, setUserLoc] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [mapMode, setMapMode] = useState<"runs" | "paths">("runs");
   const [locatedOnce, setLocatedOnce] = useState(false);
   const [selectedRun, setSelectedRun] = useState<Run | null>(null);
   const [selectedCommunityPath, setSelectedCommunityPath] = useState<CommunityPath | null>(null);
@@ -358,11 +361,18 @@ export default function MapScreen() {
     return `/api/community-paths?${p.toString()}`;
   }, [bounds]);
 
-  const { data: communityPaths = [] } = useQuery<CommunityPath[]>({
+  const { data: communityPathsData = [] } = useQuery<CommunityPath[]>({
     queryKey: [communityPathsUrl],
     staleTime: 120_000,
     placeholderData: (prev) => prev,
   });
+
+  const communityPaths = useMemo(() => {
+    return communityPathsData.map(path => ({
+      ...path,
+      route_path: typeof path.route_path === "string" ? JSON.parse(path.route_path) : path.route_path
+    }));
+  }, [communityPathsData]);
 
   // Only runs/rides matching the activity filter and visible in the map viewport
   const visibleRuns = useMemo(() => {
@@ -512,15 +522,42 @@ export default function MapScreen() {
             <Feather name="arrow-left" size={16} color={C.textSecondary} />
             <Text style={s.backTxt}>Discover</Text>
           </Pressable>
+
+          {/* Mode Toggle */}
+          <View style={s.modeToggle}>
+            <Pressable
+              style={[s.modePill, mapMode === "runs" && s.modePillActive]}
+              onPress={() => {
+                setMapMode("runs");
+                if (selectedCommunityPath) closePathCard();
+              }}
+            >
+              <Feather name="list" size={12} color={mapMode === "runs" ? "#FFF" : C.textMuted} />
+              <Text style={[s.modePillText, mapMode === "runs" && s.modePillTextActive]}>Runs</Text>
+            </Pressable>
+            <Pressable
+              style={[s.modePill, mapMode === "paths" && s.modePillActive]}
+              onPress={() => {
+                setMapMode("paths");
+                if (selectedRun) closeCard();
+              }}
+            >
+              <Feather name="map" size={12} color={mapMode === "paths" ? "#FFF" : C.textMuted} />
+              <Text style={[s.modePillText, mapMode === "paths" && s.modePillTextActive]}>Paths</Text>
+            </Pressable>
+          </View>
+
           <View style={s.headerRight}>
             {isFetching && <ActivityIndicator size="small" color={C.primary} style={{ marginRight: 6 }} />}
-            <Pressable
-              style={[s.filterBtn, isFiltered && s.filterBtnActive]}
-              onPress={() => { setDraft({ ...applied }); setShowFilter(true); }}
-            >
-              <Feather name="sliders" size={16} color={isFiltered ? C.primary : C.textSecondary} />
-              {isFiltered && <View style={s.filterDot} />}
-            </Pressable>
+            {mapMode === "runs" && (
+              <Pressable
+                style={[s.filterBtn, isFiltered && s.filterBtnActive]}
+                onPress={() => { setDraft({ ...applied }); setShowFilter(true); }}
+              >
+                <Feather name="sliders" size={16} color={isFiltered ? C.primary : C.textSecondary} />
+                {isFiltered && <View style={s.filterDot} />}
+              </Pressable>
+            )}
           </View>
         </View>
       </View>
@@ -550,13 +587,12 @@ export default function MapScreen() {
           onRegionChangeComplete={onRegionChange}
           onPress={() => { if (selectedRun) closeCard(); if (selectedCommunityPath) closePathCard(); }}
         >
-          {communityPaths.map((path) => (
+          {mapMode === "paths" && communityPaths.map((path) => (
             <Polyline
               key={path.id}
               coordinates={path.route_path}
-              strokeColor={selectedCommunityPath?.id === path.id ? "#A78BFA" : "#7C3AED"}
-              strokeWidth={selectedCommunityPath?.id === path.id ? 5 : 3.5}
-              strokeOpacity={0.75}
+              strokeColor={selectedCommunityPath?.id === path.id ? C.primary : "#00D97E"}
+              strokeWidth={4}
               tappable
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -564,7 +600,7 @@ export default function MapScreen() {
               }}
             />
           ))}
-          {runs.map((run) => (
+          {mapMode === "runs" && runs.map((run) => (
             <RunMarker
               key={run.id}
               run={run}
@@ -581,6 +617,11 @@ export default function MapScreen() {
 
         {/* ─── Sidebar (inside map card) ────────────────────────────────── */}
         <View style={s.sideBar}>
+          {mapMode === "paths" && communityPaths.length > 0 && (
+            <View style={s.routeCountChip}>
+              <Text style={s.routeCountTxt}>{communityPaths.length} routes</Text>
+            </View>
+          )}
           {userLoc && (
             <Pressable
               style={s.sideBtn}
@@ -736,63 +777,42 @@ export default function MapScreen() {
         {selectedCommunityPath && (
           <Animated.View
             style={[
-              s.card,
-              { bottom: 16, opacity: pathCardOpacity, transform: [{ translateY: pathSlideAnim }] },
+              s.pathSheet,
+              { bottom: 0, opacity: pathCardOpacity, transform: [{ translateY: pathSlideAnim }] },
             ]}
           >
-            <View style={s.cardTop}>
-              <View style={s.pathIcon}>
-                <Ionicons name="trail-sign-outline" size={22} color="#A78BFA" />
+            <Pressable style={s.closeSheetBtn} onPress={closePathCard}>
+              <Feather name="x" size={20} color={C.textMuted} />
+            </Pressable>
+            
+            <Text style={s.pathSheetTitle}>{selectedCommunityPath.name}</Text>
+            
+            <View style={s.pathStatRow}>
+              <View style={s.pathChip}>
+                <Feather name="move" size={14} color={C.primary} />
+                <Text style={s.pathChipTxt}>{formatDistance(selectedCommunityPath.distance_miles ?? 0)} mi</Text>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={s.cardTitle} numberOfLines={1}>{selectedCommunityPath.name}</Text>
-                <Text style={s.cardHost}>
-                  {selectedCommunityPath.contributor_count} runner{selectedCommunityPath.contributor_count !== 1 ? "s" : ""} run this path
+              <View style={[s.pathChip, { backgroundColor: C.primaryMuted + "55" }]}>
+                <Text style={[s.pathChipTxt, { color: C.primary, textTransform: "capitalize" }]}>
+                  {selectedCommunityPath.activity_type ?? "run"}
                 </Text>
               </View>
-              <Pressable onPress={closePathCard} hitSlop={12}>
-                <Feather name="x" size={18} color={C.textSecondary} />
-              </Pressable>
             </View>
 
-            <View style={s.chips}>
-              {selectedCommunityPath.distance_miles != null && (
-                <View style={s.chip}>
-                  <Feather name="map" size={11} color="#A78BFA" />
-                  <Text style={[s.chipTxt, { color: "#A78BFA" }]}>
-                    {formatDistance(selectedCommunityPath.distance_miles)} mi
-                  </Text>
-                </View>
-              )}
-              <View style={s.chip}>
-                <Ionicons name="people-outline" size={11} color={C.textSecondary} />
-                <Text style={s.chipTxt}>{selectedCommunityPath.contributor_count} contributors</Text>
-              </View>
-              <View style={[s.chip, s.chipCommunity]}>
-                <Ionicons name="star-outline" size={11} color="#A78BFA" />
-                <Text style={[s.chipTxt, { color: "#A78BFA" }]}>Community Path</Text>
-              </View>
+            <View style={{ marginBottom: 20 }}>
+              <Text style={s.pathMutedTxt}>Created by {selectedCommunityPath.created_by_name || "Community Member"}</Text>
+              <Text style={s.pathMutedTxt}>Run count: {selectedCommunityPath.run_count ?? 1}</Text>
             </View>
 
             <Pressable
-              style={({ pressed }) => [s.joinBtn, s.joinBtnPurple, { opacity: pressed ? 0.85 : 1 }]}
+              style={s.pathStartBtn}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                closePathCard();
-                router.push({
-                  pathname: "/create-run",
-                  params: {
-                    pathLat: selectedCommunityPath.start_lat.toString(),
-                    pathLng: selectedCommunityPath.start_lng.toString(),
-                    pathName: selectedCommunityPath.name,
-                    pathDistance: selectedCommunityPath.distance_miles?.toFixed(2) ?? "",
-                    activityType: activityFilter,
-                  },
-                });
+                router.push("/run-tracking");
               }}
             >
-              <Ionicons name="add-circle-outline" size={16} color="#fff" />
-              <Text style={s.joinTxt}>{activityFilter === "ride" ? "Schedule a Ride Here" : "Schedule a Run Here"}</Text>
+              <Text style={s.pathStartBtnTxt}>Start Run Here</Text>
+              <Feather name="play" size={18} color="#FFF" />
             </Pressable>
           </Animated.View>
         )}
@@ -801,7 +821,7 @@ export default function MapScreen() {
 
       {/* ─── Mini run cards strip — always reserves space so map never resizes */}
       <View style={s.miniStrip}>
-        {!selectedRun && !selectedCommunityPath && visibleRuns.length > 0 && (
+        {mapMode === "runs" && !selectedRun && !selectedCommunityPath && visibleRuns.length > 0 && (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -850,7 +870,7 @@ export default function MapScreen() {
 
       {/* ─── Insights strip (below map card, fixed height so map never jumps) */}
       <View style={[s.insightArea, { marginBottom: insets.bottom + 4 }]}>
-        {insights.length > 0 && (
+        {mapMode === "runs" && insights.length > 0 && (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -1211,4 +1231,119 @@ function makeSStyles(C: ColorScheme) { return StyleSheet.create({
     borderWidth: 1, borderColor: C.border,
   },
   insightTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 12 },
+
+  /* Paths Mode Styles */
+  modeToggle: {
+    flexDirection: "row",
+    backgroundColor: C.card,
+    borderRadius: 20,
+    padding: 2,
+    alignItems: "center",
+  },
+  modePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 18,
+  },
+  modePillActive: {
+    backgroundColor: C.primary,
+  },
+  modePillText: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 13,
+    color: C.textMuted,
+  },
+  modePillTextActive: {
+    color: "#FFF",
+  },
+  routeCountChip: {
+    backgroundColor: C.card,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    alignSelf: "flex-end",
+  },
+  routeCountTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 10,
+    color: "#FFF",
+  },
+  pathSheet: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: C.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 20,
+    borderTopWidth: 1,
+    borderColor: C.border,
+  },
+  pathSheetTitle: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 24,
+    color: C.text,
+    marginBottom: 12,
+    paddingRight: 30,
+  },
+  pathStatRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 16,
+  },
+  pathChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: C.card,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  pathChipTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 14,
+    color: C.text,
+  },
+  pathMutedTxt: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 13,
+    color: C.textMuted,
+    marginBottom: 4,
+  },
+  pathStartBtn: {
+    backgroundColor: C.primary,
+    height: 56,
+    borderRadius: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+  pathStartBtnTxt: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 16,
+    color: "#FFF",
+  },
+  closeSheetBtn: {
+    position: "absolute",
+    top: 20,
+    right: 20,
+    zIndex: 10,
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 }); }

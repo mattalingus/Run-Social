@@ -266,6 +266,34 @@ export async function initDb() {
       joined_at TIMESTAMP DEFAULT NOW(),
       UNIQUE(crew_id, user_id)
     );
+
+    CREATE TABLE IF NOT EXISTS crew_messages (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      crew_id VARCHAR NOT NULL REFERENCES crews(id) ON DELETE CASCADE,
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      sender_name TEXT NOT NULL,
+      sender_photo TEXT,
+      message TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_crew_messages_crew_created ON crew_messages(crew_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS run_messages (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      run_id VARCHAR NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      sender_name TEXT NOT NULL,
+      sender_photo TEXT,
+      message TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_run_messages_run_created ON run_messages(run_id, created_at DESC);
+
+    ALTER TABLE community_paths ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT false;
+    ALTER TABLE community_paths ADD COLUMN IF NOT EXISTS created_by_user_id VARCHAR REFERENCES users(id) ON DELETE SET NULL;
+    ALTER TABLE community_paths ADD COLUMN IF NOT EXISTS created_by_name TEXT;
+    ALTER TABLE community_paths ADD COLUMN IF NOT EXISTS run_count INTEGER DEFAULT 1;
+    ALTER TABLE community_paths ADD COLUMN IF NOT EXISTS activity_type TEXT DEFAULT 'run';
   `);
 }
 
@@ -647,6 +675,88 @@ export async function toggleStarSoloRun(id: string, userId: string) {
   return result.rows[0] || null;
 }
 
+export async function getNotifications(userId: string) {
+  const [friendRequests, crewInvites, joinRequests] = await Promise.all([
+    pool.query(
+      `SELECT f.id, u.id as from_user_id, u.name as from_name, u.photo_url as from_photo, f.created_at
+       FROM friends f
+       JOIN users u ON f.requester_id = u.id
+       WHERE f.addressee_id = $1 AND f.status = 'pending'
+       ORDER BY f.created_at DESC`,
+      [userId]
+    ),
+    pool.query(
+      `SELECT cm.id, c.id as crew_id, c.name as crew_name, c.emoji, cm.joined_at as created_at
+       FROM crew_members cm
+       JOIN crews c ON cm.crew_id = c.id
+       WHERE cm.user_id = $1 AND cm.status = 'invited'
+       ORDER BY cm.joined_at DESC`,
+      [userId]
+    ),
+    pool.query(
+      `SELECT rp.id, rp.run_id, r.title as run_title, u.id as user_id, u.name as user_name, u.photo_url as user_photo, rp.joined_at as created_at
+       FROM run_participants rp
+       JOIN runs r ON rp.run_id = r.id
+       JOIN users u ON rp.user_id = u.id
+       WHERE r.host_id = $1 AND rp.status = 'pending'
+       ORDER BY rp.joined_at DESC`,
+      [userId]
+    )
+  ]);
+
+  return {
+    friendRequests: friendRequests.rows,
+    crewInvites: crewInvites.rows,
+    joinRequests: joinRequests.rows,
+    total: (friendRequests.rowCount ?? 0) + (crewInvites.rowCount ?? 0) + (joinRequests.rowCount ?? 0)
+  };
+}
+
+export async function respondToCrewInvite(crewId: string, userId: string, action: 'accept' | 'reject') {
+  if (action === 'accept') {
+    return pool.query(
+      `UPDATE crew_members SET status = 'member', joined_at = NOW() WHERE crew_id = $1 AND user_id = $2 AND status = 'invited' RETURNING *`,
+      [crewId, userId]
+    );
+  } else {
+    return pool.query(
+      `DELETE FROM crew_members WHERE crew_id = $1 AND user_id = $2 AND status = 'invited'`,
+      [crewId, userId]
+    );
+  }
+}
+
+export async function respondToJoinRequest(participantId: string, hostId: string, action: 'approve' | 'deny') {
+  if (action === 'approve') {
+    return pool.query(
+      `UPDATE run_participants rp
+       SET status = 'joined'
+       FROM runs r
+       WHERE rp.id = $1 AND rp.run_id = r.id AND r.host_id = $2 AND rp.status = 'pending'
+       RETURNING rp.*`,
+      [participantId, hostId]
+    );
+  } else {
+    return pool.query(
+      `DELETE FROM run_participants rp
+       USING runs r
+       WHERE rp.id = $1 AND rp.run_id = r.id AND r.host_id = $2 AND rp.status = 'pending'`,
+      [participantId, hostId]
+    );
+  }
+}
+
+export async function respondToFriendRequest(friendshipId: string, userId: string, action: 'accept' | 'reject') {
+  if (action === 'accept') {
+    return acceptFriendRequest(friendshipId, userId);
+  } else {
+    return pool.query(
+      `DELETE FROM friends WHERE id = $1 AND addressee_id = $2 AND status = 'pending'`,
+      [friendshipId, userId]
+    );
+  }
+}
+
 export async function updateSoloRun(id: string, userId: string, updates: Record<string, any>) {
   const allowed = ["title", "date", "distance_miles", "pace_min_per_mile", "duration_seconds", "completed", "planned", "notes", "route_path", "is_starred", "elevation_gain_ft"];
   const entries = Object.entries(updates).filter(([k]) => allowed.includes(k));
@@ -747,13 +857,6 @@ export async function getUserRuns(userId: string) {
   return result.rows;
 }
 
-export async function isParticipant(runId: string, userId: string) {
-  const result = await pool.query(
-    `SELECT id FROM run_participants WHERE run_id = $1 AND user_id = $2 AND status != 'cancelled'`,
-    [runId, userId]
-  );
-  return result.rows.length > 0;
-}
 
 export async function joinRun(runId: string, userId: string) {
   const existing = await pool.query(
@@ -1583,15 +1686,90 @@ export async function deleteSavedPath(id: string, userId: string) {
 // ─── Community Paths ───────────────────────────────────────────────────────────
 
 export async function getCommunityPaths(bounds?: { swLat: number; neLat: number; swLng: number; neLng: number }) {
-  let query = `SELECT * FROM community_paths WHERE contributor_count >= 3`;
+  let query = `SELECT *, (SELECT COUNT(*) FROM path_contributions WHERE community_path_id = cp.id) as contribution_count FROM community_paths cp WHERE is_public = true`;
   const params: any[] = [];
   if (bounds) {
     params.push(bounds.swLat, bounds.neLat, bounds.swLng, bounds.neLng);
     query += ` AND start_lat >= $1 AND start_lat <= $2 AND start_lng >= $3 AND start_lng <= $4`;
   }
-  query += ` ORDER BY contributor_count DESC, updated_at DESC LIMIT 50`;
+  query += ` ORDER BY run_count DESC, updated_at DESC LIMIT 50`;
   const res = await pool.query(query, params);
   return res.rows;
+}
+
+export async function publishSoloRunRoute(soloRunId: string, userId: string, routeName: string) {
+  const soloRes = await pool.query(`SELECT * FROM solo_runs WHERE id = $1 AND user_id = $2`, [soloRunId, userId]);
+  const soloRun = soloRes.rows[0];
+  if (!soloRun) throw new Error("Solo run not found");
+  
+  const routePath = soloRun.route_path;
+  if (!routePath || !Array.isArray(routePath) || routePath.length < 2) {
+    throw new Error("Route must have at least 2 points to publish");
+  }
+
+  const user = await getUserById(userId);
+  if (!user) throw new Error("User not found");
+
+  const startLat = routePath[0].latitude;
+  const startLng = routePath[0].longitude;
+  const endLat = routePath[routePath.length - 1].latitude;
+  const endLng = routePath[routePath.length - 1].longitude;
+
+  const result = await pool.query(
+    `INSERT INTO community_paths (name, route_path, distance_miles, is_public, created_by_user_id, created_by_name, start_lat, start_lng, end_lat, end_lng, activity_type, run_count)
+     VALUES ($1, $2, $3, true, $4, $5, $6, $7, $8, $9, $10, 1) RETURNING *`,
+    [routeName, JSON.stringify(routePath), soloRun.distance_miles, userId, user.name, startLat, startLng, endLat, endLng, soloRun.activity_type || 'run']
+  );
+  
+  const newPath = result.rows[0];
+  await pool.query(
+    `INSERT INTO path_contributions (community_path_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+    [newPath.id, userId]
+  );
+  
+  return newPath;
+}
+
+export async function getCrewMessages(crewId: string, limit = 50) {
+  const result = await pool.query(
+    `SELECT * FROM crew_messages WHERE crew_id = $1 ORDER BY created_at DESC LIMIT $2`,
+    [crewId, limit]
+  );
+  return result.rows;
+}
+
+export async function createCrewMessage(crewId: string, userId: string, senderName: string, senderPhoto: string | null, message: string) {
+  const result = await pool.query(
+    `INSERT INTO crew_messages (crew_id, user_id, sender_name, sender_photo, message)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [crewId, userId, senderName, senderPhoto, message]
+  );
+  return result.rows[0];
+}
+
+export async function getRunMessages(runId: string, limit = 50) {
+  const result = await pool.query(
+    `SELECT * FROM run_messages WHERE run_id = $1 ORDER BY created_at DESC LIMIT $2`,
+    [runId, limit]
+  );
+  return result.rows;
+}
+
+export async function createRunMessage(runId: string, userId: string, senderName: string, senderPhoto: string | null, message: string) {
+  const result = await pool.query(
+    `INSERT INTO run_messages (run_id, user_id, sender_name, sender_photo, message)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [runId, userId, senderName, senderPhoto, message]
+  );
+  return result.rows[0];
+}
+
+export async function isParticipant(runId: string, userId: string): Promise<boolean> {
+  const res = await pool.query(
+    `SELECT 1 FROM run_participants WHERE run_id = $1 AND user_id = $2 AND status != 'cancelled'`,
+    [runId, userId]
+  );
+  return res.rows.length > 0;
 }
 
 export async function matchCommunityPath(
@@ -1983,20 +2161,6 @@ export async function getCrewInvites(userId: string) {
     [userId]
   );
   return res.rows;
-}
-
-export async function respondToCrewInvite(crewId: string, userId: string, accept: boolean) {
-  if (accept) {
-    await pool.query(
-      `UPDATE crew_members SET status = 'member' WHERE crew_id = $1 AND user_id = $2`,
-      [crewId, userId]
-    );
-  } else {
-    await pool.query(
-      `DELETE FROM crew_members WHERE crew_id = $1 AND user_id = $2`,
-      [crewId, userId]
-    );
-  }
 }
 
 export async function inviteUserToCrew(crewId: string, userId: string, invitedBy: string) {

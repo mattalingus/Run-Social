@@ -6,12 +6,15 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
+  Switch,
   Platform,
   Modal,
   TextInput,
   ScrollView,
   Image,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Speech from "expo-speech";
 import ShareActivityModal from "@/components/ShareActivityModal";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -88,6 +91,17 @@ export default function RunTrackingScreen() {
   const [saving, setSaving] = useState(false);
   const [routeState, setRouteState] = useState<Coord[]>([]);
 
+  // Audio Coach state
+  const [coachEnabled, setCoachEnabled] = useState(true);
+  const [coachInterval, setCoachInterval] = useState<"0.5" | "1" | "2">("1");
+  const lastAnnouncedMileRef = useRef(0);
+
+  // Route Publishing state
+  const [publishedPath, setPublishedPath] = useState<{ id: string; name: string } | null>(null);
+  const [showPublishForm, setShowPublishForm] = useState(false);
+  const [publishName, setPublishName] = useState("");
+  const [publishing, setPublishing] = useState(false);
+
   // Saved paths state
   const [selectedPath, setSelectedPath] = useState<any | null>(null);
   const [showPathPicker, setShowPathPicker] = useState(false);
@@ -106,6 +120,59 @@ export default function RunTrackingScreen() {
     queryKey: ["/api/saved-paths"],
     staleTime: 60_000,
   });
+
+  // ─── Audio Coach Prefs ────────────────────────────────────────────────────
+
+  useEffect(() => {
+    async function loadPrefs() {
+      try {
+        const enabled = await AsyncStorage.getItem("@fara_coach_enabled");
+        const interval = await AsyncStorage.getItem("@fara_coach_interval");
+        if (enabled !== null) setCoachEnabled(enabled === "true");
+        if (interval !== null) setCoachInterval(interval as any);
+      } catch (e) {}
+    }
+    loadPrefs();
+  }, []);
+
+  const toggleCoach = async (val: boolean) => {
+    setCoachEnabled(val);
+    try {
+      await AsyncStorage.setItem("@fara_coach_enabled", val.toString());
+    } catch (e) {}
+  };
+
+  const updateCoachInterval = async (val: "0.5" | "1" | "2") => {
+    setCoachInterval(val);
+    try {
+      await AsyncStorage.setItem("@fara_coach_interval", val);
+    } catch (e) {}
+  };
+
+  const announcePace = useCallback((distance: number, totalSeconds: number) => {
+    if (Platform.OS === "web") return;
+
+    // Build distance text
+    let distText = "";
+    if (distance === 0.5) distText = "Half mile.";
+    else if (distance === 1.5) distText = "1 and a half miles.";
+    else if (distance === 1) distText = "1 mile.";
+    else distText = `${distance} miles.`;
+
+    // Format pace
+    const paceMinTotal = totalSeconds / 60 / distance;
+    const paceM = Math.floor(paceMinTotal);
+    const paceS = Math.round((paceMinTotal - paceM) * 60);
+    const paceText = `Pace: ${paceM} minute${paceM !== 1 ? "s" : ""} ${paceS} second${paceS !== 1 ? "s" : ""} per mile.`;
+
+    // Format time
+    const timeM = Math.floor(totalSeconds / 60);
+    const timeS = totalSeconds % 60;
+    const timeText = `Time: ${timeM} minute${timeM !== 1 ? "s" : ""} ${timeS} second${timeS !== 1 ? "s" : ""}.`;
+
+    const fullText = `${distText} ${paceText} ${timeText}`;
+    Speech.speak(fullText);
+  }, []);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const locationSubRef = useRef<Location.LocationSubscription | null>(null);
@@ -152,6 +219,15 @@ export default function RunTrackingScreen() {
       if (d >= 0 && d < 0.3) {
         totalDistRef.current += d;
         setDisplayDist(totalDistRef.current);
+
+        // Audio Coach logic
+        if (coachEnabled && Platform.OS !== "web") {
+          const interval = parseFloat(coachInterval);
+          if (totalDistRef.current >= lastAnnouncedMileRef.current + interval) {
+            lastAnnouncedMileRef.current += interval;
+            announcePace(lastAnnouncedMileRef.current, elapsed);
+          }
+        }
       }
     }
     lastCoordRef.current = coord;
@@ -223,6 +299,7 @@ export default function RunTrackingScreen() {
     setDisplayDist(0);
     setElapsed(0);
     setPathSaved(false);
+    lastAnnouncedMileRef.current = 0;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setPhase("active");
   }
@@ -262,11 +339,13 @@ export default function RunTrackingScreen() {
 
   function handleFinish() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    if (Platform.OS !== "web") Speech.stop();
     setPhase("done");
   }
 
   function handleCancel() {
     if (phase === "idle") {
+      if (Platform.OS !== "web") Speech.stop();
       router.back();
       return;
     }
@@ -276,6 +355,7 @@ export default function RunTrackingScreen() {
         text: "Discard",
         style: "destructive",
         onPress: () => {
+          if (Platform.OS !== "web") Speech.stop();
           stopWatching();
           router.back();
         },
@@ -345,6 +425,29 @@ export default function RunTrackingScreen() {
       Alert.alert("Upload failed", e.message);
     } finally {
       setUploadingPhoto(false);
+    }
+  }
+
+  async function handlePublishRoute() {
+    const name = publishName.trim();
+    if (!name) {
+      Alert.alert("Name required", "Please enter a name for this route.");
+      return;
+    }
+    setPublishing(true);
+    try {
+      const res = await apiRequest("POST", `/api/solo-runs/${savedRunId}/publish-route`, {
+        routeName: name,
+      });
+      const data = await res.json();
+      setPublishedPath({ id: data.id, name });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      qc.invalidateQueries({ queryKey: ["/api/community-paths"] });
+      setShowPublishForm(false);
+    } catch (e: any) {
+      Alert.alert("Error", e.message || "Failed to publish route");
+    } finally {
+      setPublishing(false);
     }
   }
 
@@ -424,6 +527,62 @@ export default function RunTrackingScreen() {
 
           {savedRunId ? (
             <>
+              {/* ─── Route Publishing ───────────────────────────────────── */}
+              {IS_NATIVE && routeState.length > 1 && (
+                publishedPath ? (
+                  <View style={t.publishedPill}>
+                    <Text style={t.publishedPillTxt}>
+                      📍 {publishedPath.name} · Published
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={{ width: "100%", paddingHorizontal: 4 }}>
+                    {showPublishForm ? (
+                      <View style={t.publishForm}>
+                        <TextInput
+                          style={t.publishInput}
+                          value={publishName}
+                          onChangeText={setPublishName}
+                          placeholder="Route Name"
+                          placeholderTextColor={C.textMuted}
+                          autoFocus
+                        />
+                        <View style={{ flexDirection: "row", gap: 8 }}>
+                          <Pressable
+                            style={[t.publishConfirmBtn, publishing && { opacity: 0.6 }]}
+                            onPress={handlePublishRoute}
+                            disabled={publishing}
+                          >
+                            {publishing ? (
+                              <ActivityIndicator size="small" color={C.bg} />
+                            ) : (
+                              <Text style={t.publishConfirmTxt}>Confirm</Text>
+                            )}
+                          </Pressable>
+                          <Pressable
+                            style={t.publishCancelBtn}
+                            onPress={() => setShowPublishForm(false)}
+                          >
+                            <Text style={t.publishCancelTxt}>Cancel</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    ) : (
+                      <Pressable
+                        style={t.publishBtn}
+                        onPress={() => {
+                          setPublishName(`${totalDistRef.current.toFixed(1)} mi Run`);
+                          setShowPublishForm(true);
+                        }}
+                      >
+                        <Feather name="map-pin" size={16} color={C.primary} />
+                        <Text style={t.publishBtnTxt}>Publish Route</Text>
+                      </Pressable>
+                    )}
+                  </View>
+                )
+              )}
+
               {/* ─── Photo section ─────────────────────────────────────── */}
               <View style={t.photoSection}>
                 <Text style={t.photoSectionTitle}>Add a photo</Text>
@@ -699,22 +858,63 @@ export default function RunTrackingScreen() {
         </View>
 
         {phase === "idle" && (
-          <View style={{ alignItems: "center", gap: 10 }}>
-            <Text style={t.hintTxt}>GPS will track your distance automatically</Text>
-            {selectedPath ? (
-              <Pressable
-                style={t.ghostPathChip}
-                onPress={() => setSelectedPath(null)}
-              >
-                <Feather name="map" size={13} color={C.primary} />
-                <Text style={t.ghostPathChipTxt} numberOfLines={1}>{selectedPath.name}</Text>
-                <Feather name="x" size={13} color={C.textMuted} />
-              </Pressable>
-            ) : (
-              <Pressable onPress={() => setShowPathPicker(true)}>
-                <Text style={t.followPathLink}>+ Follow a saved path</Text>
-              </Pressable>
-            )}
+          <View style={{ width: "100%", gap: 16 }}>
+            {/* Audio Coach Settings */}
+            <View style={t.coachSettings}>
+              <View style={t.coachRow}>
+                <View style={t.coachLabelRow}>
+                  <Feather name="headphones" size={16} color={C.textSecondary} />
+                  <Text style={t.coachLabel}>Audio Coach</Text>
+                </View>
+                <Switch
+                  value={coachEnabled}
+                  onValueChange={toggleCoach}
+                  trackColor={{ false: C.border, true: C.primary }}
+                  thumbColor={Platform.OS === "ios" ? undefined : (coachEnabled ? C.bg : C.textMuted)}
+                />
+              </View>
+              {coachEnabled && (
+                <View style={t.intervalRow}>
+                  {(["0.5", "1", "2"] as const).map((interval) => (
+                    <Pressable
+                      key={interval}
+                      style={[
+                        t.intervalPill,
+                        coachInterval === interval && t.intervalPillActive,
+                      ]}
+                      onPress={() => updateCoachInterval(interval)}
+                    >
+                      <Text
+                        style={[
+                          t.intervalPillTxt,
+                          coachInterval === interval && t.intervalPillTxtActive,
+                        ]}
+                      >
+                        {interval} mi
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            <View style={{ alignItems: "center", gap: 10 }}>
+              <Text style={t.hintTxt}>GPS will track your distance automatically</Text>
+              {selectedPath ? (
+                <Pressable
+                  style={t.ghostPathChip}
+                  onPress={() => setSelectedPath(null)}
+                >
+                  <Feather name="map" size={13} color={C.primary} />
+                  <Text style={t.ghostPathChipTxt} numberOfLines={1}>{selectedPath.name}</Text>
+                  <Feather name="x" size={13} color={C.textMuted} />
+                </Pressable>
+              ) : (
+                <Pressable onPress={() => setShowPathPicker(true)}>
+                  <Text style={t.followPathLink}>+ Follow a saved path</Text>
+                </Pressable>
+              )}
+            </View>
           </View>
         )}
       </View>
@@ -1138,6 +1338,135 @@ const t = StyleSheet.create({
     fontSize: 13,
     color: C.primary,
     flex: 1,
+  },
+
+  // ─── Audio Coach Settings ─────────────────────────────────────────────
+  coachSettings: {
+    backgroundColor: C.card,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: C.border,
+    alignSelf: "stretch",
+  },
+  coachRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  coachLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  coachLabel: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 15,
+    color: C.text,
+  },
+  intervalRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 12,
+  },
+  intervalPill: {
+    flex: 1,
+    backgroundColor: C.surface,
+    borderRadius: 10,
+    paddingVertical: 8,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  intervalPillActive: {
+    backgroundColor: C.primary,
+    borderColor: C.primary,
+  },
+  intervalPillTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 13,
+    color: C.textSecondary,
+  },
+  intervalPillTxtActive: {
+    color: C.bg,
+  },
+
+  // ─── Route Publishing ─────────────────────────────────────────────────
+  publishBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderWidth: 1.5,
+    borderColor: C.primary,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  publishBtnTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 15,
+    color: C.primary,
+  },
+  publishedPill: {
+    backgroundColor: C.primary,
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignSelf: "center",
+    marginBottom: 12,
+  },
+  publishedPillTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 13,
+    color: C.bg,
+  },
+  publishForm: {
+    backgroundColor: C.card,
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+    marginBottom: 8,
+  },
+  publishInput: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 15,
+    color: C.text,
+    backgroundColor: C.surface,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  publishConfirmBtn: {
+    flex: 1,
+    backgroundColor: C.primary,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  publishConfirmTxt: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 14,
+    color: C.bg,
+  },
+  publishCancelBtn: {
+    flex: 1,
+    backgroundColor: C.surface,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  publishCancelTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 14,
+    color: C.textSecondary,
   },
 
   // ─── Modals ─────────────────────────────────────────────────────────────

@@ -139,6 +139,10 @@ function RootLayoutNav() {
           name="run-results/[id]"
           options={{ presentation: "modal", headerShown: false }}
         />
+        <Stack.Screen
+          name="crew-chat/[id]"
+          options={{ headerShown: false }}
+        />
       </Stack>
     </>
   );

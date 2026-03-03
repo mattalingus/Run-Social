@@ -7,8 +7,12 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  FlatList,
+  TextInput,
+  KeyboardAvoidingView,
 } from "react-native";
 import MapView, { Marker, Polyline, Circle } from "react-native-maps";
+import { KeyboardAvoidingView as KAV } from "react-native-keyboard-controller";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
@@ -72,6 +76,12 @@ export default function RunLiveScreen() {
   const [displayDist, setDisplayDist] = useState(0);
   const [presentToast, setPresentToast] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // Chat state
+  const [activeTab, setActiveTab] = useState<"map" | "chat">("map");
+  const [messages, setMessages] = useState<any[]>([]);
+  const [messageInput, setMessageInput] = useState("");
+  const [lastSeenMessageCount, setLastSeenMessageCount] = useState(0);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -254,6 +264,55 @@ export default function RunLiveScreen() {
     );
   }
 
+  // ─── Chat Polling ─────────────────────────────────────────────────────────
+
+  const fetchMessages = useCallback(async () => {
+    if (!id) return;
+    try {
+      const res = await apiRequest("GET", `/api/runs/${id}/messages`);
+      const data = await res.json();
+      setMessages(data);
+      if (activeTab === "chat") {
+        setLastSeenMessageCount(data.length);
+      }
+    } catch (e) {
+      console.error("Error fetching messages:", e);
+    }
+  }, [id, activeTab]);
+
+  useEffect(() => {
+    fetchMessages();
+    const interval = setInterval(fetchMessages, 5000);
+    return () => clearInterval(interval);
+  }, [fetchMessages]);
+
+  const handleSendMessage = async () => {
+    if (!messageInput.trim() || !id || !user) return;
+
+    const newMessage = {
+      id: "temp-" + Date.now(),
+      user_id: user.id,
+      sender_name: user.name || "Me",
+      sender_photo: user.photo_url,
+      message: messageInput.trim(),
+      created_at: new Date().toISOString(),
+    };
+
+    setMessages((prev) => [newMessage, ...prev]);
+    setMessageInput("");
+    setLastSeenMessageCount((prev) => prev + 1);
+
+    try {
+      await apiRequest("POST", `/api/runs/${id}/messages`, {
+        message: newMessage.message,
+      });
+      fetchMessages();
+    } catch (e) {
+      Alert.alert("Error", "Could not send message");
+      setMessages((prev) => prev.filter((m) => m.id !== newMessage.id));
+    }
+  };
+
   // ─── Cleanup ────────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -277,6 +336,8 @@ export default function RunLiveScreen() {
   const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
   const botPad = insets.bottom + (Platform.OS === "web" ? 34 : 0);
 
+  const hasNewMessages = messages.length > lastSeenMessageCount && activeTab === "map";
+
   return (
     <View style={s.container}>
       {/* Header */}
@@ -297,131 +358,230 @@ export default function RunLiveScreen() {
         </View>
       </View>
 
-      {/* Map */}
-      <View style={s.mapCard}>
-        {Platform.OS !== "web" ? (
-          <MapView
-            ref={mapRef}
-            style={StyleSheet.absoluteFillObject}
-            customMapStyle={MAP_STYLE}
-            initialRegion={initialRegion}
-            showsUserLocation
-            showsMyLocationButton={false}
+      {/* Tab Toggle */}
+      <View style={s.tabBarContainer}>
+        <View style={s.tabBar}>
+          <Pressable
+            onPress={() => setActiveTab("map")}
+            style={[s.tabPill, activeTab === "map" && s.activeTabPill]}
           >
-            {/* 500ft presence circle around pin */}
-            {runPin && (
-              <Circle
-                center={runPin}
-                radius={152}
-                strokeColor={C.primary + "55"}
-                fillColor={C.primary + "0A"}
-                strokeWidth={1.5}
-              />
+            <Feather name="map" size={16} color={activeTab === "map" ? "#fff" : C.textMuted} />
+            <Text style={[s.tabText, activeTab === "map" && s.activeTabText]}>Map</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              setActiveTab("chat");
+              setLastSeenMessageCount(messages.length);
+            }}
+            style={[s.tabPill, activeTab === "chat" && s.activeTabPill]}
+          >
+            <View>
+              <Feather name="message-circle" size={16} color={activeTab === "chat" ? "#fff" : C.textMuted} />
+              {hasNewMessages && <View style={s.unreadBadge} />}
+            </View>
+            <Text style={[s.tabText, activeTab === "chat" && s.activeTabText]}>Chat</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      {activeTab === "map" ? (
+        <>
+          {/* Map */}
+          <View style={s.mapCard}>
+            {Platform.OS !== "web" ? (
+              <MapView
+                ref={mapRef}
+                style={StyleSheet.absoluteFillObject}
+                customMapStyle={MAP_STYLE}
+                initialRegion={initialRegion}
+                showsUserLocation
+                showsMyLocationButton={false}
+              >
+                {/* 500ft presence circle around pin */}
+                {runPin && (
+                  <Circle
+                    center={runPin}
+                    radius={152}
+                    strokeColor={C.primary + "55"}
+                    fillColor={C.primary + "0A"}
+                    strokeWidth={1.5}
+                  />
+                )}
+                {/* Run pin */}
+                {runPin && (
+                  <Marker coordinate={runPin} anchor={{ x: 0.5, y: 0.5 }}>
+                    <View style={s.pinMarker}>
+                      <Feather name="map-pin" size={18} color={C.primary} />
+                    </View>
+                  </Marker>
+                )}
+                {/* Other runners' dots */}
+                {otherRunners.map((runner: any, i: number) => {
+                  if (!runner.latitude || !runner.longitude) return null;
+                  const color = DOT_COLORS[i % DOT_COLORS.length];
+                  return (
+                    <Marker
+                      key={runner.user_id}
+                      coordinate={{ latitude: runner.latitude, longitude: runner.longitude }}
+                      anchor={{ x: 0.5, y: 0.5 }}
+                      tracksViewChanges={false}
+                    >
+                      <View style={[s.runnerDot, { backgroundColor: color }]}>
+                        <Text style={s.runnerDotText}>{runner.name?.[0] ?? "?"}</Text>
+                      </View>
+                    </Marker>
+                  );
+                })}
+                {/* Own path polyline */}
+                {routePathRef.current.length > 1 && (
+                  <Polyline
+                    coordinates={routePathRef.current}
+                    strokeColor={C.primary}
+                    strokeWidth={3}
+                  />
+                )}
+              </MapView>
+            ) : (
+              <View style={[StyleSheet.absoluteFillObject, { alignItems: "center", justifyContent: "center" }]}>
+                <Feather name="map" size={48} color={C.border} />
+                <Text style={{ fontFamily: "Outfit_400Regular", color: C.textSecondary, marginTop: 8 }}>
+                  Map not available on web
+                </Text>
+              </View>
             )}
-            {/* Run pin */}
-            {runPin && (
-              <Marker coordinate={runPin} anchor={{ x: 0.5, y: 0.5 }}>
-                <View style={s.pinMarker}>
-                  <Feather name="map-pin" size={18} color={C.primary} />
+
+            {/* Present toast */}
+            {presentToast && (
+              <View style={s.toast}>
+                <Feather name="check-circle" size={14} color={C.primary} />
+                <Text style={s.toastText}>Marked as present</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Stats strip */}
+          <View style={s.statsStrip}>
+            <View style={s.statItem}>
+              <Text style={s.statValue}>{displayDist.toFixed(2)}</Text>
+              <Text style={s.statLabel}>mi</Text>
+            </View>
+            <View style={s.statDivider} />
+            <View style={s.statItem}>
+              <Text style={s.statValue}>{formatElapsed(elapsed)}</Text>
+              <Text style={s.statLabel}>time</Text>
+            </View>
+            <View style={s.statDivider} />
+            <View style={s.statItem}>
+              <Text style={s.statValue}>{formatPaceStr(paceNum)}</Text>
+              <Text style={s.statLabel}>min/mi</Text>
+            </View>
+          </View>
+
+          {/* Legend */}
+          <View style={s.legendContainer}>
+            <View style={s.legend}>
+              {otherRunners.slice(0, 4).map((runner: any, i: number) => (
+                <View key={runner.user_id} style={s.legendItem}>
+                  <View style={[s.legendDot, { backgroundColor: DOT_COLORS[i % DOT_COLORS.length] }]} />
+                  <Text style={s.legendName} numberOfLines={1}>{runner.name?.split(" ")[0]}</Text>
                 </View>
-              </Marker>
+              ))}
+              {otherRunners.length > 4 && (
+                <Text style={s.legendMore}>+{otherRunners.length - 4} more</Text>
+              )}
+            </View>
+          </View>
+
+          {/* Bottom action */}
+          <View style={[s.bottomBar, { paddingBottom: botPad + 16 }]}>
+            {phase === "idle" && (
+              <Pressable style={({ pressed }) => [s.startBtn, { opacity: pressed ? 0.85 : 1 }]} onPress={handleStartTracking}>
+                <Feather name="play" size={20} color={C.bg} />
+                <Text style={s.startBtnText}>Start Tracking</Text>
+              </Pressable>
             )}
-            {/* Other runners' dots */}
-            {otherRunners.map((runner: any, i: number) => {
-              if (!runner.latitude || !runner.longitude) return null;
-              const color = DOT_COLORS[i % DOT_COLORS.length];
-              return (
-                <Marker
-                  key={runner.user_id}
-                  coordinate={{ latitude: runner.latitude, longitude: runner.longitude }}
-                  anchor={{ x: 0.5, y: 0.5 }}
-                  tracksViewChanges={false}
-                >
-                  <View style={[s.runnerDot, { backgroundColor: color }]}>
-                    <Text style={s.runnerDotText}>{runner.name?.[0] ?? "?"}</Text>
-                  </View>
-                </Marker>
-              );
-            })}
-            {/* Own path polyline */}
-            {routePathRef.current.length > 1 && (
-              <Polyline
-                coordinates={routePathRef.current}
-                strokeColor={C.primary}
-                strokeWidth={3}
-              />
+            {phase === "active" && (
+              <Pressable style={({ pressed }) => [s.finishBtn, { opacity: pressed ? 0.85 : 1 }]} onPress={handleFinishRun}>
+                <Feather name="flag" size={20} color="#fff" />
+                <Text style={s.finishBtnText}>Finish My Run</Text>
+              </Pressable>
             )}
-          </MapView>
-        ) : (
-          <View style={[StyleSheet.absoluteFillObject, { alignItems: "center", justifyContent: "center" }]}>
-            <Feather name="map" size={48} color={C.border} />
-            <Text style={{ fontFamily: "Outfit_400Regular", color: C.textSecondary, marginTop: 8 }}>
-              Map not available on web
-            </Text>
+            {phase === "finishing" && (
+              <View style={s.savingRow}>
+                <ActivityIndicator color={C.primary} />
+                <Text style={s.savingText}>Saving your run…</Text>
+              </View>
+            )}
           </View>
-        )}
-
-        {/* Present toast */}
-        {presentToast && (
-          <View style={s.toast}>
-            <Feather name="check-circle" size={14} color={C.primary} />
-            <Text style={s.toastText}>Marked as present</Text>
+        </>
+      ) : (
+        <KAV style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}>
+          <View style={s.chatContainer}>
+            {!markedPresentRef.current ? (
+              <View style={s.notPresentContainer}>
+                <Text style={s.notPresentText}>
+                  You'll be able to chat once you arrive at the start point 📍
+                </Text>
+                <Pressable onPress={() => setActiveTab("map")} style={s.backToMapLink}>
+                  <Text style={s.backToMapLinkText}>Back to Map</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <>
+                <FlatList
+                  data={messages}
+                  inverted
+                  contentContainerStyle={s.chatListContent}
+                  keyExtractor={(item) => item.id}
+                  renderItem={({ item }) => {
+                    const isOwn = item.user_id === user?.id;
+                    return (
+                      <View style={[s.msgWrapper, isOwn ? s.msgOwnWrapper : s.msgOtherWrapper]}>
+                        {!isOwn && (
+                          <View style={s.msgAvatar}>
+                            <Text style={s.msgAvatarText}>{item.sender_name?.[0] ?? "?"}</Text>
+                          </View>
+                        )}
+                        <View style={[s.msgBubbleWrapper, isOwn ? { alignItems: "flex-end" } : { alignItems: "flex-start" }]}>
+                          {!isOwn && <Text style={s.msgSenderName}>{item.sender_name}</Text>}
+                          <View style={[s.msgBubble, isOwn ? s.msgOwnBubble : s.msgOtherBubble]}>
+                            <Text style={[s.msgText, isOwn ? s.msgOwnText : s.msgOtherText]}>{item.message}</Text>
+                          </View>
+                          <Text style={s.msgTime}>
+                            {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </Text>
+                        </View>
+                      </View>
+                    );
+                  }}
+                  ListEmptyComponent={
+                    <View style={s.emptyChat}>
+                      <Text style={s.emptyChatText}>No messages yet — be the first to say something!</Text>
+                    </View>
+                  }
+                />
+                <View style={[s.inputContainer, { paddingBottom: botPad + 10 }]}>
+                  <TextInput
+                    style={s.textInput}
+                    placeholder="Type a message..."
+                    placeholderTextColor={C.textMuted}
+                    value={messageInput}
+                    onChangeText={setMessageInput}
+                    multiline
+                  />
+                  <Pressable
+                    onPress={handleSendMessage}
+                    style={({ pressed }) => [s.sendBtn, { opacity: pressed || !messageInput.trim() ? 0.6 : 1 }]}
+                    disabled={!messageInput.trim()}
+                  >
+                    <Feather name="send" size={20} color={C.primary} />
+                  </Pressable>
+                </View>
+              </>
+            )}
           </View>
-        )}
-      </View>
-
-      {/* Stats strip */}
-      <View style={s.statsStrip}>
-        <View style={s.statItem}>
-          <Text style={s.statValue}>{displayDist.toFixed(2)}</Text>
-          <Text style={s.statLabel}>mi</Text>
-        </View>
-        <View style={s.statDivider} />
-        <View style={s.statItem}>
-          <Text style={s.statValue}>{formatElapsed(elapsed)}</Text>
-          <Text style={s.statLabel}>time</Text>
-        </View>
-        <View style={s.statDivider} />
-        <View style={s.statItem}>
-          <Text style={s.statValue}>{formatPaceStr(paceNum)}</Text>
-          <Text style={s.statLabel}>min/mi</Text>
-        </View>
-      </View>
-
-      {/* Bottom action */}
-      <View style={[s.bottomBar, { paddingBottom: botPad + 16 }]}>
-        {phase === "idle" && (
-          <Pressable style={({ pressed }) => [s.startBtn, { opacity: pressed ? 0.85 : 1 }]} onPress={handleStartTracking}>
-            <Feather name="play" size={20} color={C.bg} />
-            <Text style={s.startBtnText}>Start Tracking</Text>
-          </Pressable>
-        )}
-        {phase === "active" && (
-          <Pressable style={({ pressed }) => [s.finishBtn, { opacity: pressed ? 0.85 : 1 }]} onPress={handleFinishRun}>
-            <Feather name="flag" size={20} color="#fff" />
-            <Text style={s.finishBtnText}>Finish My Run</Text>
-          </Pressable>
-        )}
-        {phase === "finishing" && (
-          <View style={s.savingRow}>
-            <ActivityIndicator color={C.primary} />
-            <Text style={s.savingText}>Saving your run…</Text>
-          </View>
-        )}
-      </View>
-
-      {/* Legend */}
-      <View style={[s.legend, { bottom: botPad + 90 }]}>
-        {otherRunners.slice(0, 4).map((runner: any, i: number) => (
-          <View key={runner.user_id} style={s.legendItem}>
-            <View style={[s.legendDot, { backgroundColor: DOT_COLORS[i % DOT_COLORS.length] }]} />
-            <Text style={s.legendName} numberOfLines={1}>{runner.name?.split(" ")[0]}</Text>
-          </View>
-        ))}
-        {otherRunners.length > 4 && (
-          <Text style={s.legendMore}>+{otherRunners.length - 4} more</Text>
-        )}
-      </View>
+        </KAV>
+      )}
     </View>
   );
 }
@@ -454,6 +614,24 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: C.border,
   },
   runnerCountText: { fontFamily: "Outfit_700Bold", fontSize: 13, color: C.primary },
+
+  tabBarContainer: { paddingHorizontal: 10, paddingBottom: 10 },
+  tabBar: {
+    flexDirection: "row", backgroundColor: C.surface, borderRadius: 12, padding: 4,
+    borderWidth: 1, borderColor: C.border,
+  },
+  tabPill: {
+    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 6, paddingVertical: 8, borderRadius: 8,
+  },
+  activeTabPill: { backgroundColor: C.primary },
+  tabText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.textMuted },
+  activeTabText: { color: "#fff" },
+  unreadBadge: {
+    position: "absolute", top: -2, right: -4, width: 8, height: 8,
+    borderRadius: 4, backgroundColor: C.primary, borderWidth: 1.5, borderColor: "#fff",
+  },
+
   mapCard: { flex: 1, marginHorizontal: 10, borderRadius: 20, overflow: "hidden", backgroundColor: C.surface },
   pinMarker: {
     width: 36, height: 36, borderRadius: 18,
@@ -495,8 +673,9 @@ const s = StyleSheet.create({
   finishBtnText: { fontFamily: "Outfit_700Bold", fontSize: 16, color: "#fff" },
   savingRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, height: 52 },
   savingText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.textSecondary },
+
+  legendContainer: { marginHorizontal: 10, marginTop: 10 },
   legend: {
-    position: "absolute", left: 20, right: 20,
     flexDirection: "row", flexWrap: "wrap", gap: 8,
   },
   legendItem: {
@@ -507,4 +686,48 @@ const s = StyleSheet.create({
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendName: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.text, maxWidth: 70 },
   legendMore: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary, alignSelf: "center" },
+
+  chatContainer: { flex: 1, backgroundColor: C.bg },
+  chatListContent: { padding: 16, paddingBottom: 20 },
+  notPresentContainer: { flex: 1, alignItems: "center", justifyContent: "center", padding: 40 },
+  notPresentText: { fontFamily: "Outfit_500Medium", fontSize: 16, color: C.textSecondary, textAlign: "center", lineHeight: 24 },
+  backToMapLink: { marginTop: 16 },
+  backToMapLinkText: { fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.primary },
+  emptyChat: { padding: 40, alignItems: "center" },
+  emptyChatText: { fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textMuted, textAlign: "center" },
+
+  msgWrapper: { flexDirection: "row", marginBottom: 16, gap: 10 },
+  msgOwnWrapper: { justifyContent: "flex-end" },
+  msgOtherWrapper: { justifyContent: "flex-start" },
+  msgAvatar: {
+    width: 28, height: 28, borderRadius: 14, backgroundColor: C.border,
+    alignItems: "center", justifyContent: "center", marginTop: 4,
+  },
+  msgAvatarText: { fontFamily: "Outfit_700Bold", fontSize: 12, color: C.textSecondary },
+  msgBubbleWrapper: { maxWidth: "80%", gap: 4 },
+  msgSenderName: { fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.textMuted, marginLeft: 4 },
+  msgBubble: { borderRadius: 16, paddingHorizontal: 14, paddingVertical: 10 },
+  msgOwnBubble: { backgroundColor: C.primary, borderBottomRightRadius: 4 },
+  msgOtherBubble: { backgroundColor: C.card, borderBottomLeftRadius: 4, borderWidth: 1, borderColor: C.border },
+  msgText: { fontFamily: "Outfit_400Regular", fontSize: 15 },
+  msgOwnText: { color: "#fff" },
+  msgOtherText: { color: C.text },
+  msgTime: { fontFamily: "Outfit_400Regular", fontSize: 10, color: C.textMuted, marginTop: 2 },
+
+  inputContainer: {
+    flexDirection: "row", alignItems: "flex-end", gap: 10,
+    paddingHorizontal: 16, paddingTop: 12, backgroundColor: C.bg,
+    borderTopWidth: 1, borderColor: C.border,
+  },
+  textInput: {
+    flex: 1, backgroundColor: C.surface, borderRadius: 20,
+    paddingHorizontal: 16, paddingVertical: 10, paddingTop: 10,
+    fontFamily: "Outfit_400Regular", fontSize: 15, color: C.text,
+    borderWidth: 1, borderColor: C.border, maxHeight: 100,
+  },
+  sendBtn: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: C.surface, alignItems: "center", justifyContent: "center",
+    borderWidth: 1, borderColor: C.border,
+  },
 });

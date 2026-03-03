@@ -353,6 +353,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/notifications", requireAuth, async (req, res) => {
+    try {
+      const data = await storage.getNotifications(req.session.userId!);
+      res.json(data);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/friends/respond", requireAuth, async (req, res) => {
+    try {
+      const { friendshipId, action } = req.body;
+      if (!friendshipId || !action) return res.status(400).json({ message: "friendshipId and action required" });
+      await storage.respondToFriendRequest(friendshipId, req.session.userId!, action);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/crews/invites/respond", requireAuth, async (req, res) => {
+    try {
+      const { crewId, action } = req.body;
+      if (!crewId || !action) return res.status(400).json({ message: "crewId and action required" });
+      await storage.respondToCrewInvite(crewId, req.session.userId!, action);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/runs/requests/respond", requireAuth, async (req, res) => {
+    try {
+      const { participantId, action } = req.body;
+      if (!participantId || !action) return res.status(400).json({ message: "participantId and action required" });
+      await storage.respondToJoinRequest(participantId, req.session.userId!, action);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.get("/api/runs/mine", requireAuth, async (req, res) => {
     try {
       const runs = await storage.getUserRuns(req.session.userId!);
@@ -543,6 +585,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
+  });
+
+  app.get("/api/runs/:id/messages", requireAuth, async (req, res) => {
+    try {
+      const isParticipant = await storage.isParticipant(req.params.id, req.session.userId!);
+      if (!isParticipant) return res.status(403).json({ message: "Not a participant" });
+      const limit = parseInt(req.query.limit as string) || 50;
+      const messages = await storage.getRunMessages(req.params.id, limit);
+      res.json(messages);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/runs/:id/messages", requireAuth, async (req, res) => {
+    try {
+      const isParticipant = await storage.isParticipant(req.params.id, req.session.userId!);
+      if (!isParticipant) return res.status(403).json({ message: "Not a participant" });
+      const { message } = req.body;
+      if (!message?.trim()) return res.status(400).json({ message: "Message is required" });
+      const user = await storage.getUserById(req.session.userId!);
+      const msg = await storage.createRunMessage(req.params.id, req.session.userId!, user!.name, user!.photo_url, message.trim());
+      res.json(msg);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
   app.get("/api/runs/:id/participants", async (req, res) => {
@@ -884,6 +948,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/solo-runs/:id/publish-route", requireAuth, async (req, res) => {
+    try {
+      const { routeName } = req.body;
+      if (!routeName?.trim()) return res.status(400).json({ message: "Route name is required" });
+      const path = await storage.publishSoloRunRoute(req.params.id, req.session.userId!, routeName.trim());
+      res.json(path);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
   app.get("/api/community-paths", async (req, res) => {
     try {
       const bounds = req.query.swLat
@@ -1011,7 +1084,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/crew-invites/:crewId/respond", requireAuth, async (req, res) => {
     try {
       const { accept } = req.body;
-      await storage.respondToCrewInvite(req.params.crewId, req.session.userId!, !!accept);
+      await storage.respondToCrewInvite(req.params.crewId, req.session.userId!, accept ? 'accept' : 'reject');
       res.json({ ok: true });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
@@ -1084,6 +1157,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const crew = await storage.getCrewById(req.params.id);
       if (!crew) return res.status(404).json({ message: "Crew not found" });
       res.json(crew);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/crews/:id/messages", requireAuth, async (req, res) => {
+    try {
+      const crew = await storage.getCrewById(req.params.id);
+      if (!crew) return res.status(404).json({ message: "Crew not found" });
+      const isMember = await storage.isCrewMember(req.params.id, req.session.userId!);
+      const isCreator = crew.created_by === req.session.userId!;
+      if (!isMember && !isCreator) return res.status(403).json({ message: "Not a crew member" });
+      const limit = parseInt(req.query.limit as string) || 50;
+      const messages = await storage.getCrewMessages(req.params.id, limit);
+      res.json(messages);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/crews/:id/messages", requireAuth, async (req, res) => {
+    try {
+      const crew = await storage.getCrewById(req.params.id);
+      if (!crew) return res.status(404).json({ message: "Crew not found" });
+      const isMember = await storage.isCrewMember(req.params.id, req.session.userId!);
+      const isCreator = crew.created_by === req.session.userId!;
+      if (!isMember && !isCreator) return res.status(403).json({ message: "Not a crew member" });
+      const { message } = req.body;
+      if (!message?.trim()) return res.status(400).json({ message: "Message is required" });
+      const user = await storage.getUserById(req.session.userId!);
+      const msg = await storage.createCrewMessage(req.params.id, req.session.userId!, user!.name, user!.photo_url, message.trim());
+      res.json(msg);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 

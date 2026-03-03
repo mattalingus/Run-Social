@@ -165,8 +165,8 @@ function CrewCard({ crew, onPress }: { crew: Crew; onPress: () => void }) {
             <Text style={s.crewEmojiText}>{crew.emoji}</Text>
           )}
           {pendingCount > 0 && (
-            <View style={s.requestBadge}>
-              <Text style={s.requestBadgeTxt}>{pendingCount}</Text>
+            <View style={s.requestCountBadge}>
+              <Text style={s.requestCountBadgeTxt}>{pendingCount}</Text>
             </View>
           )}
         </View>
@@ -883,6 +883,19 @@ function CrewDetailSheet({
                 </TouchableOpacity>
 
                 {/* Disband (creator only) */}
+                <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
+                  <TouchableOpacity
+                    style={[s.scheduleBtn, { flex: 1, marginTop: 0 }]}
+                    onPress={() => {
+                      onClose();
+                      router.push(`/crew-chat/${crew?.id}`);
+                    }}
+                  >
+                    <Ionicons name="chatbubble-ellipses-outline" size={18} color={C.primary} />
+                    <Text style={s.scheduleBtnTxt}>Crew Chat</Text>
+                  </TouchableOpacity>
+                </View>
+
                 {isCreator && (
                   <TouchableOpacity
                     style={s.disbandBtn}
