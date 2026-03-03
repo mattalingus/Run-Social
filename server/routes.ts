@@ -425,6 +425,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(201).json(run);
       // Notify — crew runs notify crew members; regular runs notify friends (fire-and-forget)
       if (run.crew_id) {
+        // Auto-post context-aware prompt to crew chat
+        (() => {
+          const runDate = new Date(run.date);
+          const dayStr = runDate.toLocaleDateString('en-US', { weekday: 'long' });
+          const timeStr = runDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+          const actLabel = run.activity_type === "ride" ? "ride" : "run";
+          const promptMsg = `📅 ${run.title} scheduled for ${dayStr} at ${timeStr}. Who's joining this ${actLabel}?`;
+          storage.createCrewMessage(
+            run.crew_id!,
+            req.session.userId!,
+            host?.name ?? 'Host',
+            host?.photo_url ?? null,
+            promptMsg,
+            'prompt',
+            { runId: run.id, quickReplies: ["I'm in! 💪", "Maybe 🤔", "Can't make it 😔"] }
+          ).catch(() => {});
+        })();
+
         storage.getCrewMemberPushTokensFiltered(run.crew_id, 'notif_crew_activity').then((tokens) => {
           if (tokens.length) {
             const actLabel = run.activity_type === "ride" ? "ride" : "run";
@@ -454,6 +472,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/community-paths", async (req, res) => {
+    try {
+      const bounds = (req.query.swLat && req.query.neLat && req.query.swLng && req.query.neLng)
+        ? {
+            swLat: parseFloat(req.query.swLat as string),
+            neLat: parseFloat(req.query.neLat as string),
+            swLng: parseFloat(req.query.swLng as string),
+            neLng: parseFloat(req.query.neLng as string)
+          }
+        : undefined;
+      const paths = await storage.getCommunityPaths(bounds);
+      res.json(paths);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/solo-runs/:id/publish-route", requireAuth, async (req, res) => {
+    try {
+      const { routeName } = req.body;
+      if (!routeName) return res.status(400).json({ message: "routeName required" });
+      const path = await storage.publishSoloRunRoute(req.params.id, req.session.userId!, routeName);
+      res.json(path);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/crews/:id/messages", requireAuth, async (req, res) => {
+    try {
+      const crewId = req.params.id;
+      const userId = req.session.userId!;
+      const isMember = await storage.isCrewMember(crewId, userId);
+      if (!isMember) return res.status(403).json({ message: "Not a crew member" });
+
+      const limit = parseInt(req.query.limit as string) || 50;
+      const messages = await storage.getCrewMessages(crewId, limit);
+      res.json(messages);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/crews/:id/messages", requireAuth, async (req, res) => {
+    try {
+      const crewId = req.params.id;
+      const userId = req.session.userId!;
+      const isMember = await storage.isCrewMember(crewId, userId);
+      if (!isMember) return res.status(403).json({ message: "Not a crew member" });
+
+      const { message } = req.body;
+      if (!message) return res.status(400).json({ message: "Message required" });
+
+      const user = await storage.getUserById(userId);
+      const newMessage = await storage.createCrewMessage(
+        crewId,
+        userId,
+        user.name,
+        user.photo_url,
+        message
+      );
+      res.status(201).json(newMessage);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.get("/api/runs/invite/:token", async (req, res) => {
     try {
       const run = await storage.getRunByInviteToken(req.params.token.toUpperCase());
@@ -462,6 +547,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await storage.grantRunAccess(run.id, req.session.userId);
       }
       res.json({ runId: run.id, title: run.title, hostName: run.host_name });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/runs/:id/messages", requireAuth, async (req, res) => {
+    try {
+      const runId = req.params.id;
+      const userId = req.session.userId!;
+      const isParticipant = await storage.isRunParticipant(runId, userId);
+      const run = await storage.getRunById(runId);
+      const isHost = run?.host_id === userId;
+
+      if (!isParticipant && !isHost) {
+        return res.status(403).json({ message: "Only participants can view messages" });
+      }
+
+      const limit = parseInt(req.query.limit as string) || 50;
+      const messages = await storage.getRunMessages(runId, limit);
+      res.json(messages);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/runs/:id/messages", requireAuth, async (req, res) => {
+    try {
+      const runId = req.params.id;
+      const userId = req.session.userId!;
+      const { message } = req.body;
+
+      if (!message) return res.status(400).json({ message: "Message is required" });
+
+      const isParticipant = await storage.isRunParticipant(runId, userId);
+      const run = await storage.getRunById(runId);
+      const isHost = run?.host_id === userId;
+
+      if (!isParticipant && !isHost) {
+        return res.status(403).json({ message: "Only participants can send messages" });
+      }
+
+      const user = await storage.getUserById(userId);
+      const newMessage = await storage.createRunMessage(
+        runId,
+        userId,
+        user.name,
+        user.photo_url,
+        message
+      );
+      res.json(newMessage);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
@@ -600,28 +735,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
-  });
-
-  app.get("/api/runs/:id/messages", requireAuth, async (req, res) => {
-    try {
-      const isParticipant = await storage.isParticipant(req.params.id, req.session.userId!);
-      if (!isParticipant) return res.status(403).json({ message: "Not a participant" });
-      const limit = parseInt(req.query.limit as string) || 50;
-      const messages = await storage.getRunMessages(req.params.id, limit);
-      res.json(messages);
-    } catch (e: any) { res.status(500).json({ message: e.message }); }
-  });
-
-  app.post("/api/runs/:id/messages", requireAuth, async (req, res) => {
-    try {
-      const isParticipant = await storage.isParticipant(req.params.id, req.session.userId!);
-      if (!isParticipant) return res.status(403).json({ message: "Not a participant" });
-      const { message } = req.body;
-      if (!message?.trim()) return res.status(400).json({ message: "Message is required" });
-      const user = await storage.getUserById(req.session.userId!);
-      const msg = await storage.createRunMessage(req.params.id, req.session.userId!, user!.name, user!.photo_url, message.trim());
-      res.json(msg);
-    } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
   app.get("/api/runs/:id/participants", async (req, res) => {
@@ -793,12 +906,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { title, date, distanceMiles, paceMinPerMile, durationSeconds, completed, planned, notes, routePath, activityType } = req.body;
       if (!date || !distanceMiles) return res.status(400).json({ message: "date and distanceMiles required" });
+      const parsedDist = parseFloat(distanceMiles);
+      const parsedPace = paceMinPerMile ? parseFloat(paceMinPerMile) : null;
       const run = await storage.createSoloRun({
         userId: req.session.userId!,
         title,
         date,
-        distanceMiles: parseFloat(distanceMiles),
-        paceMinPerMile: paceMinPerMile ? parseFloat(paceMinPerMile) : null,
+        distanceMiles: parsedDist,
+        paceMinPerMile: parsedPace,
         durationSeconds: durationSeconds ? parseInt(durationSeconds) : null,
         completed: !!completed,
         planned: !!planned,
@@ -807,6 +922,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         activityType: activityType === "ride" ? "ride" : "run",
       });
       res.status(201).json(run);
+      // Fire-and-forget PR check → post milestones to crews
+      if (completed) {
+        storage.checkSoloRunPRs(req.session.userId!, run.id, parsedDist, parsedPace).then(async (msgs) => {
+          for (const msg of msgs) {
+            await storage.postMilestoneToAllCrews(req.session.userId!, msg);
+          }
+        }).catch(() => {});
+      }
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
@@ -958,32 +1081,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const path = await storage.createSavedPath(req.session.userId!, { name, routePath, distanceMiles });
       storage.matchCommunityPath(req.session.userId!, path.id, routePath, distanceMiles ?? null).catch(console.error);
       res.json(path);
-    } catch (e: any) {
-      res.status(500).json({ message: e.message });
-    }
-  });
-
-  app.post("/api/solo-runs/:id/publish-route", requireAuth, async (req, res) => {
-    try {
-      const { routeName } = req.body;
-      if (!routeName?.trim()) return res.status(400).json({ message: "Route name is required" });
-      const path = await storage.publishSoloRunRoute(req.params.id, req.session.userId!, routeName.trim());
-      res.json(path);
-    } catch (e: any) { res.status(500).json({ message: e.message }); }
-  });
-
-  app.get("/api/community-paths", async (req, res) => {
-    try {
-      const bounds = req.query.swLat
-        ? {
-            swLat: parseFloat(req.query.swLat as string),
-            neLat: parseFloat(req.query.neLat as string),
-            swLng: parseFloat(req.query.swLng as string),
-            neLng: parseFloat(req.query.neLng as string),
-          }
-        : undefined;
-      const paths = await storage.getCommunityPaths(bounds);
-      res.json(paths);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
@@ -1175,34 +1272,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
-  app.get("/api/crews/:id/messages", requireAuth, async (req, res) => {
-    try {
-      const crew = await storage.getCrewById(req.params.id);
-      if (!crew) return res.status(404).json({ message: "Crew not found" });
-      const isMember = await storage.isCrewMember(req.params.id, req.session.userId!);
-      const isCreator = crew.created_by === req.session.userId!;
-      if (!isMember && !isCreator) return res.status(403).json({ message: "Not a crew member" });
-      const limit = parseInt(req.query.limit as string) || 50;
-      const messages = await storage.getCrewMessages(req.params.id, limit);
-      res.json(messages);
-    } catch (e: any) { res.status(500).json({ message: e.message }); }
-  });
-
-  app.post("/api/crews/:id/messages", requireAuth, async (req, res) => {
-    try {
-      const crew = await storage.getCrewById(req.params.id);
-      if (!crew) return res.status(404).json({ message: "Crew not found" });
-      const isMember = await storage.isCrewMember(req.params.id, req.session.userId!);
-      const isCreator = crew.created_by === req.session.userId!;
-      if (!isMember && !isCreator) return res.status(403).json({ message: "Not a crew member" });
-      const { message } = req.body;
-      if (!message?.trim()) return res.status(400).json({ message: "Message is required" });
-      const user = await storage.getUserById(req.session.userId!);
-      const msg = await storage.createCrewMessage(req.params.id, req.session.userId!, user!.name, user!.photo_url, message.trim());
-      res.json(msg);
-    } catch (e: any) { res.status(500).json({ message: e.message }); }
-  });
-
   app.post("/api/crews/:id/invite", requireAuth, async (req, res) => {
     try {
       const { userId } = req.body;
@@ -1244,6 +1313,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const result = await storage.leaveCrewById(req.params.id, req.session.userId!);
       res.json({ ok: true, disbanded: result?.disbanded ?? false });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.patch("/api/crews/:id/mute", requireAuth, async (req, res) => {
+    try {
+      const muted = await storage.toggleCrewChatMute(req.params.id, req.session.userId!);
+      res.json({ muted });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 

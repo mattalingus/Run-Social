@@ -150,6 +150,41 @@ shared/
 - `POST /api/solo-runs/:id/photos` - Upload a photo to a solo run (auth required, multipart/form-data)
 - `DELETE /api/solo-runs/:id/photos/:photoId` - Delete a solo run photo (owner only)
 
+## Audio Pace Coach
+- `expo-speech` installed (Expo Go compatible TTS)
+- Toggle + interval selector (0.5 mi / 1 mi / 2 mi) in pre-run UI of `app/run-tracking.tsx`
+- Persisted via AsyncStorage: `@fara_coach_enabled`, `@fara_coach_interval`
+- Fires `Speech.speak()` at each milestone; `Speech.stop()` on pause/stop
+- Guarded with `Platform.OS !== 'web'` — no web crash
+
+## Crew Chat
+- `crew_messages` table: id, crew_id, user_id, sender_name, sender_photo, message, message_type ('text'|'prompt'|'milestone'), metadata JSONB, created_at
+- `GET /api/crews/:id/messages` — members only, newest-first
+- `POST /api/crews/:id/messages` — members only
+- `app/crew-chat/[id].tsx` — inverted FlatList, prompt bubbles with quick-reply chips, milestone gold cards, 5s polling
+- Access via chat icon on each crew card in crew.tsx
+
+## Live Event Chat
+- `run_messages` table: id, run_id, user_id, sender_name, sender_photo, message, created_at
+- `GET /api/runs/:id/messages` — participants/host only
+- `POST /api/runs/:id/messages` — participants/host only
+- `app/run-live/[id].tsx` gets "Map | Chat" tab toggle; unread dot badge on Chat tab; presence guard for non-arrived users
+
+## Community Route Library
+- `community_paths` table gets: is_public, created_by_user_id, created_by_name, run_count, activity_type
+- `GET /api/community-paths` returns `is_public = true` paths
+- `POST /api/solo-runs/:id/publish-route` — publish GPS path with custom name
+- `app/run-tracking.tsx` — "Publish Route" button in post-run done screen (native only)
+- `app/map.tsx` — "Runs | Paths" mode toggle; Paths mode shows green polylines, tappable detail sheet
+
+## Discover Header Redesign + Notifications
+- Sort by removed from header → moved into filter sheet (top section with 4 pills: Soonest/Nearest/Distance↑/Distance↓)
+- Header order: Filter (sliders) | Host (+) | Notifications Bell
+- Bell shows primary-color dot badge when `notifCount > 0`; polls every 30s
+- `GET /api/notifications` aggregates: pending friend requests, pending crew invites, pending join requests to user's runs
+- Slide-up notification panel groups by type with Accept/Decline/Approve/Deny action buttons
+- Mute chat toggle on crew detail modal (bell icon + "Mute chat" text in close-button row)
+
 ## Future Integrations (Structured)
 Database columns exist for: `strava_id`, `apple_health_id`, `garmin_id`
 

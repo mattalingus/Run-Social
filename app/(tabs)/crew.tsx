@@ -54,6 +54,7 @@ interface Crew {
   run_style?: string;
   tags?: string[];
   pending_request_count?: number;
+  chat_muted?: boolean;
 }
 
 interface JoinRequest {
@@ -199,7 +200,21 @@ function CrewCard({ crew, onPress }: { crew: Crew; onPress: () => void }) {
           ) : null}
         </View>
       </View>
-      <Ionicons name="chevron-forward" size={18} color={C.textMuted} />
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+        {crew.chat_muted && (
+          <Ionicons name="notifications-off-outline" size={16} color={C.textMuted} />
+        )}
+        <TouchableOpacity 
+          onPress={(e) => {
+            e.stopPropagation();
+            router.push(`/crew-chat/${crew.id}`);
+          }}
+          style={{ padding: 4 }}
+        >
+          <Feather name="message-circle" size={20} color={C.primary} />
+        </TouchableOpacity>
+        <Ionicons name="chevron-forward" size={18} color={C.textMuted} />
+      </View>
     </TouchableOpacity>
   );
 }
@@ -601,6 +616,17 @@ function CrewDetailSheet({
     onError: (e: any) => Alert.alert("Error", e.message ?? "Could not remove member"),
   });
 
+  const muteMutation = useMutation({
+    mutationFn: () => apiRequest("PATCH", `/api/crews/${crew?.id}/mute`).then((r) => r.json()),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/crews"] });
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    },
+    onError: (e: any) => Alert.alert("Error", e.message ?? "Could not update notification setting"),
+  });
+
+  const isMuted = crew?.chat_muted ?? false;
+
   function handleRemoveMember(memberId: string, memberName: string) {
     Alert.alert(
       "Remove Member",
@@ -666,6 +692,21 @@ function CrewDetailSheet({
               <View style={s.detailCloseRow}>
                 <TouchableOpacity onPress={onClose} testID="close-crew-detail" style={s.detailCloseBtn}>
                   <Ionicons name="close" size={22} color={C.textMuted} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => muteMutation.mutate()}
+                  disabled={muteMutation.isPending}
+                  style={s.muteToggleBtn}
+                  testID="mute-crew-chat-btn"
+                >
+                  <Ionicons
+                    name={isMuted ? "notifications-off-outline" : "notifications-outline"}
+                    size={20}
+                    color={isMuted ? C.textMuted : C.text}
+                  />
+                  <Text style={[s.muteToggleTxt, isMuted && s.muteToggleTxtMuted]}>
+                    {isMuted ? "Chat muted" : "Mute chat"}
+                  </Text>
                 </TouchableOpacity>
               </View>
 
@@ -937,7 +978,7 @@ function CrewDetailSheet({
                             hitSlop={10}
                             style={s.removeMemberBtn}
                           >
-                            <Feather name="user-minus" size={15} color="#FF6B35" />
+                            <Feather name="user-minus" size={15} color={C.orange} />
                           </Pressable>
                         )}
                       </View>
@@ -1486,12 +1527,12 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     color: C.textSecondary,
   },
   searchCardBadge: {
-    backgroundColor: "#00D97E22",
+    backgroundColor: C.primary + "22",
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderWidth: 1,
-    borderColor: "#00D97E44",
+    borderColor: C.primary + "44",
   },
   searchCardBadgePending: {
     backgroundColor: C.surface,
@@ -1908,7 +1949,8 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   // Detail
   detailCloseRow: {
     flexDirection: "row",
-    justifyContent: "flex-end",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 20,
     paddingTop: 6,
     paddingBottom: 2,
@@ -1920,6 +1962,23 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     backgroundColor: C.surface,
     alignItems: "center",
     justifyContent: "center",
+  },
+  muteToggleBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: C.surface,
+  },
+  muteToggleTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 13,
+    color: C.text,
+  },
+  muteToggleTxtMuted: {
+    color: C.textMuted,
   },
   detailHero: {
     alignItems: "center",
@@ -2075,7 +2134,7 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   removeMemberBtn: {
     padding: 8,
     borderRadius: 8,
-    backgroundColor: "#FF6B3512",
+    backgroundColor: C.orange + "12",
     marginLeft: 4,
   },
   memberAvatar: {

@@ -296,7 +296,123 @@ export async function initDb() {
     ALTER TABLE community_paths ADD COLUMN IF NOT EXISTS created_by_name TEXT;
     ALTER TABLE community_paths ADD COLUMN IF NOT EXISTS run_count INTEGER DEFAULT 1;
     ALTER TABLE community_paths ADD COLUMN IF NOT EXISTS activity_type TEXT DEFAULT 'run';
+
+    ALTER TABLE crew_messages ADD COLUMN IF NOT EXISTS message_type TEXT DEFAULT 'text';
+    ALTER TABLE crew_messages ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT NULL;
+    ALTER TABLE crew_members ADD COLUMN IF NOT EXISTS chat_muted BOOLEAN DEFAULT false;
   `);
+}
+
+export async function getNotifications(userId: string) {
+  const friendRequests = await pool.query(
+    `SELECT fr.id, 'friend_request' as type, u.name as from_name, u.photo_url as from_photo, fr.created_at
+     FROM friends fr
+     JOIN users u ON u.id = fr.requester_id
+     WHERE fr.addressee_id = $1 AND fr.status = 'pending'`,
+    [userId]
+  );
+
+  const crewInvites = await pool.query(
+    `SELECT cm.id, cm.crew_id, 'crew_invite' as type, c.name as crew_name, c.emoji, cm.joined_at as created_at
+     FROM crew_members cm
+     JOIN crews c ON c.id = cm.crew_id
+     WHERE cm.user_id = $1 AND cm.status = 'invited'`,
+    [userId]
+  );
+
+  const joinRequests = await pool.query(
+    `SELECT rp.id, 'join_request' as type, u.name as from_name, r.title as run_title, rp.joined_at as created_at
+     FROM run_participants rp
+     JOIN runs r ON r.id = rp.run_id
+     JOIN users u ON u.id = rp.user_id
+     WHERE r.host_id = $1 AND rp.status = 'pending'`,
+    [userId]
+  );
+
+  const notifications = [
+    ...friendRequests.rows.map(r => ({
+      id: r.id,
+      type: 'friend_request',
+      title: 'Friend Request',
+      body: `${r.from_name} wants to be your running buddy`,
+      data: { from_name: r.from_name, from_photo: r.from_photo },
+      created_at: r.created_at
+    })),
+    ...crewInvites.rows.map(r => ({
+      id: r.id,
+      type: 'crew_invite',
+      title: 'Crew Invite',
+      body: `You've been invited to join ${r.emoji} ${r.crew_name}`,
+      data: { crew_id: r.crew_id, crew_name: r.crew_name, emoji: r.emoji },
+      created_at: r.created_at
+    })),
+    ...joinRequests.rows.map(r => ({
+      id: r.id,
+      type: 'join_request',
+      title: 'Join Request',
+      body: `${r.from_name} wants to join "${r.run_title}"`,
+      data: { participant_id: r.id, from_name: r.from_name, run_title: r.run_title },
+      created_at: r.created_at
+    }))
+  ];
+
+  return notifications.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+}
+
+export async function respondToFriendRequest(friendshipId: string, userId: string, action: 'accept' | 'decline') {
+  if (action === 'accept') {
+    return pool.query(`UPDATE friends SET status = 'accepted' WHERE id = $1 AND addressee_id = $2`, [friendshipId, userId]);
+  } else {
+    return pool.query(`DELETE FROM friends WHERE id = $1 AND addressee_id = $2`, [friendshipId, userId]);
+  }
+}
+
+export async function respondToCrewInvite(crewId: string, userId: string, action: 'accept' | 'decline') {
+  if (action === 'accept') {
+    return pool.query(`UPDATE crew_members SET status = 'member', joined_at = NOW() WHERE crew_id = $1 AND user_id = $2`, [crewId, userId]);
+  } else {
+    return pool.query(`DELETE FROM crew_members WHERE crew_id = $1 AND user_id = $2`, [crewId, userId]);
+  }
+}
+
+export async function respondToJoinRequest(participantId: string, hostId: string, action: 'approve' | 'deny') {
+  if (action === 'approve') {
+    return pool.query(
+      `UPDATE run_participants SET status = 'joined' 
+       WHERE id = $1 AND run_id IN (SELECT id FROM runs WHERE host_id = $2)`, 
+      [participantId, hostId]
+    );
+  } else {
+    return pool.query(
+      `DELETE FROM run_participants 
+       WHERE id = $1 AND run_id IN (SELECT id FROM runs WHERE host_id = $2)`, 
+      [participantId, hostId]
+    );
+  }
+}
+
+export async function getRunMessages(runId: string, limit = 50) {
+  const res = await pool.query(
+    `SELECT * FROM run_messages WHERE run_id = $1 ORDER BY created_at DESC LIMIT $2`,
+    [runId, limit]
+  );
+  return res.rows;
+}
+
+export async function createRunMessage(runId: string, userId: string, senderName: string, senderPhoto: string | null, message: string) {
+  const res = await pool.query(
+    `INSERT INTO run_messages (run_id, user_id, sender_name, sender_photo, message) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [runId, userId, senderName, senderPhoto, message]
+  );
+  return res.rows[0];
+}
+
+export async function isRunParticipant(runId: string, userId: string): Promise<boolean> {
+  const res = await pool.query(
+    `SELECT 1 FROM run_participants WHERE run_id = $1 AND user_id = $2 AND status != 'cancelled'`,
+    [runId, userId]
+  );
+  return res.rows.length > 0;
 }
 
 export async function getUserByUsername(username: string) {
@@ -677,88 +793,6 @@ export async function toggleStarSoloRun(id: string, userId: string) {
   return result.rows[0] || null;
 }
 
-export async function getNotifications(userId: string) {
-  const [friendRequests, crewInvites, joinRequests] = await Promise.all([
-    pool.query(
-      `SELECT f.id, u.id as from_user_id, u.name as from_name, u.photo_url as from_photo, f.created_at
-       FROM friends f
-       JOIN users u ON f.requester_id = u.id
-       WHERE f.addressee_id = $1 AND f.status = 'pending'
-       ORDER BY f.created_at DESC`,
-      [userId]
-    ),
-    pool.query(
-      `SELECT cm.id, c.id as crew_id, c.name as crew_name, c.emoji, cm.joined_at as created_at
-       FROM crew_members cm
-       JOIN crews c ON cm.crew_id = c.id
-       WHERE cm.user_id = $1 AND cm.status = 'invited'
-       ORDER BY cm.joined_at DESC`,
-      [userId]
-    ),
-    pool.query(
-      `SELECT rp.id, rp.run_id, r.title as run_title, u.id as user_id, u.name as user_name, u.photo_url as user_photo, rp.joined_at as created_at
-       FROM run_participants rp
-       JOIN runs r ON rp.run_id = r.id
-       JOIN users u ON rp.user_id = u.id
-       WHERE r.host_id = $1 AND rp.status = 'pending'
-       ORDER BY rp.joined_at DESC`,
-      [userId]
-    )
-  ]);
-
-  return {
-    friendRequests: friendRequests.rows,
-    crewInvites: crewInvites.rows,
-    joinRequests: joinRequests.rows,
-    total: (friendRequests.rowCount ?? 0) + (crewInvites.rowCount ?? 0) + (joinRequests.rowCount ?? 0)
-  };
-}
-
-export async function respondToCrewInvite(crewId: string, userId: string, action: 'accept' | 'reject') {
-  if (action === 'accept') {
-    return pool.query(
-      `UPDATE crew_members SET status = 'member', joined_at = NOW() WHERE crew_id = $1 AND user_id = $2 AND status = 'invited' RETURNING *`,
-      [crewId, userId]
-    );
-  } else {
-    return pool.query(
-      `DELETE FROM crew_members WHERE crew_id = $1 AND user_id = $2 AND status = 'invited'`,
-      [crewId, userId]
-    );
-  }
-}
-
-export async function respondToJoinRequest(participantId: string, hostId: string, action: 'approve' | 'deny') {
-  if (action === 'approve') {
-    return pool.query(
-      `UPDATE run_participants rp
-       SET status = 'joined'
-       FROM runs r
-       WHERE rp.id = $1 AND rp.run_id = r.id AND r.host_id = $2 AND rp.status = 'pending'
-       RETURNING rp.*`,
-      [participantId, hostId]
-    );
-  } else {
-    return pool.query(
-      `DELETE FROM run_participants rp
-       USING runs r
-       WHERE rp.id = $1 AND rp.run_id = r.id AND r.host_id = $2 AND rp.status = 'pending'`,
-      [participantId, hostId]
-    );
-  }
-}
-
-export async function respondToFriendRequest(friendshipId: string, userId: string, action: 'accept' | 'reject') {
-  if (action === 'accept') {
-    return acceptFriendRequest(friendshipId, userId);
-  } else {
-    return pool.query(
-      `DELETE FROM friends WHERE id = $1 AND addressee_id = $2 AND status = 'pending'`,
-      [friendshipId, userId]
-    );
-  }
-}
-
 export async function updateSoloRun(id: string, userId: string, updates: Record<string, any>) {
   const allowed = ["title", "date", "distance_miles", "pace_min_per_mile", "duration_seconds", "completed", "planned", "notes", "route_path", "is_starred", "elevation_gain_ft"];
   const entries = Object.entries(updates).filter(([k]) => allowed.includes(k));
@@ -1127,7 +1161,7 @@ export async function getHostUnlockProgress(userId: string) {
   return { unique_hosts: parseInt(result.rows[0].unique_hosts), total_runs: parseInt(result.rows[0].total_runs) };
 }
 
-async function awardSlug(userId: string, slug: string) {
+async function awardSlug(userId: string, slug: string): Promise<boolean> {
   const existing = await pool.query(
     `SELECT id FROM achievements WHERE user_id = $1 AND slug = $2`,
     [userId, slug]
@@ -1137,7 +1171,79 @@ async function awardSlug(userId: string, slug: string) {
       `INSERT INTO achievements (user_id, milestone, slug) VALUES ($1, 0, $2)`,
       [userId, slug]
     );
+    return true;
   }
+  return false;
+}
+
+export async function postMilestoneToAllCrews(userId: string, milestoneMessage: string): Promise<void> {
+  try {
+    const userRes = await pool.query(`SELECT name, photo_url FROM users WHERE id = $1`, [userId]);
+    const user = userRes.rows[0];
+    if (!user) return;
+    const crewsRes = await pool.query(
+      `SELECT crew_id FROM crew_members WHERE user_id = $1 AND status = 'member'`,
+      [userId]
+    );
+    for (const row of crewsRes.rows) {
+      await pool.query(
+        `INSERT INTO crew_messages (crew_id, user_id, sender_name, sender_photo, message, message_type)
+         VALUES ($1, $2, $3, $4, $5, 'milestone')`,
+        [row.crew_id, userId, user.name, user.photo_url, milestoneMessage]
+      );
+    }
+  } catch (_) {}
+}
+
+export async function checkSoloRunPRs(
+  userId: string,
+  newRunId: string,
+  distanceMiles: number | null,
+  paceMinPerMile: number | null
+): Promise<string[]> {
+  const messages: string[] = [];
+  const userRes = await pool.query(`SELECT name FROM users WHERE id = $1`, [userId]);
+  const userName = userRes.rows[0]?.name ?? 'Someone';
+  if (distanceMiles && distanceMiles > 0) {
+    const prevBest = await pool.query(
+      `SELECT COALESCE(MAX(distance_miles), 0) as best FROM solo_runs
+       WHERE user_id = $1 AND completed = true AND distance_miles IS NOT NULL AND id != $2`,
+      [userId, newRunId]
+    );
+    const bestDist = parseFloat(prevBest.rows[0]?.best ?? 0);
+    if (bestDist > 0 && distanceMiles > bestDist) {
+      const rounded = Math.round(distanceMiles * 100) / 100;
+      messages.push(`🎉 ${userName} just ran their longest distance ever — ${rounded} miles!`);
+    }
+  }
+  if (paceMinPerMile && paceMinPerMile > 0) {
+    const prevBest = await pool.query(
+      `SELECT COALESCE(MIN(pace_min_per_mile), 999) as best FROM solo_runs
+       WHERE user_id = $1 AND completed = true AND pace_min_per_mile IS NOT NULL AND id != $2`,
+      [userId, newRunId]
+    );
+    const bestPace = parseFloat(prevBest.rows[0]?.best ?? 999);
+    if (bestPace < 900 && paceMinPerMile < bestPace) {
+      const mins = Math.floor(paceMinPerMile);
+      const secs = Math.round((paceMinPerMile - mins) * 60).toString().padStart(2, '0');
+      messages.push(`⚡ ${userName} just set a new pace PR — ${mins}:${secs} /mi!`);
+    }
+  }
+  return messages;
+}
+
+export async function toggleCrewChatMute(crewId: string, userId: string): Promise<boolean> {
+  const current = await pool.query(
+    `SELECT chat_muted FROM crew_members WHERE crew_id = $1 AND user_id = $2`,
+    [crewId, userId]
+  );
+  if (!current.rows.length) throw new Error("Not a crew member");
+  const newMuted = !current.rows[0].chat_muted;
+  await pool.query(
+    `UPDATE crew_members SET chat_muted = $3 WHERE crew_id = $1 AND user_id = $2`,
+    [crewId, userId, newMuted]
+  );
+  return newMuted;
 }
 
 export async function checkAndAwardAchievements(userId: string, totalMiles: number) {
@@ -1145,8 +1251,14 @@ export async function checkAndAwardAchievements(userId: string, totalMiles: numb
   const { completed_runs, hosted_runs } = user.rows[0] ?? {};
 
   if (totalMiles >= 25) await awardSlug(userId, "miles_25");
-  if (totalMiles >= 100) await awardSlug(userId, "miles_100");
-  if (totalMiles >= 250) await awardSlug(userId, "miles_250");
+  if (totalMiles >= 100) {
+    const isNew = await awardSlug(userId, "miles_100");
+    if (isNew) postMilestoneToAllCrews(userId, "🔥 Just hit 100 miles total — legend status!").catch(() => {});
+  }
+  if (totalMiles >= 250) {
+    const isNew = await awardSlug(userId, "miles_250");
+    if (isNew) postMilestoneToAllCrews(userId, "🏅 Just crossed 250 miles total — absolute machine!").catch(() => {});
+  }
   if (completed_runs >= 1) await awardSlug(userId, "first_step");
   if (completed_runs >= 5) await awardSlug(userId, "five_alive");
   if (completed_runs >= 10) await awardSlug(userId, "ten_toes_down");
@@ -1740,28 +1852,19 @@ export async function getCrewMessages(crewId: string, limit = 50) {
   return result.rows;
 }
 
-export async function createCrewMessage(crewId: string, userId: string, senderName: string, senderPhoto: string | null, message: string) {
+export async function createCrewMessage(
+  crewId: string,
+  userId: string,
+  senderName: string,
+  senderPhoto: string | null,
+  message: string,
+  messageType: string = 'text',
+  metadata: any = null
+) {
   const result = await pool.query(
-    `INSERT INTO crew_messages (crew_id, user_id, sender_name, sender_photo, message)
-     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [crewId, userId, senderName, senderPhoto, message]
-  );
-  return result.rows[0];
-}
-
-export async function getRunMessages(runId: string, limit = 50) {
-  const result = await pool.query(
-    `SELECT * FROM run_messages WHERE run_id = $1 ORDER BY created_at DESC LIMIT $2`,
-    [runId, limit]
-  );
-  return result.rows;
-}
-
-export async function createRunMessage(runId: string, userId: string, senderName: string, senderPhoto: string | null, message: string) {
-  const result = await pool.query(
-    `INSERT INTO run_messages (run_id, user_id, sender_name, sender_photo, message)
-     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [runId, userId, senderName, senderPhoto, message]
+    `INSERT INTO crew_messages (crew_id, user_id, sender_name, sender_photo, message, message_type, metadata)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+    [crewId, userId, senderName, senderPhoto, message, messageType, metadata ? JSON.stringify(metadata) : null]
   );
   return result.rows[0];
 }
@@ -2108,7 +2211,7 @@ export async function createCrew(data: { name: string; description?: string; emo
 
 export async function getCrewsByUser(userId: string) {
   const res = await pool.query(
-    `SELECT c.*, cm.status,
+    `SELECT c.*, cm.status, cm.chat_muted,
        (SELECT COUNT(*) FROM crew_members WHERE crew_id = c.id AND status = 'member') AS member_count,
        u.name AS created_by_name,
        CASE WHEN c.created_by = $1

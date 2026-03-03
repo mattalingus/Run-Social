@@ -588,20 +588,24 @@ export default function MapScreen() {
           onRegionChangeComplete={onRegionChange}
           onPress={() => { if (selectedRun) closeCard(); if (selectedCommunityPath) closePathCard(); }}
         >
-          {mapMode === "paths" && communityPaths.map((path) => (
-            <Polyline
-              key={path.id}
-              coordinates={path.route_path}
-              strokeColor={selectedCommunityPath?.id === path.id ? C.primary : "#00D97E"}
-              strokeWidth={4}
-              tappable
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                openPathCard(path);
-              }}
-            />
-          ))}
-          {mapMode === "runs" && runs.map((run) => (
+          {mapMode === "paths" && (
+            <>
+              {communityPaths.map((path) => (
+                <Polyline
+                  key={path.id}
+                  coordinates={path.route_path}
+                  strokeColor={selectedCommunityPath?.id === path.id ? C.primary : "#00D97E"}
+                  strokeWidth={4}
+                  tappable
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    openPathCard(path);
+                  }}
+                />
+              ))}
+            </>
+          )}
+          {mapMode === "runs" && visibleRuns.map((run) => (
             <RunMarker
               key={run.id}
               run={run}
@@ -615,6 +619,17 @@ export default function MapScreen() {
         {/* Dim overlay */}
         <View style={s.mapDim} pointerEvents="none" />
 
+
+        {/* ─── Empty State (inside map card) ────────────────────────────────── */}
+        {mapMode === "paths" && communityPaths.length === 0 && (
+          <View style={s.emptyState}>
+            <View style={s.emptyCircle}>
+              <Feather name="map" size={32} color={C.textMuted} />
+            </View>
+            <Text style={s.emptyTitle}>No community routes here yet</Text>
+            <Text style={s.emptySub}>Finish a run and publish your first!</Text>
+          </View>
+        )}
 
         {/* ─── Sidebar (inside map card) ────────────────────────────────── */}
         <View style={s.sideBar}>
@@ -1352,5 +1367,37 @@ function makeSStyles(C: ColorScheme) { return StyleSheet.create({
     height: 32,
     alignItems: "center",
     justifyContent: "center",
+  },
+  emptyState: {
+    position: "absolute",
+    top: "30%",
+    left: 40,
+    right: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: C.card,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  emptyTitle: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 18,
+    color: C.text,
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  emptySub: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 14,
+    color: C.textSecondary,
+    textAlign: "center",
   },
 }); }

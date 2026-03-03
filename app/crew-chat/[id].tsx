@@ -27,6 +27,8 @@ interface Message {
   sender_photo?: string;
   message: string;
   created_at: string;
+  message_type?: string;
+  metadata?: { runId?: string; quickReplies?: string[] } | null;
   isTemp?: boolean;
 }
 
@@ -112,7 +114,58 @@ export default function CrewChatScreen() {
     const isMe = item.user_id === user?.id;
     const date = new Date(item.created_at);
     const timeStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    const initials = item.sender_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
 
+    // ── Milestone message ───────────────────────────────────────────
+    if (item.message_type === 'milestone') {
+      return (
+        <View style={s.milestoneContainer}>
+          <View style={s.milestoneBubble}>
+            <Text style={s.milestoneText}>{item.message}</Text>
+            <Text style={s.milestoneSubText}>via {item.sender_name}</Text>
+          </View>
+          <Text style={s.timestamp}>{timeStr}</Text>
+        </View>
+      );
+    }
+
+    // ── Prompt message (context-aware event prompt) ─────────────────
+    if (item.message_type === 'prompt') {
+      const quickReplies = item.metadata?.quickReplies ?? [];
+      return (
+        <View style={s.otherMessageContainer}>
+          <View style={s.avatarContainer}>
+            <View style={s.avatar}>
+              <Text style={s.avatarText}>{initials}</Text>
+            </View>
+          </View>
+          <View style={s.otherContent}>
+            <Text style={s.senderName}>{item.sender_name}</Text>
+            <View style={s.promptBubble}>
+              <Text style={s.promptText}>{item.message}</Text>
+              {quickReplies.length > 0 && (
+                <View style={s.quickReplyRow}>
+                  {quickReplies.map((reply: string) => (
+                    <TouchableOpacity
+                      key={reply}
+                      style={s.quickReplyChip}
+                      onPress={() => {
+                        setInputText(reply);
+                      }}
+                    >
+                      <Text style={s.quickReplyTxt}>{reply}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
+            <Text style={s.timestamp}>{timeStr}</Text>
+          </View>
+        </View>
+      );
+    }
+
+    // ── Standard message ────────────────────────────────────────────
     if (isMe) {
       return (
         <View style={s.myMessageContainer}>
@@ -123,8 +176,6 @@ export default function CrewChatScreen() {
         </View>
       );
     }
-
-    const initials = item.sender_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
 
     return (
       <View style={s.otherMessageContainer}>
@@ -361,5 +412,66 @@ const makeStyles = (C: any) => StyleSheet.create({
     marginTop: 12,
     lineHeight: 24,
     fontFamily: "Outfit_400Regular",
+  },
+  // Milestone message — centred gold card
+  milestoneContainer: {
+    alignItems: "center",
+    marginBottom: 16,
+    paddingHorizontal: 16,
+  },
+  milestoneBubble: {
+    backgroundColor: C.gold + "18",
+    borderWidth: 1,
+    borderColor: C.gold + "40",
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  milestoneText: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 14,
+    color: C.gold,
+    textAlign: "center",
+  },
+  milestoneSubText: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 11,
+    color: C.textMuted,
+    marginTop: 2,
+    textAlign: "center",
+  },
+  // Prompt message bubble
+  promptBubble: {
+    backgroundColor: C.primary + "18",
+    borderWidth: 1,
+    borderColor: C.primary + "35",
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    alignSelf: "flex-start",
+    maxWidth: "100%",
+  },
+  promptText: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 15,
+    color: C.text,
+    marginBottom: 10,
+  },
+  quickReplyRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  quickReplyChip: {
+    backgroundColor: C.primary,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+  },
+  quickReplyTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 13,
+    color: C.bg,
   },
 });

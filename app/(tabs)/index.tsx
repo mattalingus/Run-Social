@@ -617,79 +617,66 @@ export default function DiscoverScreen() {
   const { activityFilter, setActivityFilter } = useActivity();
   const [showFilter, setShowFilter] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
-  const [notifCount, setNotifCount] = useState(0);
-  const [notifData, setNotifData] = useState<{
-    friendRequests: any[];
-    crewInvites: any[];
-    joinRequests: any[];
-  }>({ friendRequests: [], crewInvites: [], joinRequests: [] });
-  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
 
-  useEffect(() => {
-    if (!user) return;
-    const fetchCount = async () => {
-      try {
-        const res = await apiRequest("GET", "/api/notifications");
-        const data = await res.json();
-        setNotifCount(data.total || 0);
-      } catch (e) {
-        console.error("Error fetching notification count:", e);
-      }
+  const { data: notifications = [], refetch: refetchNotifs } = useQuery({
+    queryKey: ["/api/notifications"],
+    refetchInterval: 30000,
+    enabled: !!user,
+  });
+
+  const notifCount = notifications.length;
+
+  const notifData = useMemo(() => {
+    return {
+      friendRequests: notifications.filter((n: any) => n.type === "friend_request"),
+      crewInvites: notifications.filter((n: any) => n.type === "crew_invite"),
+      joinRequests: notifications.filter((n: any) => n.type === "join_request"),
     };
-    fetchCount();
-    const interval = setInterval(fetchCount, 30000);
-    return () => clearInterval(interval);
-  }, [user]);
+  }, [notifications]);
 
-  const fetchNotifs = useCallback(async () => {
-    try {
-      const res = await apiRequest("GET", "/api/notifications");
-      const data = await res.json();
-      setNotifData(data);
-      setNotifCount(data.total || 0);
-    } catch (e) {
-      console.error("Error fetching notifications:", e);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (showNotifs) {
-      fetchNotifs();
-    }
-  }, [showNotifs, fetchNotifs]);
-
-  const respondFriend = async (friendshipId: string, action: "accept" | "reject") => {
-    try {
-      await apiRequest("POST", "/api/friends/respond", { friendshipId, action });
-      fetchNotifs();
+  const respondFriendMutation = useMutation({
+    mutationFn: (vars: { id: string; action: "accept" | "decline" }) =>
+      apiRequest("POST", "/api/friends/respond", { friendshipId: vars.id, action: vars.action }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/notifications"] });
       qc.invalidateQueries({ queryKey: ["/api/friends"] });
-    } catch (e) {
-      Alert.alert("Error", "Could not respond to friend request");
-    }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+  });
+
+  const respondCrewMutation = useMutation({
+    mutationFn: (vars: { crewId: string; action: "accept" | "decline" }) =>
+      apiRequest("POST", "/api/crews/invites/respond", { crewId: vars.crewId, action: vars.action }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/notifications"] });
+      qc.invalidateQueries({ queryKey: ["/api/crews/mine"] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+  });
+
+  const respondJoinMutation = useMutation({
+    mutationFn: (vars: { participantId: string; action: "approve" | "deny" }) =>
+      apiRequest("POST", "/api/runs/requests/respond", { participantId: vars.participantId, action: vars.action }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/notifications"] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+  });
+
+  const respondFriend = (id: string, action: "accept" | "decline") => {
+    respondFriendMutation.mutate({ id, action });
   };
 
-  const respondCrew = async (crewId: string, action: "accept" | "reject") => {
-    try {
-      await apiRequest("POST", "/api/crews/invites/respond", { crewId, action });
-      fetchNotifs();
-      qc.invalidateQueries({ queryKey: ["/api/crews"] });
-    } catch (e) {
-      Alert.alert("Error", "Could not respond to crew invite");
-    }
+  const respondCrew = (crewId: string, action: "accept" | "decline") => {
+    respondCrewMutation.mutate({ crewId, action });
   };
 
-  const respondJoin = async (participantId: string, action: "approve" | "deny") => {
-    try {
-      await apiRequest("POST", "/api/runs/requests/respond", { participantId, action });
-      fetchNotifs();
-      qc.invalidateQueries({ queryKey: ["/api/runs"] });
-    } catch (e) {
-      Alert.alert("Error", "Could not respond to join request");
-    }
+  const respondJoin = (participantId: string, action: "approve" | "deny") => {
+    respondJoinMutation.mutate({ participantId, action });
   };
-
   const [draft,    setDraft]    = useState<FilterState>({ ...DEFAULT_FILTERS });
   const [applied,  setApplied]  = useState<FilterState>({ ...DEFAULT_FILTERS });
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
 
   // ─── Host modal state ───────────────────────────────────────────────────────
   const [showHostModal, setShowHostModal] = useState(false);

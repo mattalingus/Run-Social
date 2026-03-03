@@ -429,11 +429,41 @@ export default function RunTrackingScreen() {
   }
 
   async function handlePublishRoute() {
+    if (Platform.OS === "ios" && !showPublishForm) {
+      Alert.prompt(
+        "Publish Route",
+        "Enter a name for this community route:",
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
+          },
+          {
+            text: "Publish",
+            onPress: async (name?: string) => {
+              if (!name?.trim()) {
+                Alert.alert("Name required", "Please enter a name for this route.");
+                return;
+              }
+              await performPublish(name.trim());
+            },
+          },
+        ],
+        "plain-text",
+        `${totalDistRef.current.toFixed(1)} mi Run`
+      );
+      return;
+    }
+
     const name = publishName.trim();
     if (!name) {
       Alert.alert("Name required", "Please enter a name for this route.");
       return;
     }
+    await performPublish(name);
+  }
+
+  async function performPublish(name: string) {
     setPublishing(true);
     try {
       const res = await apiRequest("POST", `/api/solo-runs/${savedRunId}/publish-route`, {
