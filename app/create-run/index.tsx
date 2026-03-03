@@ -133,7 +133,6 @@ export default function CreateRunScreen() {
   }
 
   useEffect(() => {
-    if (!locationPickerOpen) return;
     if (parseFloat(locationLat) && parseFloat(locationLng)) return;
     (async () => {
       try {
@@ -144,7 +143,7 @@ export default function CreateRunScreen() {
         setPickerLng(loc.coords.longitude);
       } catch {}
     })();
-  }, [locationPickerOpen]);
+  }, []);
 
   const createMutation = useMutation({
     mutationFn: async () => {
