@@ -26,6 +26,13 @@ import C from "@/constants/colors";
 import RangeSlider from "@/components/RangeSlider";
 import { formatDistance } from "@/lib/formatDistance";
 import HostProfileSheet from "@/components/HostProfileSheet";
+import { getApiUrl } from "@/lib/query-client";
+
+function resolveImgUrl(url?: string | null): string | null {
+  if (!url) return null;
+  if (url.startsWith("http")) return url;
+  return new URL(url, getApiUrl()).toString();
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -72,6 +79,7 @@ interface Run {
   privacy?: string;
   is_active?: boolean;
   activity_type?: string;
+  crew_photo_url?: string | null;
 }
 
 interface CommunityPath {
@@ -154,7 +162,8 @@ function RunMarker({ run, isSelected, onPress }: { run: Run; isSelected: boolean
   const icon = run.host_marker_icon;
   const isEmojiIcon = !!icon && !icon.startsWith("http") && !icon.startsWith("/api/objects");
   const isUrlIcon = !!icon && (icon.startsWith("http") || icon.startsWith("/api/objects"));
-  const photoSrc = isUrlIcon ? icon : (run.host_photo || avatarUrl(run.host_name));
+  const crewPhoto = resolveImgUrl(run.crew_photo_url);
+  const photoSrc = isUrlIcon ? icon : (crewPhoto || run.host_photo || avatarUrl(run.host_name));
 
   function freeze() {
     if (!frozen.current) {
@@ -630,7 +639,7 @@ export default function MapScreen() {
                     </View>
                   ) : (
                     <Image
-                      source={{ uri: selectedRun.host_photo || avatarUrl(selectedRun.host_name) }}
+                      source={{ uri: resolveImgUrl(selectedRun.crew_photo_url) || selectedRun.host_photo || avatarUrl(selectedRun.host_name) }}
                       style={s.cardAvatarImg}
                     />
                   )}
@@ -780,8 +789,8 @@ export default function MapScreen() {
                   <View style={s.miniAvatar}>
                     <Text style={{ fontSize: 18 }}>{run.host_marker_icon}</Text>
                   </View>
-                ) : run.host_photo ? (
-                  <Image source={{ uri: run.host_photo }} style={s.miniAvatarImg} />
+                ) : resolveImgUrl(run.crew_photo_url) || run.host_photo ? (
+                  <Image source={{ uri: resolveImgUrl(run.crew_photo_url) || run.host_photo! }} style={s.miniAvatarImg} />
                 ) : (
                   <View style={s.miniAvatar}>
                     <Text style={s.miniAvatarTxt}>{run.host_name?.charAt(0).toUpperCase()}</Text>

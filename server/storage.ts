@@ -524,10 +524,12 @@ export async function getCrewVisibleRuns(userId: string, bounds?: { swLat: numbe
   let query = `SELECT r.*, u.name as host_name, u.avg_rating as host_rating, u.photo_url as host_photo,
       u.marker_icon as host_marker_icon, u.hosted_runs as host_hosted_runs,
       (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled') as participant_count,
-      false as is_locked
+      false as is_locked,
+      c.photo_url as crew_photo_url
     FROM runs r
     JOIN users u ON u.id = r.host_id
     JOIN crew_members cm ON cm.crew_id = r.crew_id AND cm.user_id = $1 AND cm.status = 'member'
+    LEFT JOIN crews c ON c.id = r.crew_id
     WHERE r.crew_id IS NOT NULL AND r.date > NOW() - INTERVAL '2 hours' AND r.is_completed = false`;
   const params: any[] = [userId];
   let idx = 2;
