@@ -699,8 +699,8 @@ export default function DiscoverScreen() {
   const [hMaxParticipants, setHMaxParticipants] = useState(20);
   const [hTags, setHTags] = useState<string[]>(["General"]);
   const [hDist, setHDist] = useState("3");
-  const [hMinPace, setHMinPace] = useState(8);
-  const [hMaxPace, setHMaxPace] = useState(12);
+  const [hMinPace, setHMinPace] = useState(4);
+  const [hMaxPace, setHMaxPace] = useState(20);
   const [hLocationLat, setHLocationLat] = useState<number | null>(null);
   const [hLocationLng, setHLocationLng] = useState<number | null>(null);
   const [hostPage, setHostPage] = useState<"form" | "location">("form");
@@ -729,16 +729,21 @@ export default function DiscoverScreen() {
 
   function autoFormatTime(digits: string): string {
     if (digits.length <= 1) return digits;
+    const first = parseInt(digits[0], 10);
+    const second = parseInt(digits[1], 10);
+    // Two-digit hour only for 10, 11, 12 (first=1, second≤2)
+    const twoDigit = first === 1 && second <= 2;
     if (digits.length === 2) {
-      if (parseInt(digits[0], 10) > 1) return digits[0] + ":" + digits[1];
-      return digits;
+      // 13–19 impossible in 12h → must be single-digit hour
+      if (first > 1 || (first === 1 && second > 2)) return digits[0] + ":" + digits[1];
+      return digits; // 10, 11, 12 — wait for third digit
     }
     if (digits.length === 3) {
-      if (parseInt(digits[0], 10) > 1) return digits[0] + ":" + digits.slice(1);
-      return digits.slice(0, 2) + ":" + digits[2];
+      if (twoDigit) return digits.slice(0, 2) + ":" + digits[2];
+      return digits[0] + ":" + digits.slice(1);
     }
-    if (parseInt(digits[0], 10) > 1) return digits[0] + ":" + digits.slice(1, 3);
-    return digits.slice(0, 2) + ":" + digits.slice(2, 4);
+    if (twoDigit) return digits.slice(0, 2) + ":" + digits.slice(2, 4);
+    return digits[0] + ":" + digits.slice(1, 3);
   }
 
   function handleTimeChange(text: string) {
