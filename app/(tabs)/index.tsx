@@ -513,7 +513,7 @@ function RunCard({
   return (
     <View style={{ position: "relative" }}>
       {isLiveNow && (
-        <Animated.View style={[s.liveCardGlow, { opacity: pulseAnim }]} />
+        <Animated.View style={[s.liveCardGlow, { opacity: pulseAnim }]} pointerEvents="none" />
       )}
     <Pressable
       style={({ pressed }) => [s.card, isFriend && s.cardFriend, isCrew && s.cardCrew, { opacity: pressed ? 0.85 : 1 }]}
@@ -2097,7 +2097,6 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     position: "absolute", top: -2, left: -2, right: -2, bottom: -2,
     borderRadius: 16, borderWidth: 2, borderColor: "#C0392B",
     shadowColor: "#C0392B", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: 10,
-    zIndex: 1,
   },
   card: {
     backgroundColor: C.surface,
