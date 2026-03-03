@@ -1830,10 +1830,10 @@ export async function getUserRunRecords(userId: string) {
 
 // ─── Crew Storage ─────────────────────────────────────────────────────────────
 
-export async function createCrew(data: { name: string; description?: string; emoji: string; createdBy: string; runStyle?: string; tags?: string[] }) {
+export async function createCrew(data: { name: string; description?: string; emoji: string; createdBy: string; runStyle?: string; tags?: string[]; imageUrl?: string }) {
   const res = await pool.query(
-    `INSERT INTO crews (name, description, emoji, created_by, run_style, tags) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-    [data.name, data.description ?? null, data.emoji, data.createdBy, data.runStyle ?? null, data.tags ?? []]
+    `INSERT INTO crews (name, description, emoji, created_by, run_style, tags, image_url) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+    [data.name, data.description ?? null, data.emoji, data.createdBy, data.runStyle ?? null, data.tags ?? [], data.imageUrl ?? null]
   );
   const crew = res.rows[0];
   await pool.query(

@@ -13,7 +13,9 @@ import {
   Alert,
   KeyboardAvoidingView,
   Keyboard,
+  Image,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -44,6 +46,7 @@ interface Crew {
   name: string;
   description?: string;
   emoji: string;
+  image_url?: string;
   created_by: string;
   created_at: string;
   member_count: number;
@@ -143,7 +146,11 @@ function CrewCard({ crew, onPress }: { crew: Crew; onPress: () => void }) {
     <TouchableOpacity style={s.crewCard} onPress={onPress} activeOpacity={0.75} testID={`crew-card-${crew.id}`}>
       <View style={s.crewCardLeft}>
         <View style={s.crewEmojiBadge}>
-          <Text style={s.crewEmojiText}>{crew.emoji}</Text>
+          {crew.image_url ? (
+            <Image source={{ uri: crew.image_url }} style={{ width: 52, height: 52, borderRadius: 26 }} />
+          ) : (
+            <Text style={s.crewEmojiText}>{crew.emoji}</Text>
+          )}
         </View>
         <View style={s.crewCardInfo}>
           <Text style={s.crewCardName}>{crew.name}</Text>
@@ -181,10 +188,51 @@ function CreateCrewSheet({ visible, onClose, onCreated }: { visible: boolean; on
   const [emoji, setEmoji] = useState("🏃");
   const [runStyle, setRunStyle] = useState<string | null>(null);
   const [vibes, setVibes] = useState<string[]>([]);
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const qc = useQueryClient();
 
+  async function pickImage() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission needed", "Please allow photo library access to upload a crew image.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    setImageUri(asset.uri);
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      const ext = asset.uri.split(".").pop() ?? "jpg";
+      formData.append("photo", { uri: asset.uri, name: `crew-image.${ext}`, type: `image/${ext}` } as any);
+      const base = getApiUrl();
+      const res = await fetch(new URL("/api/upload/photo", base).toString(), {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (data.url) setImageUrl(data.url);
+      else throw new Error("Upload failed");
+    } catch {
+      Alert.alert("Upload failed", "Could not upload image. Please try again.");
+      setImageUri(null);
+      setImageUrl(null);
+    } finally {
+      setIsUploading(false);
+    }
+  }
+
   const createMutation = useMutation({
-    mutationFn: async (data: { name: string; description: string; emoji: string; runStyle?: string; tags: string[] }) => {
+    mutationFn: async (data: { name: string; description: string; emoji: string; runStyle?: string; tags: string[]; imageUrl?: string }) => {
       const res = await apiRequest("POST", "/api/crews", data);
       return res.json() as Promise<Crew>;
     },
@@ -195,6 +243,8 @@ function CreateCrewSheet({ visible, onClose, onCreated }: { visible: boolean; on
       setEmoji("🏃");
       setRunStyle(null);
       setVibes([]);
+      setImageUri(null);
+      setImageUrl(null);
       onCreated(crew);
     },
     onError: (e: any) => Alert.alert("Error", e.message ?? "Could not create crew"),
@@ -202,7 +252,7 @@ function CreateCrewSheet({ visible, onClose, onCreated }: { visible: boolean; on
 
   const handleCreate = () => {
     if (!name.trim()) { Alert.alert("Name required", "Give your crew a name"); return; }
-    createMutation.mutate({ name: name.trim(), description: description.trim(), emoji, runStyle: runStyle ?? undefined, tags: vibes });
+    createMutation.mutate({ name: name.trim(), description: description.trim(), emoji, runStyle: runStyle ?? undefined, tags: vibes, imageUrl: imageUrl ?? undefined });
   };
 
   const toggleVibe = (v: string) => setVibes((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]);
@@ -220,18 +270,34 @@ function CreateCrewSheet({ visible, onClose, onCreated }: { visible: boolean; on
           </View>
 
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 24, paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
-            <Text style={s.fieldLabel}>Pick an emoji</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.emojiRow}>
-              {EMOJIS.map((e) => (
-                <TouchableOpacity
-                  key={e}
-                  style={[s.emojiOption, emoji === e && s.emojiOptionActive]}
-                  onPress={() => setEmoji(e)}
-                >
-                  <Text style={s.emojiOptionText}>{e}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+            <Text style={s.fieldLabel}>Crew Icon</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 16 }}>
+              {/* Upload photo button */}
+              <TouchableOpacity style={s.imagePickerBtn} onPress={pickImage} disabled={isUploading}>
+                {isUploading ? (
+                  <ActivityIndicator color={C.primary} />
+                ) : imageUri ? (
+                  <Image source={{ uri: imageUri }} style={s.imagePickerPreview} />
+                ) : (
+                  <>
+                    <Ionicons name="add" size={24} color={C.textMuted} />
+                    <Text style={s.imagePickerTxt}>Photo</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              {/* Emoji scroll */}
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ gap: 8 }}>
+                {EMOJIS.map((e) => (
+                  <TouchableOpacity
+                    key={e}
+                    style={[s.emojiOption, !imageUri && emoji === e && s.emojiOptionActive]}
+                    onPress={() => { setEmoji(e); setImageUri(null); setImageUrl(null); }}
+                  >
+                    <Text style={s.emojiOptionText}>{e}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
 
             <Text style={s.fieldLabel}>Crew name</Text>
             <TextInput
@@ -518,7 +584,11 @@ function CrewDetailSheet({
 
               {/* Hero title */}
               <View style={s.detailHero}>
-                <Text style={s.detailHeroEmoji}>{crew.emoji}</Text>
+                {crew.image_url ? (
+                  <Image source={{ uri: crew.image_url }} style={s.detailHeroImage} />
+                ) : (
+                  <Text style={s.detailHeroEmoji}>{crew.emoji}</Text>
+                )}
                 <Text style={s.detailHeroName}>{crew.name}</Text>
                 {crew.description ? (
                   <Text style={s.detailDesc}>{crew.description}</Text>
@@ -784,7 +854,11 @@ function SearchResultCard({
       onPress={isMember ? onOpen : undefined}
       activeOpacity={isMember ? 0.75 : 1}
     >
-      <Text style={s.searchCardEmoji}>{crew.emoji}</Text>
+      {crew.image_url ? (
+        <Image source={{ uri: crew.image_url }} style={s.searchCardEmojiImg} />
+      ) : (
+        <Text style={s.searchCardEmoji}>{crew.emoji}</Text>
+      )}
       <View style={{ flex: 1, gap: 3 }}>
         <Text style={s.searchCardName} numberOfLines={1}>{crew.name}</Text>
         <Text style={s.searchCardMeta}>
@@ -1133,6 +1207,11 @@ const s = StyleSheet.create({
   searchCardEmoji: {
     fontSize: 30,
   },
+  searchCardEmojiImg: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
   searchCardName: {
     fontFamily: "Outfit_700Bold",
     fontSize: 15,
@@ -1464,6 +1543,28 @@ const s = StyleSheet.create({
   emojiOptionText: {
     fontSize: 22,
   },
+  imagePickerBtn: {
+    width: 58,
+    height: 58,
+    borderRadius: 14,
+    backgroundColor: C.surface,
+    borderWidth: 1.5,
+    borderColor: C.border,
+    borderStyle: "dashed",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
+  },
+  imagePickerPreview: {
+    width: 58,
+    height: 58,
+    borderRadius: 14,
+  },
+  imagePickerTxt: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 10,
+    color: C.textMuted,
+  },
   input: {
     backgroundColor: C.surface,
     borderWidth: 1,
@@ -1571,6 +1672,12 @@ const s = StyleSheet.create({
   detailHeroEmoji: {
     fontSize: 52,
     marginBottom: 8,
+  },
+  detailHeroImage: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    marginBottom: 12,
   },
   detailHeroName: {
     fontFamily: "Outfit_700Bold",
