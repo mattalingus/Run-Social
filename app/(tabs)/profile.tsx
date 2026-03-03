@@ -77,6 +77,7 @@ interface RunHistoryItem {
   max_distance: number;
   is_host: boolean;
   is_completed: boolean;
+  my_is_present: boolean;
   my_status: string;
   host_name: string;
   activity_type?: string;
@@ -797,11 +798,16 @@ export default function ProfileScreen() {
                   <Text style={styles.historyMeta}>{formatDate(run.date)} · {run.min_distance === run.max_distance ? formatDistance(run.min_distance) : `${formatDistance(run.min_distance)}–${formatDistance(run.max_distance)}`} mi</Text>
                 </View>
               </View>
-              <View style={[styles.historyStatus, { backgroundColor: run.is_completed ? C.primary + "22" : C.border }]}>
-                <Text style={[styles.historyStatusText, { color: run.is_completed ? C.primary : C.textMuted }]}>
-                  {run.is_completed ? "Done" : "Upcoming"}
-                </Text>
-              </View>
+              {(() => {
+                const isPast = new Date(run.date) <= new Date();
+                return (
+                  <View style={[styles.historyStatus, { backgroundColor: isPast ? C.primary + "22" : C.border }]}>
+                    <Text style={[styles.historyStatusText, { color: isPast ? C.primary : C.textMuted }]}>
+                      {isPast ? "Done" : "Upcoming"}
+                    </Text>
+                  </View>
+                );
+              })()}
             </Pressable>
           ))
         )}

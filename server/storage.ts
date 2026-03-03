@@ -707,10 +707,16 @@ export async function getUserRuns(userId: string) {
   const result = await pool.query(
     `SELECT r.*, u.name as host_name,
       (SELECT rp2.status FROM run_participants rp2 WHERE rp2.run_id = r.id AND rp2.user_id = $1 LIMIT 1) as my_status,
-      CASE WHEN r.host_id = $1 THEN true ELSE false END as is_host
+      CASE WHEN r.host_id = $1 THEN true ELSE false END as is_host,
+      COALESCE((SELECT rp3.is_present FROM run_participants rp3 WHERE rp3.run_id = r.id AND rp3.user_id = $1 LIMIT 1), false) as my_is_present
      FROM runs r
      JOIN users u ON u.id = r.host_id
-     WHERE r.host_id = $1 OR r.id IN (SELECT run_id FROM run_participants WHERE user_id = $1 AND status != 'cancelled')
+     WHERE (r.host_id = $1 OR r.id IN (SELECT run_id FROM run_participants WHERE user_id = $1 AND status != 'cancelled'))
+       AND (
+         r.date > NOW()
+         OR r.host_id = $1
+         OR EXISTS (SELECT 1 FROM run_participants rp4 WHERE rp4.run_id = r.id AND rp4.user_id = $1 AND rp4.is_present = true)
+       )
      ORDER BY r.date DESC`,
     [userId]
   );
