@@ -24,6 +24,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import C from "@/constants/colors";
+import { useTheme } from "@/contexts/ThemeContext";
 import { formatDistance } from "@/lib/formatDistance";
 import MAP_STYLE from "@/lib/mapStyle";
 import MapView, { Polyline } from "react-native-maps";
@@ -348,6 +349,7 @@ export default function SoloScreen() {
   const insets = useSafeAreaInsets();
   const { user, refreshUser } = useAuth();
   const { activityFilter, setActivityFilter } = useActivity();
+  const { C: themeC } = useTheme();
   const qc = useQueryClient();
 
   const [showGoals, setShowGoals] = useState(false);
@@ -533,7 +535,7 @@ export default function SoloScreen() {
   const periodLabel = period === "monthly" ? "This Month" : "This Year";
 
   return (
-    <View style={s.container}>
+    <View style={[s.container, { backgroundColor: themeC.bg }]}>
       <ScrollView
         contentContainerStyle={[
           s.scroll,

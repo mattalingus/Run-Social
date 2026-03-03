@@ -23,25 +23,16 @@ import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
+import { useTheme } from "@/contexts/ThemeContext";
+import { darkColors } from "@/constants/colors";
+
+const C = darkColors;
 
 function resolveImgUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   if (url.startsWith("http")) return url;
   return new URL(url, getApiUrl()).toString();
 }
-
-const C = {
-  bg: "#080F0C",
-  surface: "#111A15",
-  card: "#1A2E21",
-  border: "#1E3528",
-  primary: "#00D97E",
-  orange: "#FF6B35",
-  text: "#E8F5EE",
-  textMuted: "#6B8F78",
-  textDim: "#A8C4B4",
-  danger: "#FF4444",
-};
 
 const EMOJIS = ["🏃", "🚴", "⚡", "🔥", "💪", "🌿", "🦅", "🐺", "🦁", "🏔", "🌊", "⭐", "🎯", "🚀", "🌙"];
 const CREW_RUN_STYLES = ["Easy Pace", "Chill", "Steady", "Tempo", "Fast", "Recovery", "Long Run", "Progressive", "Intervals", "Race Prep"];
@@ -992,6 +983,7 @@ function SearchResultCard({
 export default function CrewScreen() {
   const insets = useSafeAreaInsets();
   const isWeb = Platform.OS === "web";
+  const { C } = useTheme();
   const qc = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [selectedCrew, setSelectedCrew] = useState<Crew | null>(null);
@@ -1054,7 +1046,7 @@ export default function CrewScreen() {
   const bottomPad = isWeb ? 34 : insets.bottom;
 
   return (
-    <View style={[s.screen, { paddingTop: topPad }]}>
+    <View style={[s.screen, { paddingTop: topPad, backgroundColor: C.bg }]}>
       {/* Header */}
       <View style={s.header}>
         <Text style={s.headerTitle}>Crew</Text>
@@ -1336,7 +1328,7 @@ const s = StyleSheet.create({
   searchCardDesc: {
     fontFamily: "Outfit_400Regular",
     fontSize: 12,
-    color: C.textDim,
+    color: C.textSecondary,
   },
   searchCardBadge: {
     backgroundColor: "#00D97E22",
@@ -1487,7 +1479,7 @@ const s = StyleSheet.create({
   crewCardDesc: {
     fontFamily: "Outfit_400Regular",
     fontSize: 13,
-    color: C.textDim,
+    color: C.textSecondary,
     marginTop: 2,
   },
   crewCardMeta: {
@@ -1584,7 +1576,7 @@ const s = StyleSheet.create({
   fieldLabel: {
     fontFamily: "Outfit_600SemiBold",
     fontSize: 14,
-    color: C.textDim,
+    color: C.textSecondary,
     marginTop: 20,
     marginBottom: 8,
   },
@@ -1800,7 +1792,7 @@ const s = StyleSheet.create({
   detailDesc: {
     fontFamily: "Outfit_400Regular",
     fontSize: 17,
-    color: C.textDim,
+    color: C.textSecondary,
     textAlign: "center",
     lineHeight: 24,
     paddingHorizontal: 32,
@@ -1871,7 +1863,7 @@ const s = StyleSheet.create({
   historyRunMetaTxt: {
     fontFamily: "Outfit_400Regular",
     fontSize: 12,
-    color: C.textDim,
+    color: C.textSecondary,
   },
   historyRunDot: {
     fontFamily: "Outfit_400Regular",

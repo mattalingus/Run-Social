@@ -24,6 +24,7 @@ import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import MapView, { Marker } from "react-native-maps";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTheme } from "@/contexts/ThemeContext";
 import C from "@/constants/colors";
 import RangeSlider from "@/components/RangeSlider";
 import { formatDistance } from "@/lib/formatDistance";
@@ -553,6 +554,7 @@ export default function DiscoverScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const qc = useQueryClient();
+  const { C: themeC } = useTheme();
 
   const [search, setSearch] = useState("");
   const [sortOption, setSortOption] = useState<SortOption>("soonest");
@@ -944,7 +946,7 @@ export default function DiscoverScreen() {
   // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <View style={s.container}>
+    <View style={[s.container, { backgroundColor: themeC.bg }]}>
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <View style={[s.header, { paddingTop: headerTopPad }]}>
         <View style={s.titleRow}>

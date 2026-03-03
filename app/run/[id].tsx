@@ -23,6 +23,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import C from "@/constants/colors";
+import { useTheme } from "@/contexts/ThemeContext";
 import { formatDistance } from "@/lib/formatDistance";
 import HostProfileSheet from "@/components/HostProfileSheet";
 
@@ -70,6 +71,7 @@ function formatTime(dateStr: string) {
 }
 
 export default function RunDetailScreen() {
+  const { C: themeC } = useTheme();
   const { id, token } = useLocalSearchParams<{ id: string; token?: string }>();
   const insets = useSafeAreaInsets();
   const { user, refreshUser } = useAuth();
@@ -487,7 +489,7 @@ export default function RunDetailScreen() {
 
   if (isLoading) {
     return (
-      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+      <View style={[styles.container, { backgroundColor: themeC.bg, justifyContent: "center", alignItems: "center" }]}>
         <ActivityIndicator color={C.primary} size="large" />
       </View>
     );
@@ -495,7 +497,7 @@ export default function RunDetailScreen() {
 
   if (!run) {
     return (
-      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+      <View style={[styles.container, { backgroundColor: themeC.bg, justifyContent: "center", alignItems: "center" }]}>
         <Text style={styles.errorText}>Run not found</Text>
         <Pressable onPress={() => router.back()} style={styles.backLink}>
           <Text style={styles.backLinkText}>Go back</Text>
@@ -506,7 +508,7 @@ export default function RunDetailScreen() {
 
   if (run.isPrivate) {
     return (
-      <KeyboardAvoidingView behavior="padding" style={[styles.container, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20, paddingHorizontal: 28 }]}>
+      <KeyboardAvoidingView behavior="padding" style={[styles.container, { backgroundColor: themeC.bg, paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20, paddingHorizontal: 28 }]}>
         <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={12}>
           <Feather name="arrow-left" size={20} color={C.textSecondary} />
         </Pressable>
@@ -567,7 +569,7 @@ export default function RunDetailScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: themeC.bg }]}>
       <ScrollView
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 120 }]}
         showsVerticalScrollIndicator={false}

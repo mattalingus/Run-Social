@@ -24,7 +24,8 @@ import { router } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest } from "@/lib/query-client";
-import C from "@/constants/colors";
+import { useTheme } from "@/contexts/ThemeContext";
+import { darkColors as C } from "@/constants/colors";
 import { MARKER_ICONS } from "@/constants/markerIcons";
 import { ACHIEVEMENTS, type AchievementDef } from "@/constants/achievements";
 import { formatDistance } from "@/lib/formatDistance";
@@ -194,6 +195,7 @@ export default function ProfileScreen() {
   const { user, logout, refreshUser } = useAuth();
   const qc = useQueryClient();
   const { activityFilter: profileActivity, setActivityFilter: setProfileActivity } = useActivity();
+  const { C, theme, toggleTheme } = useTheme();
 
   const [showGoals, setShowGoals] = useState(false);
   const [showPace, setShowPace] = useState(false);
@@ -219,6 +221,10 @@ export default function ProfileScreen() {
   const [editNameValue, setEditNameValue] = useState("");
   const [nameError, setNameError] = useState("");
   const [nameDaysRemaining, setNameDaysRemaining] = useState<number | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+
+  const styles = makeStyles(C);
+  const devStylesObj = makeDevStyles(C);
 
   // ─── Handlers ──────────────────────────────────────────────────────────────
 
@@ -522,16 +528,24 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        <Pressable
-          onPress={async () => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            await logout();
-            router.replace("/(auth)/login");
-          }}
-          style={styles.logoutBtn}
-        >
-          <Feather name="log-out" size={18} color={C.textMuted} />
-        </Pressable>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+          <Pressable
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowSettings(true); }}
+            style={styles.logoutBtn}
+          >
+            <Feather name="settings" size={18} color={C.textMuted} />
+          </Pressable>
+          <Pressable
+            onPress={async () => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              await logout();
+              router.replace("/(auth)/login");
+            }}
+            style={styles.logoutBtn}
+          >
+            <Feather name="log-out" size={18} color={C.textMuted} />
+          </Pressable>
+        </View>
       </View>
 
       {/* ── Friends Quick-Access Row ───────────────────────────────────────── */}
@@ -918,15 +932,15 @@ export default function ProfileScreen() {
       </View>
 
       {/* ── Dev Mode ──────────────────────────────────────────────────────── */}
-      <Pressable onPress={handleVersionTap} style={devStyles.versionWrap}>
-        <Text style={devStyles.versionText}>FARA v1.0</Text>
+      <Pressable onPress={handleVersionTap} style={devStylesObj.versionWrap}>
+        <Text style={devStylesObj.versionText}>FARA v1.0</Text>
       </Pressable>
 
       {showDevMode && (
-        <View style={devStyles.devPanel}>
-          <Text style={devStyles.devTitle}>Dev Mode</Text>
+        <View style={devStylesObj.devPanel}>
+          <Text style={devStylesObj.devTitle}>Dev Mode</Text>
           <Pressable
-            style={({ pressed }) => [devStyles.devBtn, { opacity: pressed ? 0.8 : 1 }]}
+            style={({ pressed }) => [devStylesObj.devBtn, { opacity: pressed ? 0.8 : 1 }]}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
               seedMutation.mutate();
@@ -935,11 +949,11 @@ export default function ProfileScreen() {
           >
             {seedMutation.isPending
               ? <ActivityIndicator color={C.primary} />
-              : <Text style={devStyles.devBtnText}>Generate 20 Random Runs</Text>
+              : <Text style={devStylesObj.devBtnText}>Generate 20 Random Runs</Text>
             }
           </Pressable>
-          <Pressable onPress={() => setShowDevMode(false)} style={devStyles.devClose}>
-            <Text style={devStyles.devCloseText}>Close Dev Mode</Text>
+          <Pressable onPress={() => setShowDevMode(false)} style={devStylesObj.devClose}>
+            <Text style={devStylesObj.devCloseText}>Close Dev Mode</Text>
           </Pressable>
         </View>
       )}
@@ -947,6 +961,48 @@ export default function ProfileScreen() {
       {/* ── Modals ────────────────────────────────────────────────────────── */}
 
       {/* ── Edit Name Modal ────────────────────────────────────────────────── */}
+      {/* ── Settings Modal ─────────────────────────────────────────────── */}
+      <Modal visible={showSettings} transparent animationType="slide" onRequestClose={() => setShowSettings(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setShowSettings(false)} />
+        <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 24 }]}>
+          <View style={styles.modalTitleRow}>
+            <Text style={styles.modalTitle}>Settings</Text>
+            <Pressable onPress={() => setShowSettings(false)}>
+              <Feather name="x" size={20} color={C.textSecondary} />
+            </Pressable>
+          </View>
+
+          {/* Theme Toggle */}
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.border }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+              <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: C.card, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: C.border }}>
+                <Feather name={theme === "dark" ? "moon" : "sun"} size={18} color={C.primary} />
+              </View>
+              <View>
+                <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.text }}>{theme === "dark" ? "Dark Mode" : "Light Mode"}</Text>
+                <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary }}>
+                  {theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+                </Text>
+              </View>
+            </View>
+            <Pressable
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); toggleTheme(); }}
+              style={{
+                width: 50, height: 28, borderRadius: 14,
+                backgroundColor: theme === "dark" ? C.border : C.primary,
+                justifyContent: "center", paddingHorizontal: 3,
+              }}
+            >
+              <View style={{
+                width: 22, height: 22, borderRadius: 11,
+                backgroundColor: theme === "dark" ? C.textMuted : "#FFFFFF",
+                alignSelf: theme === "dark" ? "flex-start" : "flex-end",
+              }} />
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={showEditName} transparent animationType="slide" onRequestClose={() => setShowEditName(false)}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <Pressable style={styles.modalOverlay} onPress={() => setShowEditName(false)} />
@@ -1453,7 +1509,7 @@ export default function ProfileScreen() {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+function makeStyles(C: ReturnType<typeof import("@/contexts/ThemeContext").useTheme>["C"]) { return StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   content: { paddingHorizontal: 20, gap: 24 },
   profileHeader: { flexDirection: "row", alignItems: "center", gap: 14 },
@@ -1818,9 +1874,9 @@ const styles = StyleSheet.create({
   soloHistDist: { fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text },
   soloHistDistUnit: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted },
 
-});
+}); }
 
-const devStyles = StyleSheet.create({
+function makeDevStyles(C: ReturnType<typeof import("@/contexts/ThemeContext").useTheme>["C"]) { return StyleSheet.create({
   versionWrap: { alignItems: "center", paddingVertical: 8 },
   versionText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted },
   devPanel: {
@@ -1835,4 +1891,4 @@ const devStyles = StyleSheet.create({
   devBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.primary },
   devClose: { alignItems: "center", paddingVertical: 8 },
   devCloseText: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textMuted },
-});
+}); }

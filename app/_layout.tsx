@@ -10,6 +10,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient, getApiUrl } from "@/lib/query-client";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ActivityProvider } from "@/contexts/ActivityContext";
+import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
 import { StatusBar } from "expo-status-bar";
 import {
   useFonts,
@@ -55,6 +56,7 @@ async function registerPushToken(userId: string) {
 
 function RootLayoutNav() {
   const { user, isLoading } = useAuth();
+  const { C: themeC, theme } = useTheme();
   const [fontsLoaded] = useFonts({ Outfit_400Regular, Outfit_600SemiBold, Outfit_700Bold });
   const splashHidden = useRef(false);
   const pushRegistered = useRef(false);
@@ -97,8 +99,8 @@ function RootLayoutNav() {
 
   return (
     <>
-      <StatusBar style="light" />
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.bg } }}>
+      <StatusBar style={theme === "dark" ? "light" : "dark"} />
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: themeC.bg } }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen
           name="(auth)"
@@ -141,15 +143,17 @@ export default function RootLayout() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <ActivityProvider>
-            <GestureHandlerRootView style={{ flex: 1, backgroundColor: C.bg }}>
-              <KeyboardProvider>
-                <RootLayoutNav />
-              </KeyboardProvider>
-            </GestureHandlerRootView>
-          </ActivityProvider>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <ActivityProvider>
+              <GestureHandlerRootView style={{ flex: 1 }}>
+                <KeyboardProvider>
+                  <RootLayoutNav />
+                </KeyboardProvider>
+              </GestureHandlerRootView>
+            </ActivityProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </QueryClientProvider>
     </ErrorBoundary>
   );

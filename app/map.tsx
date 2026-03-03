@@ -22,6 +22,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActivity } from "@/contexts/ActivityContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import C from "@/constants/colors";
 import RangeSlider from "@/components/RangeSlider";
 import { formatDistance } from "@/lib/formatDistance";
@@ -279,6 +280,7 @@ export default function MapScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { activityFilter } = useActivity();
+  const { C: themeC } = useTheme();
   const mapRef = useRef<MapView>(null);
   const params = useLocalSearchParams<{ styles?: string }>();
 
@@ -495,7 +497,7 @@ export default function MapScreen() {
   const topPad = insets.top;
 
   return (
-    <View style={s.container}>
+    <View style={[s.container, { backgroundColor: themeC.bg }]}>
 
       {/* ─── Header ──────────────────────────────────────────────────────── */}
       <View style={[s.header, { paddingTop: topPad + (Platform.OS === "web" ? 67 : 0) }]}>
