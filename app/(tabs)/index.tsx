@@ -309,23 +309,39 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
 
           {/* ── B. Distance (Run length) ────────────────────────────────── */}
           <View style={fm.section}>
-            <View style={fm.sectionHead}>
-              <Text style={fm.sectionTitle}>Run Length</Text>
-              <Text style={fm.sectionValue}>
-                {formatDistance(draft.distMin)} – {draft.distMax >= 999 ? "Unlimited" : `${formatDistance(draft.distMax)} mi`}
-              </Text>
-            </View>
-            <RangeSlider
-              min={1} max={999} step={0.5}
-              low={draft.distMin} high={draft.distMax}
-              onLowChange={(v) => setDraft((p) => ({ ...p, distMin: v }))}
-              onHighChange={(v) => setDraft((p) => ({ ...p, distMax: v }))}
-              color={C.primary}
-              trackColor={C.border}
-            />
-            <View style={fm.edgeRow}>
-              <Text style={fm.edgeLabel}>1 mi</Text>
-              <Text style={fm.edgeLabel}>Unlimited</Text>
+            <Text style={fm.sectionTitle}>Run Length</Text>
+            <View style={fm.distRow}>
+              <View style={fm.distField}>
+                <Text style={fm.distLabel}>Min (mi)</Text>
+                <TextInput
+                  style={fm.distInput}
+                  keyboardType="decimal-pad"
+                  placeholder="1"
+                  placeholderTextColor={C.textMuted}
+                  value={draft.distMin === DEFAULT_FILTERS.distMin ? "" : String(draft.distMin)}
+                  onChangeText={(t) => {
+                    const n = parseFloat(t);
+                    setDraft((p) => ({ ...p, distMin: t === "" ? 1 : (Number.isFinite(n) && n > 0 ? n : p.distMin) }));
+                  }}
+                  returnKeyType="done"
+                />
+              </View>
+              <Text style={fm.distSep}>–</Text>
+              <View style={fm.distField}>
+                <Text style={fm.distLabel}>Max (mi)</Text>
+                <TextInput
+                  style={fm.distInput}
+                  keyboardType="decimal-pad"
+                  placeholder="No limit"
+                  placeholderTextColor={C.textMuted}
+                  value={draft.distMax >= 999 ? "" : String(draft.distMax)}
+                  onChangeText={(t) => {
+                    const n = parseFloat(t);
+                    setDraft((p) => ({ ...p, distMax: t === "" ? 999 : (Number.isFinite(n) && n > 0 ? n : p.distMax) }));
+                  }}
+                  returnKeyType="done"
+                />
+              </View>
             </View>
           </View>
 
@@ -2488,6 +2504,38 @@ function makeFmStyles(C: ColorScheme) { return StyleSheet.create({
   },
   sectionTitle: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.text },
   sectionValue: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.primary },
+
+  distRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 14,
+  },
+  distField: { flex: 1 },
+  distLabel: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 11,
+    color: C.textMuted,
+    marginBottom: 6,
+  },
+  distInput: {
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 15,
+    color: C.text,
+    textAlign: "center",
+  },
+  distSep: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 18,
+    color: C.textMuted,
+    marginTop: 18,
+  },
 
   edgeRow: {
     flexDirection: "row",
