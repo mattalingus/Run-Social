@@ -793,7 +793,15 @@ export async function cancelRun(runId: string, userId: string) {
 
 export async function getRunParticipants(runId: string) {
   const result = await pool.query(
-    `SELECT u.id, u.name, u.photo_url, u.avg_pace, u.avg_distance, rp.status, rp.joined_at
+    `SELECT u.id, u.name, u.photo_url, u.avg_pace, u.avg_distance, rp.status, rp.joined_at,
+       (SELECT a.slug FROM achievements a
+        WHERE a.user_id = u.id AND a.slug IN ('reliable_90','reliable_80','reliable_65','reliable_50')
+        ORDER BY CASE a.slug
+          WHEN 'reliable_90' THEN 1
+          WHEN 'reliable_80' THEN 2
+          WHEN 'reliable_65' THEN 3
+          WHEN 'reliable_50' THEN 4
+        END LIMIT 1) AS reliability_slug
      FROM run_participants rp JOIN users u ON u.id = rp.user_id
      WHERE rp.run_id = $1 AND rp.status != 'cancelled' ORDER BY rp.joined_at ASC`,
     [runId]
@@ -1084,6 +1092,26 @@ export async function checkAndAwardAchievements(userId: string, totalMiles: numb
     [userId]
   );
   if (parseInt(communityLeader.rows[0]?.cnt) >= 20) await awardSlug(userId, "community_leader");
+
+  const committedRes = await pool.query(
+    `SELECT COUNT(*) as cnt FROM run_participants rp JOIN runs r ON r.id = rp.run_id
+     WHERE rp.user_id = $1 AND rp.status != 'cancelled' AND r.date < NOW()`,
+    [userId]
+  );
+  const committedCount = parseInt(committedRes.rows[0]?.cnt ?? 0);
+  if (committedCount >= 5) {
+    const presentRes = await pool.query(
+      `SELECT COUNT(*) as cnt FROM run_participants rp JOIN runs r ON r.id = rp.run_id
+       WHERE rp.user_id = $1 AND rp.status != 'cancelled' AND rp.is_present = true AND r.date < NOW()`,
+      [userId]
+    );
+    const presentCount = parseInt(presentRes.rows[0]?.cnt ?? 0);
+    const rate = (presentCount / committedCount) * 100;
+    if (rate >= 50) await awardSlug(userId, "reliable_50");
+    if (rate >= 65) await awardSlug(userId, "reliable_65");
+    if (rate >= 80) await awardSlug(userId, "reliable_80");
+    if (rate >= 90) await awardSlug(userId, "reliable_90");
+  }
 }
 
 export async function checkFriendAchievements(userId: string) {
@@ -1314,6 +1342,23 @@ export async function getAchievementStats(userId: string) {
   const rideTotalMiles = parseFloat(rideTotalMilesRes.rows[0]?.total ?? 0);
   const rideMaxSingle = parseFloat(rideMaxSingleRes.rows[0]?.max ?? 0);
 
+  const committedStatRes = await pool.query(
+    `SELECT COUNT(*) as cnt FROM run_participants rp JOIN runs r ON r.id = rp.run_id
+     WHERE rp.user_id = $1 AND rp.status != 'cancelled' AND r.date < NOW()`,
+    [userId]
+  );
+  const committedStatCount = parseInt(committedStatRes.rows[0]?.cnt ?? 0);
+  let attendanceRatePct: number | null = null;
+  if (committedStatCount >= 5) {
+    const presentStatRes = await pool.query(
+      `SELECT COUNT(*) as cnt FROM run_participants rp JOIN runs r ON r.id = rp.run_id
+       WHERE rp.user_id = $1 AND rp.status != 'cancelled' AND rp.is_present = true AND r.date < NOW()`,
+      [userId]
+    );
+    const presentStatCount = parseInt(presentStatRes.rows[0]?.cnt ?? 0);
+    attendanceRatePct = Math.round((presentStatCount / committedStatCount) * 100);
+  }
+
   return {
     completed_runs: parseInt(u.completed_runs ?? 0),
     total_miles: parseFloat(u.total_miles ?? 0),
@@ -1353,6 +1398,7 @@ export async function getAchievementStats(userId: string) {
     ride_hosted_count: parseInt(rideHostedRes.rows[0]?.cnt ?? 0),
     has_fast_ride: rideMaxSingle >= 20 ? 1 : 0,
     ride_pace_perfect_count: 0,
+    attendance_rate_pct: attendanceRatePct,
   };
 }
 
