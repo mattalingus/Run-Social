@@ -238,6 +238,8 @@ export default function ProfileScreen() {
   const [showSoloHistory, setShowSoloHistory] = useState(false);
   const [historyActivityFilter, setHistoryActivityFilter] = useState<"run" | "ride">("run");
   const [historyTypeFilter, setHistoryTypeFilter] = useState<"all" | HistoryEventType>("all");
+  const [showFavorites, setShowFavorites] = useState(false);
+  const [favActivityFilter, setFavActivityFilter] = useState<"run" | "ride">("run");
   const [friendSearch, setFriendSearch] = useState("");
   const [showAddFriend, setShowAddFriend] = useState(false);
   const [viewProfileId, setViewProfileId] = useState<string | null>(null);
@@ -962,57 +964,27 @@ export default function ProfileScreen() {
 
 
       {/* ── Favorite Runs/Rides ───────────────────────────────────────────── */}
-      <View style={styles.section}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 12 }}>
-          <Ionicons name="star" size={16} color={C.gold} />
-          <Text style={styles.sectionTitle}>
-            {profileActivity === "ride" ? "Favorite Rides" : "Favorite Runs"}
-          </Text>
-        </View>
-        {starredRuns.filter((r) => (r.activity_type ?? "run") === profileActivity).length === 0 ? (
-          <View style={styles.emptyHistory}>
-            <Ionicons name="star-outline" size={32} color={C.textMuted} />
-            <Text style={styles.emptyHistoryText}>
-              {profileActivity === "ride"
-                ? "Star rides from your history to save them here"
-                : "Star runs from your history to save them here"}
+      <Pressable
+        style={({ pressed }) => [styles.viewPastBtn, { opacity: pressed ? 0.8 : 1 }]}
+        onPress={() => {
+          setFavActivityFilter(profileActivity);
+          setShowFavorites(true);
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }}
+      >
+        <Ionicons name="star" size={16} color={C.gold} />
+        <Text style={[styles.viewPastBtnTxt, { color: C.gold }]}>
+          {profileActivity === "ride" ? "View Favorite Rides" : "View Favorite Runs"}
+        </Text>
+        {starredRuns.filter((r) => (r.activity_type ?? "run") === profileActivity).length > 0 && (
+          <View style={[styles.histEventBadge, { backgroundColor: C.gold + "22", marginRight: 4 }]}>
+            <Text style={[styles.histEventBadgeTxt, { color: C.gold }]}>
+              {starredRuns.filter((r) => (r.activity_type ?? "run") === profileActivity).length}
             </Text>
           </View>
-        ) : (
-          starredRuns
-            .filter((r) => (r.activity_type ?? "run") === profileActivity)
-            .map((run) => {
-              const label = run.title || `${formatDistance(run.distance_miles)} mi ${run.activity_type === "ride" ? "ride" : "run"}`;
-              return (
-                <View key={run.id} style={styles.soloHistCard}>
-                  <View style={styles.soloHistRow}>
-                    <View style={styles.soloHistLeft}>
-                      <View style={[styles.soloHistCheck, { backgroundColor: C.gold + "22", borderColor: C.gold + "55" }]}>
-                        <Ionicons name="star" size={12} color={C.gold} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.soloHistTitle} numberOfLines={1}>{label}</Text>
-                        <Text style={styles.soloHistMeta}>
-                          {formatDisplayDate(run.date)}
-                          {run.pace_min_per_mile ? ` · ${formatPaceSolo(run.pace_min_per_mile)}/mi` : ""}
-                          {run.duration_seconds ? ` · ${formatDurationSolo(run.duration_seconds)}` : ""}
-                          {run.elevation_gain_ft ? ` · ${Math.round(run.elevation_gain_ft)}ft gain` : ""}
-                        </Text>
-                      </View>
-                    </View>
-                    <View style={styles.soloHistRight}>
-                      <Text style={styles.soloHistDist}>{formatDistance(run.distance_miles)}</Text>
-                      <Text style={styles.soloHistDistUnit}>mi</Text>
-                    </View>
-                  </View>
-                  {run.route_path && run.route_path.length > 1 && (
-                    <ProfileMiniRouteMap path={run.route_path} />
-                  )}
-                </View>
-              );
-            })
         )}
-      </View>
+        <Feather name="chevron-right" size={16} color={C.gold} />
+      </Pressable>
 
       {/* ── Run / Ride Schedule ───────────────────────────────────────────── */}
       <View style={styles.section}>
@@ -1630,6 +1602,95 @@ export default function ProfileScreen() {
                             </>
                           )}
                           {run.is_starred && <Ionicons name="star" size={12} color={C.gold} style={{ marginLeft: 2 }} />}
+                        </View>
+                      </View>
+                      {run.route_path && run.route_path.length > 1 && (
+                        <ProfileMiniRouteMap path={run.route_path} />
+                      )}
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            );
+          })()}
+        </View>
+      </Modal>
+
+      {/* ── Favorites Modal ────────────────────────────────────────────────── */}
+      <Modal visible={showFavorites} transparent animationType="slide" onRequestClose={() => setShowFavorites(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setShowFavorites(false)} />
+        <View style={[styles.modalSheet, styles.friendModalSheet, { paddingBottom: insets.bottom + 16 }]}>
+          {/* Header */}
+          <View style={styles.modalTitleRow}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Ionicons name="star" size={18} color={C.gold} />
+              <Text style={styles.modalTitle}>Favorites</Text>
+            </View>
+            <Pressable onPress={() => setShowFavorites(false)} hitSlop={12}>
+              <Feather name="x" size={20} color={C.textMuted} />
+            </Pressable>
+          </View>
+
+          {/* Runs / Rides toggle */}
+          <View style={styles.histToggleRow}>
+            {(["run", "ride"] as const).map((act) => (
+              <Pressable
+                key={act}
+                style={[styles.histToggleChip, favActivityFilter === act && styles.histToggleChipActive]}
+                onPress={() => { Haptics.selectionAsync(); setFavActivityFilter(act); }}
+              >
+                <Ionicons
+                  name={act === "ride" ? "bicycle-outline" : "walk-outline"}
+                  size={13}
+                  color={favActivityFilter === act ? C.bg : C.textSecondary}
+                  style={{ marginRight: 4 }}
+                />
+                <Text style={[styles.histToggleChipTxt, favActivityFilter === act && styles.histToggleChipTxtActive]}>
+                  {act === "ride" ? "Rides" : "Runs"}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
+          {/* List */}
+          {(() => {
+            const favs = starredRuns.filter((r) => (r.activity_type ?? "run") === favActivityFilter);
+            if (favs.length === 0) {
+              return (
+                <View style={styles.emptyState}>
+                  <Ionicons name="star-outline" size={32} color={C.textMuted} />
+                  <Text style={styles.emptyStateTxt}>
+                    {favActivityFilter === "ride"
+                      ? "Star rides in your history to save them here"
+                      : "Star runs in your history to save them here"}
+                  </Text>
+                </View>
+              );
+            }
+            return (
+              <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 4, paddingBottom: 8 }}>
+                {favs.map((run) => {
+                  const label = run.title || `${formatDistance(run.distance_miles)} mi ${run.activity_type === "ride" ? "ride" : "run"}`;
+                  return (
+                    <View key={run.id} style={styles.soloHistCard}>
+                      <View style={styles.soloHistRow}>
+                        <View style={styles.soloHistLeft}>
+                          <View style={[styles.soloHistCheck, { backgroundColor: C.gold + "22", borderColor: C.gold + "44" }]}>
+                            <Ionicons name="star" size={12} color={C.gold} />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.soloHistTitle} numberOfLines={1}>{label}</Text>
+                            <Text style={styles.soloHistMeta}>
+                              {formatDisplayDate(run.date)}
+                              {run.pace_min_per_mile ? ` · ${formatPaceSolo(run.pace_min_per_mile)}/mi` : ""}
+                              {run.duration_seconds ? ` · ${formatDurationSolo(run.duration_seconds)}` : ""}
+                              {run.elevation_gain_ft ? ` · ${Math.round(run.elevation_gain_ft)}ft gain` : ""}
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={styles.soloHistRight}>
+                          <Text style={styles.soloHistDist}>{formatDistance(run.distance_miles)}</Text>
+                          <Text style={styles.soloHistDistUnit}>mi</Text>
                         </View>
                       </View>
                       {run.route_path && run.route_path.length > 1 && (
