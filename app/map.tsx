@@ -61,6 +61,7 @@ const DEFAULT_FILTERS = {
 interface Run {
   id: string;
   title: string;
+  host_id: string;
   host_name: string;
   host_photo: string | null;
   host_marker_icon: string | null;
@@ -156,7 +157,7 @@ function LockedRunMarker({ run, isSelected, onPress }: { run: Run; isSelected: b
   );
 }
 
-function RunMarker({ run, isSelected, onPress }: { run: Run; isSelected: boolean; onPress: () => void }) {
+function RunMarker({ run, isSelected, isFriend, onPress }: { run: Run; isSelected: boolean; isFriend?: boolean; onPress: () => void }) {
   const scale = useRef(new Animated.Value(1)).current;
   const frozen = useRef(false);
   const [tracksViewChanges, setTracksViewChanges] = useState(true);
@@ -203,7 +204,7 @@ function RunMarker({ run, isSelected, onPress }: { run: Run; isSelected: boolean
       <Animated.View style={[mk.wrap, { transform: [{ scale }] }]}>
         {soon && <View style={mk.glow} />}
         {run.is_active && run.participant_count > 0 && <View style={mk.liveRing} />}
-        <View style={[mk.circle, !!run.crew_id && mk.circleCrew, isSelected && mk.circleSelected]}>
+        <View style={[mk.circle, isFriend && mk.circleFriend, !!run.crew_id && mk.circleCrew, isSelected && mk.circleSelected]}>
           {isEmojiIcon ? (
             <Text style={mk.emoji}>{icon}</Text>
           ) : (
@@ -214,7 +215,7 @@ function RunMarker({ run, isSelected, onPress }: { run: Run; isSelected: boolean
             />
           )}
         </View>
-        <View style={[mk.pin, !!run.crew_id && mk.pinCrew]} />
+        <View style={[mk.pin, isFriend && mk.pinFriend, !!run.crew_id && mk.pinCrew]} />
         {run.is_active && run.participant_count > 0 && (
           <View style={mk.liveBadge}>
             <Text style={mk.liveBadgeText}>LIVE</Text>
@@ -236,13 +237,14 @@ const mk = StyleSheet.create({
   },
   circle: {
     width: 48, height: 48, borderRadius: 24,
-    borderWidth: 3, borderColor: C.primary,
+    borderWidth: 3, borderColor: C.textMuted,
     overflow: "hidden", backgroundColor: C.card,
     alignItems: "center", justifyContent: "center",
-    shadowColor: C.primary, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.35, shadowRadius: 8,
+    shadowColor: C.textMuted, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.2, shadowRadius: 4,
     elevation: 10,
   },
   circleSelected: { borderColor: "#FFFFFF", shadowColor: C.primary, shadowOpacity: 1, shadowRadius: 16 },
+  circleFriend: { borderColor: C.primary, shadowColor: C.primary, shadowOpacity: 0.6, shadowRadius: 10 },
   circleCrew: { borderColor: "#FFFFFF", shadowColor: "#FFFFFF", shadowOpacity: 0.45, shadowRadius: 8 },
   circleGray: { borderColor: "#444", shadowColor: "#000", shadowOpacity: 0.2 },
   circleGraySelected: { borderColor: "#888" },
@@ -250,10 +252,11 @@ const mk = StyleSheet.create({
   emoji: { fontSize: 26 },
   pin: {
     width: 6, height: 6, borderRadius: 3,
-    backgroundColor: C.primary, marginTop: 3,
-    shadowColor: C.primary, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 4,
+    backgroundColor: C.textMuted, marginTop: 3,
+    shadowColor: C.textMuted, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 3,
     elevation: 3,
   },
+  pinFriend: { backgroundColor: C.primary, shadowColor: C.primary, shadowOpacity: 0.9, shadowRadius: 4 },
   pinCrew: { backgroundColor: "#FFFFFF", shadowColor: "#FFFFFF", shadowOpacity: 0.9, shadowRadius: 4 },
   pinGray: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#555", marginTop: 3 },
   liveRing: {
@@ -328,6 +331,14 @@ export default function MapScreen() {
     staleTime: 60_000,
     placeholderData: (prev) => prev,
   });
+
+  const { data: friends = [] } = useQuery<{ id: string }[]>({
+    queryKey: ["/api/friends"],
+    staleTime: 60_000,
+    enabled: !!user,
+  });
+
+  const friendIdSet = useMemo(() => new Set(friends.map((f) => f.id)), [friends]);
 
   const communityPathsUrl = useMemo(() => {
     if (!bounds) return "/api/community-paths";
@@ -550,6 +561,7 @@ export default function MapScreen() {
               key={run.id}
               run={run}
               isSelected={selectedRun?.id === run.id}
+              isFriend={friendIdSet.has(run.host_id)}
               onPress={() => openCard(run)}
             />
           ))}
