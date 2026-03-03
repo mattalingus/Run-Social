@@ -618,6 +618,11 @@ export default function RunDetailScreen() {
           <View style={styles.hostInfo}>
             <Text style={styles.hostName}>{run.host_name}</Text>
             <View style={styles.hostMeta}>
+              {(run.host_rating_count ?? 0) >= 5 && (run.host_rating ?? 0) >= 4.5 && (
+                <View style={styles.topRatedChip}>
+                  <Text style={styles.topRatedChipTxt}>⭐ Top Rated</Text>
+                </View>
+              )}
               {(() => { const b = getHostBadge(run.host_hosted_runs); return b ? <Text style={[styles.hostBadgeText, { color: b.color }]}>{b.label}</Text> : null; })()}
             </View>
             <Text style={styles.hostPlannedDist}>{formatDistance(run.min_distance)} mi planned</Text>
@@ -940,13 +945,16 @@ export default function RunDetailScreen() {
           </Pressable>
         )}
         {canRate && !myRating && (
-          <Pressable
-            style={({ pressed }) => [styles.rateBtn, { opacity: pressed ? 0.8 : 1 }]}
-            onPress={() => router.push(`/rate/${id}`)}
-          >
-            <Ionicons name="star-outline" size={18} color={C.gold} />
-            <Text style={styles.rateBtnText}>Rate Host</Text>
-          </Pressable>
+          <View>
+            <Text style={styles.ratePrompt}>How was the host?</Text>
+            <Pressable
+              style={({ pressed }) => [styles.rateBtn, { opacity: pressed ? 0.8 : 1 }]}
+              onPress={() => router.push(`/rate/${id}`)}
+            >
+              <Ionicons name="star-outline" size={18} color={C.gold} />
+              <Text style={styles.rateBtnText}>Rate Host</Text>
+            </Pressable>
+          </View>
         )}
         {myRating && (
           <View style={styles.ratedBanner}>
@@ -1316,6 +1324,9 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   ratingRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   ratingText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary },
   hostBadgeText: { fontFamily: "Outfit_600SemiBold", fontSize: 11 },
+  topRatedChip: { backgroundColor: "#FFB80020", borderWidth: 1, borderColor: "#FFB80055", borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
+  topRatedChipTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 11, color: "#FFB800" },
+  ratePrompt: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text, textAlign: "center", marginBottom: 8, marginTop: 4 },
   yourRunBadge: { backgroundColor: C.primaryMuted, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: C.primary + "44" },
   yourRunText: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.primary },
   infoGrid: { gap: 10, marginBottom: 16 },

@@ -87,6 +87,7 @@ interface Run {
   host_id: string;
   host_name: string;
   host_rating: number;
+  host_rating_count?: number;
   date: string;
   location_lat: number;
   location_lng: number;
@@ -505,12 +506,12 @@ function RunCard({
             );
           })()}
           <Text style={s.hostColumnName} numberOfLines={2}>{run.host_name}</Text>
-          {false && (
-            <Text style={s.hostColumnRating}>★ {run.host_rating?.toFixed(1)}</Text>
-          )}
-          {badge && (
-            <Text style={[s.hostColumnBadge, { color: badge.color }]}>{badge.label}</Text>
-          )}
+          {(() => {
+            const isTopRated = (run.host_rating_count ?? 0) >= 5 && (run.host_rating ?? 0) >= 4.5;
+            if (isTopRated) return <Text style={[s.hostColumnBadge, { color: "#FFB800" }]}>⭐ Top</Text>;
+            if (badge) return <Text style={[s.hostColumnBadge, { color: badge.color }]}>{badge.label}</Text>;
+            return null;
+          })()}
           <Text style={s.hostColumnDist}>{formatDistance(run.min_distance)} mi</Text>
         </View>
 

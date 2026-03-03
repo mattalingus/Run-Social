@@ -67,6 +67,7 @@ interface Run {
   host_photo: string | null;
   host_marker_icon: string | null;
   host_rating: number;
+  host_rating_count?: number;
   date: string;
   location_lat: number;
   location_lng: number;
@@ -712,9 +713,14 @@ export default function MapScreen() {
                   )}
                   <View style={{ flex: 1 }}>
                     <Text style={s.cardTitle} numberOfLines={1}>{selectedRun.title}</Text>
-                    <Text style={s.cardHost}>
-                      {selectedRun.host_name}
-                    </Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      <Text style={s.cardHost}>{selectedRun.host_name}</Text>
+                      {(selectedRun.host_rating_count ?? 0) >= 5 && (selectedRun.host_rating ?? 0) >= 4.5 && (
+                        <View style={s.topRatedChip}>
+                          <Text style={s.topRatedChipTxt}>⭐ Top Rated</Text>
+                        </View>
+                      )}
+                    </View>
                   </View>
                 </Pressable>
                 <Pressable onPress={closeCard} hitSlop={12}>
@@ -1102,7 +1108,9 @@ function makeSStyles(C: ColorScheme) { return StyleSheet.create({
   },
   cardAvatarImg: { width: 48, height: 48, borderRadius: 24, backgroundColor: C.card },
   cardTitle: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.text },
-  cardHost: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary, marginTop: 2 },
+  cardHost: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary },
+  topRatedChip: { backgroundColor: "#FFB80020", borderWidth: 1, borderColor: "#FFB80055", borderRadius: 8, paddingHorizontal: 6, paddingVertical: 1 },
+  topRatedChipTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 10, color: "#FFB800" },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 14 },
   chip: {
     flexDirection: "row", alignItems: "center", gap: 5,
