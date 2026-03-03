@@ -63,6 +63,8 @@ interface FilterState {
   maxDistFromMe: number | null;
   styles: string[];
   visibility: "all" | "public" | "crew" | "friends";
+  days: string[];
+  times: string[];
 }
 
 const DEFAULT_FILTERS: FilterState = {
@@ -73,6 +75,8 @@ const DEFAULT_FILTERS: FilterState = {
   maxDistFromMe: 10,
   styles: [],
   visibility: "all",
+  days: [],
+  times: [],
 };
 
 // ─── Run interface ────────────────────────────────────────────────────────────
@@ -166,6 +170,20 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
     setDraft((p) => ({
       ...p,
       styles: p.styles.includes(s) ? p.styles.filter((x) => x !== s) : [...p.styles, s],
+    }));
+  }
+
+  function toggleDay(d: string) {
+    setDraft((p) => ({
+      ...p,
+      days: p.days.includes(d) ? p.days.filter((x) => x !== d) : [...p.days, d],
+    }));
+  }
+
+  function toggleTime(t: string) {
+    setDraft((p) => ({
+      ...p,
+      times: p.times.includes(t) ? p.times.filter((x) => x !== t) : [...p.times, t],
     }));
   }
 
@@ -347,45 +365,43 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
 
           <View style={fm.divider} />
 
-          {/* ── F. Future-Proof (structure only) ────────────────────────── */}
-          <View style={[fm.section, fm.futureSection]}>
-            <View style={fm.sectionHead}>
-              <Text style={[fm.sectionTitle, fm.futureTxt]}>More Filters</Text>
-              <View style={fm.soonBadge}>
-                <Text style={fm.soonTxt}>Coming soon</Text>
-              </View>
+          {/* ── F. Day of Week ──────────────────────────────────────────── */}
+          <View style={fm.section}>
+            <Text style={fm.sectionTitle}>Day of Week</Text>
+            <View style={[fm.proxRow, { flexWrap: "wrap" }]}>
+              {(["Mon","Tue","Wed","Thu","Fri","Sat","Sun"] as const).map((d) => {
+                const active = draft.days.includes(d);
+                return (
+                  <Pressable
+                    key={d}
+                    style={[fm.proxChip, active && fm.proxChipActive, { minWidth: 40 }]}
+                    onPress={() => { Haptics.selectionAsync(); toggleDay(d); }}
+                  >
+                    <Text style={[fm.proxChipTxt, active && fm.proxChipTxtActive]}>{d}</Text>
+                  </Pressable>
+                );
+              })}
             </View>
+          </View>
 
-            {/* Day of week */}
-            <Text style={fm.futureLabel}>Day of Week</Text>
+          <View style={fm.divider} />
+
+          {/* ── G. Time of Day ──────────────────────────────────────────── */}
+          <View style={fm.section}>
+            <Text style={fm.sectionTitle}>Time of Day</Text>
             <View style={fm.proxRow}>
-              {["M","T","W","T","F","S","S"].map((d, i) => (
-                <View key={i} style={[fm.proxChip, fm.proxChipDisabled, { minWidth: 34 }]}>
-                  <Text style={[fm.proxChipTxt, fm.proxChipTxtDisabled]}>{d}</Text>
-                </View>
-              ))}
-            </View>
-
-            {/* Time of day */}
-            <Text style={[fm.futureLabel, { marginTop: 14 }]}>Time of Day</Text>
-            <View style={fm.proxRow}>
-              {["Morning","Afternoon","Evening"].map((t) => (
-                <View key={t} style={[fm.proxChip, fm.proxChipDisabled]}>
-                  <Text style={[fm.proxChipTxt, fm.proxChipTxtDisabled]}>{t}</Text>
-                </View>
-              ))}
-            </View>
-
-            {/* Toggles row */}
-            <View style={fm.futureToggles}>
-              <View style={fm.futureToggleRow}>
-                <Text style={[fm.futureLabel, { marginTop: 0 }]}>Spots remaining</Text>
-                <Switch value={false} disabled trackColor={{ false: C.border, true: C.primary }} />
-              </View>
-              <View style={fm.futureToggleRow}>
-                <Text style={[fm.futureLabel, { marginTop: 0 }]}>Verified host only</Text>
-                <Switch value={false} disabled trackColor={{ false: C.border, true: C.primary }} />
-              </View>
+              {(["Morning","Afternoon","Evening","Night"] as const).map((t) => {
+                const active = draft.times.includes(t);
+                return (
+                  <Pressable
+                    key={t}
+                    style={[fm.proxChip, active && fm.proxChipActive]}
+                    onPress={() => { Haptics.selectionAsync(); toggleTime(t); }}
+                  >
+                    <Text style={[fm.proxChipTxt, active && fm.proxChipTxtActive]}>{t}</Text>
+                  </Pressable>
+                );
+              })}
             </View>
           </View>
         </ScrollView>
@@ -878,9 +894,24 @@ export default function DiscoverScreen() {
         (applied.visibility === "public" && r.privacy === "public" && !r.crew_id) ||
         (applied.visibility === "crew" && !!r.crew_id) ||
         (applied.visibility === "friends" && friendIdSet.has(r.host_id) && !r.crew_id);
+      // Day of Week
+      const DAY_MAP: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+      const runDay = new Date(r.date).getDay();
+      const matchDay = applied.days.length === 0 ||
+        applied.days.some((d) => DAY_MAP[d] === runDay);
+      // Time of Day
+      const runHour = new Date(r.date).getHours();
+      function runTimeSlot(h: number): string {
+        if (h >= 5 && h < 12) return "Morning";
+        if (h >= 12 && h < 17) return "Afternoon";
+        if (h >= 17 && h < 21) return "Evening";
+        return "Night";
+      }
+      const matchTime = applied.times.length === 0 ||
+        applied.times.includes(runTimeSlot(runHour));
 
       const matchActivity = (r.activity_type ?? "run") === activityFilter;
-      return matchSearch && matchPace && matchDist && matchProx && matchStyle && matchVisibility && matchActivity;
+      return matchSearch && matchPace && matchDist && matchProx && matchStyle && matchVisibility && matchDay && matchTime && matchActivity;
     });
 
     switch (sortOption) {
@@ -919,7 +950,9 @@ export default function DiscoverScreen() {
     applied.distMax !== DEFAULT_FILTERS.distMax ||
     applied.maxDistFromMe !== DEFAULT_FILTERS.maxDistFromMe ||
     applied.styles.length > 0 ||
-    applied.visibility !== "all";
+    applied.visibility !== "all" ||
+    applied.days.length > 0 ||
+    applied.times.length > 0;
 
   const isNonDefaultSort = sortOption !== "soonest";
 
