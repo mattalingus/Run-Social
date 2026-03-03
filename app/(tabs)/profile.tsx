@@ -843,15 +843,26 @@ export default function ProfileScreen() {
         <Text style={styles.sectionTitle}>{profileActivity === "ride" ? "Ride Schedule" : "Run Schedule"}</Text>
         {runsLoading ? (
           <ActivityIndicator color={C.primary} />
-        ) : runs.filter((r) => (r.activity_type ?? "run") === profileActivity).length === 0 ? (
-          <View style={styles.emptyHistory}>
-            <Ionicons name={profileActivity === "ride" ? "bicycle-outline" : "walk-outline"} size={36} color={C.textMuted} />
-            <Text style={styles.emptyHistoryText}>
-              {profileActivity === "ride" ? "No rides yet — discover one now" : "No runs yet — discover one now"}
-            </Text>
-          </View>
-        ) : (
-          runs.filter((r) => (r.activity_type ?? "run") === profileActivity).slice(0, 10).map((run) => (
+        ) : (() => {
+          const now = new Date();
+          const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          const scheduleRuns = runs
+            .filter((r) => {
+              if ((r.activity_type ?? "run") !== profileActivity) return false;
+              const d = new Date(r.date);
+              return d >= startOfToday;
+            })
+            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+            .slice(0, 5);
+          if (scheduleRuns.length === 0) return (
+            <View style={styles.emptyHistory}>
+              <Ionicons name={profileActivity === "ride" ? "bicycle-outline" : "walk-outline"} size={36} color={C.textMuted} />
+              <Text style={styles.emptyHistoryText}>
+                {profileActivity === "ride" ? "No upcoming rides" : "No upcoming runs"}
+              </Text>
+            </View>
+          );
+          return scheduleRuns.map((run) => (
             <Pressable
               key={run.id}
               style={({ pressed }) => [styles.historyCard, { opacity: pressed ? 0.8 : 1 }]}
@@ -882,8 +893,8 @@ export default function ProfileScreen() {
                 );
               })()}
             </Pressable>
-          ))
-        )}
+          ));
+        })()}
       </View>
 
       {/* ── Dev Mode ──────────────────────────────────────────────────────── */}
