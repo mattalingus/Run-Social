@@ -296,16 +296,14 @@ function autoFormatTime(digits: string): string {
   if (digits.length <= 1) return digits;
   const first = parseInt(digits[0], 10);
   const second = parseInt(digits[1], 10);
-  const twoDigit = first === 1 && second <= 2;
   if (digits.length === 2) {
     if (first > 1 || (first === 1 && second > 2)) return digits[0] + ":" + digits[1];
     return digits;
   }
   if (digits.length === 3) {
-    if (twoDigit) return digits.slice(0, 2) + ":" + digits[2];
     return digits[0] + ":" + digits.slice(1);
   }
-  if (twoDigit) return digits.slice(0, 2) + ":" + digits.slice(2, 4);
+  if (first === 1 && second <= 2) return digits.slice(0, 2) + ":" + digits.slice(2, 4);
   return digits[0] + ":" + digits.slice(1, 3);
 }
 

@@ -731,18 +731,17 @@ export default function DiscoverScreen() {
     if (digits.length <= 1) return digits;
     const first = parseInt(digits[0], 10);
     const second = parseInt(digits[1], 10);
-    // Two-digit hour only for 10, 11, 12 (first=1, second≤2)
-    const twoDigit = first === 1 && second <= 2;
     if (digits.length === 2) {
-      // 13–19 impossible in 12h → must be single-digit hour
+      // Insert colon immediately for unambiguous single-digit hours (2–9, or 1 followed by 3–9)
       if (first > 1 || (first === 1 && second > 2)) return digits[0] + ":" + digits[1];
-      return digits; // 10, 11, 12 — wait for third digit
+      return digits; // 10, 11, 12 — wait for 3rd digit
     }
     if (digits.length === 3) {
-      if (twoDigit) return digits.slice(0, 2) + ":" + digits[2];
+      // Always single-digit hour at 3 digits — "120" → "1:20", "130" → "1:30"
       return digits[0] + ":" + digits.slice(1);
     }
-    if (twoDigit) return digits.slice(0, 2) + ":" + digits.slice(2, 4);
+    // 4 digits: use 2-digit hour only for valid 10/11/12; otherwise single-digit
+    if (first === 1 && second <= 2) return digits.slice(0, 2) + ":" + digits.slice(2, 4);
     return digits[0] + ":" + digits.slice(1, 3);
   }
 
