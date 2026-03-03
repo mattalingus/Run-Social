@@ -1391,7 +1391,7 @@ function CrewDetailSheet({
                       }}
                     >
                       <ExpoImage
-                        source={{ uri: item.preview_url }}
+                        source={{ uri: item.gif_url }}
                         style={s.gifGridImg}
                         contentFit="cover"
                       />
