@@ -85,6 +85,18 @@ interface Run {
   participant_count?: number;
 }
 
+interface CrewHistoryRun {
+  id: string;
+  title: string;
+  date: string;
+  min_distance: number;
+  activity_type: string;
+  host_id: string;
+  host_name: string;
+  avg_attendee_pace: number;
+  attendee_count: number;
+}
+
 interface UserSearchResult {
   id: string;
   name: string;
@@ -437,6 +449,11 @@ function CrewDetailSheet({
     enabled: !!crew?.id,
   });
 
+  const { data: crewHistory = [] } = useQuery<CrewHistoryRun[]>({
+    queryKey: ["/api/crews", crew?.id, "history"],
+    enabled: !!crew?.id,
+  });
+
   const leaveMutation = useMutation({
     mutationFn: () => apiRequest("DELETE", `/api/crews/${crew?.id}/leave`),
     onSuccess: () => {
@@ -612,6 +629,60 @@ function CrewDetailSheet({
                     ))
                   )}
                 </View>
+
+                {/* Past Runs/Rides history */}
+                {crewHistory.filter((r) => (r.activity_type ?? "run") === activityFilter).length > 0 && (
+                  <View style={s.detailSection}>
+                    <Text style={s.detailSectionTitle}>
+                      Past {activityFilter === "ride" ? "Rides" : "Runs"}
+                    </Text>
+                    {crewHistory
+                      .filter((r) => (r.activity_type ?? "run") === activityFilter)
+                      .map((run) => (
+                        <TouchableOpacity
+                          key={run.id}
+                          style={s.historyRow}
+                          activeOpacity={0.7}
+                          onPress={() => {
+                            onClose();
+                            router.push({ pathname: "/run/[id]", params: { id: run.id } });
+                          }}
+                        >
+                          <Ionicons
+                            name={run.activity_type === "ride" ? "bicycle-outline" : "walk-outline"}
+                            size={15}
+                            color={C.textMuted}
+                            style={{ marginRight: 10, marginTop: 2 }}
+                          />
+                          <View style={{ flex: 1, gap: 3 }}>
+                            <Text style={s.historyRunTitle} numberOfLines={1}>{run.title}</Text>
+                            <View style={s.historyRunMeta}>
+                              <Text style={s.historyRunMetaTxt}>
+                                {formatDate(run.date)}
+                              </Text>
+                              <Text style={s.historyRunDot}>·</Text>
+                              <Text style={s.historyRunMetaTxt}>
+                                {run.min_distance} mi
+                              </Text>
+                              {Number(run.avg_attendee_pace) > 0 && (
+                                <>
+                                  <Text style={s.historyRunDot}>·</Text>
+                                  <Text style={s.historyRunMetaTxt}>
+                                    {formatPace(Number(run.avg_attendee_pace))} avg pace
+                                  </Text>
+                                </>
+                              )}
+                            </View>
+                            <Text style={s.historyChief}>
+                              {run.host_id === crew?.created_by ? "👑 Crew Chief" : run.host_name}
+                              {Number(run.attendee_count) > 0 ? ` · ${run.attendee_count} attended` : ""}
+                            </Text>
+                          </View>
+                          <Ionicons name="chevron-forward" size={13} color={C.textMuted} />
+                        </TouchableOpacity>
+                      ))}
+                  </View>
+                )}
 
                 {/* Schedule Run/Ride */}
                 <TouchableOpacity
@@ -1534,6 +1605,40 @@ const s = StyleSheet.create({
     fontFamily: "Outfit_700Bold",
     fontSize: 17,
     color: C.text,
+  },
+  historyRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+  },
+  historyRunTitle: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 14,
+    color: C.text,
+  },
+  historyRunMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    flexWrap: "wrap",
+  },
+  historyRunMetaTxt: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 12,
+    color: C.textDim,
+  },
+  historyRunDot: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 12,
+    color: C.textMuted,
+  },
+  historyChief: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 12,
+    color: C.textMuted,
+    marginTop: 1,
   },
   inviteChip: {
     flexDirection: "row",

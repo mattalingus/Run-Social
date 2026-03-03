@@ -1953,6 +1953,28 @@ export async function getCrewRuns(crewId: string) {
   return res.rows;
 }
 
+export async function getCrewRunHistory(crewId: string) {
+  const res = await pool.query(
+    `SELECT r.id, r.title, r.date, r.min_distance, r.activity_type, r.host_id,
+            u.name AS host_name,
+            COALESCE(
+              AVG(rp.final_pace) FILTER (WHERE rp.is_present = true AND rp.final_pace IS NOT NULL),
+              0
+            ) AS avg_attendee_pace,
+            COUNT(rp.user_id) FILTER (WHERE rp.is_present = true) AS attendee_count
+     FROM runs r
+     JOIN users u ON u.id = r.host_id
+     LEFT JOIN run_participants rp ON rp.run_id = r.id
+     WHERE r.crew_id = $1
+       AND r.date < NOW()
+     GROUP BY r.id, u.name
+     ORDER BY r.date DESC
+     LIMIT 20`,
+    [crewId]
+  );
+  return res.rows;
+}
+
 export async function searchCrews(userId: string, query: string, friendsOnly: boolean) {
   if (friendsOnly) {
     const res = await pool.query(

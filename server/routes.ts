@@ -1053,6 +1053,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
+  app.get("/api/crews/:id/history", requireAuth, async (req, res) => {
+    try {
+      const history = await storage.getCrewRunHistory(req.params.id);
+      res.json(history);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
   app.post("/api/admin/seed-runs", async (req, res) => {
     try {
       const { count = 20 } = req.body;
