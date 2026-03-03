@@ -46,8 +46,8 @@ export default function CreateRunScreen() {
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [locationName, setLocationName] = useState(params.pathName ?? "");
-  const [locationLat, setLocationLat] = useState(params.pathLat ?? "37.7749");
-  const [locationLng, setLocationLng] = useState(params.pathLng ?? "-122.4194");
+  const [locationLat, setLocationLat] = useState(params.pathLat ?? "");
+  const [locationLng, setLocationLng] = useState(params.pathLng ?? "");
   const [minDistance, setMinDistance] = useState("3");
   const [maxDistance, setMaxDistance] = useState("6");
   const [minPace, setMinPace] = useState("8");
