@@ -23,7 +23,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActivity } from "@/contexts/ActivityContext";
 import { useTheme } from "@/contexts/ThemeContext";
-import C from "@/constants/colors";
+import { darkColors as C, type ColorScheme } from "@/constants/colors";
 import RangeSlider from "@/components/RangeSlider";
 import { formatDistance } from "@/lib/formatDistance";
 import HostProfileSheet from "@/components/HostProfileSheet";
@@ -227,7 +227,7 @@ function RunMarker({ run, isSelected, isFriend, onPress }: { run: Run; isSelecte
   );
 }
 
-const mk = StyleSheet.create({
+function makeMkStyles(C: ColorScheme) { return StyleSheet.create({
   wrap: { alignItems: "center", width: 62, height: 66 },
   glow: {
     position: "absolute", top: -3,
@@ -272,7 +272,7 @@ const mk = StyleSheet.create({
     paddingHorizontal: 5, paddingVertical: 2,
   },
   liveBadgeText: { fontFamily: "Outfit_700Bold", fontSize: 8, color: C.bg, letterSpacing: 0.5 },
-});
+}); }
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
@@ -280,7 +280,9 @@ export default function MapScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { activityFilter } = useActivity();
-  const { C: themeC } = useTheme();
+  const { C } = useTheme();
+  const mk = useMemo(() => makeMkStyles(C), [C]);
+  const s = useMemo(() => makeSStyles(C), [C]);
   const mapRef = useRef<MapView>(null);
   const params = useLocalSearchParams<{ styles?: string }>();
 
@@ -497,7 +499,7 @@ export default function MapScreen() {
   const topPad = insets.top;
 
   return (
-    <View style={[s.container, { backgroundColor: themeC.bg }]}>
+    <View style={[s.container, { backgroundColor: C.bg }]}>
 
       {/* ─── Header ──────────────────────────────────────────────────────── */}
       <View style={[s.header, { paddingTop: topPad + (Platform.OS === "web" ? 67 : 0) }]}>
@@ -997,7 +999,7 @@ export default function MapScreen() {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const s = StyleSheet.create({
+function makeSStyles(C: ColorScheme) { return StyleSheet.create({
   container: { flex: 1, flexDirection: "column", backgroundColor: C.bg },
 
   header: {
@@ -1205,4 +1207,4 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: C.border,
   },
   insightTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 12 },
-});
+}); }

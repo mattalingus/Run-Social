@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -23,7 +23,7 @@ import * as Clipboard from "expo-clipboard";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/query-client";
-import C from "@/constants/colors";
+import { darkColors as C, type ColorScheme } from "@/constants/colors";
 import { useTheme } from "@/contexts/ThemeContext";
 
 const RUN_TAGS = ["Talkative", "Quiet", "Motivational", "Training", "Ministry", "Recovery"];
@@ -35,7 +35,8 @@ const PRIVACY_OPTIONS = [
 ];
 
 export default function CreateRunScreen() {
-  const { C: themeC } = useTheme();
+  const { C } = useTheme();
+  const styles = useMemo(() => makeStyles(C), [C]);
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -233,7 +234,7 @@ export default function CreateRunScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: themeC.bg }]}>
+    <View style={[styles.container, { backgroundColor: C.bg }]}>
       <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <Pressable onPress={() => router.back()} style={styles.cancelBtn}>
           <Feather name="x" size={20} color={C.textSecondary} />
@@ -754,7 +755,7 @@ export default function CreateRunScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(C: ColorScheme) { return StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   crewBanner: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#00D97E18", borderRadius: 12, borderWidth: 1, borderColor: "#00D97E40", padding: 12, marginBottom: 16 },
   crewBannerTxt: { fontFamily: "Outfit_400Regular", fontSize: 13, color: "#A8C4B4", flex: 1 },
@@ -889,4 +890,4 @@ const styles = StyleSheet.create({
     backgroundColor: C.primary, borderRadius: 14, paddingVertical: 14,
   },
   pickerConfirmTxt: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.bg },
-});
+}); }

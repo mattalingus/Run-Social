@@ -56,7 +56,7 @@ async function registerPushToken(userId: string) {
 
 function RootLayoutNav() {
   const { user, isLoading } = useAuth();
-  const { C: themeC, theme } = useTheme();
+  const { C, theme } = useTheme();
   const [fontsLoaded] = useFonts({ Outfit_400Regular, Outfit_600SemiBold, Outfit_700Bold });
   const splashHidden = useRef(false);
   const pushRegistered = useRef(false);
@@ -100,7 +100,7 @@ function RootLayoutNav() {
   return (
     <>
       <StatusBar style={theme === "dark" ? "light" : "dark"} />
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: themeC.bg } }}>
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.bg } }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen
           name="(auth)"

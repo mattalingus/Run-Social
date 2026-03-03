@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   View,
   Text,
@@ -22,7 +22,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
-import C from "@/constants/colors";
+import { darkColors as C, type ColorScheme } from "@/constants/colors";
 import { useTheme } from "@/contexts/ThemeContext";
 import { formatDistance } from "@/lib/formatDistance";
 import HostProfileSheet from "@/components/HostProfileSheet";
@@ -71,7 +71,8 @@ function formatTime(dateStr: string) {
 }
 
 export default function RunDetailScreen() {
-  const { C: themeC } = useTheme();
+  const { C } = useTheme();
+  const styles = useMemo(() => makeStyles(C), [C]);
   const { id, token } = useLocalSearchParams<{ id: string; token?: string }>();
   const insets = useSafeAreaInsets();
   const { user, refreshUser } = useAuth();
@@ -489,7 +490,7 @@ export default function RunDetailScreen() {
 
   if (isLoading) {
     return (
-      <View style={[styles.container, { backgroundColor: themeC.bg, justifyContent: "center", alignItems: "center" }]}>
+      <View style={[styles.container, { backgroundColor: C.bg, justifyContent: "center", alignItems: "center" }]}>
         <ActivityIndicator color={C.primary} size="large" />
       </View>
     );
@@ -497,7 +498,7 @@ export default function RunDetailScreen() {
 
   if (!run) {
     return (
-      <View style={[styles.container, { backgroundColor: themeC.bg, justifyContent: "center", alignItems: "center" }]}>
+      <View style={[styles.container, { backgroundColor: C.bg, justifyContent: "center", alignItems: "center" }]}>
         <Text style={styles.errorText}>Run not found</Text>
         <Pressable onPress={() => router.back()} style={styles.backLink}>
           <Text style={styles.backLinkText}>Go back</Text>
@@ -508,7 +509,7 @@ export default function RunDetailScreen() {
 
   if (run.isPrivate) {
     return (
-      <KeyboardAvoidingView behavior="padding" style={[styles.container, { backgroundColor: themeC.bg, paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20, paddingHorizontal: 28 }]}>
+      <KeyboardAvoidingView behavior="padding" style={[styles.container, { backgroundColor: C.bg, paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20, paddingHorizontal: 28 }]}>
         <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={12}>
           <Feather name="arrow-left" size={20} color={C.textSecondary} />
         </Pressable>
@@ -569,7 +570,7 @@ export default function RunDetailScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: themeC.bg }]}>
+    <View style={[styles.container, { backgroundColor: C.bg }]}>
       <ScrollView
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 120 }]}
         showsVerticalScrollIndicator={false}
@@ -1290,7 +1291,7 @@ export default function RunDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(C: ColorScheme) { return StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   content: { paddingHorizontal: 20 },
   topBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 20 },
@@ -1452,4 +1453,4 @@ const styles = StyleSheet.create({
   planInfoPageRow: { flexDirection: "row", justifyContent: "center", gap: 6, marginTop: 16 },
   planInfoDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.border },
   planInfoDotActive: { backgroundColor: C.primary, width: 18 },
-});
+}); }
