@@ -163,6 +163,7 @@ export async function initDb() {
     ALTER TABLE run_participants ADD COLUMN IF NOT EXISTS final_distance REAL;
     ALTER TABLE run_participants ADD COLUMN IF NOT EXISTS final_pace REAL;
     ALTER TABLE run_participants ADD COLUMN IF NOT EXISTS final_rank INTEGER;
+    CREATE UNIQUE INDEX IF NOT EXISTS run_participants_run_user_unique ON run_participants (run_id, user_id);
 
     CREATE TABLE IF NOT EXISTS run_tracking_points (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1043,12 +1044,8 @@ export async function startGroupRun(runId: string, hostId: string) {
   // Guarantee the host has a participant row with is_present = true from the moment the run starts
   await pool.query(
     `INSERT INTO run_participants (run_id, user_id, status, is_present)
-     SELECT $1, $2, 'joined', true
-     WHERE NOT EXISTS (SELECT 1 FROM run_participants WHERE run_id = $1 AND user_id = $2)`,
-    [runId, hostId]
-  );
-  await pool.query(
-    `UPDATE run_participants SET is_present = true WHERE run_id = $1 AND user_id = $2`,
+     VALUES ($1, $2, 'joined', true)
+     ON CONFLICT (run_id, user_id) DO UPDATE SET is_present = true`,
     [runId, hostId]
   );
 
@@ -1145,11 +1142,11 @@ export async function getLiveRunState(runId: string) {
 }
 
 export async function finishRunnerRun(runId: string, userId: string, finalDistance: number, finalPace: number) {
-  // Ensure the user has a participant row before writing final data
+  // Ensure the user has a participant row with is_present=true before writing final data
   await pool.query(
     `INSERT INTO run_participants (run_id, user_id, status, is_present)
-     SELECT $1, $2, 'joined', true
-     WHERE NOT EXISTS (SELECT 1 FROM run_participants WHERE run_id = $1 AND user_id = $2)`,
+     VALUES ($1, $2, 'joined', true)
+     ON CONFLICT (run_id, user_id) DO UPDATE SET is_present = true`,
     [runId, userId]
   );
 
@@ -1171,18 +1168,30 @@ export async function finishRunnerRun(runId: string, userId: string, finalDistan
     );
   }
 
-  // Auto-complete the run when the host finishes OR when every present participant has submitted
+  // Auto-complete the run:
+  // - If the caller IS the host → complete immediately (host ending = session over)
+  // - If the caller is NOT the host → only complete once the host has also submitted
+  //   their final_pace AND no other is_present participant is still running
   const runRes = await pool.query(`SELECT host_id FROM runs WHERE id = $1`, [runId]);
   if (runRes.rows.length) {
-    const isHost = runRes.rows[0].host_id === userId;
+    const hostId = runRes.rows[0].host_id;
+    const isHost = hostId === userId;
     let shouldComplete = isHost;
     if (!shouldComplete) {
-      const remaining = await pool.query(
-        `SELECT COUNT(*) FROM run_participants
-         WHERE run_id = $1 AND is_present = true AND final_pace IS NULL AND status != 'cancelled'`,
-        [runId]
+      // Require the host to have finished before a participant can trigger completion
+      const hostDone = await pool.query(
+        `SELECT 1 FROM run_participants WHERE run_id = $1 AND user_id = $2 AND final_pace IS NOT NULL`,
+        [runId, hostId]
       );
-      shouldComplete = parseInt(remaining.rows[0].count) === 0;
+      if (hostDone.rows.length > 0) {
+        // All present participants (excluding the one who just finished) must also be done
+        const remaining = await pool.query(
+          `SELECT COUNT(*) FROM run_participants
+           WHERE run_id = $1 AND is_present = true AND final_pace IS NULL AND status != 'cancelled'`,
+          [runId]
+        );
+        shouldComplete = parseInt(remaining.rows[0].count) === 0;
+      }
     }
     if (shouldComplete) {
       await pool.query(
