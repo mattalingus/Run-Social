@@ -631,6 +631,13 @@ export default function DiscoverScreen() {
     enabled: !!user,
   });
 
+  const { data: unreadDmData } = useQuery<{ count: number }>({
+    queryKey: ["/api/dm/unread-count"],
+    refetchInterval: 30000,
+    enabled: !!user,
+  });
+  const unreadDmCount = unreadDmData?.count ?? 0;
+
   const notifCount = notifications.length;
 
   const notifData = useMemo(() => {
@@ -1090,14 +1097,17 @@ export default function DiscoverScreen() {
           <Text style={s.title}>FARA</Text>
 
           <View style={s.headerBtns}>
-            {/* Filter */}
+            {/* Messages */}
             <Pressable
-              style={[s.hBtn, isFiltered && s.hBtnActive]}
-              onPress={openFilter}
-              testID="filter-button"
+              style={s.hBtnRow}
+              onPress={() => router.push("/(tabs)/messages")}
+              testID="messages-button"
             >
-              <Feather name="sliders" size={16} color={C.primary} />
-              {isFiltered && <View style={s.dot} />}
+              <View>
+                <Ionicons name="chatbubble-outline" size={15} color={C.primary} />
+                {unreadDmCount > 0 && <View style={s.notifBadge} />}
+              </View>
+              <Text style={s.hBtnTxt}>Messages</Text>
             </Pressable>
 
             {/* Host */}
@@ -1136,7 +1146,7 @@ export default function DiscoverScreen() {
           )}
         </View>
 
-        {/* Activity toggle */}
+        {/* Activity toggle + filter */}
         <View style={s.activityToggleRow}>
           <Pressable
             style={[s.activityPill, activityFilter === "run" && s.activityPillActive]}
@@ -1151,6 +1161,14 @@ export default function DiscoverScreen() {
           >
             <Ionicons name="bicycle" size={13} color={activityFilter === "ride" ? C.bg : C.textMuted} />
             <Text style={[s.activityPillTxt, activityFilter === "ride" && s.activityPillTxtActive]}>Rides</Text>
+          </Pressable>
+          <Pressable
+            style={[s.filterToggleBtn, isFiltered && s.hBtnActive]}
+            onPress={openFilter}
+            testID="filter-button"
+          >
+            <Feather name="sliders" size={15} color={isFiltered ? C.primary : C.textMuted} />
+            {isFiltered && <View style={s.dot} />}
           </Pressable>
         </View>
       </View>
@@ -2027,6 +2045,13 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   activityPillActive: { backgroundColor: C.primary, borderColor: C.primary },
   activityPillTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textMuted },
   activityPillTxtActive: { color: C.bg },
+  filterToggleBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: C.surface,
+    borderWidth: 1.5, borderColor: C.border,
+    alignItems: "center", justifyContent: "center",
+    marginLeft: "auto" as any,
+  },
 
   list: { paddingHorizontal: 16, paddingTop: 10, gap: 10 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },

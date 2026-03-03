@@ -3,11 +3,10 @@ import { Platform, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/contexts/ThemeContext";
-import { useQuery } from "@tanstack/react-query";
 
 const PILL_H      = 64;
 const PILL_RADIUS = 30;
-const PILL_MX     = 24;
+const PILL_MX     = 48;
 
 function PillBackground({ bg, border }: { bg: string; border: string }) {
   return <View style={[styles.pill, { backgroundColor: bg, borderColor: border }]} />;
@@ -17,12 +16,6 @@ export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const isWeb  = Platform.OS === "web";
   const { C }  = useTheme();
-
-  const { data: unreadData } = useQuery<{ count: number }>({
-    queryKey: ["/api/dm/unread-count"],
-    refetchInterval: 30000,
-  });
-  const unreadCount = unreadData?.count ?? 0;
 
   return (
     <Tabs
@@ -86,11 +79,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="messages"
         options={{
-          title: "Messages",
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "chatbubble" : "chatbubble-outline"} size={22} color={color} />
-          ),
-          tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+          href: null,
         }}
       />
       <Tabs.Screen
