@@ -314,7 +314,7 @@ export default function RunDetailScreen() {
       qc.invalidateQueries({ queryKey: ["/api/runs", id] });
       router.push(`/run-live/${id}`);
     } catch (e: any) {
-      Alert.alert("Can't Start Run", e.message || "Failed to start run");
+      Alert.alert(`Can't Start ${run?.activity_type === "ride" ? "Ride" : "Run"}`, e.message || `Failed to start ${run?.activity_type === "ride" ? "ride" : "run"}`);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setStarting(false);
@@ -934,7 +934,7 @@ export default function RunDetailScreen() {
                 {starting ? <ActivityIndicator color={C.text} /> : (
                   <>
                     <Feather name="play" size={18} color={C.text} />
-                    <Text style={styles.primaryBtnText}>Start Run</Text>
+                    <Text style={styles.primaryBtnText}>{run?.activity_type === "ride" ? "Start Ride" : "Start Run"}</Text>
                   </>
                 )}
               </Pressable>
@@ -1207,19 +1207,19 @@ export default function RunDetailScreen() {
             <View style={[styles.frSheet, { paddingBottom: insets.bottom + 24 }]}>
               <View style={styles.frHandle} />
               <View style={styles.frHeader}>
-                <Text style={styles.frTitle}>Before You Run</Text>
+                <Text style={styles.frTitle}>{run?.activity_type === "ride" ? "Before You Ride" : "Before You Run"}</Text>
                 <Pressable onPress={() => setShowRulesModal(false)}>
                   <Feather name="x" size={18} color={C.textSecondary} />
                 </Pressable>
               </View>
               <Text style={styles.frIntro}>
                 {proximityTriggered
-                  ? `You're within 1 km of this run — want to join the group?`
+                  ? `You're within 1 km of this ${run?.activity_type === "ride" ? "ride" : "run"} — want to join the group?`
                   : `A quick reminder before you join the group.`}
               </Text>
               {[
-                { icon: "smile" as const,      title: "Have fun",   body: "Running with others is a great time. Enjoy the pace, the people, and the miles." },
-                { icon: "heart" as const,      title: "Be kind",    body: "Cheer each other on. Every runner is working hard — support your group." },
+                { icon: "smile" as const,      title: "Have fun",   body: run?.activity_type === "ride" ? "Riding with others is a great time. Enjoy the pace, the people, and the miles." : "Running with others is a great time. Enjoy the pace, the people, and the miles." },
+                { icon: "heart" as const,      title: "Be kind",    body: run?.activity_type === "ride" ? "Cheer each other on. Every rider is working hard — support your group." : "Cheer each other on. Every runner is working hard — support your group." },
                 { icon: "trending-up" as const, title: "Keep up",   body: "Do your best to match the group's pace. If you fall behind, it's okay — just keep moving." },
               ].map((item) => (
                 <View key={item.title} style={styles.frRuleRow}>

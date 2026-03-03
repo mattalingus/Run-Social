@@ -233,9 +233,10 @@ export default function RunLiveScreen() {
   // ─── Finish tracking ────────────────────────────────────────────────────────
 
   function handleFinishRun() {
+    const type = run?.activity_type === "ride" ? "ride" : "run";
     Alert.alert(
-      "Finish Run",
-      "End your run and see the results?",
+      `Finish ${type === "ride" ? "Ride" : "Run"}`,
+      `End your ${type} and see the results?`,
       [
         { text: "Keep Going", style: "cancel" },
         {
@@ -350,7 +351,7 @@ export default function RunLiveScreen() {
             <View style={s.liveDot} />
             <Text style={s.livePillText}>LIVE</Text>
           </View>
-          <Text style={s.headerTitle}>{run?.title ?? "Live Run"}</Text>
+          <Text style={s.headerTitle}>{run?.title ?? (run?.activity_type === "ride" ? "Live Ride" : "Live Run")}</Text>
         </View>
         <View style={s.runnerCount}>
           <Feather name="users" size={14} color={C.primary} />

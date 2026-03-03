@@ -117,7 +117,7 @@ export default function RunResultsScreen() {
             <View style={s.summaryItem}>
               <Feather name="users" size={18} color={C.primary} />
               <Text style={s.summaryValue}>{results.length}</Text>
-              <Text style={s.summaryLabel}>Runners</Text>
+              <Text style={s.summaryLabel}>{run?.activity_type === "ride" ? "Riders" : "Runners"}</Text>
             </View>
             <View style={s.summaryDivider} />
             <View style={s.summaryItem}>
@@ -131,7 +131,7 @@ export default function RunResultsScreen() {
               <Text style={[s.summaryValue, { color: stillRunning.length > 0 ? C.primary : C.textSecondary }]}>
                 {stillRunning.length}
               </Text>
-              <Text style={s.summaryLabel}>Still running</Text>
+              <Text style={s.summaryLabel}>{run?.activity_type === "ride" ? "Still riding" : "Still running"}</Text>
             </View>
           </View>
 
