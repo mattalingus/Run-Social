@@ -679,6 +679,9 @@ function CrewDetailSheet({
   const [chatInput, setChatInput] = useState("");
   const [chatSending, setChatSending] = useState(false);
   const chatScrollRef = useRef<ScrollView>(null);
+  const outerScrollRef = useRef<ScrollView>(null);
+  const chatSectionY = useRef(0);
+  const isChatFocused = useRef(false);
   const [showGifPicker, setShowGifPicker] = useState(false);
   const [gifSearch, setGifSearch] = useState("");
   const [gifResults, setGifResults] = useState<GifItem[]>([]);
@@ -691,6 +694,13 @@ function CrewDetailSheet({
     }
   }, [crewMessages.length]);
 
+  useEffect(() => {
+    const sub = Keyboard.addListener("keyboardDidShow", () => {
+      if (!isChatFocused.current) return;
+      outerScrollRef.current?.scrollTo({ y: chatSectionY.current, animated: true });
+    });
+    return () => sub.remove();
+  }, []);
 
   async function fetchGifs(query: string) {
     setGifLoading(true);
@@ -803,7 +813,7 @@ function CrewDetailSheet({
                 </TouchableOpacity>
               </View>
 
-              <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20 }} showsVerticalScrollIndicator={false}>
+              <ScrollView ref={outerScrollRef} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20 }} showsVerticalScrollIndicator={false}>
 
                 {/* Join Requests — crew chief only */}
                 {isCreatorLocal && joinRequests.length > 0 && (
@@ -927,7 +937,10 @@ function CrewDetailSheet({
                 </View>
 
                 {/* ── Inline Crew Chat ── */}
-                <View style={s.detailSection}>
+                <View
+                  style={s.detailSection}
+                  onLayout={(e) => { chatSectionY.current = e.nativeEvent.layout.y; }}
+                >
                   <View style={s.detailSectionHeader}>
                     <Text style={s.detailSectionTitle}>Crew Chat</Text>
                     {isMuted && (
@@ -1040,6 +1053,54 @@ function CrewDetailSheet({
                     )}
                   </View>
 
+                  {/* Selected GIF preview */}
+                  {selectedGif && (
+                    <View style={s.gifPreviewRow}>
+                      <ExpoImage
+                        source={{ uri: selectedGif.preview_url }}
+                        style={s.gifPreviewThumb}
+                        contentFit="cover"
+                      />
+                      <TouchableOpacity style={s.gifPreviewRemove} onPress={() => setSelectedGif(null)}>
+                        <Ionicons name="close-circle" size={18} color={C.textMuted} />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  {/* Input row */}
+                  <View style={s.inlineChatInputRow}>
+                    <TextInput
+                      style={s.inlineChatInput}
+                      value={chatInput}
+                      onChangeText={setChatInput}
+                      placeholder="Send a message…"
+                      placeholderTextColor={C.textMuted}
+                      onSubmitEditing={sendChatMessage}
+                      blurOnSubmit={false}
+                      returnKeyType="send"
+                      editable={!chatSending}
+                      onFocus={() => { isChatFocused.current = true; }}
+                      onBlur={() => { isChatFocused.current = false; }}
+                    />
+                    <TouchableOpacity
+                      testID="gif-btn"
+                      style={s.gifPickerBtn}
+                      onPress={() => {
+                        setGifSearch("");
+                        setGifResults([]);
+                        setShowGifPicker(true);
+                      }}
+                    >
+                      <Text style={s.gifPickerBtnTxt}>GIF</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[s.inlineSendBtn, (!chatInput.trim() && !selectedGif || chatSending) && s.inlineSendBtnDisabled]}
+                      onPress={sendChatMessage}
+                      disabled={(!chatInput.trim() && !selectedGif) || chatSending}
+                    >
+                      <Ionicons name="send" size={16} color={(chatInput.trim() || selectedGif) && !chatSending ? C.bg : C.textMuted} />
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
                 {/* ── Members ── */}
@@ -1214,52 +1275,6 @@ function CrewDetailSheet({
                 </TouchableOpacity>
               </ScrollView>
 
-              {/* Fixed chat input bar — outside ScrollView so KAV keeps it above keyboard */}
-              <View style={s.chatInputBar}>
-                {selectedGif && (
-                  <View style={s.gifPreviewRow}>
-                    <ExpoImage
-                      source={{ uri: selectedGif.preview_url }}
-                      style={s.gifPreviewThumb}
-                      contentFit="cover"
-                    />
-                    <TouchableOpacity style={s.gifPreviewRemove} onPress={() => setSelectedGif(null)}>
-                      <Ionicons name="close-circle" size={18} color={C.textMuted} />
-                    </TouchableOpacity>
-                  </View>
-                )}
-                <View style={s.inlineChatInputRow}>
-                  <TextInput
-                    style={s.inlineChatInput}
-                    value={chatInput}
-                    onChangeText={setChatInput}
-                    placeholder="Send a message…"
-                    placeholderTextColor={C.textMuted}
-                    onSubmitEditing={sendChatMessage}
-                    blurOnSubmit={false}
-                    returnKeyType="send"
-                    editable={!chatSending}
-                  />
-                  <TouchableOpacity
-                    testID="gif-btn"
-                    style={s.gifPickerBtn}
-                    onPress={() => {
-                      setGifSearch("");
-                      setGifResults([]);
-                      setShowGifPicker(true);
-                    }}
-                  >
-                    <Text style={s.gifPickerBtnTxt}>GIF</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[s.inlineSendBtn, (!chatInput.trim() && !selectedGif || chatSending) && s.inlineSendBtnDisabled]}
-                    onPress={sendChatMessage}
-                    disabled={(!chatInput.trim() && !selectedGif) || chatSending}
-                  >
-                    <Ionicons name="send" size={16} color={(chatInput.trim() || selectedGif) && !chatSending ? C.bg : C.textMuted} />
-                  </TouchableOpacity>
-                </View>
-              </View>
             </>
           )}
 
@@ -2626,8 +2641,8 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginTop: 0,
-    paddingHorizontal: 0,
+    marginTop: 8,
+    paddingHorizontal: 2,
   },
   inlineChatInput: {
     flex: 1,
