@@ -734,10 +734,21 @@ function CrewDetailSheet({
     setChatSending(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
-      await apiRequest("POST", `/api/crews/${crew?.id}/messages`, {
-        message: text,
-        ...(gifToSend ? { gif_url: gifToSend.gif_url, gif_preview_url: gifToSend.preview_url } : {}),
-      });
+      if (gifToSend && text) {
+        // Send GIF and text as two separate messages
+        await apiRequest("POST", `/api/crews/${crew?.id}/messages`, {
+          gif_url: gifToSend.gif_url,
+          gif_preview_url: gifToSend.preview_url,
+        });
+        await apiRequest("POST", `/api/crews/${crew?.id}/messages`, {
+          message: text,
+        });
+      } else {
+        await apiRequest("POST", `/api/crews/${crew?.id}/messages`, {
+          message: text,
+          ...(gifToSend ? { gif_url: gifToSend.gif_url, gif_preview_url: gifToSend.preview_url } : {}),
+        });
+      }
       refetchMessages();
     } catch (e: any) {
       Alert.alert("Error", e.message ?? "Could not send message");
@@ -761,7 +772,7 @@ function CrewDetailSheet({
           <View style={s.sheetHandle} />
           {!crew ? null : (
             <>
-              <ScrollView ref={outerScrollRef} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20 }} showsVerticalScrollIndicator={false}>
+              <ScrollView ref={outerScrollRef} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
                 {/* Close button row */}
                 <View style={s.detailCloseRow}>
@@ -1369,6 +1380,7 @@ function CrewDetailSheet({
                   keyExtractor={(item) => item.id}
                   contentContainerStyle={{ padding: 8, gap: 6 }}
                   columnWrapperStyle={{ gap: 6 }}
+                  keyboardShouldPersistTaps="handled"
                   renderItem={({ item }) => (
                     <TouchableOpacity
                       style={s.gifGridCell}
