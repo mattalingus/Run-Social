@@ -760,60 +760,60 @@ function CrewDetailSheet({
           <View style={s.sheetHandle} />
           {!crew ? null : (
             <>
-              {/* Close button row */}
-              <View style={s.detailCloseRow}>
-                <TouchableOpacity onPress={onClose} testID="close-crew-detail" style={s.detailCloseBtn}>
-                  <Ionicons name="close" size={22} color={C.textMuted} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => muteMutation.mutate()}
-                  disabled={muteMutation.isPending}
-                  style={s.muteToggleBtn}
-                  testID="mute-crew-chat-btn"
-                >
-                  <Ionicons
-                    name={isMuted ? "notifications-off-outline" : "notifications-outline"}
-                    size={20}
-                    color={isMuted ? C.textMuted : C.text}
-                  />
-                  <Text style={[s.muteToggleTxt, isMuted && s.muteToggleTxtMuted]}>
-                    {isMuted ? "Chat muted" : "Mute chat"}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Hero title */}
-              <View style={s.detailHero}>
-                {crew.image_url ? (
-                  <Image source={{ uri: resolveImgUrl(crew.image_url)! }} style={s.detailHeroImage} />
-                ) : (
-                  <Text style={s.detailHeroEmoji}>{crew.emoji}</Text>
-                )}
-                <Text style={s.detailHeroName}>{crew.name}</Text>
-                {crew.description ? (
-                  <Text style={s.detailDesc}>{crew.description}</Text>
-                ) : null}
-              </View>
-
-              {/* Runs / Rides toggle */}
-              <View style={s.detailToggleRow}>
-                <TouchableOpacity
-                  style={[s.detailToggleBtn, activityFilter === "run" && s.detailToggleBtnActive]}
-                  onPress={() => setActivityFilter("run")}
-                >
-                  <Ionicons name="walk" size={14} color={activityFilter === "run" ? C.bg : C.textMuted} />
-                  <Text style={[s.detailToggleTxt, activityFilter === "run" && s.detailToggleTxtActive]}>Runs</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[s.detailToggleBtn, activityFilter === "ride" && s.detailToggleBtnActive]}
-                  onPress={() => setActivityFilter("ride")}
-                >
-                  <Ionicons name="bicycle" size={14} color={activityFilter === "ride" ? C.bg : C.textMuted} />
-                  <Text style={[s.detailToggleTxt, activityFilter === "ride" && s.detailToggleTxtActive]}>Rides</Text>
-                </TouchableOpacity>
-              </View>
-
               <ScrollView ref={outerScrollRef} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20 }} showsVerticalScrollIndicator={false}>
+
+                {/* Close button row */}
+                <View style={s.detailCloseRow}>
+                  <TouchableOpacity onPress={onClose} testID="close-crew-detail" style={s.detailCloseBtn}>
+                    <Ionicons name="close" size={22} color={C.textMuted} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => muteMutation.mutate()}
+                    disabled={muteMutation.isPending}
+                    style={s.muteToggleBtn}
+                    testID="mute-crew-chat-btn"
+                  >
+                    <Ionicons
+                      name={isMuted ? "notifications-off-outline" : "notifications-outline"}
+                      size={20}
+                      color={isMuted ? C.textMuted : C.text}
+                    />
+                    <Text style={[s.muteToggleTxt, isMuted && s.muteToggleTxtMuted]}>
+                      {isMuted ? "Chat muted" : "Mute chat"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Hero title */}
+                <View style={s.detailHero}>
+                  {crew.image_url ? (
+                    <Image source={{ uri: resolveImgUrl(crew.image_url)! }} style={s.detailHeroImage} />
+                  ) : (
+                    <Text style={s.detailHeroEmoji}>{crew.emoji}</Text>
+                  )}
+                  <Text style={s.detailHeroName}>{crew.name}</Text>
+                  {crew.description ? (
+                    <Text style={s.detailDesc}>{crew.description}</Text>
+                  ) : null}
+                </View>
+
+                {/* Runs / Rides toggle */}
+                <View style={s.detailToggleRow}>
+                  <TouchableOpacity
+                    style={[s.detailToggleBtn, activityFilter === "run" && s.detailToggleBtnActive]}
+                    onPress={() => setActivityFilter("run")}
+                  >
+                    <Ionicons name="walk" size={14} color={activityFilter === "run" ? C.bg : C.textMuted} />
+                    <Text style={[s.detailToggleTxt, activityFilter === "run" && s.detailToggleTxtActive]}>Runs</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[s.detailToggleBtn, activityFilter === "ride" && s.detailToggleBtnActive]}
+                    onPress={() => setActivityFilter("ride")}
+                  >
+                    <Ionicons name="bicycle" size={14} color={activityFilter === "ride" ? C.bg : C.textMuted} />
+                    <Text style={[s.detailToggleTxt, activityFilter === "ride" && s.detailToggleTxtActive]}>Rides</Text>
+                  </TouchableOpacity>
+                </View>
 
                 {/* Join Requests — crew chief only */}
                 {isCreatorLocal && joinRequests.length > 0 && (
