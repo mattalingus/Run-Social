@@ -212,7 +212,7 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
         >
           {/* ── A. Visibility ────────────────────────────────────────────── */}
           <View style={fm.section}>
-            <Text style={fm.sectionTitle}>Visibility</Text>
+            <Text style={fm.sectionTitle}>View</Text>
             <View style={fm.proxRow}>
               {(["all", "public", "crew", "friends"] as const).map((opt) => {
                 const labels = { all: "All", public: "Public", crew: "Crew", friends: "Friends" };
@@ -1419,7 +1419,7 @@ export default function DiscoverScreen() {
             </View>
 
             {/* Privacy */}
-            <Text style={s.hLabel}>Visibility</Text>
+            <Text style={s.hLabel}>View</Text>
             <View style={{ flexDirection: "row", gap: 8, marginBottom: 4 }}>
               {([
                 { val: "public",  icon: "globe"   as const, label: "Public",       desc: "Anyone can join" },

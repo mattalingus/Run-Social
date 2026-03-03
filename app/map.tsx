@@ -883,7 +883,7 @@ export default function MapScreen() {
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
             <View style={s.section}>
-              <Text style={s.sectionLabel}>Visibility</Text>
+              <Text style={s.sectionLabel}>View</Text>
               <View style={{ height: 12 }} />
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                 {(["all", "public", "crew", "friends"] as const).map((opt) => {

@@ -314,7 +314,7 @@ export default function CreateRunScreen() {
 
         {!params.crewId && (
           <View style={styles.field}>
-            <Text style={styles.label}>Visibility</Text>
+            <Text style={styles.label}>View</Text>
             <View style={styles.privacyRow}>
               {PRIVACY_OPTIONS.map((opt) => (
                 <Pressable
