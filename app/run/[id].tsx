@@ -11,6 +11,7 @@ import {
   Platform,
   Image,
   Modal,
+  Linking,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { router, useLocalSearchParams } from "expo-router";
@@ -645,12 +646,26 @@ export default function RunDetailScreen() {
               <Text style={styles.infoLabel}>at {formatTime(run.date)}</Text>
             </View>
           </View>
-          <View style={styles.infoCard}>
+          <Pressable
+            style={styles.infoCard}
+            onPress={() => {
+              const lat = run.location_lat;
+              const lng = run.location_lng;
+              const label = encodeURIComponent(run.location_name);
+              const url = Platform.select({
+                ios: `maps://maps.apple.com/?ll=${lat},${lng}&q=${label}`,
+                android: `geo:${lat},${lng}?q=${label}`,
+                default: `https://www.google.com/maps?q=${lat},${lng}`,
+              });
+              if (url) Linking.openURL(url);
+            }}
+          >
             <Feather name="map-pin" size={18} color={C.primary} />
             <View style={{ flex: 1 }}>
               <Text style={styles.infoValue} numberOfLines={2}>{run.location_name}</Text>
+              <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 11, color: C.primary, marginTop: 1 }}>Tap to view map</Text>
             </View>
-          </View>
+          </Pressable>
         </View>
 
         <View style={styles.requirementsCard}>
