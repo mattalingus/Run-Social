@@ -279,7 +279,7 @@ export default function RunDetailScreen() {
 
   // Geo-proximity auto-trigger: show rules modal when non-participant arrives within 1 km
   useEffect(() => {
-    if (!user || !run || isHost || isParticipant || isPastRun || proximityTriggered || Platform.OS === "web") return;
+    if (!user || !run || isHost || isParticipant || run.is_completed || proximityTriggered || Platform.OS === "web") return;
     let sub: any = null;
     Location.getForegroundPermissionsAsync().then(async (perm) => {
       try {
@@ -887,7 +887,7 @@ export default function RunDetailScreen() {
       )}
 
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
-        {isHost && !isPastRun && !run.is_completed && (
+        {isHost && !run.is_completed && (
           isLive ? (
             <Pressable
               style={({ pressed }) => [styles.liveBtn, { opacity: pressed ? 0.85 : 1 }]}
@@ -955,7 +955,7 @@ export default function RunDetailScreen() {
             </>
           )
         )}
-        {!isHost && !isPastRun && isLive && isParticipant && (
+        {!isHost && isLive && isParticipant && !run.is_completed && (
           <Pressable
             style={({ pressed }) => [styles.liveBtn, { opacity: pressed ? 0.85 : 1 }]}
             onPress={() => router.push(`/run-live/${id}`)}
@@ -963,6 +963,12 @@ export default function RunDetailScreen() {
             <View style={styles.liveDot} />
             <Text style={styles.liveBtnText}>{run?.activity_type === "ride" ? "Join Live Ride" : "Join Live Run"}</Text>
           </Pressable>
+        )}
+        {!isHost && !isLive && isParticipant && !run.is_completed && (
+          <View style={styles.waitingBanner}>
+            <Feather name="clock" size={15} color={C.gold} />
+            <Text style={styles.waitingText}>Waiting on host to start</Text>
+          </View>
         )}
         {isPastRun && isParticipant && !hasConfirmed && (
           <Pressable
@@ -996,7 +1002,7 @@ export default function RunDetailScreen() {
             <Text style={styles.ratedText}>You rated this host {myRating.stars}/5</Text>
           </View>
         )}
-        {!isHost && !isParticipant && !isPastRun && user && (
+        {!isHost && !isParticipant && !run.is_completed && user && (
           <Pressable
             style={({ pressed }) => [
               isPlanned ? [styles.planBtn, styles.planBtnActive] : styles.primaryBtn,
@@ -1026,7 +1032,7 @@ export default function RunDetailScreen() {
             )}
           </Pressable>
         )}
-        {isParticipant && !isPastRun && (
+        {isParticipant && !run.is_completed && isLive && (
           <View style={styles.joinedBanner}>
             <Feather name="map-pin" size={14} color={C.primary} />
             <Text style={styles.joinedText}>You've arrived — you're in the live count</Text>
@@ -1409,6 +1415,8 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   ratedText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary },
   joinedBanner: { flexDirection: "row", alignItems: "center", gap: 8, justifyContent: "center", padding: 8 },
   joinedText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.primary },
+  waitingBanner: { flexDirection: "row", alignItems: "center", gap: 8, justifyContent: "center", padding: 12, backgroundColor: C.gold + "18", borderRadius: 12, borderWidth: 1, borderColor: C.gold + "44" },
+  waitingText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.gold },
   liveBtn: { backgroundColor: "#0A3A1F", borderRadius: 14, height: 52, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, borderWidth: 1.5, borderColor: C.primary },
   liveBtnText: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.primary },
   liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.primary },
