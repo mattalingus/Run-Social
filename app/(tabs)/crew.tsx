@@ -1003,8 +1003,13 @@ export default function CrewScreen() {
                 <Text style={s.emptyBody}>
                   Create a crew and invite your running friends — or accept an invite when one arrives.
                 </Text>
-                <TouchableOpacity style={s.primaryBtn} onPress={() => setShowCreate(true)} testID="create-first-crew">
-                  <Text style={s.primaryBtnTxt}>Create a Crew</Text>
+                <TouchableOpacity style={[s.createCrewBtn, { marginHorizontal: 0, marginBottom: 12, alignSelf: "stretch" }]} onPress={() => setShowCreate(true)} testID="create-first-crew" activeOpacity={0.88}>
+                  <Ionicons name="people" size={20} color={C.bg} />
+                  <Text style={s.createCrewBtnTxt}>Create a Crew</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[s.joinCrewBtn, { alignSelf: "stretch" }]} onPress={() => setSearchActive(true)} activeOpacity={0.88}>
+                  <Ionicons name="search" size={20} color={C.primary} />
+                  <Text style={s.joinCrewBtnTxt}>Join a Crew</Text>
                 </TouchableOpacity>
               </View>
             )
@@ -1184,6 +1189,23 @@ const s = StyleSheet.create({
     fontFamily: "Outfit_700Bold",
     fontSize: 17,
     color: C.bg,
+  },
+  joinCrewBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: "transparent",
+    borderWidth: 1.5,
+    borderColor: C.primary,
+    borderRadius: 16,
+    paddingVertical: 16,
+    width: "100%",
+  },
+  joinCrewBtnTxt: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 17,
+    color: C.primary,
   },
 
   // Invite banner
