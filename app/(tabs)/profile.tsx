@@ -31,6 +31,7 @@ import { ACHIEVEMENTS, type AchievementDef } from "@/constants/achievements";
 import { formatDistance } from "@/lib/formatDistance";
 import { pickAndUploadImage } from "@/lib/uploadImage";
 import HostProfileSheet from "@/components/HostProfileSheet";
+import SettingsModal from "@/components/SettingsModal";
 const APP_SHARE_URL = process.env.EXPO_PUBLIC_DOMAIN
   ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
   : "https://paceup.app";
@@ -1073,46 +1074,14 @@ export default function ProfileScreen() {
 
       {/* ── Edit Name Modal ────────────────────────────────────────────────── */}
       {/* ── Settings Modal ─────────────────────────────────────────────── */}
-      <Modal visible={showSettings} transparent animationType="slide" onRequestClose={() => setShowSettings(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setShowSettings(false)} />
-        <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 24 }]}>
-          <View style={styles.modalTitleRow}>
-            <Text style={styles.modalTitle}>Settings</Text>
-            <Pressable onPress={() => setShowSettings(false)}>
-              <Feather name="x" size={20} color={C.textSecondary} />
-            </Pressable>
-          </View>
-
-          {/* Theme Toggle */}
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.border }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-              <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: C.card, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: C.border }}>
-                <Feather name={theme === "dark" ? "moon" : "sun"} size={18} color={C.primary} />
-              </View>
-              <View>
-                <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.text }}>{theme === "dark" ? "Dark Mode" : "Light Mode"}</Text>
-                <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary }}>
-                  {theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
-                </Text>
-              </View>
-            </View>
-            <Pressable
-              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); toggleTheme(); }}
-              style={{
-                width: 50, height: 28, borderRadius: 14,
-                backgroundColor: theme === "dark" ? C.border : C.primary,
-                justifyContent: "center", paddingHorizontal: 3,
-              }}
-            >
-              <View style={{
-                width: 22, height: 22, borderRadius: 11,
-                backgroundColor: theme === "dark" ? C.textMuted : "#FFFFFF",
-                alignSelf: theme === "dark" ? "flex-start" : "flex-end",
-              }} />
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
+      <SettingsModal
+        visible={showSettings}
+        onClose={() => setShowSettings(false)}
+        onSignOut={async () => {
+          await logout();
+          router.replace("/(auth)/login");
+        }}
+      />
 
       <Modal visible={showEditName} transparent animationType="slide" onRequestClose={() => setShowEditName(false)}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">

@@ -99,7 +99,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/users/me", requireAuth, async (req, res) => {
     try {
-      const allowed = ["name", "avgPace", "avgDistance", "photoUrl", "notificationsEnabled"];
+      const allowed = ["name", "avgPace", "avgDistance", "photoUrl", "notificationsEnabled", "distanceUnit", "profilePrivacy", "notifRunReminders", "notifFriendRequests", "notifCrewActivity", "notifWeeklySummary"];
       const updates: Record<string, any> = {};
       for (const key of allowed) {
         if (req.body[key] !== undefined) updates[key] = req.body[key];
