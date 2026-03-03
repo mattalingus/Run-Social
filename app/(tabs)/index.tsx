@@ -521,7 +521,9 @@ function RunCard({
               <Text style={[s.statLabel, run.is_active && run.participant_count > 0 && { color: C.primary }]}>
                 {run.is_active && run.participant_count > 0
                   ? `${run.participant_count} arrived`
-                  : `${run.participant_count}/${run.max_participants}`}
+                  : run.crew_id
+                    ? `${Math.max(1, run.participant_count)} going`
+                    : `${Math.max(1, run.participant_count)}/${run.max_participants}`}
               </Text>
             </View>
           </View>

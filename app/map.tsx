@@ -686,7 +686,9 @@ export default function MapScreen() {
                   <Text style={[s.chipTxt, (selectedRun.is_active && selectedRun.participant_count > 0) && { color: C.primary }]}>
                     {selectedRun.is_active && selectedRun.participant_count > 0
                       ? `${selectedRun.participant_count} arrived`
-                      : `${selectedRun.participant_count}/${selectedRun.max_participants}`}
+                      : selectedRun.crew_id
+                        ? `${Math.max(1, selectedRun.participant_count)} going`
+                        : `${Math.max(1, selectedRun.participant_count)}/${selectedRun.max_participants}`}
                   </Text>
                 </View>
                 {selectedRun.tags?.[0] && (
@@ -812,7 +814,9 @@ export default function MapScreen() {
                   <View style={s.miniStatRow}>
                     <Feather name="users" size={10} color={C.textSecondary} />
                     <Text style={[s.miniStatTxt, { color: C.textSecondary }]}>
-                      {run.participant_count}/{run.max_participants}
+                      {run.crew_id
+                        ? `${Math.max(1, run.participant_count)} going`
+                        : `${Math.max(1, run.participant_count)}/${run.max_participants}`}
                     </Text>
                   </View>
                 </View>
