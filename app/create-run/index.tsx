@@ -57,6 +57,7 @@ export default function CreateRunScreen() {
   const [maxParticipants, setMaxParticipants] = useState("20");
   const [invitePassword, setInvitePassword] = useState("");
   const [inviteModal, setInviteModal] = useState<{ token: string; title: string } | null>(null);
+  const [crewSuccessModal, setCrewSuccessModal] = useState<{ runId: string; title: string; crewName: string } | null>(null);
   const [page, setPage] = useState<"form" | "location">("form");
   const [pinCoord, setPinCoord] = useState<{ latitude: number; longitude: number } | null>(
     params.pathLat ? { latitude: parseFloat(params.pathLat), longitude: parseFloat(params.pathLng ?? "-122.4194") } : null
@@ -203,7 +204,12 @@ export default function CreateRunScreen() {
         qc.invalidateQueries({ queryKey: ["/api/crews"] });
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      if (run?.privacy === "private" && run?.invite_token) {
+      if (effectiveCrewId) {
+        const crewName = params.crewName
+          ?? myCrews.find((c) => c.id === effectiveCrewId)?.name
+          ?? "Your Crew";
+        setCrewSuccessModal({ runId: run.id, title: run.title, crewName });
+      } else if (run?.privacy === "private" && run?.invite_token) {
         setInviteModal({ token: run.invite_token, title: run.title });
       } else {
         Alert.alert(
@@ -648,6 +654,58 @@ export default function CreateRunScreen() {
         </Modal>
       )}
 
+      {crewSuccessModal && (
+        <Modal transparent animationType="fade">
+          <View style={styles.modalOverlay}>
+            <View style={styles.crewSuccessModal}>
+              <View style={styles.crewSuccessIconRow}>
+                <Feather name="check-circle" size={26} color={C.primary} />
+              </View>
+              <Text style={styles.crewSuccessTitle}>
+                {crewSuccessModal.crewName}'s {activityType === "ride" ? "Ride" : "Run"} Created!
+              </Text>
+              <Text style={styles.crewSuccessSub}>Crew members will be notified.</Text>
+
+              <View style={styles.crewSuccessActions}>
+                <Pressable
+                  style={styles.crewInviteBtn}
+                  onPress={() => {
+                    Share.share({
+                      message: `Join my crew on FARA to see upcoming runs & rides! Search for "${crewSuccessModal.crewName}" in the Crew tab.`,
+                    });
+                  }}
+                >
+                  <Feather name="user-plus" size={15} color={C.primary} />
+                  <Text style={styles.crewInviteTxt}>Invite to Crew</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.crewShareBtn}
+                  onPress={() => {
+                    Share.share({
+                      message: `Check out "${crewSuccessModal.title}" on FARA! Open the app to join.`,
+                    });
+                  }}
+                >
+                  <Feather name="share-2" size={15} color={C.bg} />
+                  <Text style={styles.crewShareTxt}>Share</Text>
+                </Pressable>
+              </View>
+
+              <Pressable
+                style={styles.inviteDoneBtn}
+                onPress={() => {
+                  setCrewSuccessModal(null);
+                  if (router.canGoBack()) router.back();
+                  else router.replace("/(tabs)/");
+                }}
+              >
+                <Text style={styles.inviteDoneTxt}>Done</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+      )}
+
       {inviteModal && (
         <Modal transparent animationType="fade">
           <View style={styles.modalOverlay}>
@@ -796,6 +854,15 @@ const styles = StyleSheet.create({
   inviteShareTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.bg },
   inviteDoneBtn: { width: "100%", alignItems: "center", paddingVertical: 12, borderTopWidth: 1, borderTopColor: C.border, marginTop: 4 },
   inviteDoneTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.textSecondary },
+  crewSuccessModal: { backgroundColor: C.surface, borderRadius: 20, padding: 24, width: "100%", alignItems: "center", gap: 12, borderWidth: 1, borderColor: C.border },
+  crewSuccessIconRow: { width: 52, height: 52, borderRadius: 26, backgroundColor: C.primaryMuted, alignItems: "center", justifyContent: "center" },
+  crewSuccessTitle: { fontFamily: "Outfit_700Bold", fontSize: 20, color: C.text, textAlign: "center" },
+  crewSuccessSub: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary, textAlign: "center", marginBottom: 4 },
+  crewSuccessActions: { flexDirection: "row", gap: 10, width: "100%" },
+  crewInviteBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, backgroundColor: C.primaryMuted, borderRadius: 12, paddingVertical: 11, borderWidth: 1, borderColor: C.primary },
+  crewInviteTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.primary },
+  crewShareBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, backgroundColor: C.primary, borderRadius: 12, paddingVertical: 11 },
+  crewShareTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.bg },
   locationBtn: {
     flexDirection: "row", alignItems: "center", gap: 10,
     backgroundColor: C.card, borderRadius: 12, borderWidth: 1, borderColor: C.border,
