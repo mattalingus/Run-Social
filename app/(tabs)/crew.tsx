@@ -14,9 +14,12 @@ import {
   KeyboardAvoidingView,
   Keyboard,
   Image,
+  Pressable,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import * as Haptics from "expo-haptics";
 import { Ionicons } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, useFocusEffect } from "expo-router";
@@ -92,7 +95,9 @@ interface Run {
   date: string;
   activity_type?: string;
   host_name: string;
+  host_id?: string;
   distance_miles?: number;
+  min_distance?: number;
   participant_count?: number;
 }
 
@@ -636,7 +641,16 @@ function CrewDetailSheet({
     );
   };
 
+  const [eventsExpanded, setEventsExpanded] = useState(false);
+
+  const { data: crewMessages = [] } = useQuery<any[]>({
+    queryKey: ["/api/crews", crew?.id, "messages"],
+    enabled: !!crew?.id,
+    refetchInterval: 5000,
+  });
+
   const filteredRuns = crewRuns.filter((r) => (r.activity_type ?? "run") === activityFilter);
+  const visibleRuns = eventsExpanded ? filteredRuns : filteredRuns.slice(0, 5);
   const members = detail?.members ?? [];
   const memberIds = members.map((m) => m.user_id);
   const isCreator = crew?.created_by === currentUserId;
@@ -734,7 +748,150 @@ function CrewDetailSheet({
                   </View>
                 )}
 
-                {/* Members */}
+                {/* ── Upcoming Events (big cards) ── */}
+                <View style={s.detailSection}>
+                  <View style={s.detailSectionHeader}>
+                    <Text style={s.detailSectionTitle}>
+                      Upcoming {activityFilter === "ride" ? "Rides" : "Runs"}
+                    </Text>
+                    {filteredRuns.length > 5 && (
+                      <TouchableOpacity onPress={() => setEventsExpanded((x) => !x)}>
+                        <Text style={s.viewAllTxt}>
+                          {eventsExpanded ? "Show less" : `View all ${filteredRuns.length} →`}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  {filteredRuns.length === 0 ? (
+                    <View style={s.emptyRuns}>
+                      <Ionicons
+                        name={activityFilter === "ride" ? "bicycle-outline" : "walk-outline"}
+                        size={28}
+                        color={C.textMuted}
+                      />
+                      <Text style={s.emptyRunsTxt}>
+                        No upcoming {activityFilter === "ride" ? "rides" : "runs"} from your crew
+                      </Text>
+                    </View>
+                  ) : (
+                    visibleRuns.map((run) => (
+                      <TouchableOpacity
+                        key={run.id}
+                        style={s.eventCard}
+                        activeOpacity={0.75}
+                        testID={`crew-run-row-${run.id}`}
+                        onPress={() => {
+                          onClose();
+                          router.push({ pathname: "/run/[id]", params: { id: run.id } });
+                        }}
+                      >
+                        <View style={s.eventCardTop}>
+                          <View style={s.eventActivityPill}>
+                            <Ionicons
+                              name={run.activity_type === "ride" ? "bicycle-outline" : "walk-outline"}
+                              size={13}
+                              color={C.primary}
+                            />
+                            <Text style={s.eventActivityTxt}>
+                              {run.activity_type === "ride" ? "Ride" : "Run"}
+                            </Text>
+                          </View>
+                          <Ionicons name="chevron-forward" size={14} color={C.textMuted} />
+                        </View>
+                        <Text style={s.eventCardTitle} numberOfLines={2}>{run.title}</Text>
+                        <View style={s.eventCardMeta}>
+                          <View style={s.eventMetaChip}>
+                            <Ionicons name="calendar-outline" size={12} color={C.textMuted} />
+                            <Text style={s.eventMetaChipTxt}>{formatDate(run.date)}</Text>
+                          </View>
+                          {run.min_distance ? (
+                            <View style={s.eventMetaChip}>
+                              <Ionicons name="navigate-outline" size={12} color={C.textMuted} />
+                              <Text style={s.eventMetaChipTxt}>{run.min_distance} mi</Text>
+                            </View>
+                          ) : null}
+                          {run.participant_count ? (
+                            <View style={s.eventMetaChip}>
+                              <Ionicons name="people-outline" size={12} color={C.textMuted} />
+                              <Text style={s.eventMetaChipTxt}>{run.participant_count} going</Text>
+                            </View>
+                          ) : null}
+                        </View>
+                        <Text style={s.eventCardHost}>Hosted by {run.host_name}</Text>
+                      </TouchableOpacity>
+                    ))
+                  )}
+                </View>
+
+                {/* ── Chat Preview ── */}
+                <View style={s.detailSection}>
+                  <View style={s.detailSectionHeader}>
+                    <Text style={s.detailSectionTitle}>Crew Chat</Text>
+                    <TouchableOpacity
+                      style={s.openChatChip}
+                      onPress={() => {
+                        onClose();
+                        router.push(`/crew-chat/${crew?.id}`);
+                      }}
+                    >
+                      <Ionicons name="chatbubble-ellipses-outline" size={13} color={C.primary} />
+                      <Text style={s.openChatChipTxt}>Open</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {crewMessages.length === 0 ? (
+                    <TouchableOpacity
+                      style={s.chatEmptyCard}
+                      activeOpacity={0.75}
+                      onPress={() => {
+                        onClose();
+                        router.push(`/crew-chat/${crew?.id}`);
+                      }}
+                    >
+                      <Ionicons name="chatbubble-outline" size={22} color={C.textMuted} />
+                      <Text style={s.chatEmptyTxt}>No messages yet — start the conversation!</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={s.chatPreviewContainer}>
+                      {crewMessages.slice(0, 5).reverse().map((msg: any) => {
+                        const isMe = msg.user_id === currentUserId;
+                        return (
+                          <View
+                            key={msg.id}
+                            style={[s.chatPreviewRow, isMe && s.chatPreviewRowMe]}
+                          >
+                            {!isMe && (
+                              <View style={s.chatPreviewAvatar}>
+                                <Text style={s.chatPreviewAvatarTxt}>
+                                  {(msg.sender_name ?? "?")[0].toUpperCase()}
+                                </Text>
+                              </View>
+                            )}
+                            <View style={[s.chatPreviewBubble, isMe && s.chatPreviewBubbleMe]}>
+                              {!isMe && (
+                                <Text style={s.chatPreviewSender}>{msg.sender_name}</Text>
+                              )}
+                              <Text style={[s.chatPreviewMsg, isMe && s.chatPreviewMsgMe]} numberOfLines={3}>
+                                {msg.message}
+                              </Text>
+                            </View>
+                          </View>
+                        );
+                      })}
+                      <TouchableOpacity
+                        style={s.chatOpenBtn}
+                        onPress={() => {
+                          onClose();
+                          router.push(`/crew-chat/${crew?.id}`);
+                        }}
+                      >
+                        <Ionicons name="send-outline" size={14} color={C.primary} />
+                        <Text style={s.chatOpenBtnTxt}>Send a message…</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+
+                {/* ── Members ── */}
                 <View style={s.detailSection}>
                   <View style={s.detailSectionHeader}>
                     <Text style={s.detailSectionTitle}>Members ({members.length})</Text>
@@ -784,53 +941,6 @@ function CrewDetailSheet({
                           </Pressable>
                         )}
                       </View>
-                    ))
-                  )}
-                </View>
-
-                {/* Upcoming runs */}
-                <View style={s.detailSection}>
-                  <Text style={s.detailSectionTitle}>
-                    Upcoming {activityFilter === "ride" ? "Rides" : "Runs"}
-                  </Text>
-                  {filteredRuns.length === 0 ? (
-                    <View style={s.emptyRuns}>
-                      <Ionicons
-                        name={activityFilter === "ride" ? "bicycle-outline" : "walk-outline"}
-                        size={28}
-                        color={C.textMuted}
-                      />
-                      <Text style={s.emptyRunsTxt}>
-                        No upcoming {activityFilter === "ride" ? "rides" : "runs"} from your crew
-                      </Text>
-                    </View>
-                  ) : (
-                    filteredRuns.map((run) => (
-                      <TouchableOpacity
-                        key={run.id}
-                        style={s.runRow}
-                        activeOpacity={0.7}
-                        testID={`crew-run-row-${run.id}`}
-                        onPress={() => {
-                          onClose();
-                          router.push({ pathname: "/run/[id]", params: { id: run.id } });
-                        }}
-                      >
-                        <Ionicons
-                          name={run.activity_type === "ride" ? "bicycle-outline" : "walk-outline"}
-                          size={16}
-                          color={C.primary}
-                          style={{ marginRight: 8, marginTop: 2 }}
-                        />
-                        <View style={{ flex: 1 }}>
-                          <Text style={s.runTitle}>{run.title}</Text>
-                          <Text style={s.runMeta}>
-                            {formatDate(run.date)} · {run.host_name}
-                            {run.participant_count ? ` · ${run.participant_count} going` : ""}
-                          </Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={14} color={C.textMuted} />
-                      </TouchableOpacity>
                     ))
                   )}
                 </View>
@@ -914,20 +1024,6 @@ function CrewDetailSheet({
                     Schedule a {activityFilter === "ride" ? "Ride" : "Run"}
                   </Text>
                 </TouchableOpacity>
-
-                {/* Disband (creator only) */}
-                <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
-                  <TouchableOpacity
-                    style={[s.scheduleBtn, { flex: 1, marginTop: 0 }]}
-                    onPress={() => {
-                      onClose();
-                      router.push(`/crew-chat/${crew?.id}`);
-                    }}
-                  >
-                    <Ionicons name="chatbubble-ellipses-outline" size={18} color={C.primary} />
-                    <Text style={s.scheduleBtnTxt}>Crew Chat</Text>
-                  </TouchableOpacity>
-                </View>
 
                 {isCreator && (
                   <TouchableOpacity
@@ -2029,6 +2125,177 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     fontSize: 14,
     color: C.textMuted,
     textAlign: "center",
+  },
+  viewAllTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 13,
+    color: C.primary,
+  },
+  // Event cards
+  eventCard: {
+    backgroundColor: C.card,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  eventCardTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  eventActivityPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: C.primary + "18",
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  eventActivityTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 12,
+    color: C.primary,
+  },
+  eventCardTitle: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 16,
+    color: C.text,
+    marginBottom: 10,
+    lineHeight: 22,
+  },
+  eventCardMeta: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 8,
+  },
+  eventMetaChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: C.surface,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  eventMetaChipTxt: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 12,
+    color: C.textMuted,
+  },
+  eventCardHost: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 12,
+    color: C.textSecondary,
+    marginTop: 2,
+  },
+  // Chat preview
+  openChatChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: C.primary + "18",
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: C.primary + "40",
+  },
+  openChatChipTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 13,
+    color: C.primary,
+  },
+  chatEmptyCard: {
+    backgroundColor: C.card,
+    borderRadius: 14,
+    padding: 20,
+    alignItems: "center",
+    gap: 10,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  chatEmptyTxt: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 14,
+    color: C.textMuted,
+    textAlign: "center",
+  },
+  chatPreviewContainer: {
+    backgroundColor: C.card,
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+    gap: 8,
+  },
+  chatPreviewRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 8,
+  },
+  chatPreviewRowMe: {
+    justifyContent: "flex-end",
+  },
+  chatPreviewAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: C.primary + "25",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  chatPreviewAvatarTxt: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 12,
+    color: C.primary,
+  },
+  chatPreviewBubble: {
+    backgroundColor: C.surface,
+    borderRadius: 12,
+    borderBottomLeftRadius: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    maxWidth: "78%",
+  },
+  chatPreviewBubbleMe: {
+    backgroundColor: C.primary,
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 4,
+  },
+  chatPreviewSender: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 11,
+    color: C.textMuted,
+    marginBottom: 2,
+  },
+  chatPreviewMsg: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 14,
+    color: C.text,
+  },
+  chatPreviewMsgMe: {
+    color: C.bg,
+  },
+  chatOpenBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+    paddingTop: 10,
+    marginTop: 2,
+  },
+  chatOpenBtnTxt: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 14,
+    color: C.textMuted,
+    flex: 1,
   },
   runRow: {
     flexDirection: "row",
