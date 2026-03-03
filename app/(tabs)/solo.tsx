@@ -764,57 +764,65 @@ export default function SoloScreen() {
               const isExpanded = expandedRunId === run.id;
               return (
                 <View key={run.id} style={s.historyCard}>
-                  <Pressable
-                    style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
-                    onPress={() => run.completed && setExpandedRunId(isExpanded ? null : run.id)}
-                    onLongPress={() => confirmDelete(run.id)}
-                  >
-                    <View style={s.historyRow}>
-                      <View style={s.historyLeft}>
-                        <View style={[
-                          s.historyStatus,
-                          { backgroundColor: run.completed ? C.primary + "22" : run.planned ? C.blue + "22" : C.border },
-                        ]}>
-                          <Feather
-                            name={run.completed ? "check" : run.planned ? "calendar" : "circle"}
-                            size={12}
-                            color={run.completed ? C.primary : run.planned ? C.blue : C.textMuted}
-                          />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <View style={s.historyTitleRow}>
-                            <Text style={s.historyTitle} numberOfLines={1}>{label}</Text>
-                            {badge && (
-                              <Text style={s.historyBadge}>{RANK_EMOJI[badge.rank - 1]}</Text>
-                            )}
-                          </View>
-                          <Text style={s.historyMeta}>
-                            {formatDisplayDate(run.date)}
-                            {run.pace_min_per_mile ? ` · ${formatPace(run.pace_min_per_mile)}/mi` : ""}
-                            {run.duration_seconds ? ` · ${formatDuration(run.duration_seconds)}` : ""}
-                          </Text>
-                        </View>
+                  <View style={s.historyRow}>
+                    {/* Left: tappable expand/delete area */}
+                    <Pressable
+                      style={({ pressed }) => [s.historyLeft, { opacity: pressed ? 0.85 : 1 }]}
+                      onPress={() => run.completed && setExpandedRunId(isExpanded ? null : run.id)}
+                      onLongPress={() => confirmDelete(run.id)}
+                    >
+                      <View style={[
+                        s.historyStatus,
+                        { backgroundColor: run.completed ? C.primary + "22" : run.planned ? C.blue + "22" : C.border },
+                      ]}>
+                        <Feather
+                          name={run.completed ? "check" : run.planned ? "calendar" : "circle"}
+                          size={12}
+                          color={run.completed ? C.primary : run.planned ? C.blue : C.textMuted}
+                        />
                       </View>
-                      <View style={s.historyRight}>
+                      <View style={{ flex: 1 }}>
+                        <View style={s.historyTitleRow}>
+                          <Text style={s.historyTitle} numberOfLines={1}>{label}</Text>
+                          {badge && (
+                            <Text style={s.historyBadge}>{RANK_EMOJI[badge.rank - 1]}</Text>
+                          )}
+                        </View>
+                        <Text style={s.historyMeta}>
+                          {formatDisplayDate(run.date)}
+                          {run.pace_min_per_mile ? ` · ${formatPace(run.pace_min_per_mile)}/mi` : ""}
+                          {run.duration_seconds ? ` · ${formatDuration(run.duration_seconds)}` : ""}
+                        </Text>
+                      </View>
+                    </Pressable>
+                    {/* Right: star + distance + chevron — outside the expand Pressable */}
+                    <View style={s.historyRight}>
+                      <Pressable
+                        onPress={() => {
+                          Haptics.selectionAsync();
+                          starMutation.mutate(run.id);
+                        }}
+                        hitSlop={12}
+                        style={{ padding: 4 }}
+                      >
+                        <Ionicons
+                          name={run.is_starred ? "star" : "star-outline"}
+                          size={18}
+                          color={run.is_starred ? C.gold : C.textMuted}
+                        />
+                      </Pressable>
+                      <Text style={s.historyDist}>{formatDistance(run.distance_miles)}</Text>
+                      <Text style={s.historyDistUnit}>mi</Text>
+                      {run.completed && (
                         <Pressable
-                          onPress={() => starMutation.mutate(run.id)}
-                          hitSlop={10}
-                          style={{ marginRight: 6 }}
+                          onPress={() => setExpandedRunId(isExpanded ? null : run.id)}
+                          hitSlop={8}
                         >
-                          <Ionicons
-                            name={run.is_starred ? "star" : "star-outline"}
-                            size={18}
-                            color={run.is_starred ? C.gold : C.textMuted}
-                          />
-                        </Pressable>
-                        <Text style={s.historyDist}>{formatDistance(run.distance_miles)}</Text>
-                        <Text style={s.historyDistUnit}>mi</Text>
-                        {run.completed && (
                           <Feather name={isExpanded ? "chevron-up" : "chevron-down"} size={14} color={C.textMuted} />
-                        )}
-                      </View>
+                        </Pressable>
+                      )}
                     </View>
-                  </Pressable>
+                  </View>
                   {run.route_path && run.route_path.length > 1 && Platform.OS !== "web" && (
                     <MiniRouteMap path={run.route_path} />
                   )}

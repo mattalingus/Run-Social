@@ -174,17 +174,17 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
   }
 
   function toggleDay(d: string) {
-    setDraft((p) => ({
-      ...p,
-      days: p.days.includes(d) ? p.days.filter((x) => x !== d) : [...p.days, d],
-    }));
+    setDraft((p) => {
+      const days = p.days ?? [];
+      return { ...p, days: days.includes(d) ? days.filter((x) => x !== d) : [...days, d] };
+    });
   }
 
   function toggleTime(t: string) {
-    setDraft((p) => ({
-      ...p,
-      times: p.times.includes(t) ? p.times.filter((x) => x !== t) : [...p.times, t],
-    }));
+    setDraft((p) => {
+      const times = p.times ?? [];
+      return { ...p, times: times.includes(t) ? times.filter((x) => x !== t) : [...times, t] };
+    });
   }
 
   return (
@@ -370,7 +370,7 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
             <Text style={fm.sectionTitle}>Day of Week</Text>
             <View style={[fm.proxRow, { flexWrap: "wrap" }]}>
               {(["Mon","Tue","Wed","Thu","Fri","Sat","Sun"] as const).map((d) => {
-                const active = draft.days.includes(d);
+                const active = (draft.days ?? []).includes(d);
                 return (
                   <Pressable
                     key={d}
@@ -391,7 +391,7 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
             <Text style={fm.sectionTitle}>Time of Day</Text>
             <View style={fm.proxRow}>
               {(["Morning","Afternoon","Evening","Night"] as const).map((t) => {
-                const active = draft.times.includes(t);
+                const active = (draft.times ?? []).includes(t);
                 return (
                   <Pressable
                     key={t}
@@ -897,8 +897,9 @@ export default function DiscoverScreen() {
       // Day of Week
       const DAY_MAP: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
       const runDay = new Date(r.date).getDay();
-      const matchDay = applied.days.length === 0 ||
-        applied.days.some((d) => DAY_MAP[d] === runDay);
+      const appliedDays = applied.days ?? [];
+      const matchDay = appliedDays.length === 0 ||
+        appliedDays.some((d) => DAY_MAP[d] === runDay);
       // Time of Day
       const runHour = new Date(r.date).getHours();
       function runTimeSlot(h: number): string {
@@ -907,8 +908,9 @@ export default function DiscoverScreen() {
         if (h >= 17 && h < 21) return "Evening";
         return "Night";
       }
-      const matchTime = applied.times.length === 0 ||
-        applied.times.includes(runTimeSlot(runHour));
+      const appliedTimes = applied.times ?? [];
+      const matchTime = appliedTimes.length === 0 ||
+        appliedTimes.includes(runTimeSlot(runHour));
 
       const matchActivity = (r.activity_type ?? "run") === activityFilter;
       return matchSearch && matchPace && matchDist && matchProx && matchStyle && matchVisibility && matchDay && matchTime && matchActivity;
@@ -951,8 +953,8 @@ export default function DiscoverScreen() {
     applied.maxDistFromMe !== DEFAULT_FILTERS.maxDistFromMe ||
     applied.styles.length > 0 ||
     applied.visibility !== "all" ||
-    applied.days.length > 0 ||
-    applied.times.length > 0;
+    (applied.days ?? []).length > 0 ||
+    (applied.times ?? []).length > 0;
 
   const isNonDefaultSort = sortOption !== "soonest";
 

@@ -881,15 +881,24 @@ export default function ProfileScreen() {
 
 
       {/* ── Favorite Runs/Rides ───────────────────────────────────────────── */}
-      {starredRuns.filter((r) => (r.activity_type ?? "run") === profileActivity).length > 0 && (
-        <View style={styles.section}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 12 }}>
-            <Ionicons name="star" size={16} color={C.gold} />
-            <Text style={styles.sectionTitle}>
-              {profileActivity === "ride" ? "Favorite Rides" : "Favorite Runs"}
+      <View style={styles.section}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 12 }}>
+          <Ionicons name="star" size={16} color={C.gold} />
+          <Text style={styles.sectionTitle}>
+            {profileActivity === "ride" ? "Favorite Rides" : "Favorite Runs"}
+          </Text>
+        </View>
+        {starredRuns.filter((r) => (r.activity_type ?? "run") === profileActivity).length === 0 ? (
+          <View style={styles.emptyHistory}>
+            <Ionicons name="star-outline" size={32} color={C.textMuted} />
+            <Text style={styles.emptyHistoryText}>
+              {profileActivity === "ride"
+                ? "Star rides from your history to save them here"
+                : "Star runs from your history to save them here"}
             </Text>
           </View>
-          {starredRuns
+        ) : (
+          starredRuns
             .filter((r) => (r.activity_type ?? "run") === profileActivity)
             .map((run) => {
               const label = run.title || `${formatDistance(run.distance_miles)} mi ${run.activity_type === "ride" ? "ride" : "run"}`;
@@ -920,9 +929,9 @@ export default function ProfileScreen() {
                   )}
                 </View>
               );
-            })}
-        </View>
-      )}
+            })
+        )}
+      </View>
 
       {/* ── Run / Ride Schedule ───────────────────────────────────────────── */}
       <View style={styles.section}>
