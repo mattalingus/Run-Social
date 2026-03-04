@@ -1258,9 +1258,11 @@ export default function DiscoverScreen() {
               onPress={() => router.push("/(tabs)/messages")}
               testID="messages-button"
             >
-              <Ionicons name="chatbubble-outline" size={15} color={C.primary} />
+              <View>
+                <Ionicons name="chatbubble-outline" size={15} color={C.primary} />
+                {unreadDmCount > 0 && <View style={s.dmDot} />}
+              </View>
               <Text style={s.hBtnTxt}>Messages</Text>
-              {unreadDmCount > 0 && <View style={s.dmDot} />}
             </Pressable>
 
             {/* Host */}
@@ -2310,8 +2312,8 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   },
   dmDot: {
     position: "absolute",
-    top: -4,
-    right: -4,
+    top: -2,
+    right: -2,
     width: 8,
     height: 8,
     borderRadius: 4,
