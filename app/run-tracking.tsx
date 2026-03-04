@@ -302,6 +302,7 @@ export default function RunTrackingScreen() {
   const [displayDist, setDisplayDist] = useState(0);
   const [saving, setSaving] = useState(false);
   const [routeState, setRouteState] = useState<Coord[]>([]);
+  const [isDriving, setIsDriving] = useState(false);
 
   // Audio Coach state
   const [coachEnabled, setCoachEnabled] = useState(true);
@@ -422,11 +423,19 @@ export default function RunTrackingScreen() {
     return () => { stopWatching(); };
   }, [phase]);
 
-  const handleCoord = useCallback((latitude: number, longitude: number, accuracy?: number) => {
+  const handleCoord = useCallback((latitude: number, longitude: number, accuracy?: number, speed?: number | null) => {
     // Skip poor-accuracy fixes that occur during GPS warm-up (first few seconds)
     // Native threshold: 40m, web threshold: 100m (web GPS is inherently less accurate)
     const maxAccuracy = Platform.OS === "web" ? 100 : 40;
     if (accuracy != null && accuracy > maxAccuracy) return;
+
+    // Vehicle detection: run > 12 m/s (~27 mph), ride > 22 m/s (~50 mph)
+    const vehicleThreshold = activityFilter === "ride" ? 22 : 12;
+    if (speed != null && speed > 0 && speed > vehicleThreshold) {
+      setIsDriving(true);
+      return;
+    }
+    setIsDriving(false);
 
     const coord: Coord = { latitude, longitude };
     routePathRef.current.push(coord);
@@ -481,7 +490,7 @@ export default function RunTrackingScreen() {
     if (Platform.OS === "web") {
       if (typeof navigator !== "undefined" && navigator.geolocation) {
         webWatchIdRef.current = navigator.geolocation.watchPosition(
-          (pos) => handleCoord(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy ?? undefined),
+          (pos) => handleCoord(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy ?? undefined, pos.coords.speed),
           () => {},
           { enableHighAccuracy: true, maximumAge: 3000 }
         );
@@ -495,7 +504,7 @@ export default function RunTrackingScreen() {
           distanceInterval: 5,
           timeInterval: 3000,
         },
-        (loc) => handleCoord(loc.coords.latitude, loc.coords.longitude, loc.coords.accuracy ?? undefined)
+        (loc) => handleCoord(loc.coords.latitude, loc.coords.longitude, loc.coords.accuracy ?? undefined, loc.coords.speed)
       );
       locationSubRef.current = sub;
     } catch (_) {}
@@ -1118,6 +1127,14 @@ export default function RunTrackingScreen() {
           {formatElapsed(elapsed)}
         </Text>
 
+        {/* Vehicle detected banner */}
+        {isDriving && phase === "active" && (
+          <View style={t.drivingBanner}>
+            <Ionicons name="car-outline" size={16} color="#fff" />
+            <Text style={t.drivingBannerTxt}>Vehicle detected — tracking paused</Text>
+          </View>
+        )}
+
         {/* Live stats */}
         <View style={t.liveRow}>
           <View style={t.liveStat}>
@@ -1368,6 +1385,23 @@ const t = StyleSheet.create({
     lineHeight: 54,
   },
 
+  drivingBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#D97700",
+    borderRadius: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    alignSelf: "stretch",
+    marginBottom: 8,
+  },
+  drivingBannerTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 13,
+    color: "#fff",
+    flex: 1,
+  },
   liveRow: {
     flexDirection: "row",
     alignItems: "center",
