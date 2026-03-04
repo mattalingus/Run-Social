@@ -2544,6 +2544,10 @@ export async function getUserRunRecords(userId: string) {
 // ─── Crew Storage ─────────────────────────────────────────────────────────────
 
 export async function createCrew(data: { name: string; description?: string; emoji: string; createdBy: string; runStyle?: string; tags?: string[]; imageUrl?: string }) {
+  const existing = await pool.query(`SELECT id FROM crews WHERE LOWER(name) = LOWER($1)`, [data.name]);
+  if (existing.rows.length > 0) {
+    throw Object.assign(new Error("A crew with that name already exists. Please choose a different name."), { code: "DUPLICATE_CREW_NAME" });
+  }
   const res = await pool.query(
     `INSERT INTO crews (name, description, emoji, created_by, run_style, tags, image_url) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
     [data.name, data.description ?? null, data.emoji, data.createdBy, data.runStyle ?? null, data.tags ?? [], data.imageUrl ?? null]

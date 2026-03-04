@@ -1298,7 +1298,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!name?.trim()) return res.status(400).json({ message: "Name is required" });
       const crew = await storage.createCrew({ name: name.trim(), description, emoji: emoji || "🏃", createdBy: req.session.userId!, runStyle, tags: Array.isArray(tags) ? tags : [], imageUrl });
       res.json(crew);
-    } catch (e: any) { res.status(500).json({ message: e.message }); }
+    } catch (e: any) {
+      if ((e as any).code === "DUPLICATE_CREW_NAME") return res.status(409).json({ message: e.message });
+      res.status(500).json({ message: e.message });
+    }
   });
 
   app.get("/api/crew-invites", requireAuth, async (req, res) => {

@@ -288,7 +288,13 @@ function CreateCrewSheet({ visible, onClose, onCreated }: { visible: boolean; on
       setImageUrl(null);
       onCreated(crew);
     },
-    onError: (e: any) => Alert.alert("Error", e.message ?? "Could not create crew"),
+    onError: (e: any) => {
+      if (e.message?.startsWith("409:")) {
+        Alert.alert("Name taken", "A crew with that name already exists. Please choose a different name.");
+      } else {
+        Alert.alert("Error", e.message ?? "Could not create crew");
+      }
+    },
   });
 
   const handleCreate = () => {
