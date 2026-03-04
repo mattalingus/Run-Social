@@ -1322,7 +1322,7 @@ export default function DiscoverScreen() {
             { paddingBottom: insets.bottom + (Platform.OS === "web" ? 34 : 100) },
           ]}
           showsVerticalScrollIndicator={false}
-          scrollEnabled={!!sorted.length}
+          scrollEnabled={true}
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={C.primary} />
           }
@@ -2574,7 +2574,7 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   },
 
   // ─── Rich Empty State ─────────────────────────────────────────────────────
-  richEmpty: { paddingTop: 24, paddingHorizontal: 16 },
+  richEmpty: { paddingTop: 24 },
   hostCtaCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -2666,7 +2666,6 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     backgroundColor: C.card,
     borderRadius: 16,
     padding: 14,
-    marginHorizontal: 16,
     marginBottom: 14,
     borderTopWidth: 1,
     borderTopColor: C.primary,
