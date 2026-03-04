@@ -22,7 +22,7 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { useActivity } from "@/contexts/ActivityContext";
@@ -83,6 +83,7 @@ export default function RunTrackingScreen() {
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
   const { activityFilter } = useActivity();
+  const { pathId } = useLocalSearchParams<{ pathId?: string }>();
 
   const [permission, requestPermission] = Location.useForegroundPermissions();
   const [phase, setPhase] = useState<Phase>("idle");
@@ -120,6 +121,15 @@ export default function RunTrackingScreen() {
     queryKey: ["/api/saved-paths"],
     staleTime: 60_000,
   });
+
+  // ─── Auto-select path from URL param ─────────────────────────────────────
+
+  useEffect(() => {
+    if (pathId && savedPaths.length > 0 && !selectedPath) {
+      const match = savedPaths.find((p: any) => p.id === pathId);
+      if (match) setSelectedPath(match);
+    }
+  }, [pathId, savedPaths]);
 
   // ─── Audio Coach Prefs ────────────────────────────────────────────────────
 
@@ -378,6 +388,7 @@ export default function RunTrackingScreen() {
         planned: false,
         routePath: routePathRef.current.length > 1 ? routePathRef.current : null,
         activityType: activityFilter,
+        savedPathId: selectedPath?.id ?? null,
       });
       const saved = await res.json();
       setSavedRunId(saved.id);

@@ -185,6 +185,8 @@ export async function initDb() {
       created_at TIMESTAMP DEFAULT NOW()
     );
 
+    ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS saved_path_id VARCHAR REFERENCES saved_paths(id) ON DELETE SET NULL;
+
     CREATE TABLE IF NOT EXISTS bookmarked_runs (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -773,10 +775,11 @@ export async function createSoloRun(data: {
   notes?: string;
   routePath?: Array<{ latitude: number; longitude: number }> | null;
   activityType?: string;
+  savedPathId?: string | null;
 }) {
   const result = await pool.query(
-    `INSERT INTO solo_runs (user_id, title, date, distance_miles, pace_min_per_mile, duration_seconds, completed, planned, notes, route_path, activity_type)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+    `INSERT INTO solo_runs (user_id, title, date, distance_miles, pace_min_per_mile, duration_seconds, completed, planned, notes, route_path, activity_type, saved_path_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
     [
       data.userId,
       data.title ?? null,
@@ -789,9 +792,18 @@ export async function createSoloRun(data: {
       data.notes ?? null,
       data.routePath ? JSON.stringify(data.routePath) : null,
       data.activityType ?? "run",
+      data.savedPathId ?? null,
     ]
   );
   return result.rows[0];
+}
+
+export async function getSoloRunsByPathId(userId: string, pathId: string) {
+  const res = await pool.query(
+    `SELECT * FROM solo_runs WHERE user_id = $1 AND saved_path_id = $2 AND completed = true ORDER BY date DESC`,
+    [userId, pathId]
+  );
+  return res.rows;
 }
 
 export async function getStarredSoloRuns(userId: string) {

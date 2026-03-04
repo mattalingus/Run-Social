@@ -908,7 +908,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/solo-runs", requireAuth, async (req, res) => {
     try {
-      const { title, date, distanceMiles, paceMinPerMile, durationSeconds, completed, planned, notes, routePath, activityType } = req.body;
+      const { title, date, distanceMiles, paceMinPerMile, durationSeconds, completed, planned, notes, routePath, activityType, savedPathId } = req.body;
       if (!date || !distanceMiles) return res.status(400).json({ message: "date and distanceMiles required" });
       const parsedDist = parseFloat(distanceMiles);
       const parsedPace = paceMinPerMile ? parseFloat(paceMinPerMile) : null;
@@ -924,6 +924,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         notes,
         routePath: Array.isArray(routePath) ? routePath : null,
         activityType: activityType === "ride" ? "ride" : "run",
+        savedPathId: savedPathId || null,
       });
       res.status(201).json(run);
       // Fire-and-forget PR check → post milestones to crews
@@ -1108,6 +1109,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const path = await storage.createSavedPath(req.session.userId!, { name, routePath, distanceMiles });
       storage.matchCommunityPath(req.session.userId!, path.id, routePath, distanceMiles ?? null).catch(console.error);
       res.json(path);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/saved-paths/:id/runs", requireAuth, async (req, res) => {
+    try {
+      const runs = await storage.getSoloRunsByPathId(req.session.userId!, req.params.id);
+      res.json(runs);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }

@@ -371,6 +371,7 @@ export default function SoloScreen() {
   const [showPlan, setShowPlan] = useState(false);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const [selectedScheduled, setSelectedScheduled] = useState<SoloRun | null>(null);
+  const [selectedSavedPath, setSelectedSavedPath] = useState<SavedPath | null>(null);
 
   // Goals form state
   const [gPace, setGPace] = useState("");
@@ -396,6 +397,12 @@ export default function SoloScreen() {
   const { data: savedPaths = [] } = useQuery<SavedPath[]>({
     queryKey: ["/api/saved-paths"],
     enabled: !!user,
+    staleTime: 30_000,
+  });
+
+  const { data: pathRuns = [], isLoading: pathRunsLoading } = useQuery<SoloRun[]>({
+    queryKey: ["/api/saved-paths", selectedSavedPath?.id, "runs"],
+    enabled: !!selectedSavedPath,
     staleTime: 30_000,
   });
 
@@ -805,6 +812,41 @@ export default function SoloScreen() {
           </View>
         )}
 
+        {/* ─── Saved Paths ──────────────────────────────────────────────── */}
+        {savedPaths.length > 0 && (
+          <View style={[s.section, { marginTop: 5 }]}>
+            <Text style={s.sectionTitle}>Saved Paths</Text>
+            {savedPaths.map((path) => (
+              <Pressable
+                key={path.id}
+                style={({ pressed }) => [s.savedPathCard, { opacity: pressed ? 0.85 : 1 }]}
+                onPress={() => { Haptics.selectionAsync(); setSelectedSavedPath(path); }}
+                onLongPress={() => {
+                  Alert.alert(
+                    "Delete Path",
+                    `Delete "${path.name}"? This won't delete your run history.`,
+                    [
+                      { text: "Cancel", style: "cancel" },
+                      { text: "Delete", style: "destructive", onPress: () => deletePathMutation.mutate(path.id) },
+                    ]
+                  );
+                }}
+              >
+                <View style={s.savedPathIconWrap}>
+                  <Feather name="map" size={16} color={C.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.savedPathName} numberOfLines={1}>{path.name}</Text>
+                  {path.distance_miles != null && (
+                    <Text style={s.savedPathMeta}>{formatDistance(path.distance_miles)} mi</Text>
+                  )}
+                </View>
+                <Feather name="chevron-right" size={18} color={C.primary} />
+              </Pressable>
+            ))}
+          </View>
+        )}
+
         {/* ─── Run / Ride History ──────────────────────────────────────── */}
         <View style={[s.section, { marginTop: 5 }]}>
           <Text style={s.sectionTitle}>{activityFilter === "ride" ? "Ride History" : "Run History"}</Text>
@@ -1189,6 +1231,118 @@ export default function SoloScreen() {
           </View>
         )}
       </Modal>
+
+      {/* ─── Saved Path Detail Sheet ─────────────────────────────────── */}
+      <Modal
+        visible={!!selectedSavedPath}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSelectedSavedPath(null)}
+      >
+        <Pressable style={s.overlay} onPress={() => setSelectedSavedPath(null)} />
+        {selectedSavedPath && (
+          <View style={[s.sheet, { paddingBottom: insets.bottom + 24, maxHeight: "88%" }]}>
+            <View style={s.sheetHandle} />
+
+            {/* Header */}
+            <View style={s.sheetHeader}>
+              <View style={s.savedPathIconWrap}>
+                <Feather name="map" size={18} color={C.primary} />
+              </View>
+              <Pressable onPress={() => setSelectedSavedPath(null)} hitSlop={12}>
+                <Feather name="x" size={22} color={C.textSecondary} />
+              </Pressable>
+            </View>
+
+            <Text style={s.scheduledModalTitle} numberOfLines={2}>{selectedSavedPath.name}</Text>
+            {selectedSavedPath.distance_miles != null && (
+              <Text style={s.scheduledModalDate}>{formatDistance(selectedSavedPath.distance_miles)} mi route</Text>
+            )}
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+              {/* Mini map */}
+              {selectedSavedPath.route_path?.length > 1 && (
+                <MiniRouteMap path={selectedSavedPath.route_path} />
+              )}
+
+              {/* Personal Records */}
+              {(() => {
+                const paces = pathRuns.map(r => r.pace_min_per_mile).filter((p): p is number => !!p && p > 0);
+                const dists = pathRuns.map(r => r.distance_miles).filter(d => d > 0);
+                const times = pathRuns.map(r => r.duration_seconds).filter((t): t is number => !!t && t > 0);
+                const bestPace = paces.length ? Math.min(...paces) : null;
+                const bestDist = dists.length ? Math.max(...dists) : null;
+                const bestTime = times.length ? Math.max(...times) : null;
+                return (
+                  <View style={s.pathPRRow}>
+                    <View style={s.pathPRBlock}>
+                      <Text style={s.pathPRLabel}>Best Pace</Text>
+                      <Text style={s.pathPRValue}>{bestPace ? formatPace(bestPace) : "--"}</Text>
+                      <Text style={s.pathPRUnit}>min/mi</Text>
+                    </View>
+                    <View style={s.pathPRDivider} />
+                    <View style={s.pathPRBlock}>
+                      <Text style={s.pathPRLabel}>Furthest</Text>
+                      <Text style={s.pathPRValue}>{bestDist ? formatDistance(bestDist) : "--"}</Text>
+                      <Text style={s.pathPRUnit}>miles</Text>
+                    </View>
+                    <View style={s.pathPRDivider} />
+                    <View style={s.pathPRBlock}>
+                      <Text style={s.pathPRLabel}>Longest</Text>
+                      <Text style={s.pathPRValue}>{bestTime ? formatDuration(bestTime) : "--"}</Text>
+                      <Text style={s.pathPRUnit}>time</Text>
+                    </View>
+                  </View>
+                );
+              })()}
+
+              {/* Run history on this path */}
+              {pathRunsLoading ? (
+                <ActivityIndicator color={C.primary} style={{ marginTop: 20 }} />
+              ) : pathRuns.length === 0 ? (
+                <View style={s.pathNoRunsWrap}>
+                  <Feather name="flag" size={24} color={C.textMuted} />
+                  <Text style={s.pathNoRunsTxt}>No runs recorded on this path yet.</Text>
+                  <Text style={s.pathNoRunsSub}>Complete a run while following this path to see your history here.</Text>
+                </View>
+              ) : (
+                <View style={{ gap: 8, marginTop: 12 }}>
+                  {pathRuns.map((run) => (
+                    <View key={run.id} style={s.pathRunCard}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.pathRunDate}>{new Date(run.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</Text>
+                        <Text style={s.pathRunTitle} numberOfLines={1}>{run.title || `${formatDistance(run.distance_miles)} mi ${run.activity_type === "ride" ? "ride" : "run"}`}</Text>
+                      </View>
+                      <View style={s.pathRunStats}>
+                        <Text style={s.pathRunStat}>{formatDistance(run.distance_miles)} mi</Text>
+                        {run.pace_min_per_mile ? <Text style={s.pathRunStatMuted}>{formatPace(run.pace_min_per_mile)}/mi</Text> : null}
+                        {run.duration_seconds ? <Text style={s.pathRunStatMuted}>{formatDuration(run.duration_seconds)}</Text> : null}
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </ScrollView>
+
+            {/* Run this path CTA */}
+            <Pressable
+              style={s.runPathBtn}
+              onPress={() => {
+                const pathId = selectedSavedPath.id;
+                const actType = pathRuns[0]?.activity_type ?? "run";
+                setSelectedSavedPath(null);
+                setTimeout(() => {
+                  setActivityFilter(actType);
+                  router.push(`/run-tracking?pathId=${pathId}` as any);
+                }, 350);
+              }}
+            >
+              <Feather name="play" size={16} color={C.bg} />
+              <Text style={s.runPathBtnTxt}>Run This Path</Text>
+            </Pressable>
+          </View>
+        )}
+      </Modal>
     </View>
   );
 }
@@ -1538,4 +1692,79 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     paddingVertical: 10,
   },
   deleteScheduledTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.textMuted },
+
+  savedPathCard: {
+    backgroundColor: C.surface,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: C.primary + "33",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  savedPathIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: C.primary + "22",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  savedPathName: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text },
+  savedPathMeta: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, marginTop: 2 },
+
+  pathPRRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: C.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    marginTop: 16,
+    marginBottom: 4,
+  },
+  pathPRBlock: { flex: 1, alignItems: "center", gap: 3 },
+  pathPRDivider: { width: 1, height: 40, backgroundColor: C.border },
+  pathPRLabel: { fontFamily: "Outfit_400Regular", fontSize: 10, color: C.textMuted, textTransform: "uppercase", letterSpacing: 0.5 },
+  pathPRValue: { fontFamily: "Outfit_700Bold", fontSize: 20, color: C.primary, letterSpacing: -0.5 },
+  pathPRUnit: { fontFamily: "Outfit_400Regular", fontSize: 10, color: C.textMuted },
+
+  pathNoRunsWrap: { alignItems: "center", paddingVertical: 28, gap: 8 },
+  pathNoRunsTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.textSecondary, textAlign: "center" },
+  pathNoRunsSub: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textMuted, textAlign: "center", lineHeight: 18 },
+
+  pathRunCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: C.card,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: C.border,
+    gap: 12,
+  },
+  pathRunDate: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted, marginBottom: 2 },
+  pathRunTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.text },
+  pathRunStats: { alignItems: "flex-end", gap: 2 },
+  pathRunStat: { fontFamily: "Outfit_700Bold", fontSize: 13, color: C.primary },
+  pathRunStatMuted: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted },
+
+  runPathBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: C.primary,
+    borderRadius: 16,
+    paddingVertical: 16,
+    marginTop: 16,
+  },
+  runPathBtnTxt: { fontFamily: "Outfit_700Bold", fontSize: 17, color: C.bg },
 }); }
