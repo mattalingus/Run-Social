@@ -41,7 +41,7 @@ export default function WebFAB({ onPress }: Props) {
       "box-shadow:none",
       "line-height:56px",
     ].join(";");
-    btn.textContent = "🚶";
+    btn.textContent = "⏱";
     btn.addEventListener("click", handleClick);
     document.body.appendChild(btn);
 

@@ -2254,7 +2254,7 @@ export default function DiscoverScreen() {
             router.push("/(tabs)/solo" as any);
           }}
         >
-          <Ionicons name="walk" size={30} color={C.bg} />
+          <Ionicons name="stopwatch" size={28} color={C.bg} />
         </Pressable>
       )}
     </View>
