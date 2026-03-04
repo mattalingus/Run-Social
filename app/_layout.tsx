@@ -21,6 +21,7 @@ import {
 } from "@expo-google-fonts/outfit";
 import { PlayfairDisplay_700Bold } from "@expo-google-fonts/playfair-display";
 import { DancingScript_700Bold } from "@expo-google-fonts/dancing-script";
+import { Nunito_800ExtraBold } from "@expo-google-fonts/nunito";
 import C from "@/constants/colors";
 
 SplashScreen.preventAutoHideAsync();
@@ -62,7 +63,7 @@ async function registerPushToken(userId: string) {
 function RootLayoutNav() {
   const { user, isLoading } = useAuth();
   const { C, theme } = useTheme();
-  const [fontsLoaded] = useFonts({ Outfit_400Regular, Outfit_600SemiBold, Outfit_700Bold, PlayfairDisplay_700Bold, DancingScript_700Bold });
+  const [fontsLoaded] = useFonts({ Outfit_400Regular, Outfit_600SemiBold, Outfit_700Bold, PlayfairDisplay_700Bold, DancingScript_700Bold, Nunito_800ExtraBold });
   const splashHidden = useRef(false);
   const pushRegistered = useRef(false);
 

@@ -463,7 +463,7 @@ function makeStStyles(C: ColorScheme) { return StyleSheet.create({
   titleRow: {
     flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12,
   },
-  title: { fontFamily: "Outfit_700Bold", fontSize: 26, color: C.text, letterSpacing: -0.5 },
+  title: { fontFamily: "Nunito_800ExtraBold", fontSize: 26, color: C.text },
   headerBtns: { flexDirection: "row", alignItems: "center", gap: 6 },
 
   hBtn: {
