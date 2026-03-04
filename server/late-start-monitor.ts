@@ -42,7 +42,7 @@ async function checkLateStarts(): Promise<void> {
           await sendPushNotification(
             run.host_push_token,
             `⏰ Start your ${type} soon`,
-            `"${run.title}" was scheduled 1 hour ago. Start it now or update the time — it will be removed from FARA in 30 minutes.`,
+            `"${run.title}" was scheduled 1 hour ago. Start it now or update the time — it will be removed from PaceUp in 30 minutes.`,
             { screen: "run", runId: run.id }
           );
         }

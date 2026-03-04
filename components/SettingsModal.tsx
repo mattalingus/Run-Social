@@ -161,7 +161,7 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
     Alert.alert(
       stravaConnected ? "Disconnect Strava" : "Connect Strava",
       stravaConnected
-        ? "Disconnect your Strava account from FARA?"
+        ? "Disconnect your Strava account from PaceUp?"
         : "Strava sync will import your activities and track performance across both apps. Full integration coming soon!",
       stravaConnected
         ? [{ text: "Cancel", style: "cancel" }, { text: "Disconnect", style: "destructive", onPress: () => Alert.alert("Coming soon", "Strava disconnect will be available in the next update.") }]
@@ -178,7 +178,7 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
       appleHealthConnected ? "Disconnect Apple Health" : "Connect Apple Health",
       appleHealthConnected
         ? "Stop syncing workouts with Apple Health?"
-        : "Sync your FARA runs to Apple Health and get credit for your workouts. Full integration coming soon!",
+        : "Sync your PaceUp runs to Apple Health and get credit for your workouts. Full integration coming soon!",
       [{ text: "Got it", style: "cancel" }]
     );
   }
@@ -188,7 +188,7 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
     if (garminConnected) {
       Alert.alert(
         "Disconnect Garmin",
-        "Remove your Garmin account from FARA? Your imported activities will remain.",
+        "Remove your Garmin account from PaceUp? Your imported activities will remain.",
         [
           { text: "Cancel", style: "cancel" },
           {
@@ -254,7 +254,7 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Alert.alert(
       `Connect ${name}`,
-      `Share your FARA activities directly to ${name}. Full integration coming soon!`,
+      `Share your PaceUp activities directly to ${name}. Full integration coming soon!`,
       [{ text: "OK" }]
     );
   }
@@ -294,10 +294,10 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
   function handleChangePassword() {
     Alert.alert(
       "Change Password",
-      "To reset your password, email us at support@fara.run with your account username and we'll send you a reset link.",
+      "To reset your password, email us at support@paceup.app with your account username and we'll send you a reset link.",
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Email Support", onPress: () => Linking.openURL("mailto:support@fara.run?subject=Password%20Reset%20Request") },
+        { text: "Email Support", onPress: () => Linking.openURL("mailto:support@paceup.app?subject=Password%20Reset%20Request") },
       ]
     );
   }
@@ -663,15 +663,15 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
               iconBg="#1A2A1A"
               icon={<Feather name="share-2" size={17} color={C.primary} />}
               label="Invite Friends"
-              sublabel="Share FARA with your crew"
+              sublabel="Share PaceUp with your crew"
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                const msg = "Join me on FARA — discover group runs & rides! Download it here: https://fara.run";
+                const msg = "Join me on PaceUp — discover group runs & rides! Download it here: https://paceup.app";
                 if (Platform.OS === "web") {
                   (navigator as any).clipboard?.writeText(msg);
                   Alert.alert("Copied!", "Invite link copied to clipboard.");
                 } else {
-                  Share.share({ message: msg, title: "Join FARA" }).catch(() => {});
+                  Share.share({ message: msg, title: "Join PaceUp" }).catch(() => {});
                 }
               }}
             />
@@ -708,7 +708,7 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
               iconBg={C.primary + "22"}
               icon={<Text style={{ fontFamily: "Outfit_700Bold", fontSize: 13, color: C.primary }}>F</Text>}
               label="Version"
-              sublabel="FARA v1.0.0"
+              sublabel="PaceUp v1.0.0"
               right={<View />}
             />
             <Divider C={C} />
@@ -733,8 +733,8 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
               iconBg="#1A2A2A"
               icon={<Feather name="mail" size={17} color="#4DA6FF" />}
               label="Contact Support"
-              sublabel="support@fara.run"
-              onPress={() => Linking.openURL("mailto:support@fara.run")}
+              sublabel="support@paceup.app"
+              onPress={() => Linking.openURL("mailto:support@paceup.app")}
             />
           </SectionCard>
 
@@ -757,18 +757,18 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
             <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, marginBottom: 20 }}>Effective date: January 1, 2025</Text>
 
             {[
-              { title: "1. Acceptance of Terms", body: "By creating an account or using FARA, you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use the app. We may update these terms from time to time; continued use of the app constitutes acceptance of any revised terms." },
-              { title: "2. Eligibility", body: "You must be at least 18 years of age to use FARA. By using the app, you represent and warrant that you meet this requirement and that all information you provide is accurate and complete." },
-              { title: "3. Your Account", body: "You are responsible for maintaining the confidentiality of your account credentials and for all activity that occurs under your account. Notify us immediately at support@fara.run if you suspect unauthorized access to your account." },
-              { title: "4. Acceptable Use", body: "You agree to use FARA only for lawful purposes. You may not: harass, threaten, or harm other users; post false, misleading, or offensive content; spam or send unsolicited messages; impersonate another person; attempt to gain unauthorized access to any part of the app; or use the app for any commercial purpose without our written consent." },
-              { title: "5. Content", body: "You retain ownership of content you post on FARA (photos, routes, messages). By posting content, you grant FARA a non-exclusive, royalty-free license to display and distribute that content within the app. We reserve the right to remove any content that violates these terms or our community standards." },
-              { title: "6. Physical Activity Disclaimer", body: "FARA facilitates connections between people for physical activities. You acknowledge that participating in runs, rides, and other physical activities carries inherent risk. You participate at your own risk and are responsible for your own safety. FARA does not supervise events, verify participants' fitness levels, or assume any liability for injuries or incidents that occur during activities organized through the app." },
-              { title: "7. Host Responsibilities", body: "If you host events through FARA, you are responsible for planning safe routes, communicating clearly with participants, and ensuring participants are aware of any risks. Hosts are independent organizers and are not employees or agents of FARA." },
-              { title: "8. Account Suspension", body: "We reserve the right to suspend or terminate your account at any time for violations of these terms, community guidelines, or for any behavior we deem harmful to other users or the FARA community." },
-              { title: "9. Disclaimer of Warranties", body: "FARA is provided \"as is\" without warranty of any kind. We do not guarantee that the app will be available at all times, error-free, or that information provided by other users is accurate. To the fullest extent permitted by law, FARA disclaims all warranties, express or implied." },
-              { title: "10. Limitation of Liability", body: "To the maximum extent permitted by applicable law, FARA and its affiliates shall not be liable for any indirect, incidental, special, consequential, or punitive damages arising from your use of the app or participation in any events organized through it." },
+              { title: "1. Acceptance of Terms", body: "By creating an account or using PaceUp, you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use the app. We may update these terms from time to time; continued use of the app constitutes acceptance of any revised terms." },
+              { title: "2. Eligibility", body: "You must be at least 18 years of age to use PaceUp. By using the app, you represent and warrant that you meet this requirement and that all information you provide is accurate and complete." },
+              { title: "3. Your Account", body: "You are responsible for maintaining the confidentiality of your account credentials and for all activity that occurs under your account. Notify us immediately at support@paceup.app if you suspect unauthorized access to your account." },
+              { title: "4. Acceptable Use", body: "You agree to use PaceUp only for lawful purposes. You may not: harass, threaten, or harm other users; post false, misleading, or offensive content; spam or send unsolicited messages; impersonate another person; attempt to gain unauthorized access to any part of the app; or use the app for any commercial purpose without our written consent." },
+              { title: "5. Content", body: "You retain ownership of content you post on PaceUp (photos, routes, messages). By posting content, you grant PaceUp a non-exclusive, royalty-free license to display and distribute that content within the app. We reserve the right to remove any content that violates these terms or our community standards." },
+              { title: "6. Physical Activity Disclaimer", body: "PaceUp facilitates connections between people for physical activities. You acknowledge that participating in runs, rides, and other physical activities carries inherent risk. You participate at your own risk and are responsible for your own safety. PaceUp does not supervise events, verify participants' fitness levels, or assume any liability for injuries or incidents that occur during activities organized through the app." },
+              { title: "7. Host Responsibilities", body: "If you host events through PaceUp, you are responsible for planning safe routes, communicating clearly with participants, and ensuring participants are aware of any risks. Hosts are independent organizers and are not employees or agents of PaceUp." },
+              { title: "8. Account Suspension", body: "We reserve the right to suspend or terminate your account at any time for violations of these terms, community guidelines, or for any behavior we deem harmful to other users or the PaceUp community." },
+              { title: "9. Disclaimer of Warranties", body: "PaceUp is provided \"as is\" without warranty of any kind. We do not guarantee that the app will be available at all times, error-free, or that information provided by other users is accurate. To the fullest extent permitted by law, PaceUp disclaims all warranties, express or implied." },
+              { title: "10. Limitation of Liability", body: "To the maximum extent permitted by applicable law, PaceUp and its affiliates shall not be liable for any indirect, incidental, special, consequential, or punitive damages arising from your use of the app or participation in any events organized through it." },
               { title: "11. Governing Law", body: "These terms shall be governed by the laws of your jurisdiction. Any disputes shall be resolved through binding arbitration or in the courts of competent jurisdiction." },
-              { title: "12. Contact", body: "If you have questions about these Terms of Service, please contact us at support@fara.run." },
+              { title: "12. Contact", body: "If you have questions about these Terms of Service, please contact us at support@paceup.app." },
             ].map((sec, i) => (
               <View key={i} style={{ marginBottom: 20 }}>
                 <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 15, color: C.text, marginBottom: 6 }}>{sec.title}</Text>
@@ -802,16 +802,16 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
 
             {[
               { title: "1. Information We Collect", body: "We collect information you provide directly, including your name, username, email address, profile photo, and activity preferences. When you use the app's tracking features, we collect GPS location data. We also collect usage data such as which features you use and when." },
-              { title: "2. How We Use Your Information", body: "We use your information to: operate and improve the FARA app; match you with nearby runs and rides; display your activity history and statistics; send notifications you've opted into; provide customer support; and ensure the safety of our community. We do not use your data for advertising purposes." },
+              { title: "2. How We Use Your Information", body: "We use your information to: operate and improve the PaceUp app; match you with nearby runs and rides; display your activity history and statistics; send notifications you've opted into; provide customer support; and ensure the safety of our community. We do not use your data for advertising purposes." },
               { title: "3. Location Data", body: "Location access is used solely to show nearby events, enable GPS activity tracking, and display your routes. You can disable location access in your device settings at any time, though this will limit tracking functionality. We do not share your precise location with other users without your consent." },
               { title: "4. Information Sharing", body: "We do not sell your personal information to third parties. We may share data with service providers who help us operate the app (e.g., hosting, database, push notifications), subject to confidentiality agreements. We may disclose information if required by law or to protect the safety of users." },
-              { title: "5. Public vs. Private Content", body: "Your profile, activity stats, and runs you host may be visible to other FARA users depending on your privacy settings. You can control your profile visibility in Settings. Private runs are only visible to invited participants." },
+              { title: "5. Public vs. Private Content", body: "Your profile, activity stats, and runs you host may be visible to other PaceUp users depending on your privacy settings. You can control your profile visibility in Settings. Private runs are only visible to invited participants." },
               { title: "6. Data Retention", body: "We retain your account data for as long as your account is active. If you delete your account, we will delete your personal data within 30 days, except where we are required by law to retain it." },
-              { title: "7. Your Rights", body: "You have the right to access, correct, or delete your personal data at any time. You can update your profile information in the app or delete your account in Settings. To request a data export or for any privacy-related inquiries, contact us at support@fara.run." },
+              { title: "7. Your Rights", body: "You have the right to access, correct, or delete your personal data at any time. You can update your profile information in the app or delete your account in Settings. To request a data export or for any privacy-related inquiries, contact us at support@paceup.app." },
               { title: "8. Security", body: "We implement industry-standard security measures to protect your data, including encrypted connections (HTTPS) and secure authentication. No method of transmission over the internet is 100% secure, and we cannot guarantee absolute security." },
-              { title: "9. Children's Privacy", body: "FARA is not intended for users under the age of 18. We do not knowingly collect personal information from children. If you believe a child has provided us with their information, please contact us and we will delete it promptly." },
-              { title: "10. Changes to This Policy", body: "We may update this Privacy Policy from time to time. We will notify you of significant changes via the app or email. Your continued use of FARA after changes constitutes acceptance of the revised policy." },
-              { title: "11. Contact Us", body: "If you have any questions, concerns, or requests regarding your privacy, please contact us at support@fara.run. We are committed to addressing your concerns promptly." },
+              { title: "9. Children's Privacy", body: "PaceUp is not intended for users under the age of 18. We do not knowingly collect personal information from children. If you believe a child has provided us with their information, please contact us and we will delete it promptly." },
+              { title: "10. Changes to This Policy", body: "We may update this Privacy Policy from time to time. We will notify you of significant changes via the app or email. Your continued use of PaceUp after changes constitutes acceptance of the revised policy." },
+              { title: "11. Contact Us", body: "If you have any questions, concerns, or requests regarding your privacy, please contact us at support@paceup.app. We are committed to addressing your concerns promptly." },
             ].map((sec, i) => (
               <View key={i} style={{ marginBottom: 20 }}>
                 <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 15, color: C.text, marginBottom: 6 }}>{sec.title}</Text>

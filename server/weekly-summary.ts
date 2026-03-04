@@ -18,7 +18,7 @@ export async function sendWeeklySummaries(): Promise<void> {
 
       await sendPushNotification(
         user.push_token,
-        `Your weekly FARA summary 📊`,
+        `Your weekly PaceUp summary 📊`,
         `${stats.runs} run${stats.runs !== 1 ? "s" : ""} · ${mi} mi · ${timeLabel} this week — keep it up!`,
         { screen: "profile" }
       );

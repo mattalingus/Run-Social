@@ -465,7 +465,7 @@ export async function getNotifications(userId: string) {
       id: r.id,
       type: 'friend_request',
       title: 'Friend Request',
-      body: `${r.from_name} wants to connect on FARA`,
+      body: `${r.from_name} wants to connect on PaceUp`,
       data: { from_name: r.from_name, from_photo: r.from_photo },
       created_at: r.created_at,
     })),

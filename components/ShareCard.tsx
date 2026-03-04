@@ -163,7 +163,7 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
   // ── Shared sub-components ──────────────────────────────────────────────────
   const HeaderRow = (
     <View style={s.headerRow}>
-      <Text style={s.logo}>FARA</Text>
+      <Text style={s.logo}>PaceUp</Text>
       <View style={s.actPill}>
         <Ionicons name={isRide ? "bicycle" : "walk"} size={11} color={PRIMARY} style={{ marginRight: 4 }} />
         <Text style={s.actPillTxt}>{isRide ? "Ride" : "Run"}</Text>
@@ -175,7 +175,7 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
     <View style={s.footer}>
       <View style={s.footerLine} />
       <View style={s.footerRow}>
-        <Text style={s.footerLogo}>FARA</Text>
+        <Text style={s.footerLogo}>PaceUp</Text>
         <Text style={s.footerSep}>·</Text>
         <Text style={s.footerTagline}>Run Together</Text>
       </View>
@@ -227,7 +227,7 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
 
         {/* Header overlaid at top */}
         <View style={s.photoHeaderRow}>
-          <Text style={s.logo}>FARA</Text>
+          <Text style={s.logo}>PaceUp</Text>
           <View style={s.actPill}>
             <Ionicons name={isRide ? "bicycle" : "walk"} size={11} color={PRIMARY} style={{ marginRight: 4 }} />
             <Text style={s.actPillTxt}>{isRide ? "Ride" : "Run"}</Text>

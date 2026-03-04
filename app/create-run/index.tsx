@@ -685,7 +685,7 @@ export default function CreateRunScreen() {
                   style={styles.crewInviteBtn}
                   onPress={() => {
                     Share.share({
-                      message: `Join my crew on FARA to see upcoming runs & rides! Search for "${crewSuccessModal.crewName}" in the Crew tab.`,
+                      message: `Join my crew on PaceUp to see upcoming runs & rides! Search for "${crewSuccessModal.crewName}" in the Crew tab.`,
                     });
                   }}
                 >
@@ -696,7 +696,7 @@ export default function CreateRunScreen() {
                   style={styles.crewShareBtn}
                   onPress={() => {
                     Share.share({
-                      message: `Check out "${crewSuccessModal.title}" on FARA! Open the app to join.`,
+                      message: `Check out "${crewSuccessModal.title}" on PaceUp! Open the app to join.`,
                     });
                   }}
                 >
@@ -748,7 +748,7 @@ export default function CreateRunScreen() {
                 </Pressable>
                 <Pressable
                   style={styles.inviteShareBtn}
-                  onPress={() => Share.share({ message: `Join my private event "${inviteModal.title}" on FARA! Use invite code: ${inviteModal.token}` })}
+                  onPress={() => Share.share({ message: `Join my private event "${inviteModal.title}" on PaceUp! Use invite code: ${inviteModal.token}` })}
                 >
                   <Feather name="share-2" size={16} color={C.bg} />
                   <Text style={styles.inviteShareTxt}>Share</Text>

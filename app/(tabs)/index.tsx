@@ -967,26 +967,26 @@ export default function DiscoverScreen() {
 
   useEffect(() => {
     if (!user?.id) return;
-    AsyncStorage.getItem(`fara_has_onboarded_${user.id}`).then((v) => {
+    AsyncStorage.getItem(`paceup_has_onboarded_${user.id}`).then((v) => {
       if (!v) setShowOnboarding(true);
     });
   }, [user?.id]);
 
   useEffect(() => {
     if (!user?.id) return;
-    AsyncStorage.getItem(`fara_checklist_dismissed_${user.id}`).then((v) => {
+    AsyncStorage.getItem(`paceup_checklist_dismissed_${user.id}`).then((v) => {
       if (v !== "true") setChecklistDismissed(false);
     });
   }, [user?.id]);
 
   const finishOnboarding = () => {
-    if (user?.id) AsyncStorage.setItem(`fara_has_onboarded_${user.id}`, "true");
+    if (user?.id) AsyncStorage.setItem(`paceup_has_onboarded_${user.id}`, "true");
     setShowOnboarding(false);
     setOnboardSlide(0);
   };
 
   const dismissChecklist = () => {
-    if (user?.id) AsyncStorage.setItem(`fara_checklist_dismissed_${user.id}`, "true");
+    if (user?.id) AsyncStorage.setItem(`paceup_checklist_dismissed_${user.id}`, "true");
     setChecklistDismissed(true);
   };
 
@@ -1232,7 +1232,7 @@ export default function DiscoverScreen() {
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <View style={[s.header, { paddingTop: headerTopPad }]}>
         <View style={s.titleRow}>
-          <Text style={s.title}>FARA</Text>
+          <Text style={s.title}>PaceUp</Text>
 
           <View style={s.headerBtns}>
             {/* Messages */}
@@ -1571,7 +1571,7 @@ export default function DiscoverScreen() {
                 <View style={s.onboardIconWrap}>
                   <Ionicons name="walk" size={56} color={C.primary} />
                 </View>
-                <Text style={s.onboardTitle}>Welcome to FARA</Text>
+                <Text style={s.onboardTitle}>Welcome to PaceUp</Text>
                 <Text style={s.onboardBody}>
                   Discover group runs and rides near you. Track your progress. Build your crew.
                 </Text>
@@ -2169,8 +2169,8 @@ export default function DiscoverScreen() {
           <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
             <Text style={s.rulesIntro}>
               {activityFilter === "ride"
-                ? "By hosting a ride on FARA, you agree to uphold these community standards. Every rider deserves a safe and welcoming experience."
-                : "By hosting a run on FARA, you agree to uphold these community standards. Every runner deserves a safe and welcoming experience."}
+                ? "By hosting a ride on PaceUp, you agree to uphold these community standards. Every rider deserves a safe and welcoming experience."
+                : "By hosting a run on PaceUp, you agree to uphold these community standards. Every runner deserves a safe and welcoming experience."}
             </Text>
 
             {(activityFilter === "ride" ? [

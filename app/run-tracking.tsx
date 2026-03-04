@@ -355,8 +355,8 @@ export default function RunTrackingScreen() {
   useEffect(() => {
     async function loadPrefs() {
       try {
-        const enabled = await AsyncStorage.getItem("@fara_coach_enabled");
-        const interval = await AsyncStorage.getItem("@fara_coach_interval");
+        const enabled = await AsyncStorage.getItem("@paceup_coach_enabled");
+        const interval = await AsyncStorage.getItem("@paceup_coach_interval");
         if (enabled !== null) setCoachEnabled(enabled === "true");
         if (interval !== null) setCoachInterval(interval as any);
       } catch (e) {}
@@ -367,14 +367,14 @@ export default function RunTrackingScreen() {
   const toggleCoach = async (val: boolean) => {
     setCoachEnabled(val);
     try {
-      await AsyncStorage.setItem("@fara_coach_enabled", val.toString());
+      await AsyncStorage.setItem("@paceup_coach_enabled", val.toString());
     } catch (e) {}
   };
 
   const updateCoachInterval = async (val: "0.5" | "1" | "2") => {
     setCoachInterval(val);
     try {
-      await AsyncStorage.setItem("@fara_coach_interval", val);
+      await AsyncStorage.setItem("@paceup_coach_interval", val);
     } catch (e) {}
   };
 
@@ -522,7 +522,7 @@ export default function RunTrackingScreen() {
         if (!res.granted) {
           Alert.alert(
             "Location Required",
-            "Enable location access so FARA can measure your run distance."
+            "Enable location access so PaceUp can measure your run distance."
           );
           return;
         }

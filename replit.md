@@ -1,4 +1,4 @@
-# FARA — Social Running App
+# PaceUp — Social Running App
 
 
 ## Overview
@@ -153,7 +153,7 @@ shared/
 ## Audio Pace Coach
 - `expo-speech` installed (Expo Go compatible TTS)
 - Toggle + interval selector (0.5 mi / 1 mi / 2 mi) in pre-run UI of `app/run-tracking.tsx`
-- Persisted via AsyncStorage: `@fara_coach_enabled`, `@fara_coach_interval`
+- Persisted via AsyncStorage: `@paceup_coach_enabled`, `@paceup_coach_interval`
 - Fires `Speech.speak()` at each milestone; `Speech.stop()` on pause/stop
 - Guarded with `Platform.OS !== 'web'` — no web crash
 
@@ -189,7 +189,7 @@ shared/
 Database columns exist for: `strava_id`, `apple_health_id`, `garmin_id`
 
 ## Share Activity Feature
-- `components/ShareCard.tsx` — always-dark branded card (360×640pt) with FARA branding, SVG GPS route, stats row, group badge, caption, footer strip. forwardRef for captureRef capture. Supports optional photo background for route panel.
+- `components/ShareCard.tsx` — always-dark branded card (360×640pt) with PaceUp branding, SVG GPS route, stats row, group badge, caption, footer strip. forwardRef for captureRef capture. Supports optional photo background for route panel.
 - `components/ShareActivityModal.tsx` — full-screen modal: card preview, photo background picker (ImagePicker), caption input (live updates card), Share/Save/Copy actions using captureRef + native Share sheet.
 - Integrated in `app/run-tracking.tsx` (solo run post-save) and `app/run-results/[id].tsx` (group results header).
 

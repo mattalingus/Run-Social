@@ -1577,7 +1577,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const accessSecret = accParams.get("oauth_token_secret");
       if (!accessToken || !accessSecret) return res.status(500).send("Invalid token response from Garmin.");
       await storage.saveGarminToken(userId, accessToken, accessSecret);
-      res.send(`<!DOCTYPE html><html><head><title>FARA — Garmin Connected</title><style>body{background:#050C09;color:#fff;font-family:sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;} h1{color:#00D97E;font-size:24px;} p{color:#aaa;margin-top:8px;}</style></head><body><h1>Garmin Connected!</h1><p>You can now return to the FARA app.</p></body></html>`);
+      res.send(`<!DOCTYPE html><html><head><title>PaceUp — Garmin Connected</title><style>body{background:#050C09;color:#fff;font-family:sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;} h1{color:#00D97E;font-size:24px;} p{color:#aaa;margin-top:8px;}</style></head><body><h1>Garmin Connected!</h1><p>You can now return to the PaceUp app.</p></body></html>`);
     } catch (e: any) { res.status(500).send(`Error: ${e.message}`); }
   });
 

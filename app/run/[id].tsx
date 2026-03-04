@@ -1108,7 +1108,7 @@ export default function RunDetailScreen() {
                     {
                       icon: "navigation" as const,
                       title: "Location is required",
-                      body: "Your phone needs location enabled so FARA can detect when you arrive near the start.",
+                      body: "Your phone needs location enabled so PaceUp can detect when you arrive near the start.",
                     },
                     {
                       icon: "clock" as const,

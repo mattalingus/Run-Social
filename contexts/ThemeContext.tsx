@@ -16,7 +16,7 @@ const ThemeContext = createContext<ThemeContextValue>({
   C: lightColors,
 });
 
-const STORAGE_KEY = "@fara_theme";
+const STORAGE_KEY = "@paceup_theme";
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>("light");

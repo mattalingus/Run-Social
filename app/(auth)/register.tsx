@@ -68,7 +68,7 @@ export default function RegisterScreen() {
         </Pressable>
 
         <View style={styles.header}>
-          <Text style={styles.title}>Join FARA</Text>
+          <Text style={styles.title}>Join PaceUp</Text>
           <Text style={styles.subtitle}>Create your profile</Text>
         </View>
 
