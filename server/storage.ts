@@ -2968,6 +2968,7 @@ export async function getRecentCommunityActivity() {
     SELECT r.id, r.title, r.location_name, r.activity_type,
            COALESCE(r.started_at, r.date) AS completed_at,
            u.name AS host_name,
+           COALESCE(r.max_distance, 0) AS max_distance,
            COUNT(DISTINCT rp.user_id) AS participant_count
     FROM runs r
     JOIN users u ON u.id = r.host_id
@@ -2976,8 +2977,9 @@ export async function getRecentCommunityActivity() {
     WHERE r.is_completed = true
       AND COALESCE(r.started_at, r.date) >= NOW() - INTERVAL '14 days'
     GROUP BY r.id, u.name
-    ORDER BY COALESCE(r.started_at, r.date) DESC
-    LIMIT 6
+    ORDER BY (COUNT(DISTINCT rp.user_id) * 2 + COALESCE(r.max_distance, 0)) DESC,
+             COALESCE(r.started_at, r.date) DESC
+    LIMIT 12
   `);
   return res.rows.map((row) => ({
     ...row,
