@@ -927,8 +927,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         savedPathId: savedPathId || null,
       });
       res.status(201).json(run);
-      // Fire-and-forget PR check → post milestones to crews
+      // Fire-and-forget: recompute avg pace + PR check on completion
       if (completed) {
+        storage.recomputeUserAvgPace(req.session.userId!).catch(() => {});
         storage.checkSoloRunPRs(req.session.userId!, run.id, parsedDist, parsedPace).then(async (msgs) => {
           for (const msg of msgs) {
             await storage.postMilestoneToAllCrews(req.session.userId!, msg);

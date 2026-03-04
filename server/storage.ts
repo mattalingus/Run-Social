@@ -114,6 +114,7 @@ export async function initDb() {
     ALTER TABLE runs ADD COLUMN IF NOT EXISTS notif_late_start_sent BOOLEAN DEFAULT false;
     ALTER TABLE users ALTER COLUMN avg_pace SET DEFAULT NULL;
     ALTER TABLE users ALTER COLUMN avg_distance SET DEFAULT NULL;
+    ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT false;
 
     CREATE TABLE IF NOT EXISTS solo_runs (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -757,7 +758,7 @@ export async function updateMarkerIcon(userId: string, icon: string | null) {
 
 export async function getSoloRuns(userId: string) {
   const result = await pool.query(
-    `SELECT * FROM solo_runs WHERE user_id = $1 ORDER BY date DESC`,
+    `SELECT * FROM solo_runs WHERE user_id = $1 AND is_deleted IS NOT TRUE ORDER BY date DESC`,
     [userId]
   );
   return result.rows;
@@ -800,7 +801,7 @@ export async function createSoloRun(data: {
 
 export async function getSoloRunsByPathId(userId: string, pathId: string) {
   const res = await pool.query(
-    `SELECT * FROM solo_runs WHERE user_id = $1 AND saved_path_id = $2 AND completed = true ORDER BY date DESC`,
+    `SELECT * FROM solo_runs WHERE user_id = $1 AND saved_path_id = $2 AND completed = true AND is_deleted IS NOT TRUE ORDER BY date DESC`,
     [userId, pathId]
   );
   return res.rows;
@@ -808,7 +809,7 @@ export async function getSoloRunsByPathId(userId: string, pathId: string) {
 
 export async function getStarredSoloRuns(userId: string) {
   const result = await pool.query(
-    `SELECT * FROM solo_runs WHERE user_id = $1 AND is_starred = true AND completed = true ORDER BY date DESC`,
+    `SELECT * FROM solo_runs WHERE user_id = $1 AND is_starred = true AND completed = true AND is_deleted IS NOT TRUE ORDER BY date DESC`,
     [userId]
   );
   return result.rows;
@@ -836,7 +837,27 @@ export async function updateSoloRun(id: string, userId: string, updates: Record<
 }
 
 export async function deleteSoloRun(id: string, userId: string) {
-  await pool.query(`DELETE FROM solo_runs WHERE id = $1 AND user_id = $2`, [id, userId]);
+  await pool.query(
+    `UPDATE solo_runs SET is_deleted = true WHERE id = $1 AND user_id = $2`,
+    [id, userId]
+  );
+}
+
+export async function recomputeUserAvgPace(userId: string): Promise<void> {
+  const res = await pool.query(
+    `SELECT AVG(pace_min_per_mile) AS avg_pace
+     FROM solo_runs
+     WHERE user_id = $1
+       AND completed = true
+       AND distance_miles > 0.5
+       AND pace_min_per_mile IS NOT NULL
+       AND pace_min_per_mile >= 2.0`,
+    [userId]
+  );
+  const computed = res.rows[0]?.avg_pace != null
+    ? parseFloat(res.rows[0].avg_pace)
+    : null;
+  await pool.query(`UPDATE users SET avg_pace = $2 WHERE id = $1`, [userId, computed]);
 }
 
 export async function updateSoloGoals(

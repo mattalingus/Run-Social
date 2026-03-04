@@ -409,7 +409,12 @@ export default function ProfileScreen() {
     const totalMiles = filtered.reduce((s, r) => s + r.distance_miles, 0);
     const monthMiles = thisMonth.reduce((s, r) => s + r.distance_miles, 0);
     const yearMiles = thisYear.reduce((s, r) => s + r.distance_miles, 0);
-    const withPace = filtered.filter((r) => r.pace_min_per_mile != null);
+    const withPace = filtered.filter(
+      (r) =>
+        r.pace_min_per_mile != null &&
+        r.pace_min_per_mile >= 2.0 &&
+        r.distance_miles > 0.5
+    );
     const avgPace = withPace.length > 0
       ? withPace.reduce((s, r) => s + r.pace_min_per_mile!, 0) / withPace.length
       : null;
@@ -423,7 +428,7 @@ export default function ProfileScreen() {
       .slice(0, 5)
       .map((r) => ({ dist: r.distance_miles, pace: r.pace_min_per_mile, date: r.date, title: null, run_type: "solo" as const }));
     const fastest = [...completed]
-      .filter((r) => r.pace_min_per_mile != null)
+      .filter((r) => r.pace_min_per_mile != null && r.pace_min_per_mile >= 2.0 && r.distance_miles > 0.5)
       .sort((a, b) => (a.pace_min_per_mile ?? 99) - (b.pace_min_per_mile ?? 99))
       .slice(0, 5)
       .map((r) => ({ dist: r.distance_miles, pace: r.pace_min_per_mile, date: r.date, title: null, run_type: "solo" as const }));
