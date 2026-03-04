@@ -2244,14 +2244,14 @@ export default function DiscoverScreen() {
 
       {/* ── Solo Run FAB ─────────────────────────────────────────────────────── */}
       {Platform.OS === "web" ? (
-        <WebFAB onPress={() => router.push("/(tabs)/solo" as any)} />
+        <WebFAB onPress={() => router.push("/run-tracking" as any)} />
       ) : (
         <Pressable
           testID="map-fab"
           style={[s.fab, { bottom: insets.bottom + 92 }]}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            router.push("/(tabs)/solo" as any);
+            router.push("/run-tracking" as any);
           }}
         >
           <Ionicons name="stopwatch-outline" size={28} color={C.bg} />
