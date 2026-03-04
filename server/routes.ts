@@ -183,8 +183,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/users/me/goals", requireAuth, async (req, res) => {
     try {
-      const { monthlyGoal, yearlyGoal } = req.body;
-      await storage.updateGoals(req.session.userId!, monthlyGoal, yearlyGoal);
+      const { monthlyGoal, yearlyGoal, paceGoal } = req.body;
+      await storage.updateGoals(req.session.userId!, monthlyGoal, yearlyGoal, paceGoal !== undefined ? (paceGoal != null ? parseFloat(paceGoal) : null) : undefined);
       const user = await storage.getUserById(req.session.userId!);
       const { password: _, ...safeUser } = user;
       res.json(safeUser);

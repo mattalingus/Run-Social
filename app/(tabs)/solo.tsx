@@ -464,10 +464,13 @@ export default function SoloScreen() {
   const [selectedScheduled, setSelectedScheduled] = useState<SoloRun | null>(null);
   const [selectedSavedPath, setSelectedSavedPath] = useState<SavedPath | null>(null);
 
+  // Goals display period (UI toggle only — not saved separately)
+  const [period, setPeriod] = useState<"monthly" | "yearly">("monthly");
+
   // Goals form state
   const [gPace, setGPace] = useState("");
-  const [gDist, setGDist] = useState("");
-  const [gPeriod, setGPeriod] = useState<"monthly" | "yearly">("monthly");
+  const [gMonthDist, setGMonthDist] = useState("");
+  const [gYearDist, setGYearDist] = useState("");
 
   // Plan form state
   const [pTitle, setPTitle] = useState("");
@@ -549,7 +552,7 @@ export default function SoloScreen() {
 
   const goalsMutation = useMutation({
     mutationFn: async (data: any) => {
-      const res = await apiRequest("PUT", "/api/users/me/solo-goals", data);
+      const res = await apiRequest("PUT", "/api/users/me/goals", data);
       return res.json();
     },
     onSuccess: () => { refreshUser(); setShowGoals(false); },
@@ -601,8 +604,7 @@ export default function SoloScreen() {
 
   // ─── Goal values ────────────────────────────────────────────────────────────
 
-  const period = (user?.goal_period as "monthly" | "yearly") ?? "monthly";
-  const distGoal = user?.distance_goal ?? 100;
+  const distGoal = period === "monthly" ? (user?.monthly_goal ?? 50) : (user?.yearly_goal ?? 500);
   const paceGoal = user?.pace_goal ?? null;
   const currentMiles = period === "monthly" ? (user?.miles_this_month ?? 0) : (user?.miles_this_year ?? 0);
   const distUnit: DistanceUnit = ((user as any)?.distance_unit ?? "miles") as DistanceUnit;
@@ -612,15 +614,16 @@ export default function SoloScreen() {
 
   function openGoals() {
     setGPace(paceGoal != null ? formatPace(paceGoal) : "");
-    setGDist(distGoal.toString());
-    setGPeriod(period);
+    setGMonthDist((user?.monthly_goal ?? 50).toString());
+    setGYearDist((user?.yearly_goal ?? 500).toString());
     setShowGoals(true);
   }
 
   function saveGoals() {
     const pace = gPace.trim() ? parsePaceInput(gPace) : null;
-    const dist = parseFloat(gDist) || 100;
-    goalsMutation.mutate({ paceGoal: pace, distanceGoal: dist, goalPeriod: gPeriod });
+    const monthlyGoal = parseFloat(gMonthDist) || 50;
+    const yearlyGoal = parseFloat(gYearDist) || 500;
+    goalsMutation.mutate({ monthlyGoal, yearlyGoal, paceGoal: pace });
   }
 
   // ─── Plan run save ───────────────────────────────────────────────────────────
@@ -747,7 +750,7 @@ export default function SoloScreen() {
               <Pressable
                 key={p}
                 style={[s.periodBtn, period === p && s.periodBtnOn]}
-                onPress={() => goalsMutation.mutate({ paceGoal, distanceGoal: distGoal, goalPeriod: p })}
+                onPress={() => { setPeriod(p); Haptics.selectionAsync(); }}
               >
                 <Text style={[s.periodBtnTxt, period === p && s.periodBtnTxtOn]}>
                   {p === "monthly" ? "Monthly" : "Yearly"}
@@ -1066,27 +1069,22 @@ export default function SoloScreen() {
             </Pressable>
           </View>
 
-          <Text style={s.inputLabel}>Goal Period</Text>
-          <View style={s.segRow}>
-            {(["monthly", "yearly"] as const).map((p) => (
-              <Pressable
-                key={p}
-                style={[s.segBtn, gPeriod === p && s.segBtnOn]}
-                onPress={() => setGPeriod(p)}
-              >
-                <Text style={[s.segTxt, gPeriod === p && s.segTxtOn]}>
-                  {p === "monthly" ? "Monthly" : "Yearly"}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-
-          <Text style={s.inputLabel}>Distance Goal (miles)</Text>
+          <Text style={s.inputLabel}>Monthly Distance Goal (miles)</Text>
           <TextInput
             style={s.input}
-            value={gDist}
-            onChangeText={setGDist}
-            placeholder="100"
+            value={gMonthDist}
+            onChangeText={setGMonthDist}
+            placeholder="50"
+            placeholderTextColor={C.textMuted}
+            keyboardType="numeric"
+          />
+
+          <Text style={s.inputLabel}>Yearly Distance Goal (miles)</Text>
+          <TextInput
+            style={s.input}
+            value={gYearDist}
+            onChangeText={setGYearDist}
+            placeholder="500"
             placeholderTextColor={C.textMuted}
             keyboardType="numeric"
           />

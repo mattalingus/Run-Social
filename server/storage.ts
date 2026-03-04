@@ -2095,11 +2095,12 @@ export async function getUserRatingForRun(runId: string, raterId: string) {
   return result.rows[0] || null;
 }
 
-export async function updateGoals(userId: string, monthlyGoal?: number, yearlyGoal?: number) {
+export async function updateGoals(userId: string, monthlyGoal?: number, yearlyGoal?: number, paceGoal?: number | null) {
   const updates: string[] = [];
   const values: any[] = [userId];
   if (monthlyGoal !== undefined) { updates.push(`monthly_goal = $${values.length + 1}`); values.push(monthlyGoal); }
   if (yearlyGoal !== undefined) { updates.push(`yearly_goal = $${values.length + 1}`); values.push(yearlyGoal); }
+  if (paceGoal !== undefined) { updates.push(`pace_goal = $${values.length + 1}`); values.push(paceGoal); }
   if (!updates.length) return;
   await pool.query(`UPDATE users SET ${updates.join(", ")} WHERE id = $1`, values);
 }
