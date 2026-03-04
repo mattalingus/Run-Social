@@ -115,6 +115,7 @@ export async function initDb() {
     ALTER TABLE users ALTER COLUMN avg_pace SET DEFAULT NULL;
     ALTER TABLE users ALTER COLUMN avg_distance SET DEFAULT NULL;
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT false;
+    ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS mile_splits JSONB DEFAULT NULL;
 
     CREATE TABLE IF NOT EXISTS solo_runs (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -777,10 +778,11 @@ export async function createSoloRun(data: {
   routePath?: Array<{ latitude: number; longitude: number }> | null;
   activityType?: string;
   savedPathId?: string | null;
+  mileSplits?: Array<{ label: string; paceMinPerMile: number; isPartial: boolean }> | null;
 }) {
   const result = await pool.query(
-    `INSERT INTO solo_runs (user_id, title, date, distance_miles, pace_min_per_mile, duration_seconds, completed, planned, notes, route_path, activity_type, saved_path_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+    `INSERT INTO solo_runs (user_id, title, date, distance_miles, pace_min_per_mile, duration_seconds, completed, planned, notes, route_path, activity_type, saved_path_id, mile_splits)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
     [
       data.userId,
       data.title ?? null,
@@ -794,6 +796,7 @@ export async function createSoloRun(data: {
       data.routePath ? JSON.stringify(data.routePath) : null,
       data.activityType ?? "run",
       data.savedPathId ?? null,
+      data.mileSplits ? JSON.stringify(data.mileSplits) : null,
     ]
   );
   return result.rows[0];

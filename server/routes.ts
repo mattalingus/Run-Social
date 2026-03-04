@@ -908,7 +908,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/solo-runs", requireAuth, async (req, res) => {
     try {
-      const { title, date, distanceMiles, paceMinPerMile, durationSeconds, completed, planned, notes, routePath, activityType, savedPathId } = req.body;
+      const { title, date, distanceMiles, paceMinPerMile, durationSeconds, completed, planned, notes, routePath, activityType, savedPathId, mileSplits } = req.body;
       if (!date || !distanceMiles) return res.status(400).json({ message: "date and distanceMiles required" });
       const parsedDist = parseFloat(distanceMiles);
       const parsedPace = paceMinPerMile ? parseFloat(paceMinPerMile) : null;
@@ -925,6 +925,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         routePath: Array.isArray(routePath) ? routePath : null,
         activityType: activityType === "ride" ? "ride" : "run",
         savedPathId: savedPathId || null,
+        mileSplits: Array.isArray(mileSplits) && mileSplits.length > 0 ? mileSplits : null,
       });
       res.status(201).json(run);
       // Fire-and-forget: recompute avg pace + PR check on completion
