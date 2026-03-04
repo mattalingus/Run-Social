@@ -1258,11 +1258,9 @@ export default function DiscoverScreen() {
               onPress={() => router.push("/(tabs)/messages")}
               testID="messages-button"
             >
-              <View>
-                <Ionicons name="chatbubble-outline" size={15} color={C.primary} />
-                {unreadDmCount > 0 && <View style={s.notifBadge} />}
-              </View>
+              <Ionicons name="chatbubble-outline" size={15} color={C.primary} />
               <Text style={s.hBtnTxt}>Messages</Text>
+              {unreadDmCount > 0 && <View style={s.dmDot} />}
             </Pressable>
 
             {/* Host */}
@@ -2309,6 +2307,15 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     backgroundColor: C.primary,
     borderWidth: 1.5,
     borderColor: C.bg,
+  },
+  dmDot: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: C.primary,
   },
   notifSheet: {
     position: "absolute",
