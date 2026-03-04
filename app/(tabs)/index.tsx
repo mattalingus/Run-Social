@@ -2043,7 +2043,7 @@ export default function DiscoverScreen() {
             )}
 
             {/* Strict Mode */}
-            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: C.card, borderRadius: 12, padding: 14, borderWidth: hStrict ? 2 : 1, borderColor: hStrict ? C.primary : C.border }}>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: C.card, borderRadius: 12, padding: 14, borderWidth: !hStrict ? 2 : 1, borderColor: !hStrict ? C.primary : C.border }}>
               <View style={{ flex: 1, marginRight: 12 }}>
                 <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text }}>Strict Mode</Text>
                 <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, marginTop: 2 }}>
