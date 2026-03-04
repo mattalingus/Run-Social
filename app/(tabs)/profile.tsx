@@ -29,6 +29,7 @@ import { darkColors as C } from "@/constants/colors";
 import { MARKER_ICONS } from "@/constants/markerIcons";
 import { ACHIEVEMENTS, type AchievementDef } from "@/constants/achievements";
 import { formatDistance } from "@/lib/formatDistance";
+import { toDisplayDist, toDisplayPace, unitLabel, type DistanceUnit } from "@/lib/units";
 import { pickAndUploadImage } from "@/lib/uploadImage";
 import HostProfileSheet from "@/components/HostProfileSheet";
 import SettingsModal from "@/components/SettingsModal";
@@ -220,6 +221,7 @@ export default function ProfileScreen() {
   const qc = useQueryClient();
   const { activityFilter: profileActivity, setActivityFilter: setProfileActivity } = useActivity();
   const { C, theme, toggleTheme } = useTheme();
+  const distUnit: DistanceUnit = ((user as any)?.distance_unit ?? "miles") as DistanceUnit;
 
   const [showGoals, setShowGoals] = useState(false);
   const [showPace, setShowPace] = useState(false);
@@ -753,7 +755,7 @@ export default function ProfileScreen() {
                       </View>
                       <Text style={styles.statName}>
                         {ach.progressKey === "max_single_run_miles_x10"
-                          ? `${(current / 10).toFixed(1)} / ${(target / 10).toFixed(1)} mi`
+                          ? `${toDisplayDist(current / 10, distUnit)} / ${toDisplayDist(target / 10, distUnit)}`
                           : `${Math.round(current)} / ${target} ${ach.progressLabel ?? ""}`}
                       </Text>
                     </View>
@@ -786,8 +788,8 @@ export default function ProfileScreen() {
       {/* ── Stats Grid ────────────────────────────────────────────────────── */}
       <View style={styles.statsGrid}>
         <View style={styles.statCard}>
-          <Text style={styles.statNum}>{formatDistance(actStats.totalMiles)}</Text>
-          <Text style={styles.statName}>Total Miles</Text>
+          <Text style={styles.statNum}>{toDisplayDist(actStats.totalMiles, distUnit)}</Text>
+          <Text style={styles.statName}>{distUnit === "km" ? "Total KM" : "Total Miles"}</Text>
         </View>
         <View style={styles.statCard}>
           <Text style={styles.statNum}>{actStats.count}</Text>
@@ -811,7 +813,7 @@ export default function ProfileScreen() {
           onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setTopRunsModal("longest"); }}
         >
           <Text style={styles.statNum}>
-            {computedTopRuns.longest[0]?.dist != null ? `${formatDistance(computedTopRuns.longest[0].dist)} mi` : "—"}
+            {computedTopRuns.longest[0]?.dist != null ? toDisplayDist(computedTopRuns.longest[0].dist, distUnit) : "—"}
           </Text>
           <Text style={styles.statName}>{profileActivity === "ride" ? "Longest Ride" : "Longest Run"}</Text>
           <Feather name="chevron-right" size={10} color={C.textMuted} style={{ marginTop: 2 }} />
@@ -872,7 +874,7 @@ export default function ProfileScreen() {
             <View>
               <Text style={styles.statsVal}>
                 {actStats.avgPace != null
-                  ? `${Math.floor(actStats.avgPace)}:${Math.round((actStats.avgPace % 1) * 60).toString().padStart(2, "0")}/mi`
+                  ? toDisplayPace(actStats.avgPace, distUnit)
                   : "—"}
               </Text>
               <Text style={styles.statsLabel}>Avg Pace</Text>
@@ -882,7 +884,7 @@ export default function ProfileScreen() {
             <Feather name="target" size={16} color={C.blue} />
             <View>
               <Text style={styles.statsVal}>
-                {user.avg_distance ? `${formatDistance(user.avg_distance)} mi` : "—"}
+                {user.avg_distance ? toDisplayDist(user.avg_distance, distUnit) : "—"}
               </Text>
               <Text style={styles.statsLabel}>Avg Distance</Text>
             </View>
@@ -961,21 +963,21 @@ export default function ProfileScreen() {
         <View style={styles.goalCard}>
           <View style={styles.goalHeader}>
             <Text style={styles.goalLabel}>This Month</Text>
-            <Text style={styles.goalValues}>{formatDistance(actStats.monthMiles)} / {user.monthly_goal} mi</Text>
+            <Text style={styles.goalValues}>{toDisplayDist(actStats.monthMiles, distUnit)} / {toDisplayDist(user.monthly_goal ?? 50, distUnit)}</Text>
           </View>
           <ProgressBar value={actStats.monthMiles} total={user.monthly_goal} />
           <Text style={styles.goalRemain}>
-            {formatDistance(Math.max(0, user.monthly_goal - actStats.monthMiles))} mi remaining
+            {toDisplayDist(Math.max(0, user.monthly_goal - actStats.monthMiles), distUnit)} remaining
           </Text>
         </View>
         <View style={[styles.goalCard, { marginTop: 10 }]}>
           <View style={styles.goalHeader}>
             <Text style={styles.goalLabel}>This Year</Text>
-            <Text style={styles.goalValues}>{formatDistance(actStats.yearMiles)} / {user.yearly_goal} mi</Text>
+            <Text style={styles.goalValues}>{toDisplayDist(actStats.yearMiles, distUnit)} / {toDisplayDist(user.yearly_goal ?? 500, distUnit)}</Text>
           </View>
           <ProgressBar value={actStats.yearMiles} total={user.yearly_goal} color={C.blue} />
           <Text style={styles.goalRemain}>
-            {formatDistance(Math.max(0, user.yearly_goal - actStats.yearMiles))} mi remaining
+            {toDisplayDist(Math.max(0, user.yearly_goal - actStats.yearMiles), distUnit)} remaining
           </Text>
         </View>
       </View>

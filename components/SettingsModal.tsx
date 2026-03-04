@@ -16,10 +16,11 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons, FontAwesome5 } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import * as WebBrowser from "expo-web-browser";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { apiRequest } from "@/lib/query-client";
+import { apiRequest, getApiUrl } from "@/lib/query-client";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -127,9 +128,18 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
 
   const stravaConnected = !!(user as any)?.strava_id;
   const appleHealthConnected = !!(user as any)?.apple_health_id;
-  const garminConnected = !!(user as any)?.garmin_id;
+
+  const { data: garminStatus, refetch: refetchGarmin } = useQuery<{ connected: boolean }>({
+    queryKey: ["/api/garmin/status"],
+    enabled: visible,
+  });
+  const garminConnected = garminStatus?.connected ?? false;
 
   const [updatingField, setUpdatingField] = useState<string | null>(null);
+  const [showTerms, setShowTerms] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
+  const [garminSyncing, setGarminSyncing] = useState(false);
+  const [garminSyncMsg, setGarminSyncMsg] = useState<string | null>(null);
 
   const updateUser = useCallback(async (updates: Record<string, any>, fieldKey: string) => {
     setUpdatingField(fieldKey);
@@ -173,14 +183,71 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
     );
   }
 
-  function handleConnectGarmin() {
-    Alert.alert(
-      garminConnected ? "Disconnect Garmin" : "Connect Garmin",
-      garminConnected
-        ? "Disconnect your Garmin device from FARA?"
-        : "Import detailed GPS data and heart rate from your Garmin watch. Full integration coming soon!",
-      [{ text: "Got it", style: "cancel" }]
-    );
+  async function handleConnectGarmin() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (garminConnected) {
+      Alert.alert(
+        "Disconnect Garmin",
+        "Remove your Garmin account from FARA? Your imported activities will remain.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Disconnect",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await apiRequest("POST", "/api/garmin/disconnect", {});
+                await refetchGarmin();
+                setGarminSyncMsg(null);
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              } catch (e: any) {
+                Alert.alert("Error", e.message || "Could not disconnect Garmin.");
+              }
+            },
+          },
+        ]
+      );
+      return;
+    }
+    try {
+      const base = getApiUrl();
+      const resp = await fetch(new URL("/api/garmin/auth", base).toString(), { credentials: "include" });
+      const data = await resp.json();
+      if (!resp.ok) {
+        Alert.alert("Garmin Connect", data.message || "Could not start Garmin authorization.");
+        return;
+      }
+      const { authUrl } = data;
+      await WebBrowser.openBrowserAsync(authUrl);
+      await refetchGarmin();
+      if (garminStatus?.connected) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch (e: any) {
+      Alert.alert("Error", e.message || "Could not open Garmin authorization.");
+    }
+  }
+
+  async function handleGarminSync() {
+    if (garminSyncing) return;
+    setGarminSyncing(true);
+    setGarminSyncMsg(null);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      const base = getApiUrl();
+      const resp = await fetch(new URL("/api/garmin/sync", base).toString(), { method: "POST", credentials: "include" });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.message || "Sync failed");
+      const msg = data.imported > 0 ? `${data.imported} new activit${data.imported === 1 ? "y" : "ies"} imported!` : "All activities already synced.";
+      setGarminSyncMsg(msg);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      qc.invalidateQueries({ queryKey: ["/api/solo-runs"] });
+    } catch (e: any) {
+      setGarminSyncMsg(`Sync failed: ${e.message}`);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setGarminSyncing(false);
+    }
   }
 
   function handleConnectSocial(name: string) {
@@ -196,7 +263,7 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     Alert.alert(
       "Delete Account",
-      "This will permanently delete your account, all your runs, crews, and data. This cannot be undone.",
+      "This will permanently delete your account, all your activities, crews, and data. This cannot be undone.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -491,16 +558,30 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
               iconBg="#0A1A2A"
               icon={<FontAwesome5 name="satellite-dish" size={15} color="#009CDE" />}
               label="Garmin"
-              sublabel={garminConnected ? "Connected" : "Sync from your Garmin device"}
+              sublabel={garminConnected ? (garminSyncMsg ?? "Connected — tap Sync to import activities") : "Sync from your Garmin device"}
               right={
-                <Pressable
-                  style={[st.connectBtn, { borderColor: garminConnected ? "#009CDE" : C.border, backgroundColor: garminConnected ? "#009CDE22" : C.surface }]}
-                  onPress={handleConnectGarmin}
-                >
-                  <Text style={[st.connectBtnTxt, { color: garminConnected ? "#009CDE" : C.textSecondary }]}>
-                    {garminConnected ? "Connected" : "Connect"}
-                  </Text>
-                </Pressable>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  {garminConnected && (
+                    <Pressable
+                      style={[st.connectBtn, { borderColor: "#009CDE", backgroundColor: "#009CDE22" }]}
+                      onPress={handleGarminSync}
+                      disabled={garminSyncing}
+                    >
+                      {garminSyncing
+                        ? <ActivityIndicator size="small" color="#009CDE" />
+                        : <Text style={[st.connectBtnTxt, { color: "#009CDE" }]}>Sync</Text>
+                      }
+                    </Pressable>
+                  )}
+                  <Pressable
+                    style={[st.connectBtn, { borderColor: garminConnected ? "#FF4D4D" : C.border, backgroundColor: garminConnected ? "#FF4D4D22" : C.surface }]}
+                    onPress={handleConnectGarmin}
+                  >
+                    <Text style={[st.connectBtnTxt, { color: garminConnected ? "#FF4D4D" : C.textSecondary }]}>
+                      {garminConnected ? "Disconnect" : "Connect"}
+                    </Text>
+                  </Pressable>
+                </View>
               }
             />
             <Divider C={C} />
@@ -556,7 +637,7 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
               iconBg="#0A0A0F"
               icon={<FontAwesome5 name="tiktok" size={17} color={C.text} />}
               label="TikTok"
-              sublabel="Share run highlights"
+              sublabel="Share activity highlights"
               right={
                 <Pressable style={[st.connectBtn, { borderColor: C.border, backgroundColor: C.surface }]} onPress={() => handleConnectSocial("TikTok")}>
                   <Text style={[st.connectBtnTxt, { color: C.textSecondary }]}>Connect</Text>
@@ -582,10 +663,10 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
               iconBg="#1A2A1A"
               icon={<Feather name="share-2" size={17} color={C.primary} />}
               label="Invite Friends"
-              sublabel="Share FARA with your running crew"
+              sublabel="Share FARA with your crew"
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                const msg = "Join me on FARA — the social running app! Download it here: https://fara.run";
+                const msg = "Join me on FARA — discover group runs & rides! Download it here: https://fara.run";
                 if (Platform.OS === "web") {
                   (navigator as any).clipboard?.writeText(msg);
                   Alert.alert("Copied!", "Invite link copied to clipboard.");
@@ -636,7 +717,7 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
               iconBg="#1A1A2E"
               icon={<Feather name="file-text" size={17} color="#9B7FFF" />}
               label="Terms of Service"
-              onPress={() => Linking.openURL("https://fara.run/terms")}
+              onPress={() => setShowTerms(true)}
             />
             <Divider C={C} />
             <SettingRow
@@ -644,7 +725,7 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
               iconBg="#1A1A2E"
               icon={<Feather name="shield" size={17} color="#9B7FFF" />}
               label="Privacy Policy"
-              onPress={() => Linking.openURL("https://fara.run/privacy")}
+              onPress={() => setShowPrivacy(true)}
             />
             <Divider C={C} />
             <SettingRow
@@ -660,6 +741,93 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
           <View style={{ height: 20 }} />
         </ScrollView>
       </View>
+
+      {/* ── Terms of Service Modal ────────────────────────────────────────── */}
+      <Modal visible={showTerms} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowTerms(false)}>
+        <View style={[st.container, { backgroundColor: C.bg }]}>
+          <View style={[st.header, { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 16), borderBottomColor: C.border }]}>
+            <View style={{ width: 40 }} />
+            <Text style={[st.headerTitle, { color: C.text }]}>Terms of Service</Text>
+            <Pressable onPress={() => setShowTerms(false)} hitSlop={12} style={[st.closeBtn, { backgroundColor: C.card, borderColor: C.border }]}>
+              <Feather name="x" size={18} color={C.text} />
+            </Pressable>
+          </View>
+          <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
+            <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 22, color: C.text, marginBottom: 6 }}>Terms of Service</Text>
+            <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, marginBottom: 20 }}>Effective date: January 1, 2025</Text>
+
+            {[
+              { title: "1. Acceptance of Terms", body: "By creating an account or using FARA, you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use the app. We may update these terms from time to time; continued use of the app constitutes acceptance of any revised terms." },
+              { title: "2. Eligibility", body: "You must be at least 18 years of age to use FARA. By using the app, you represent and warrant that you meet this requirement and that all information you provide is accurate and complete." },
+              { title: "3. Your Account", body: "You are responsible for maintaining the confidentiality of your account credentials and for all activity that occurs under your account. Notify us immediately at support@fara.run if you suspect unauthorized access to your account." },
+              { title: "4. Acceptable Use", body: "You agree to use FARA only for lawful purposes. You may not: harass, threaten, or harm other users; post false, misleading, or offensive content; spam or send unsolicited messages; impersonate another person; attempt to gain unauthorized access to any part of the app; or use the app for any commercial purpose without our written consent." },
+              { title: "5. Content", body: "You retain ownership of content you post on FARA (photos, routes, messages). By posting content, you grant FARA a non-exclusive, royalty-free license to display and distribute that content within the app. We reserve the right to remove any content that violates these terms or our community standards." },
+              { title: "6. Physical Activity Disclaimer", body: "FARA facilitates connections between people for physical activities. You acknowledge that participating in runs, rides, and other physical activities carries inherent risk. You participate at your own risk and are responsible for your own safety. FARA does not supervise events, verify participants' fitness levels, or assume any liability for injuries or incidents that occur during activities organized through the app." },
+              { title: "7. Host Responsibilities", body: "If you host events through FARA, you are responsible for planning safe routes, communicating clearly with participants, and ensuring participants are aware of any risks. Hosts are independent organizers and are not employees or agents of FARA." },
+              { title: "8. Account Suspension", body: "We reserve the right to suspend or terminate your account at any time for violations of these terms, community guidelines, or for any behavior we deem harmful to other users or the FARA community." },
+              { title: "9. Disclaimer of Warranties", body: "FARA is provided \"as is\" without warranty of any kind. We do not guarantee that the app will be available at all times, error-free, or that information provided by other users is accurate. To the fullest extent permitted by law, FARA disclaims all warranties, express or implied." },
+              { title: "10. Limitation of Liability", body: "To the maximum extent permitted by applicable law, FARA and its affiliates shall not be liable for any indirect, incidental, special, consequential, or punitive damages arising from your use of the app or participation in any events organized through it." },
+              { title: "11. Governing Law", body: "These terms shall be governed by the laws of your jurisdiction. Any disputes shall be resolved through binding arbitration or in the courts of competent jurisdiction." },
+              { title: "12. Contact", body: "If you have questions about these Terms of Service, please contact us at support@fara.run." },
+            ].map((sec, i) => (
+              <View key={i} style={{ marginBottom: 20 }}>
+                <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 15, color: C.text, marginBottom: 6 }}>{sec.title}</Text>
+                <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textSecondary, lineHeight: 22 }}>{sec.body}</Text>
+              </View>
+            ))}
+
+            <Pressable
+              onPress={() => setShowTerms(false)}
+              style={{ backgroundColor: C.primary, borderRadius: 12, paddingVertical: 14, alignItems: "center", marginTop: 8 }}
+            >
+              <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 15, color: C.bg }}>Done</Text>
+            </Pressable>
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* ── Privacy Policy Modal ──────────────────────────────────────────── */}
+      <Modal visible={showPrivacy} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowPrivacy(false)}>
+        <View style={[st.container, { backgroundColor: C.bg }]}>
+          <View style={[st.header, { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 16), borderBottomColor: C.border }]}>
+            <View style={{ width: 40 }} />
+            <Text style={[st.headerTitle, { color: C.text }]}>Privacy Policy</Text>
+            <Pressable onPress={() => setShowPrivacy(false)} hitSlop={12} style={[st.closeBtn, { backgroundColor: C.card, borderColor: C.border }]}>
+              <Feather name="x" size={18} color={C.text} />
+            </Pressable>
+          </View>
+          <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
+            <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 22, color: C.text, marginBottom: 6 }}>Privacy Policy</Text>
+            <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, marginBottom: 20 }}>Effective date: January 1, 2025</Text>
+
+            {[
+              { title: "1. Information We Collect", body: "We collect information you provide directly, including your name, username, email address, profile photo, and activity preferences. When you use the app's tracking features, we collect GPS location data. We also collect usage data such as which features you use and when." },
+              { title: "2. How We Use Your Information", body: "We use your information to: operate and improve the FARA app; match you with nearby runs and rides; display your activity history and statistics; send notifications you've opted into; provide customer support; and ensure the safety of our community. We do not use your data for advertising purposes." },
+              { title: "3. Location Data", body: "Location access is used solely to show nearby events, enable GPS activity tracking, and display your routes. You can disable location access in your device settings at any time, though this will limit tracking functionality. We do not share your precise location with other users without your consent." },
+              { title: "4. Information Sharing", body: "We do not sell your personal information to third parties. We may share data with service providers who help us operate the app (e.g., hosting, database, push notifications), subject to confidentiality agreements. We may disclose information if required by law or to protect the safety of users." },
+              { title: "5. Public vs. Private Content", body: "Your profile, activity stats, and runs you host may be visible to other FARA users depending on your privacy settings. You can control your profile visibility in Settings. Private runs are only visible to invited participants." },
+              { title: "6. Data Retention", body: "We retain your account data for as long as your account is active. If you delete your account, we will delete your personal data within 30 days, except where we are required by law to retain it." },
+              { title: "7. Your Rights", body: "You have the right to access, correct, or delete your personal data at any time. You can update your profile information in the app or delete your account in Settings. To request a data export or for any privacy-related inquiries, contact us at support@fara.run." },
+              { title: "8. Security", body: "We implement industry-standard security measures to protect your data, including encrypted connections (HTTPS) and secure authentication. No method of transmission over the internet is 100% secure, and we cannot guarantee absolute security." },
+              { title: "9. Children's Privacy", body: "FARA is not intended for users under the age of 18. We do not knowingly collect personal information from children. If you believe a child has provided us with their information, please contact us and we will delete it promptly." },
+              { title: "10. Changes to This Policy", body: "We may update this Privacy Policy from time to time. We will notify you of significant changes via the app or email. Your continued use of FARA after changes constitutes acceptance of the revised policy." },
+              { title: "11. Contact Us", body: "If you have any questions, concerns, or requests regarding your privacy, please contact us at support@fara.run. We are committed to addressing your concerns promptly." },
+            ].map((sec, i) => (
+              <View key={i} style={{ marginBottom: 20 }}>
+                <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 15, color: C.text, marginBottom: 6 }}>{sec.title}</Text>
+                <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textSecondary, lineHeight: 22 }}>{sec.body}</Text>
+              </View>
+            ))}
+
+            <Pressable
+              onPress={() => setShowPrivacy(false)}
+              style={{ backgroundColor: C.primary, borderRadius: 12, paddingVertical: 14, alignItems: "center", marginTop: 8 }}
+            >
+              <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 15, color: C.bg }}>Done</Text>
+            </Pressable>
+          </ScrollView>
+        </View>
+      </Modal>
     </Modal>
   );
 }

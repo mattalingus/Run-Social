@@ -39,6 +39,8 @@ export const users = pgTable("users", {
   stravaId: text("strava_id"),
   appleHealthId: text("apple_health_id"),
   garminId: text("garmin_id"),
+  garminAccessToken: text("garmin_access_token"),
+  garminTokenSecret: text("garmin_token_secret"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

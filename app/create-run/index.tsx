@@ -310,7 +310,7 @@ export default function CreateRunScreen() {
             style={[styles.input, styles.textarea]}
             value={description}
             onChangeText={setDescription}
-            placeholder={isCrew ? "Tell the crew what to expect..." : "Tell runners what to expect..."}
+            placeholder={isCrew ? "Tell the crew what to expect..." : "Tell participants what to expect..."}
             placeholderTextColor={C.textMuted}
             multiline
             numberOfLines={3}
@@ -539,7 +539,7 @@ export default function CreateRunScreen() {
           <>
             <View style={styles.field}>
               <Text style={styles.label}>Run Style</Text>
-              <Text style={styles.fieldHint}>What kind of run is this?</Text>
+              <Text style={styles.fieldHint}>What type of event is this?</Text>
               <View style={styles.tagsGrid}>
                 {RUN_STYLES.map((s) => (
                   <Pressable
@@ -748,7 +748,7 @@ export default function CreateRunScreen() {
                 </Pressable>
                 <Pressable
                   style={styles.inviteShareBtn}
-                  onPress={() => Share.share({ message: `Join my private run "${inviteModal.title}" on FARA! Use invite code: ${inviteModal.token}` })}
+                  onPress={() => Share.share({ message: `Join my private event "${inviteModal.title}" on FARA! Use invite code: ${inviteModal.token}` })}
                 >
                   <Feather name="share-2" size={16} color={C.bg} />
                   <Text style={styles.inviteShareTxt}>Share</Text>

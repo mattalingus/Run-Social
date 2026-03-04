@@ -69,7 +69,7 @@ export default function RegisterScreen() {
 
         <View style={styles.header}>
           <Text style={styles.title}>Join FARA</Text>
-          <Text style={styles.subtitle}>Create your runner profile</Text>
+          <Text style={styles.subtitle}>Create your profile</Text>
         </View>
 
         <View style={styles.form}>

@@ -29,6 +29,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { darkColors as C, type ColorScheme } from "@/constants/colors";
 import RangeSlider from "@/components/RangeSlider";
 import { formatDistance } from "@/lib/formatDistance";
+import { toDisplayDist, toDisplayPace, unitLabel, type DistanceUnit } from "@/lib/units";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
@@ -191,6 +192,8 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
   const fm = useMemo(() => makeFmStyles(C), [C]);
   const insets = useSafeAreaInsets();
   const { activityFilter } = useActivity();
+  const { user: fmUser } = useAuth();
+  const distUnit: DistanceUnit = ((fmUser as any)?.distance_unit ?? "miles") as DistanceUnit;
 
   function toggleStyle(s: string) {
     setDraft((p) => ({
@@ -298,7 +301,7 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
             <View style={fm.sectionHead}>
               <Text style={fm.sectionTitle}>Pace</Text>
               <Text style={fm.sectionValue}>
-                {formatPace(draft.paceMin)} – {formatPace(draft.paceMax)} /mi
+                {toDisplayPace(draft.paceMin, distUnit)} – {toDisplayPace(draft.paceMax, distUnit)}
               </Text>
             </View>
             <RangeSlider
@@ -311,7 +314,7 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
             />
             <View style={fm.edgeRow}>
               <Text style={fm.edgeLabel}>4:00</Text>
-              <Text style={fm.edgeLabel}>15:00 /mi</Text>
+              <Text style={fm.edgeLabel}>{`15:00 /${unitLabel(distUnit)}`}</Text>
             </View>
           </View>
 
@@ -518,6 +521,8 @@ function RunCard({
   isCrew?: boolean;
 }) {
   const { C } = useTheme();
+  const { user: cardUser } = useAuth();
+  const distUnit: DistanceUnit = ((cardUser as any)?.distance_unit ?? "miles") as DistanceUnit;
   const s = useMemo(() => makeStyles(C), [C]);
   const spotsLeft = run.max_participants - run.participant_count;
   const badge = getHostBadge(run.host_hosted_runs);
@@ -568,7 +573,7 @@ function RunCard({
             if (badge) return <Text style={[s.hostColumnBadge, { color: badge.color }]}>{badge.label}</Text>;
             return null;
           })()}
-          <Text style={s.hostColumnDist}>{formatDistance(run.min_distance)} mi</Text>
+          <Text style={s.hostColumnDist}>{toDisplayDist(run.min_distance, distUnit)}</Text>
         </View>
 
         <View style={s.cardDivider} />
@@ -612,7 +617,7 @@ function RunCard({
             {distanceMi !== undefined && (
               <View style={s.metaItem}>
                 <Feather name="navigation" size={11} color={C.textMuted} />
-                <Text style={s.metaText}>{formatDistance(distanceMi)} mi away</Text>
+                <Text style={s.metaText}>{toDisplayDist(distanceMi!, distUnit)} away</Text>
               </View>
             )}
           </View>
@@ -620,14 +625,12 @@ function RunCard({
           <View style={s.cardStats}>
             <View style={s.stat}>
               <Ionicons name={run.activity_type === "ride" ? "bicycle" : "walk"} size={12} color={getPaceColor(run.min_pace, run.max_pace, C)} />
-              <Text style={[s.statLabel, { color: getPaceColor(run.min_pace, run.max_pace, C) }]}>{formatPace(run.min_pace)}–{formatPace(run.max_pace)}</Text>
-              <Text style={s.statUnit}>/mi</Text>
+              <Text style={[s.statLabel, { color: getPaceColor(run.min_pace, run.max_pace, C) }]}>{toDisplayPace(run.min_pace, distUnit)}–{toDisplayPace(run.max_pace, distUnit)}</Text>
             </View>
             <View style={s.statDiv} />
             <View style={s.stat}>
               <Feather name="target" size={12} color={C.blue} />
-              <Text style={s.statLabel}>{run.min_distance === run.max_distance ? formatDistance(run.min_distance) : `${formatDistance(run.min_distance)}–${formatDistance(run.max_distance)}`}</Text>
-              <Text style={s.statUnit}>mi</Text>
+              <Text style={s.statLabel}>{run.min_distance === run.max_distance ? toDisplayDist(run.min_distance, distUnit) : `${toDisplayDist(run.min_distance, distUnit)}–${toDisplayDist(run.max_distance, distUnit)}`}</Text>
             </View>
             <View style={s.statDiv} />
             <View style={s.stat}>
@@ -1047,12 +1050,12 @@ export default function DiscoverScreen() {
       action: () => router.push("/(tabs)/profile" as any),
     },
     {
-      label: "Log a solo run",
+      label: "Log a solo activity",
       done: ((user as any)?.completed_runs ?? 0) > 0,
       action: () => router.push("/(tabs)/solo" as any),
     },
     {
-      label: "Host your first run",
+      label: "Host your first event",
       done: ((user as any)?.hosted_runs ?? 0) > 0,
       action: () => setShowHostModal(true),
     },
@@ -1405,7 +1408,7 @@ export default function DiscoverScreen() {
                       </View>
                       <View style={s.plannedPace}>
                         <Ionicons name="walk" size={12} color={C.orange} />
-                        <Text style={s.plannedPaceTxt}>{formatPace(r.min_pace)}–{formatPace(r.max_pace)} /mi</Text>
+                        <Text style={s.plannedPaceTxt}>{toDisplayPace(r.min_pace, (user as any)?.distance_unit ?? "miles")}–{toDisplayPace(r.max_pace, (user as any)?.distance_unit ?? "miles")}</Text>
                       </View>
                     </Pressable>
                   ))}
@@ -1487,7 +1490,7 @@ export default function DiscoverScreen() {
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={s.hostCtaTitle}>Be the first to host in your area</Text>
-                    <Text style={s.hostCtaBody}>Create a run and invite others — it only takes a minute.</Text>
+                    <Text style={s.hostCtaBody}>Create an event and invite others — it only takes a minute.</Text>
                   </View>
                 </Pressable>
                 <Pressable

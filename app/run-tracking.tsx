@@ -27,8 +27,10 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { useActivity } from "@/contexts/ActivityContext";
+import { useAuth } from "@/contexts/AuthContext";
 import C from "@/constants/colors";
 import { formatDistance } from "@/lib/formatDistance";
+import { toDisplayDist, toDisplayPace, unitLabel, type DistanceUnit } from "@/lib/units";
 
 const IS_NATIVE = Platform.OS !== "web";
 
@@ -290,6 +292,8 @@ export default function RunTrackingScreen() {
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
   const { activityFilter } = useActivity();
+  const { user } = useAuth();
+  const distUnit: DistanceUnit = ((user as any)?.distance_unit ?? "miles") as DistanceUnit;
   const { pathId } = useLocalSearchParams<{ pathId?: string }>();
 
   const [permission, requestPermission] = Location.useForegroundPermissions();
@@ -610,7 +614,7 @@ export default function RunTrackingScreen() {
       router.back();
       return;
     }
-    Alert.alert("Discard Run", "Discard this run and go back?", [
+    Alert.alert(`Discard ${activityFilter === "ride" ? "Ride" : "Run"}`, `Discard this ${activityFilter === "ride" ? "ride" : "run"} and go back?`, [
       { text: "Keep Going", style: "cancel" },
       {
         text: "Discard",
@@ -630,7 +634,7 @@ export default function RunTrackingScreen() {
     setSaving(true);
     try {
       const res = await apiRequest("POST", "/api/solo-runs", {
-        title: `${formatDistance(distance)} mi solo ${activityFilter === "ride" ? "ride" : "run"}`,
+        title: `${toDisplayDist(distance, distUnit)} solo ${activityFilter === "ride" ? "ride" : "run"}`,
         date: new Date().toISOString(),
         distanceMiles: Math.max(distance, 0.001),
         paceMinPerMile: pace,
@@ -713,7 +717,7 @@ export default function RunTrackingScreen() {
           },
         ],
         "plain-text",
-        `${formatDistance(totalDistRef.current)} mi Run`
+        `${toDisplayDist(totalDistRef.current, distUnit)} ${activityFilter === "ride" ? "Ride" : "Run"}`
       );
       return;
     }
@@ -808,8 +812,8 @@ export default function RunTrackingScreen() {
 
           <View style={t.statsRow}>
             <View style={t.statBlock}>
-              <Text style={t.statBig}>{formatDistance(distance)}</Text>
-              <Text style={t.statUnit}>miles</Text>
+              <Text style={t.statBig}>{toDisplayDist(distance, distUnit)}</Text>
+              <Text style={t.statUnit}>{distUnit === "km" ? "km" : "miles"}</Text>
             </View>
             <View style={t.statDivider} />
             <View style={t.statBlock}>
@@ -910,7 +914,7 @@ export default function RunTrackingScreen() {
                       <Pressable
                         style={t.publishBtn}
                         onPress={() => {
-                          setPublishName(`${formatDistance(totalDistRef.current)} mi Run`);
+                          setPublishName(`${toDisplayDist(totalDistRef.current, distUnit)} ${activityFilter === "ride" ? "Ride" : "Run"}`);
                           setShowPublishForm(true);
                         }}
                       >
@@ -933,7 +937,7 @@ export default function RunTrackingScreen() {
                   <Pressable
                     style={t.savePathBtn}
                     onPress={() => {
-                      setPathName(`My Route – ${formatDistance(totalDistRef.current)} mi`);
+                      setPathName(`My Route – ${toDisplayDist(totalDistRef.current, distUnit)}`);
                       setShowSaveNameModal(true);
                     }}
                   >
@@ -1117,8 +1121,8 @@ export default function RunTrackingScreen() {
         {/* Live stats */}
         <View style={t.liveRow}>
           <View style={t.liveStat}>
-            <Text style={t.liveVal}>{formatDistance(displayDist)}</Text>
-            <Text style={t.liveUnit}>miles</Text>
+            <Text style={t.liveVal}>{toDisplayDist(displayDist, distUnit)}</Text>
+            <Text style={t.liveUnit}>{distUnit === "km" ? "km" : "miles"}</Text>
           </View>
           <View style={t.liveDivider} />
           <View style={t.liveStat}>
@@ -1249,7 +1253,7 @@ export default function RunTrackingScreen() {
                     <View style={{ flex: 1 }}>
                       <Text style={t.pickerRowName}>{p.name}</Text>
                       {p.distance_miles != null && (
-                        <Text style={t.pickerRowMeta}>{formatDistance(p.distance_miles)} mi</Text>
+                        <Text style={t.pickerRowMeta}>{toDisplayDist(p.distance_miles ?? 0, distUnit)}</Text>
                       )}
                     </View>
                     <Feather name="chevron-right" size={16} color={C.textMuted} />

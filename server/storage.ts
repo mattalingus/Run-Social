@@ -320,6 +320,9 @@ export async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_dm_recipient ON direct_messages(recipient_id, created_at DESC);
     ALTER TABLE direct_messages ADD COLUMN IF NOT EXISTS message_type TEXT DEFAULT 'text';
     ALTER TABLE direct_messages ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT NULL;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS garmin_access_token TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS garmin_token_secret TEXT;
+    ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS garmin_activity_id TEXT UNIQUE;
   `);
 }
 
@@ -462,7 +465,7 @@ export async function getNotifications(userId: string) {
       id: r.id,
       type: 'friend_request',
       title: 'Friend Request',
-      body: `${r.from_name} wants to be your running buddy`,
+      body: `${r.from_name} wants to connect on FARA`,
       data: { from_name: r.from_name, from_photo: r.from_photo },
       created_at: r.created_at,
     })),
@@ -1116,6 +1119,66 @@ export async function leaveRun(runId: string, userId: string) {
     `UPDATE run_participants SET status = 'cancelled' WHERE run_id = $1 AND user_id = $2`,
     [runId, userId]
   );
+}
+
+export async function getParticipantStatus(runId: string, userId: string): Promise<string | null> {
+  const result = await pool.query(
+    `SELECT status FROM run_participants WHERE run_id = $1 AND user_id = $2`,
+    [runId, userId]
+  );
+  return result.rows[0]?.status ?? null;
+}
+
+export async function getRunParticipantCount(runId: string): Promise<number> {
+  const result = await pool.query(
+    `SELECT COUNT(*) FROM run_participants WHERE run_id = $1 AND status IN ('joined', 'confirmed')`,
+    [runId]
+  );
+  return parseInt(result.rows[0].count, 10);
+}
+
+export async function decrementCompletedRuns(userId: string): Promise<void> {
+  await pool.query(
+    `UPDATE users SET completed_runs = GREATEST(0, completed_runs - 1) WHERE id = $1`,
+    [userId]
+  );
+}
+
+export async function getGarminToken(userId: string): Promise<{ access_token: string; token_secret: string } | null> {
+  const result = await pool.query(
+    `SELECT garmin_access_token as access_token, garmin_token_secret as token_secret FROM users WHERE id = $1`,
+    [userId]
+  );
+  if (!result.rows[0]?.access_token) return null;
+  return result.rows[0];
+}
+
+export async function saveGarminToken(userId: string, accessToken: string, tokenSecret: string): Promise<void> {
+  await pool.query(
+    `UPDATE users SET garmin_access_token = $1, garmin_token_secret = $2 WHERE id = $3`,
+    [accessToken, tokenSecret, userId]
+  );
+}
+
+export async function saveGarminActivity(userId: string, garminActivityId: string, data: {
+  title: string;
+  date: Date;
+  distanceMiles: number;
+  paceMinPerMile: number | null;
+  durationSeconds: number | null;
+  activityType: string;
+}): Promise<boolean> {
+  const existing = await pool.query(
+    `SELECT id FROM solo_runs WHERE garmin_activity_id = $1`,
+    [garminActivityId]
+  );
+  if (existing.rows.length > 0) return false;
+  await pool.query(
+    `INSERT INTO solo_runs (user_id, garmin_activity_id, title, date, distance_miles, pace_min_per_mile, duration_seconds, activity_type, completed, planned)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, false)`,
+    [userId, garminActivityId, data.title, data.date, data.distanceMiles, data.paceMinPerMile, data.durationSeconds, data.activityType]
+  );
+  return true;
 }
 
 export async function getRunParticipantTokens(runId: string): Promise<{ name: string; push_token: string }[]> {

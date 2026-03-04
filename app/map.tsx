@@ -26,6 +26,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { darkColors as C, type ColorScheme } from "@/constants/colors";
 import RangeSlider from "@/components/RangeSlider";
 import { formatDistance } from "@/lib/formatDistance";
+import { toDisplayDist, toDisplayPace, unitLabel, type DistanceUnit } from "@/lib/units";
 import HostProfileSheet from "@/components/HostProfileSheet";
 import { getApiUrl } from "@/lib/query-client";
 
@@ -304,6 +305,7 @@ function makeMkStyles(C: ColorScheme) { return StyleSheet.create({
 export default function MapScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const distUnit: DistanceUnit = ((user as any)?.distance_unit ?? "miles") as DistanceUnit;
   const { activityFilter } = useActivity();
   const { C } = useTheme();
   const mk = useMemo(() => makeMkStyles(C), [C]);
@@ -434,12 +436,12 @@ export default function MapScreen() {
     if (totalOpen > 0) result.push({ icon: "users", lib: "feather", text: `${totalOpen} open spot${totalOpen !== 1 ? "s" : ""}`, color: C.blue });
 
     const fastest = visibleRuns.reduce((a, b) => a.min_pace < b.min_pace ? a : b);
-    result.push({ icon: "zap", lib: "feather", text: `${formatPace(fastest.min_pace)}/mi fastest`, color: "#F4C542" });
+    result.push({ icon: "zap", lib: "feather", text: `${toDisplayPace(fastest.min_pace, distUnit)} fastest`, color: "#F4C542" });
 
     if (visibleRuns.length > 1) {
       const minD = Math.min(...visibleRuns.map((r) => r.min_distance));
       const maxD = Math.max(...visibleRuns.map((r) => r.max_distance));
-      result.push({ icon: "target", lib: "feather", text: `${formatDistance(minD)}–${formatDistance(maxD)} mi range`, color: C.textSecondary });
+      result.push({ icon: "target", lib: "feather", text: `${toDisplayDist(minD, distUnit)}–${toDisplayDist(maxD, distUnit)} range`, color: C.textSecondary });
     }
 
     const totalRunners = visibleRuns.reduce((acc, r) => acc + r.participant_count, 0);
@@ -646,7 +648,7 @@ export default function MapScreen() {
               <Feather name="map" size={32} color={C.textMuted} />
             </View>
             <Text style={s.emptyTitle}>No community routes here yet</Text>
-            <Text style={s.emptySub}>Finish a run and publish your first!</Text>
+            <Text style={s.emptySub}>Finish an activity and publish your first!</Text>
           </View>
         )}
 
@@ -770,13 +772,13 @@ export default function MapScreen() {
                 <View style={s.chip}>
                   <Ionicons name="walk" size={11} color={C.orange} />
                   <Text style={[s.chipTxt, { color: C.orange }]}>
-                    {formatPace(selectedRun.min_pace)}–{formatPace(selectedRun.max_pace)} /mi
+                    {toDisplayPace(selectedRun.min_pace, distUnit)}–{toDisplayPace(selectedRun.max_pace, distUnit)}
                   </Text>
                 </View>
                 <View style={s.chip}>
                   <Feather name="map" size={11} color={C.blue} />
                   <Text style={[s.chipTxt, { color: C.blue }]}>
-                    {selectedRun.min_distance === selectedRun.max_distance ? formatDistance(selectedRun.min_distance) : `${formatDistance(selectedRun.min_distance)}–${formatDistance(selectedRun.max_distance)}`} mi
+                    {selectedRun.min_distance === selectedRun.max_distance ? toDisplayDist(selectedRun.min_distance, distUnit) : `${toDisplayDist(selectedRun.min_distance, distUnit)}–${toDisplayDist(selectedRun.max_distance, distUnit)}`}
                   </Text>
                 </View>
                 <View style={[s.chip, selectedRun.is_active && s.chipLive]}>
@@ -829,7 +831,7 @@ export default function MapScreen() {
             <View style={s.pathStatRow}>
               <View style={s.pathChip}>
                 <Feather name="move" size={14} color={C.primary} />
-                <Text style={s.pathChipTxt}>{formatDistance(selectedCommunityPath.distance_miles ?? 0)} mi</Text>
+                <Text style={s.pathChipTxt}>{toDisplayDist(selectedCommunityPath.distance_miles ?? 0, distUnit)}</Text>
               </View>
               <View style={[s.pathChip, { backgroundColor: C.primaryMuted + "55" }]}>
                 <Text style={[s.pathChipTxt, { color: C.primary, textTransform: "capitalize" }]}>
@@ -886,11 +888,11 @@ export default function MapScreen() {
                 <View style={{ flex: 1, gap: 3 }}>
                   <View style={s.miniStatRow}>
                     <Feather name="map" size={10} color={C.primary} />
-                    <Text style={s.miniStatTxt}>{formatDistance(run.min_distance)} mi</Text>
+                    <Text style={s.miniStatTxt}>{toDisplayDist(run.min_distance, distUnit)}</Text>
                   </View>
                   <View style={s.miniStatRow}>
                     <Feather name="zap" size={10} color="#F4C542" />
-                    <Text style={[s.miniStatTxt, { color: "#F4C542" }]}>{formatPace(run.min_pace)}/mi</Text>
+                    <Text style={[s.miniStatTxt, { color: "#F4C542" }]}>{toDisplayPace(run.min_pace, distUnit)}</Text>
                   </View>
                   <View style={s.miniStatRow}>
                     <Feather name="users" size={10} color={C.textSecondary} />
@@ -965,7 +967,7 @@ export default function MapScreen() {
             <View style={s.section}>
               <View style={s.sectionHead}>
                 <Text style={s.sectionLabel}>Pace</Text>
-                <Text style={s.sectionValue}>{formatPace(draft.paceMin)} – {formatPace(draft.paceMax)} /mi</Text>
+                <Text style={s.sectionValue}>{toDisplayPace(draft.paceMin, distUnit)} – {toDisplayPace(draft.paceMax, distUnit)}</Text>
               </View>
               <RangeSlider
                 min={6} max={12} step={0.5}

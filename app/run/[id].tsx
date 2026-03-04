@@ -28,6 +28,7 @@ import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { darkColors as C, type ColorScheme } from "@/constants/colors";
 import { useTheme } from "@/contexts/ThemeContext";
 import { formatDistance } from "@/lib/formatDistance";
+import { toDisplayDist, toDisplayPace, unitLabel, type DistanceUnit } from "@/lib/units";
 import HostProfileSheet from "@/components/HostProfileSheet";
 
 function haversineKmDetail(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -79,6 +80,7 @@ export default function RunDetailScreen() {
   const { id, token } = useLocalSearchParams<{ id: string; token?: string }>();
   const insets = useSafeAreaInsets();
   const { user, refreshUser } = useAuth();
+  const distUnit: DistanceUnit = ((user as any)?.distance_unit ?? "miles") as DistanceUnit;
   const liveTracking = useLiveTracking();
   const qc = useQueryClient();
   const pillPulse = useRef(new Animated.Value(1)).current;
@@ -626,7 +628,7 @@ export default function RunDetailScreen() {
               )}
               {(() => { const b = getHostBadge(run.host_hosted_runs); return b ? <Text style={[styles.hostBadgeText, { color: b.color }]}>{b.label}</Text> : null; })()}
             </View>
-            <Text style={styles.hostPlannedDist}>{formatDistance(run.min_distance)} mi planned</Text>
+            <Text style={styles.hostPlannedDist}>{toDisplayDist(run.min_distance, distUnit)} planned</Text>
           </View>
           {isHost && (
             <View style={styles.yourRunBadge}>
@@ -680,14 +682,14 @@ export default function RunDetailScreen() {
           <View style={styles.requirementsGrid}>
             <View style={styles.reqItem}>
               <Ionicons name="walk" size={20} color={C.orange} />
-              <Text style={styles.reqValue}>{formatPace(run.min_pace)} – {formatPace(run.max_pace)}</Text>
-              <Text style={styles.reqLabel}>Pace (min/mi)</Text>
+              <Text style={styles.reqValue}>{toDisplayPace(run.min_pace, distUnit)} – {toDisplayPace(run.max_pace, distUnit)}</Text>
+              <Text style={styles.reqLabel}>{`Pace (min/${unitLabel(distUnit)})`}</Text>
             </View>
             <View style={styles.reqDivider} />
             <View style={styles.reqItem}>
               <Feather name="target" size={20} color={C.blue} />
-              <Text style={styles.reqValue}>{run.min_distance === run.max_distance ? formatDistance(run.min_distance) : `${formatDistance(run.min_distance)} – ${formatDistance(run.max_distance)}`}</Text>
-              <Text style={styles.reqLabel}>Distance (mi)</Text>
+              <Text style={styles.reqValue}>{run.min_distance === run.max_distance ? toDisplayDist(run.min_distance, distUnit) : `${toDisplayDist(run.min_distance, distUnit)} – ${toDisplayDist(run.max_distance, distUnit)}`}</Text>
+              <Text style={styles.reqLabel}>{`Distance (${unitLabel(distUnit)})`}</Text>
             </View>
             <View style={styles.reqDivider} />
             <View style={styles.reqItem}>
@@ -737,8 +739,8 @@ export default function RunDetailScreen() {
             let msg = "";
             if (eligible) msg = "Pace and distance both qualify";
             else if (!paceOk && !distOk) msg = "Pace and distance both fall short";
-            else if (!paceOk) msg = `Your pace (${formatPace(user.avg_pace)}/mi) doesn't match this run`;
-            else msg = `No recent run covers 70%+ of the planned ${formatDistance(run.min_distance)} mi`;
+            else if (!paceOk) msg = `Your pace (${toDisplayPace(user.avg_pace, distUnit)}) doesn't match this run`;
+            else msg = `No recent run covers 70%+ of the planned ${toDisplayDist(run.min_distance, distUnit)}`;
             return (
               <View style={[styles.eligibilityRow, {
                 backgroundColor: eligible ? C.primaryMuted : C.danger + "22",
@@ -815,7 +817,7 @@ export default function RunDetailScreen() {
                       {p.reliability_slug === "reliable_65" && <Text style={{ fontSize: 13 }}>🔵</Text>}
                       {p.reliability_slug === "reliable_50" && <Text style={{ fontSize: 13 }}>🟡</Text>}
                     </View>
-                    <Text style={styles.participantPace}>{formatPace(p.avg_pace)}/mi · {formatDistance(p.avg_distance)} mi avg</Text>
+                    <Text style={styles.participantPace}>{toDisplayPace(p.avg_pace, distUnit)} · {toDisplayDist(p.avg_distance, distUnit)} avg</Text>
                   </View>
                   <View style={[styles.participantStatus, { backgroundColor: p.status === "confirmed" ? C.primary + "22" : C.border }]}>
                     <Text style={[styles.participantStatusText, { color: p.status === "confirmed" ? C.primary : C.textMuted }]}>

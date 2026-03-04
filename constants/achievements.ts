@@ -40,7 +40,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   {
     slug: "host_in_making",
     name: "Host in the Making",
-    desc: "Host your first run.",
+    desc: "Host your first event.",
     icon: "🎯",
     category: "Beginner",
     difficulty: 1,

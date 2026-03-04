@@ -8,6 +8,35 @@ import * as storage from "./storage";
 import { generateDummyRuns, clearAndReseedRuns, getRunCount } from "./seed";
 import { uploadPhotoBuffer, streamObject } from "./objectStorage";
 import { sendPushNotification, userWantsNotif } from "./notifications";
+import crypto from "crypto";
+const OAuth = require("oauth-1.0a");
+
+const GARMIN_REQUEST_TOKEN_URL = "https://connectapi.garmin.com/oauth-service/oauth/request_token";
+const GARMIN_AUTH_URL = "https://connect.garmin.com/oauthConfirm";
+const GARMIN_ACCESS_TOKEN_URL = "https://connectapi.garmin.com/oauth-service/oauth/access_token";
+const GARMIN_ACTIVITIES_URL = "https://apis.garmin.com/wellness-api/rest/activities";
+
+function makeGarminOAuth() {
+  const key = process.env.GARMIN_CONSUMER_KEY;
+  const secret = process.env.GARMIN_CONSUMER_SECRET;
+  if (!key || !secret) return null;
+  return new OAuth({
+    consumer: { key, secret },
+    signature_method: "HMAC-SHA1",
+    hash_function(base_string: string, sigKey: string) {
+      return crypto.createHmac("sha1", sigKey).update(base_string).digest("base64");
+    },
+  });
+}
+
+async function garminFetch(url: string, method: string, oauthInst: any, token?: { key: string; secret: string }): Promise<any> {
+  const request = { url, method };
+  const authData = oauthInst.authorize(request, token ? { key: token.key, secret: token.secret } : undefined);
+  const authHeader = oauthInst.toHeader(authData);
+  const resp = await fetch(url, { method, headers: { ...authHeader, "Content-Type": "application/x-www-form-urlencoded" } });
+  if (!resp.ok) throw new Error(`Garmin API error: ${resp.status} ${await resp.text()}`);
+  return resp;
+}
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 
@@ -460,8 +489,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const privacy = run.privacy === "private" ? "private" : "public";
             sendPushNotification(
               tokens,
-              "New run from a friend 🏃",
-              `${run.host_name} just posted a ${privacy} run — "${run.title}"`,
+              "New activity from a friend 🏃",
+              `${run.host_name} just posted a ${privacy} ${run.activity_type === "ride" ? "ride" : "run"} — "${run.title}"`,
               { runId: run.id }
             );
           }
@@ -779,6 +808,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      // Time guard: reject if event is more than 2 hours in the past
+      const runDate = new Date(run.date);
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+      if (runDate < twoHoursAgo) {
+        return res.status(400).json({ message: "This event has already taken place" });
+      }
+
+      // Capacity check: reject if event is full
+      if (run.max_participants) {
+        const participantCount = await storage.getRunParticipantCount(req.params.id);
+        if (participantCount >= run.max_participants) {
+          return res.status(400).json({ message: "This event is full" });
+        }
+      }
+
       const participant = await storage.joinRun(req.params.id, req.session.userId!);
       res.json(participant);
       // Notify host (fire-and-forget)
@@ -798,8 +842,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/runs/:id/leave", requireAuth, async (req, res) => {
-    await storage.leaveRun(req.params.id, req.session.userId!);
-    res.json({ success: true });
+    try {
+      const prior = await storage.getParticipantStatus(req.params.id, req.session.userId!);
+      await storage.leaveRun(req.params.id, req.session.userId!);
+      if (prior === "confirmed") {
+        await storage.decrementCompletedRuns(req.session.userId!);
+      }
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
   });
 
   app.patch("/api/runs/:id", requireAuth, async (req, res) => {
@@ -1470,6 +1522,105 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       await storage.deleteDmThread(req.session.userId!, req.params.friendId);
       res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // ─── Garmin Connect OAuth 1.0a ───────────────────────────────────────────────
+
+  app.get("/api/garmin/status", requireAuth, async (req, res) => {
+    try {
+      const token = await storage.getGarminToken(req.session.userId!);
+      res.json({ connected: !!token });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/garmin/auth", requireAuth, async (req, res) => {
+    try {
+      const oauthInst = makeGarminOAuth();
+      if (!oauthInst) return res.status(503).json({ message: "Garmin integration is not configured. Add GARMIN_CONSUMER_KEY and GARMIN_CONSUMER_SECRET." });
+      const callbackUrl = `${req.protocol}://${req.get("host")}/api/garmin/callback?userId=${req.session.userId}`;
+      const reqResp = await garminFetch(GARMIN_REQUEST_TOKEN_URL + `?oauth_callback=${encodeURIComponent(callbackUrl)}`, "POST", oauthInst);
+      const body = await reqResp.text();
+      const params = new URLSearchParams(body);
+      const requestToken = params.get("oauth_token");
+      const requestSecret = params.get("oauth_token_secret");
+      if (!requestToken || !requestSecret) return res.status(500).json({ message: "Failed to obtain request token from Garmin." });
+      (req.session as any).garminRequestSecret = requestSecret;
+      await new Promise<void>((r) => req.session.save(() => r()));
+      res.json({ authUrl: `${GARMIN_AUTH_URL}?oauth_token=${requestToken}` });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/garmin/callback", async (req, res) => {
+    try {
+      const { userId, oauth_token, oauth_verifier } = req.query as Record<string, string>;
+      if (!userId || !oauth_token || !oauth_verifier) {
+        return res.status(400).send("Missing OAuth parameters.");
+      }
+      const oauthInst = makeGarminOAuth();
+      if (!oauthInst) return res.status(503).send("Garmin integration is not configured.");
+      const request = { url: GARMIN_ACCESS_TOKEN_URL, method: "POST" };
+      const authData = oauthInst.authorize(request, { key: oauth_token, secret: "" });
+      const authHeader = oauthInst.toHeader({ ...authData, oauth_verifier });
+      const accResp = await fetch(GARMIN_ACCESS_TOKEN_URL, {
+        method: "POST",
+        headers: { ...authHeader, "Content-Type": "application/x-www-form-urlencoded" },
+        body: `oauth_verifier=${encodeURIComponent(oauth_verifier)}`,
+      });
+      if (!accResp.ok) {
+        const errText = await accResp.text();
+        return res.status(500).send(`Garmin token exchange failed: ${errText}`);
+      }
+      const accBody = await accResp.text();
+      const accParams = new URLSearchParams(accBody);
+      const accessToken = accParams.get("oauth_token");
+      const accessSecret = accParams.get("oauth_token_secret");
+      if (!accessToken || !accessSecret) return res.status(500).send("Invalid token response from Garmin.");
+      await storage.saveGarminToken(userId, accessToken, accessSecret);
+      res.send(`<!DOCTYPE html><html><head><title>FARA — Garmin Connected</title><style>body{background:#050C09;color:#fff;font-family:sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;} h1{color:#00D97E;font-size:24px;} p{color:#aaa;margin-top:8px;}</style></head><body><h1>Garmin Connected!</h1><p>You can now return to the FARA app.</p></body></html>`);
+    } catch (e: any) { res.status(500).send(`Error: ${e.message}`); }
+  });
+
+  app.post("/api/garmin/disconnect", requireAuth, async (req, res) => {
+    try {
+      await storage.saveGarminToken(req.session.userId!, "", "");
+      res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/garmin/sync", requireAuth, async (req, res) => {
+    try {
+      const oauthInst = makeGarminOAuth();
+      if (!oauthInst) return res.status(503).json({ message: "Garmin integration is not configured." });
+      const tokenRow = await storage.getGarminToken(req.session.userId!);
+      if (!tokenRow) return res.status(401).json({ message: "Garmin account not connected." });
+      const token = { key: tokenRow.access_token, secret: tokenRow.token_secret };
+      const since = Math.floor(Date.now() / 1000) - 30 * 24 * 60 * 60;
+      const activitiesUrl = `${GARMIN_ACTIVITIES_URL}?uploadStartTimeInSeconds=${since}&uploadEndTimeInSeconds=${Math.floor(Date.now() / 1000)}`;
+      const resp = await garminFetch(activitiesUrl, "GET", oauthInst, token);
+      const data = await resp.json();
+      const activities: any[] = Array.isArray(data) ? data : data.activityList ?? [];
+      let imported = 0;
+      for (const act of activities) {
+        const garminId = String(act.activityId ?? act.summaryId ?? "");
+        if (!garminId) continue;
+        const distMeters = act.distanceInMeters ?? act.totalDistanceInMeters ?? 0;
+        const distMiles = distMeters * 0.000621371;
+        const durationSec = act.durationInSeconds ?? act.timerDuration ?? null;
+        const avgPaceSecPerMeter = durationSec && distMeters > 0 ? durationSec / distMeters : null;
+        const paceMinPerMile = avgPaceSecPerMeter ? (avgPaceSecPerMeter * 1609.34) / 60 : null;
+        const actType = (act.activityType ?? "").toLowerCase().includes("cycl") ? "ride" : "run";
+        const wasNew = await storage.saveGarminActivity(req.session.userId!, garminId, {
+          title: act.activityName ?? (actType === "ride" ? "Garmin Ride" : "Garmin Run"),
+          date: new Date((act.startTimeInSeconds ?? Math.floor(Date.now() / 1000)) * 1000),
+          distanceMiles: distMiles,
+          paceMinPerMile,
+          durationSeconds: durationSec,
+          activityType: actType,
+        });
+        if (wasNew) imported++;
+      }
+      res.json({ imported, total: activities.length });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 

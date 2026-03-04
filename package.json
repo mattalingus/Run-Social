@@ -61,6 +61,7 @@
     "google-auth-library": "^10.6.1",
     "http-proxy-middleware": "^3.0.5",
     "multer": "^2.1.0",
+    "oauth-1.0a": "^2.2.6",
     "pg": "^8.16.3",
     "react": "19.1.0",
     "react-dom": "19.1.0",
