@@ -162,13 +162,6 @@ export default function RegisterScreen() {
             </View>
           </View>
 
-          <View style={styles.infoBox}>
-            <Feather name="info" size={14} color={C.primary} />
-            <Text style={styles.infoText}>
-              You can set your pace and distance after signing up. Host privileges unlock after 3 runs with 2+ different hosts.
-            </Text>
-          </View>
-
           <Pressable
             style={({ pressed }) => [styles.primaryBtn, { opacity: pressed || loading ? 0.85 : 1 }]}
             onPress={handleRegister}
