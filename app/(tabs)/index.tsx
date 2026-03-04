@@ -2043,7 +2043,7 @@ export default function DiscoverScreen() {
             )}
 
             {/* Strict Mode */}
-            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: C.card, borderRadius: 12, padding: 14, borderWidth: !hStrict ? 3 : 0, borderColor: C.primary }}>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: C.card, borderRadius: 12, padding: 14, borderWidth: 3, borderColor: C.primary }}>
               <View style={{ flex: 1, marginRight: 12 }}>
                 <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text }}>Strict Mode</Text>
                 <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, marginTop: 2 }}>
@@ -2052,12 +2052,14 @@ export default function DiscoverScreen() {
                     : "Runners avg. pace must be within set range AND have a recent run covering 70% of the planned distance"}
                 </Text>
               </View>
-              <Switch
-                value={hStrict}
-                onValueChange={(v) => { setHStrict(v); Haptics.selectionAsync(); }}
-                trackColor={{ false: C.textMuted, true: C.primary }}
-                thumbColor="#FFFFFF"
-              />
+              <View style={{ borderWidth: !hStrict ? 2 : 0, borderColor: C.primary, borderRadius: 20, padding: 2 }}>
+                <Switch
+                  value={hStrict}
+                  onValueChange={(v) => { setHStrict(v); Haptics.selectionAsync(); }}
+                  trackColor={{ false: C.textMuted, true: C.primary }}
+                  thumbColor="#FFFFFF"
+                />
+              </View>
             </View>
 
             {/* Max Runners */}
