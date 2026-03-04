@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { formatDistance } from "@/lib/formatDistance";
 import {
   View,
@@ -15,7 +15,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/query-client";
-import C from "@/constants/colors";
+import { useTheme } from "@/contexts/ThemeContext";
+import { type ColorScheme } from "@/constants/colors";
 import { ACHIEVEMENTS } from "@/constants/achievements";
 
 interface Props {
@@ -53,6 +54,8 @@ function formatTime(d: string) {
 export default function HostProfileSheet({ hostId, onClose }: Props) {
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
+  const { C } = useTheme();
+  const s = useMemo(() => makeStyles(C), [C]);
 
   const { data: profile, isLoading: profileLoading } = useQuery<any>({
     queryKey: [`/api/users/${hostId}/profile`],
@@ -101,40 +104,40 @@ export default function HostProfileSheet({ hostId, onClose }: Props) {
       animationType="slide"
       onRequestClose={onClose}
     >
-      <Pressable style={styles.backdrop} onPress={onClose} />
+      <Pressable style={s.backdrop} onPress={onClose} />
       <View
         style={[
-          styles.sheet,
+          s.sheet,
           {
             paddingBottom: insets.bottom + 24 + webPaddingBottom,
             paddingTop: webPaddingTop,
           },
         ]}
       >
-        <View style={styles.handle} />
+        <View style={s.handle} />
 
         {loading ? (
-          <View style={styles.loadingBox}>
+          <View style={s.loadingBox}>
             <ActivityIndicator color={C.primary} />
           </View>
         ) : profile ? (
           <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
-            <View style={styles.header}>
+            <View style={s.header}>
               {profile.photo_url ? (
-                <Image source={{ uri: profile.photo_url }} style={styles.avatar} />
+                <Image source={{ uri: profile.photo_url }} style={s.avatar} />
               ) : (
-                <View style={styles.avatarFallback}>
-                  <Text style={styles.avatarLetter}>
+                <View style={s.avatarFallback}>
+                  <Text style={s.avatarLetter}>
                     {profile.name?.charAt(0).toUpperCase()}
                   </Text>
                 </View>
               )}
               <View style={{ flex: 1 }}>
-                <Text style={styles.name}>{profile.name}</Text>
-                <View style={styles.badgeRow}>
+                <Text style={s.name}>{profile.name}</Text>
+                <View style={s.badgeRow}>
                   {badge && (
-                    <View style={[styles.badgePill, { borderColor: badge.color + "44" }]}>
-                      <Text style={[styles.badgeText, { color: badge.color }]}>
+                    <View style={[s.badgePill, { borderColor: badge.color + "44" }]}>
+                      <Text style={[s.badgeText, { color: badge.color }]}>
                         {badge.label} Host
                       </Text>
                     </View>
@@ -145,78 +148,78 @@ export default function HostProfileSheet({ hostId, onClose }: Props) {
               {friendStatus !== "self" && (
                 <View>
                   {friendStatus === "friends" ? (
-                    <View style={[styles.friendBtn, styles.friendBtnDone]}>
+                    <View style={[s.friendBtn, s.friendBtnDone]}>
                       <Feather name="check" size={14} color={C.primary} />
-                      <Text style={[styles.friendBtnTxt, { color: C.primary }]}>Friends</Text>
+                      <Text style={[s.friendBtnTxt, { color: C.primary }]}>Friends</Text>
                     </View>
                   ) : friendStatus === "pending_sent" ? (
                     <Pressable
-                      style={[styles.friendBtn, styles.friendBtnPending]}
+                      style={[s.friendBtn, s.friendBtnPending]}
                       onPress={() => cancelMut.mutate()}
                       disabled={cancelMut.isPending}
                     >
                       <Feather name="clock" size={14} color={C.textSecondary} />
-                      <Text style={[styles.friendBtnTxt, { color: C.textSecondary }]}>Pending</Text>
+                      <Text style={[s.friendBtnTxt, { color: C.textSecondary }]}>Pending</Text>
                     </Pressable>
                   ) : friendStatus === "pending_received" ? (
                     <Pressable
-                      style={[styles.friendBtn, styles.friendBtnAdd]}
+                      style={[s.friendBtn, s.friendBtnAdd]}
                       onPress={() => apiRequest("PUT", `/api/friends/${friendship?.friendshipId}/accept`).then(() => {
                         qc.invalidateQueries({ queryKey: [`/api/users/${hostId}/friendship`] });
                         qc.invalidateQueries({ queryKey: ["/api/friends"] });
                       })}
                     >
                       <Feather name="user-check" size={14} color="#080F0C" />
-                      <Text style={[styles.friendBtnTxt, { color: "#080F0C" }]}>Accept</Text>
+                      <Text style={[s.friendBtnTxt, { color: "#080F0C" }]}>Accept</Text>
                     </Pressable>
                   ) : (
                     <Pressable
-                      style={[styles.friendBtn, styles.friendBtnAdd]}
+                      style={[s.friendBtn, s.friendBtnAdd]}
                       onPress={() => addFriendMut.mutate()}
                       disabled={addFriendMut.isPending}
                     >
                       <Feather name="user-plus" size={14} color="#080F0C" />
-                      <Text style={[styles.friendBtnTxt, { color: "#080F0C" }]}>Add Friend</Text>
+                      <Text style={[s.friendBtnTxt, { color: "#080F0C" }]}>Add Friend</Text>
                     </Pressable>
                   )}
                 </View>
               )}
             </View>
 
-            <View style={styles.statsRow}>
-              <View style={styles.statBox}>
-                <Text style={styles.statVal}>{formatPace(profile.avg_pace)}</Text>
-                <Text style={styles.statLabel}>Avg Pace</Text>
+            <View style={s.statsRow}>
+              <View style={s.statBox}>
+                <Text style={s.statVal}>{formatPace(profile.avg_pace)}</Text>
+                <Text style={s.statLabel}>Avg Pace</Text>
               </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statBox}>
-                <Text style={styles.statVal}>
+              <View style={s.statDivider} />
+              <View style={s.statBox}>
+                <Text style={s.statVal}>
                   {profile.avg_distance ? `${formatDistance(profile.avg_distance)} mi` : "—"}
                 </Text>
-                <Text style={styles.statLabel}>Avg Distance</Text>
+                <Text style={s.statLabel}>Avg Distance</Text>
               </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statBox}>
-                <Text style={styles.statVal}>{profile.hosted_runs}</Text>
-                <Text style={styles.statLabel}>Runs Hosted</Text>
+              <View style={s.statDivider} />
+              <View style={s.statBox}>
+                <Text style={s.statVal}>{profile.hosted_runs}</Text>
+                <Text style={s.statLabel}>Runs Hosted</Text>
               </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statBox}>
-                <Text style={styles.statVal}>{profile.friends_count}</Text>
-                <Text style={styles.statLabel}>Friends</Text>
+              <View style={s.statDivider} />
+              <View style={s.statBox}>
+                <Text style={s.statVal}>{profile.friends_count}</Text>
+                <Text style={s.statLabel}>Friends</Text>
               </View>
             </View>
 
             {earnedAchievements.length > 0 && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>
+              <View style={s.section}>
+                <Text style={s.sectionTitle}>
                   Achievements · {earnedAchievements.length}
                 </Text>
-                <View style={styles.achieveGrid}>
+                <View style={s.achieveGrid}>
                   {earnedAchievements.map((a) => (
-                    <View key={a.slug} style={styles.achieveChip}>
-                      <Text style={styles.achieveIcon}>{a.icon}</Text>
-                      <Text style={styles.achieveName}>{a.name}</Text>
+                    <View key={a.slug} style={s.achieveChip}>
+                      <Text style={s.achieveIcon}>{a.icon}</Text>
+                      <Text style={s.achieveName}>{a.name}</Text>
                     </View>
                   ))}
                 </View>
@@ -224,19 +227,19 @@ export default function HostProfileSheet({ hostId, onClose }: Props) {
             )}
 
             {earnedAchievements.length === 0 && (
-              <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: C.textMuted }]}>
+              <View style={s.section}>
+                <Text style={[s.sectionTitle, { color: C.textMuted }]}>
                   No achievements yet
                 </Text>
               </View>
             )}
 
             {starredRuns && starredRuns.length > 0 && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Starred Events · {starredRuns.length}</Text>
+              <View style={s.section}>
+                <Text style={s.sectionTitle}>Starred Events · {starredRuns.length}</Text>
                 {starredRuns.map((r) => (
-                  <View key={r.id} style={styles.starredCard}>
-                    <View style={styles.starredLeft}>
+                  <View key={r.id} style={s.starredCard}>
+                    <View style={s.starredLeft}>
                       <Feather
                         name={r.activity_type === "ride" ? "zap" : "activity"}
                         size={14}
@@ -244,8 +247,8 @@ export default function HostProfileSheet({ hostId, onClose }: Props) {
                       />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.starredTitle} numberOfLines={1}>{r.title}</Text>
-                      <Text style={styles.starredMeta}>
+                      <Text style={s.starredTitle} numberOfLines={1}>{r.title}</Text>
+                      <Text style={s.starredMeta}>
                         {r.distance_miles ? `${formatDistance(parseFloat(r.distance_miles))} mi · ` : ""}
                         {formatDate(r.date)} · {formatTime(r.date)}
                       </Text>
@@ -257,7 +260,7 @@ export default function HostProfileSheet({ hostId, onClose }: Props) {
             )}
           </ScrollView>
         ) : (
-          <View style={styles.loadingBox}>
+          <View style={s.loadingBox}>
             <Text style={{ color: C.textMuted }}>Could not load profile.</Text>
           </View>
         )}
@@ -266,201 +269,203 @@ export default function HostProfileSheet({ hostId, onClose }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.55)",
-  },
-  sheet: {
-    backgroundColor: "#111A15",
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    maxHeight: "80%",
-  },
-  handle: {
-    width: 38,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#2A3D30",
-    alignSelf: "center",
-    marginBottom: 20,
-  },
-  loadingBox: {
-    height: 120,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    marginBottom: 20,
-  },
-  avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 2,
-    borderColor: "#00D97E44",
-  },
-  avatarFallback: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "#1A2E21",
-    borderWidth: 2,
-    borderColor: "#00D97E44",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarLetter: {
-    fontFamily: "Outfit_700Bold",
-    fontSize: 26,
-    color: "#00D97E",
-  },
-  name: {
-    fontFamily: "Outfit_700Bold",
-    fontSize: 18,
-    color: "#E8F5EE",
-    marginBottom: 6,
-  },
-  badgeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    flexWrap: "wrap",
-  },
-  badgePill: {
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  badgeText: {
-    fontFamily: "Outfit_600SemiBold",
-    fontSize: 11,
-  },
-  starredCard: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-    backgroundColor: "#1A2E21",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: "#2A3D30",
-    marginBottom: 8,
-  },
-  starredLeft: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#00D97E18",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 1,
-  },
-  starredTitle: {
-    fontFamily: "Outfit_600SemiBold",
-    fontSize: 13,
-    color: "#E8F5EE",
-    marginBottom: 2,
-  },
-  starredMeta: {
-    fontFamily: "Outfit_400Regular",
-    fontSize: 11,
-    color: "#5A8A70",
-  },
-  friendBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  friendBtnAdd: {
-    backgroundColor: "#00D97E",
-    borderColor: "#00D97E",
-  },
-  friendBtnPending: {
-    backgroundColor: "transparent",
-    borderColor: "#2A3D30",
-  },
-  friendBtnDone: {
-    backgroundColor: "transparent",
-    borderColor: "#00D97E44",
-  },
-  friendBtnTxt: {
-    fontFamily: "Outfit_600SemiBold",
-    fontSize: 13,
-  },
-  statsRow: {
-    flexDirection: "row",
-    backgroundColor: "#1A2E21",
-    borderRadius: 14,
-    paddingVertical: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: "#2A3D30",
-  },
-  statBox: {
-    flex: 1,
-    alignItems: "center",
-    gap: 4,
-  },
-  statDivider: {
-    width: 1,
-    backgroundColor: "#2A3D30",
-    marginVertical: 4,
-  },
-  statVal: {
-    fontFamily: "Outfit_700Bold",
-    fontSize: 15,
-    color: "#E8F5EE",
-  },
-  statLabel: {
-    fontFamily: "Outfit_400Regular",
-    fontSize: 11,
-    color: "#5A8A70",
-  },
-  section: {
-    marginBottom: 20,
-  },
-  sectionTitle: {
-    fontFamily: "Outfit_600SemiBold",
-    fontSize: 13,
-    color: "#5A8A70",
-    marginBottom: 12,
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
-  },
-  achieveGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  achieveChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "#1A2E21",
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: "#2A3D30",
-  },
-  achieveIcon: {
-    fontSize: 14,
-  },
-  achieveName: {
-    fontFamily: "Outfit_600SemiBold",
-    fontSize: 12,
-    color: "#C2DAC8",
-  },
-});
+function makeStyles(C: ColorScheme) {
+  return StyleSheet.create({
+    backdrop: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.55)",
+    },
+    sheet: {
+      backgroundColor: C.card,
+      borderTopLeftRadius: 22,
+      borderTopRightRadius: 22,
+      paddingHorizontal: 20,
+      paddingTop: 12,
+      maxHeight: "80%",
+    },
+    handle: {
+      width: 38,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: C.border,
+      alignSelf: "center",
+      marginBottom: 20,
+    },
+    loadingBox: {
+      height: 120,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+      marginBottom: 20,
+    },
+    avatar: {
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      borderWidth: 2,
+      borderColor: C.primary + "44",
+    },
+    avatarFallback: {
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      backgroundColor: C.surface,
+      borderWidth: 2,
+      borderColor: C.primary + "44",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    avatarLetter: {
+      fontFamily: "Outfit_700Bold",
+      fontSize: 26,
+      color: C.primary,
+    },
+    name: {
+      fontFamily: "Outfit_700Bold",
+      fontSize: 18,
+      color: C.text,
+      marginBottom: 6,
+    },
+    badgeRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      flexWrap: "wrap",
+    },
+    badgePill: {
+      borderWidth: 1,
+      borderRadius: 10,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+    },
+    badgeText: {
+      fontFamily: "Outfit_600SemiBold",
+      fontSize: 11,
+    },
+    starredCard: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 10,
+      backgroundColor: C.surface,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderWidth: 1,
+      borderColor: C.border,
+      marginBottom: 8,
+    },
+    starredLeft: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: C.primary + "18",
+      alignItems: "center",
+      justifyContent: "center",
+      marginTop: 1,
+    },
+    starredTitle: {
+      fontFamily: "Outfit_600SemiBold",
+      fontSize: 13,
+      color: C.text,
+      marginBottom: 2,
+    },
+    starredMeta: {
+      fontFamily: "Outfit_400Regular",
+      fontSize: 11,
+      color: C.textMuted,
+    },
+    friendBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 20,
+      borderWidth: 1,
+    },
+    friendBtnAdd: {
+      backgroundColor: C.primary,
+      borderColor: C.primary,
+    },
+    friendBtnPending: {
+      backgroundColor: "transparent",
+      borderColor: C.border,
+    },
+    friendBtnDone: {
+      backgroundColor: "transparent",
+      borderColor: C.primary + "44",
+    },
+    friendBtnTxt: {
+      fontFamily: "Outfit_600SemiBold",
+      fontSize: 13,
+    },
+    statsRow: {
+      flexDirection: "row",
+      backgroundColor: C.surface,
+      borderRadius: 14,
+      paddingVertical: 16,
+      marginBottom: 20,
+      borderWidth: 1,
+      borderColor: C.border,
+    },
+    statBox: {
+      flex: 1,
+      alignItems: "center",
+      gap: 4,
+    },
+    statDivider: {
+      width: 1,
+      backgroundColor: C.border,
+      marginVertical: 4,
+    },
+    statVal: {
+      fontFamily: "Outfit_700Bold",
+      fontSize: 15,
+      color: C.text,
+    },
+    statLabel: {
+      fontFamily: "Outfit_400Regular",
+      fontSize: 11,
+      color: C.textMuted,
+    },
+    section: {
+      marginBottom: 20,
+    },
+    sectionTitle: {
+      fontFamily: "Outfit_600SemiBold",
+      fontSize: 13,
+      color: C.textSecondary,
+      marginBottom: 12,
+      letterSpacing: 0.4,
+      textTransform: "uppercase",
+    },
+    achieveGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    achieveChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      backgroundColor: C.surface,
+      borderRadius: 20,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderWidth: 1,
+      borderColor: C.border,
+    },
+    achieveIcon: {
+      fontSize: 14,
+    },
+    achieveName: {
+      fontFamily: "Outfit_600SemiBold",
+      fontSize: 12,
+      color: C.textSecondary,
+    },
+  });
+}
