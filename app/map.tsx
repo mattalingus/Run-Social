@@ -38,12 +38,23 @@ function resolveImgUrl(url?: string | null): string | null {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
+const INITIAL_DELTA = 0.06;
+
 const HOUSTON: Region = {
   latitude: 29.7604,
   longitude: -95.3698,
-  latitudeDelta: 0.09,
-  longitudeDelta: 0.09,
+  latitudeDelta: INITIAL_DELTA,
+  longitudeDelta: INITIAL_DELTA,
 };
+
+function regionToBounds(r: { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number }) {
+  return {
+    swLat: r.latitude - r.latitudeDelta / 2,
+    neLat: r.latitude + r.latitudeDelta / 2,
+    swLng: r.longitude - r.longitudeDelta / 2,
+    neLng: r.longitude + r.longitudeDelta / 2,
+  };
+}
 
 import MAP_STYLE from "@/lib/mapStyle";
 
@@ -319,7 +330,7 @@ export default function MapScreen() {
   const [selectedRun, setSelectedRun] = useState<Run | null>(null);
   const [selectedCommunityPath, setSelectedCommunityPath] = useState<CommunityPath | null>(null);
   const [hostProfileId, setHostProfileId] = useState<string | null>(null);
-  const [bounds, setBounds] = useState<Bounds | null>(null);
+  const [bounds, setBounds] = useState<Bounds | null>(regionToBounds(HOUSTON));
   const boundsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const pathSlideAnim = useRef(new Animated.Value(400)).current;
@@ -468,23 +479,17 @@ export default function MapScreen() {
   useEffect(() => {
     if (userLoc && !locatedOnce && mapRef.current) {
       setLocatedOnce(true);
-      mapRef.current.animateToRegion(
-        { ...userLoc, latitudeDelta: 0.065, longitudeDelta: 0.065 },
-        1200
-      );
+      const region = { ...userLoc, latitudeDelta: INITIAL_DELTA, longitudeDelta: INITIAL_DELTA };
+      mapRef.current.animateToRegion(region, 1000);
+      setBounds(regionToBounds(region));
     }
   }, [userLoc, locatedOnce]);
 
   function onRegionChange(r: Region) {
     if (boundsTimer.current) clearTimeout(boundsTimer.current);
     boundsTimer.current = setTimeout(() => {
-      setBounds({
-        swLat: r.latitude - r.latitudeDelta / 2,
-        neLat: r.latitude + r.latitudeDelta / 2,
-        swLng: r.longitude - r.longitudeDelta / 2,
-        neLng: r.longitude + r.longitudeDelta / 2,
-      });
-    }, 900);
+      setBounds(regionToBounds(r));
+    }, 400);
   }
 
   function openCard(run: Run) {
