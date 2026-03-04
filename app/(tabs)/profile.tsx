@@ -31,6 +31,7 @@ import { ACHIEVEMENTS, type AchievementDef } from "@/constants/achievements";
 import { formatDistance } from "@/lib/formatDistance";
 import { toDisplayDist, toDisplayPace, unitLabel, type DistanceUnit } from "@/lib/units";
 import { pickAndUploadImage } from "@/lib/uploadImage";
+import MileSplitsChart from "@/components/MileSplitsChart";
 import HostProfileSheet from "@/components/HostProfileSheet";
 import SettingsModal from "@/components/SettingsModal";
 const APP_SHARE_URL = process.env.EXPO_PUBLIC_DOMAIN
@@ -239,6 +240,7 @@ export default function ProfileScreen() {
   const [historyActivityFilter, setHistoryActivityFilter] = useState<"run" | "ride">("run");
   const [historyTypeFilter, setHistoryTypeFilter] = useState<"all" | HistoryEventType>("all");
   const [showFavorites, setShowFavorites] = useState(false);
+  const [expandedFavId, setExpandedFavId] = useState<string | null>(null);
   const [favActivityFilter, setFavActivityFilter] = useState<"run" | "ride">("run");
   const [friendSearch, setFriendSearch] = useState("");
   const [showAddFriend, setShowAddFriend] = useState(false);
@@ -1605,35 +1607,35 @@ export default function ProfileScreen() {
       </Modal>
 
       {/* ── Favorites Modal ────────────────────────────────────────────────── */}
-      <Modal visible={showFavorites} transparent animationType="slide" onRequestClose={() => setShowFavorites(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setShowFavorites(false)} />
-        <View style={[styles.modalSheet, styles.friendModalSheet, { paddingBottom: insets.bottom + 16, height: "70%" }]}>
+      <Modal visible={showFavorites} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowFavorites(false)}>
+        <View style={[styles.modalSheet, { flex: 1, height: undefined, borderRadius: 0, paddingBottom: insets.bottom + 8, backgroundColor: C.bg }]}>
           {/* Header */}
-          <View style={styles.modalTitleRow}>
+          <View style={[styles.modalTitleRow, { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 16), borderBottomWidth: 1, borderBottomColor: C.border, paddingBottom: 14 }]}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <Ionicons name="star" size={18} color={C.gold} />
               <Text style={styles.modalTitle}>Favorites</Text>
             </View>
-            <Pressable onPress={() => setShowFavorites(false)} hitSlop={12}>
-              <Feather name="x" size={20} color={C.textMuted} />
+            <Pressable onPress={() => { setShowFavorites(false); setExpandedFavId(null); }} hitSlop={12}
+              style={{ width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: C.border, backgroundColor: C.card, alignItems: "center", justifyContent: "center" }}>
+              <Feather name="x" size={18} color={C.text} />
             </Pressable>
           </View>
 
-          {/* Runs / Rides toggle */}
-          <View style={styles.histToggleRow}>
+          {/* Runs / Rides toggle — full width */}
+          <View style={[styles.histToggleRow, { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12 }]}>
             {(["run", "ride"] as const).map((act) => (
               <Pressable
                 key={act}
-                style={[styles.histToggleChip, favActivityFilter === act && styles.histToggleChipActive]}
-                onPress={() => { Haptics.selectionAsync(); setFavActivityFilter(act); }}
+                style={[styles.histToggleChip, { paddingVertical: 10 }, favActivityFilter === act && styles.histToggleChipActive]}
+                onPress={() => { Haptics.selectionAsync(); setFavActivityFilter(act); setExpandedFavId(null); }}
               >
                 <Ionicons
                   name={act === "ride" ? "bicycle-outline" : "walk-outline"}
-                  size={13}
+                  size={15}
                   color={favActivityFilter === act ? C.bg : C.textSecondary}
-                  style={{ marginRight: 4 }}
+                  style={{ marginRight: 6 }}
                 />
-                <Text style={[styles.histToggleChipTxt, favActivityFilter === act && styles.histToggleChipTxtActive]}>
+                <Text style={[styles.histToggleChipTxt, { fontSize: 14 }, favActivityFilter === act && styles.histToggleChipTxtActive]}>
                   {act === "ride" ? "Rides" : "Runs"}
                 </Text>
               </Pressable>
@@ -1646,7 +1648,7 @@ export default function ProfileScreen() {
             if (favs.length === 0) {
               return (
                 <View style={styles.emptyState}>
-                  <Ionicons name="star-outline" size={32} color={C.textMuted} />
+                  <Ionicons name="star-outline" size={36} color={C.textMuted} />
                   <Text style={styles.emptyStateTxt}>
                     {favActivityFilter === "ride"
                       ? "Star rides in your history to save them here"
@@ -1656,12 +1658,17 @@ export default function ProfileScreen() {
               );
             }
             return (
-              <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 4, paddingBottom: 8 }}>
+              <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 2, paddingBottom: 20 }}>
                 {favs.map((run) => {
-                  const label = run.title || `${formatDistance(run.distance_miles)} mi ${run.activity_type === "ride" ? "ride" : "run"}`;
+                  const isExpanded = expandedFavId === run.id;
+                  const label = run.title || `${toDisplayDist(run.distance_miles, distUnit)} ${run.activity_type === "ride" ? "ride" : "run"}`;
                   return (
-                    <View key={run.id} style={styles.soloHistCard}>
-                      <View style={styles.soloHistRow}>
+                    <View key={run.id} style={[styles.soloHistCard, { marginBottom: 10 }]}>
+                      {/* Main row */}
+                      <Pressable
+                        style={({ pressed }) => [styles.soloHistRow, { opacity: pressed ? 0.85 : 1 }]}
+                        onPress={() => { Haptics.selectionAsync(); setExpandedFavId(isExpanded ? null : run.id); }}
+                      >
                         <View style={styles.soloHistLeft}>
                           <View style={[styles.soloHistCheck, { backgroundColor: C.gold + "22", borderColor: C.gold + "44" }]}>
                             <Ionicons name="star" size={12} color={C.gold} />
@@ -1670,19 +1677,72 @@ export default function ProfileScreen() {
                             <Text style={styles.soloHistTitle} numberOfLines={1}>{label}</Text>
                             <Text style={styles.soloHistMeta}>
                               {formatDisplayDate(run.date)}
-                              {run.pace_min_per_mile ? ` · ${formatPaceSolo(run.pace_min_per_mile)}/mi` : ""}
                               {run.duration_seconds ? ` · ${formatDurationSolo(run.duration_seconds)}` : ""}
-                              {run.elevation_gain_ft ? ` · ${Math.round(run.elevation_gain_ft)}ft gain` : ""}
+                              {run.pace_min_per_mile ? ` · ${toDisplayPace(run.pace_min_per_mile, distUnit)}` : ""}
+                              {run.elevation_gain_ft ? ` · ${Math.round(run.elevation_gain_ft)}ft` : ""}
                             </Text>
                           </View>
                         </View>
-                        <View style={styles.soloHistRight}>
-                          <Text style={styles.soloHistDist}>{formatDistance(run.distance_miles)}</Text>
-                          <Text style={styles.soloHistDistUnit}>mi</Text>
+                        <View style={[styles.soloHistRight, { flexDirection: "row", alignItems: "center", gap: 6 }]}>
+                          <View style={{ alignItems: "flex-end" }}>
+                            <Text style={styles.soloHistDist}>{toDisplayDist(run.distance_miles, distUnit).split(" ")[0]}</Text>
+                            <Text style={styles.soloHistDistUnit}>{distUnit === "km" ? "km" : "mi"}</Text>
+                          </View>
+                          <Feather name={isExpanded ? "chevron-up" : "chevron-down"} size={14} color={C.textMuted} />
                         </View>
-                      </View>
-                      {run.route_path && run.route_path.length > 1 && (
+                      </Pressable>
+
+                      {/* Route map */}
+                      {run.route_path && run.route_path.length > 1 && Platform.OS !== "web" && (
                         <ProfileMiniRouteMap path={run.route_path} />
+                      )}
+
+                      {/* Expanded stats panel */}
+                      {isExpanded && (
+                        <View style={styles.soloStatPanel}>
+                          <View style={styles.soloStatRow}>
+                            {run.duration_seconds != null && (
+                              <View style={styles.soloStatItem}>
+                                <Feather name="clock" size={13} color={C.primary} />
+                                <Text style={styles.soloStatLabel}>Time</Text>
+                                <Text style={styles.soloStatValue}>{formatDurationSolo(run.duration_seconds)}</Text>
+                              </View>
+                            )}
+                            {run.pace_min_per_mile != null && (
+                              <View style={styles.soloStatItem}>
+                                <Feather name="zap" size={13} color={C.primary} />
+                                <Text style={styles.soloStatLabel}>Pace</Text>
+                                <Text style={styles.soloStatValue}>{toDisplayPace(run.pace_min_per_mile, distUnit)}</Text>
+                              </View>
+                            )}
+                            <View style={styles.soloStatItem}>
+                              <Feather name="map-pin" size={13} color={C.primary} />
+                              <Text style={styles.soloStatLabel}>Distance</Text>
+                              <Text style={styles.soloStatValue}>{toDisplayDist(run.distance_miles, distUnit)}</Text>
+                            </View>
+                            {run.elevation_gain_ft != null && (
+                              <View style={styles.soloStatItem}>
+                                <Feather name="trending-up" size={13} color={C.primary} />
+                                <Text style={styles.soloStatLabel}>Elevation</Text>
+                                <Text style={styles.soloStatValue}>{Math.round(run.elevation_gain_ft)} ft</Text>
+                              </View>
+                            )}
+                          </View>
+                        </View>
+                      )}
+
+                      {/* Mile splits */}
+                      {isExpanded && run.mile_splits && run.mile_splits.length > 0 && (
+                        <View style={{ paddingHorizontal: 12, paddingBottom: 14 }}>
+                          <MileSplitsChart splits={run.mile_splits} activityType={run.activity_type} />
+                        </View>
+                      )}
+                      {isExpanded && (!run.mile_splits || run.mile_splits.length === 0) && (
+                        <View style={{ paddingHorizontal: 12, paddingBottom: 12, alignItems: "center" }}>
+                          <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, textAlign: "center" }}>
+                            {`Splits available for activities of 1+ ${unitLabel(distUnit)}`}
+                          </Text>
+                        </View>
                       )}
                     </View>
                   );
@@ -2140,6 +2200,15 @@ function makeStyles(C: ReturnType<typeof import("@/contexts/ThemeContext").useTh
   soloHistRight: { alignItems: "flex-end" },
   soloHistDist: { fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text },
   soloHistDistUnit: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted },
+
+  soloStatPanel: {
+    marginHorizontal: 12, marginBottom: 10, paddingVertical: 12, paddingHorizontal: 8,
+    backgroundColor: C.surface, borderRadius: 12, borderWidth: 1, borderColor: C.border,
+  },
+  soloStatRow: { flexDirection: "row", justifyContent: "space-around" },
+  soloStatItem: { alignItems: "center", gap: 3, flex: 1 },
+  soloStatLabel: { fontFamily: "Outfit_400Regular", fontSize: 10, color: C.textMuted, textTransform: "uppercase", letterSpacing: 0.5 },
+  soloStatValue: { fontFamily: "Outfit_700Bold", fontSize: 13, color: C.text },
 
   histToggleRow: {
     flexDirection: "row", gap: 8, paddingHorizontal: 20, paddingBottom: 10,
