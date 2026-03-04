@@ -1598,7 +1598,7 @@ export default function DiscoverScreen() {
                 <View style={s.onboardIconWrap}>
                   <Ionicons name="trophy" size={52} color="#FFB800" />
                 </View>
-                <Text style={s.onboardTitle}>You're ready to run</Text>
+                <Text style={s.onboardTitle}>You're ready to go</Text>
                 <Text style={s.onboardBody}>
                   Explore runs & rides near you, join a crew, or host your own. The community is waiting.
                 </Text>
