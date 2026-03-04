@@ -1,17 +1,18 @@
 /**
- * Rounds a distance value to the nearest 0.5 and returns a clean display string.
- * Whole numbers are shown without a decimal (e.g. "6"),
- * half values show one decimal (e.g. "6.5").
+ * Returns a distance as a string with up to 2 decimal places.
+ * Trailing zeros are stripped so whole numbers display cleanly.
  *
  * Does NOT include a unit — callers append " mi" or " km" as needed.
  *
  * @example
- * formatDistance(5.23)  // "5"
- * formatDistance(5.26)  // "5.5"
- * formatDistance(6.74)  // "6.5"
- * formatDistance(6.76)  // "7"
+ * formatDistance(1.25)   // "1.25"
+ * formatDistance(1.50)   // "1.5"
+ * formatDistance(5.00)   // "5"
+ * formatDistance(0.08)   // "0.08"
  */
 export function formatDistance(value: number): string {
-  const rounded = Math.round(value * 2) / 2;
-  return rounded % 1 === 0 ? String(Math.round(rounded)) : rounded.toFixed(1);
+  if (!isFinite(value) || isNaN(value)) return "0";
+  const fixed = value.toFixed(2);
+  // Strip trailing zeros: "1.50" → "1.5", "5.00" → "5"
+  return fixed.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
 }

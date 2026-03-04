@@ -667,7 +667,7 @@ export default function RunTrackingScreen() {
           },
         ],
         "plain-text",
-        `${totalDistRef.current.toFixed(1)} mi Run`
+        `${formatDistance(totalDistRef.current)} mi Run`
       );
       return;
     }
@@ -853,7 +853,7 @@ export default function RunTrackingScreen() {
                       <Pressable
                         style={t.publishBtn}
                         onPress={() => {
-                          setPublishName(`${totalDistRef.current.toFixed(1)} mi Run`);
+                          setPublishName(`${formatDistance(totalDistRef.current)} mi Run`);
                           setShowPublishForm(true);
                         }}
                       >

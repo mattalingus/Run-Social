@@ -1,4 +1,5 @@
 import React from "react";
+import { formatDistance } from "@/lib/formatDistance";
 import {
   View,
   Text,
@@ -190,7 +191,7 @@ export default function HostProfileSheet({ hostId, onClose }: Props) {
               <View style={styles.statDivider} />
               <View style={styles.statBox}>
                 <Text style={styles.statVal}>
-                  {profile.avg_distance ? `${profile.avg_distance.toFixed(1)} mi` : "—"}
+                  {profile.avg_distance ? `${formatDistance(profile.avg_distance)} mi` : "—"}
                 </Text>
                 <Text style={styles.statLabel}>Avg Distance</Text>
               </View>
@@ -245,7 +246,7 @@ export default function HostProfileSheet({ hostId, onClose }: Props) {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.starredTitle} numberOfLines={1}>{r.title}</Text>
                       <Text style={styles.starredMeta}>
-                        {r.distance_miles ? `${parseFloat(r.distance_miles).toFixed(1)} mi · ` : ""}
+                        {r.distance_miles ? `${formatDistance(parseFloat(r.distance_miles))} mi · ` : ""}
                         {formatDate(r.date)} · {formatTime(r.date)}
                       </Text>
                     </View>
