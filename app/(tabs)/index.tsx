@@ -1474,6 +1474,14 @@ export default function DiscoverScreen() {
                 )}
               </View>
             )}
+            <Pressable
+              style={s.viewOnMapBtn}
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); goToMap(); }}
+            >
+              <Feather name="map" size={15} color={C.primary} />
+              <Text style={s.viewOnMapBtnTxt}>View On Map</Text>
+              <Feather name="chevron-right" size={15} color={C.primary} />
+            </Pressable>
             <Text style={s.nearbyLabel}>{activityFilter === "ride" ? "Upcoming Rides Nearby" : "Upcoming Runs Nearby"}</Text>
             </View>
           }
@@ -2234,19 +2242,19 @@ export default function DiscoverScreen() {
         </View>
       </Modal>
 
-      {/* ── Map FAB ──────────────────────────────────────────────────────────── */}
+      {/* ── Solo Run FAB ─────────────────────────────────────────────────────── */}
       {Platform.OS === "web" ? (
-        <WebFAB onPress={goToMap} />
+        <WebFAB onPress={() => router.push("/(tabs)/solo" as any)} />
       ) : (
         <Pressable
           testID="map-fab"
           style={[s.fab, { bottom: insets.bottom + 92 }]}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            goToMap();
+            router.push("/(tabs)/solo" as any);
           }}
         >
-          <Feather name="map" size={28} color={C.bg} />
+          <Ionicons name="walk" size={30} color={C.bg} />
         </Pressable>
       )}
     </View>
@@ -2509,6 +2517,20 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   savedSection: { marginBottom: 16 },
   savedSectionTitle: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.text, marginBottom: 10 },
   nearbyLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary, marginBottom: 10 },
+  viewOnMapBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: C.surface,
+    borderRadius: 12,
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  viewOnMapBtnTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.primary, flex: 1, textAlign: "center" },
   savedScroll: { gap: 10, paddingRight: 4 },
   savedCard: {
     width: 160,

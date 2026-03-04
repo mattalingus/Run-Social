@@ -21,7 +21,7 @@ export default function WebFAB({ onPress }: Props) {
 
     const btn = document.createElement("button");
     btn.setAttribute("data-testid", "map-fab");
-    btn.setAttribute("aria-label", "Open Map");
+    btn.setAttribute("aria-label", "Start Solo Run");
     btn.style.cssText = [
       "position:fixed",
       "bottom:120px",
@@ -41,7 +41,7 @@ export default function WebFAB({ onPress }: Props) {
       "box-shadow:none",
       "line-height:56px",
     ].join(";");
-    btn.textContent = "🗺";
+    btn.textContent = "🚶";
     btn.addEventListener("click", handleClick);
     document.body.appendChild(btn);
 
