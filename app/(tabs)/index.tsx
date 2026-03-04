@@ -688,8 +688,10 @@ export default function DiscoverScreen() {
   const [showFilter, setShowFilter] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
   const { width: screenWidth } = useWindowDimensions();
+  const SLIDE_TIMERS = [3, 4, 5, 4, 3];
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardSlide, setOnboardSlide] = useState(0);
+  const [slideCountdown, setSlideCountdown] = useState(SLIDE_TIMERS[0]);
   const onboardScrollRef = useRef<ScrollView>(null);
   const [checklistDismissed, setChecklistDismissed] = useState(true);
   const [checklistAllDone, setChecklistAllDone] = useState(false);
@@ -1003,7 +1005,20 @@ export default function DiscoverScreen() {
     if (user?.id) AsyncStorage.setItem(`paceup_has_onboarded_${user.id}`, "true");
     setShowOnboarding(false);
     setOnboardSlide(0);
+    setSlideCountdown(SLIDE_TIMERS[0]);
   };
+
+  useEffect(() => {
+    if (!showOnboarding) return;
+    setSlideCountdown(SLIDE_TIMERS[onboardSlide]);
+    const interval = setInterval(() => {
+      setSlideCountdown((prev) => {
+        if (prev <= 1) { clearInterval(interval); return 0; }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [onboardSlide, showOnboarding]);
 
   const dismissChecklist = () => {
     if (user?.id) AsyncStorage.setItem(`paceup_checklist_dismissed_${user.id}`, "true");
@@ -1586,34 +1601,23 @@ export default function DiscoverScreen() {
       >
         <View style={s.onboardOverlay} testID="onboarding-overlay">
           <View style={[s.onboardSheet, { paddingBottom: insets.bottom + 24 }]} testID="onboarding-sheet">
-            {/* Skip button */}
-            {onboardSlide < 2 && (
-              <Pressable style={s.onboardSkip} onPress={finishOnboarding} testID="onboarding-skip">
-                <Text style={s.onboardSkipTxt}>Skip</Text>
-              </Pressable>
-            )}
 
             {/* Swipeable slides */}
             <ScrollView
               ref={onboardScrollRef}
               horizontal
               pagingEnabled
-              scrollEnabled
+              scrollEnabled={slideCountdown === 0}
               showsHorizontalScrollIndicator={false}
               style={s.onboardPager}
               onMomentumScrollEnd={(e) => {
                 const slideW = screenWidth - 48;
                 const idx = Math.round(e.nativeEvent.contentOffset.x / slideW);
-                setOnboardSlide(Math.min(2, Math.max(0, idx)));
+                setOnboardSlide(Math.min(4, Math.max(0, idx)));
               }}
             >
               {/* Slide 0 — Welcome */}
-              <ScrollView
-                style={{ width: screenWidth - 48 }}
-                contentContainerStyle={s.onboardContent}
-                showsVerticalScrollIndicator={false}
-                bounces={false}
-              >
+              <ScrollView style={{ width: screenWidth - 48 }} contentContainerStyle={s.onboardContent} showsVerticalScrollIndicator={false} bounces={false}>
                 <View style={s.onboardIconWrap}>
                   <Ionicons name="walk" size={56} color={C.primary} />
                 </View>
@@ -1623,35 +1627,71 @@ export default function DiscoverScreen() {
                 </Text>
               </ScrollView>
 
-              {/* Slide 1 — How it works */}
-              <ScrollView
-                style={{ width: screenWidth - 48 }}
-                contentContainerStyle={s.onboardContent}
-                showsVerticalScrollIndicator={false}
-                bounces={false}
-              >
-                <Text style={s.onboardTitle}>How it works</Text>
+              {/* Slide 1 — Solo Runs & Rides */}
+              <ScrollView style={{ width: screenWidth - 48 }} contentContainerStyle={s.onboardContent} showsVerticalScrollIndicator={false} bounces={false}>
+                <View style={s.onboardIconWrap}>
+                  <Ionicons name="stopwatch-outline" size={52} color={C.primary} />
+                </View>
+                <Text style={s.onboardTitle}>Solo Runs & Rides</Text>
                 {[
-                  { icon: "map-pin" as const, label: "Find a run or ride near you" },
-                  { icon: "check-circle" as const, label: "Confirm your spot" },
-                  { icon: "users" as const, label: "Show up and run/ride together" },
+                  { icon: "play-circle" as const, label: "Start a run or ride anytime from Discover" },
+                  { icon: "map-pin" as const, label: "GPS tracks your live pace & distance" },
+                  { icon: "trending-up" as const, label: "Auto-saved to your profile & pace averages" },
+                  { icon: "share-2" as const, label: "Share your activity with friends" },
                 ].map((step, i) => (
                   <View key={i} style={s.onboardStep}>
                     <View style={s.onboardStepIcon}>
-                      <Feather name={step.icon} size={20} color={C.primary} />
+                      <Feather name={step.icon} size={18} color={C.primary} />
                     </View>
                     <Text style={s.onboardStepLabel}>{step.label}</Text>
                   </View>
                 ))}
               </ScrollView>
 
-              {/* Slide 2 — Ready */}
-              <ScrollView
-                style={{ width: screenWidth - 48 }}
-                contentContainerStyle={s.onboardContent}
-                showsVerticalScrollIndicator={false}
-                bounces={false}
-              >
+              {/* Slide 2 — Joining a Group Run */}
+              <ScrollView style={{ width: screenWidth - 48 }} contentContainerStyle={s.onboardContent} showsVerticalScrollIndicator={false} bounces={false}>
+                <View style={s.onboardIconWrap}>
+                  <Ionicons name="people-outline" size={52} color={C.primary} />
+                </View>
+                <Text style={s.onboardTitle}>Joining a Group Run</Text>
+                {[
+                  { icon: "search" as const, label: "Browse & join upcoming runs or rides near you" },
+                  { icon: "calendar" as const, label: "Schedule your spot or just show up" },
+                  { icon: "user-check" as const, label: "Run with the host or start independently" },
+                  { icon: "award" as const, label: "Every finisher's pace, time & distance is logged on the board" },
+                ].map((step, i) => (
+                  <View key={i} style={s.onboardStep}>
+                    <View style={s.onboardStepIcon}>
+                      <Feather name={step.icon} size={18} color={C.primary} />
+                    </View>
+                    <Text style={s.onboardStepLabel}>{step.label}</Text>
+                  </View>
+                ))}
+              </ScrollView>
+
+              {/* Slide 3 — Your Crew */}
+              <ScrollView style={{ width: screenWidth - 48 }} contentContainerStyle={s.onboardContent} showsVerticalScrollIndicator={false} bounces={false}>
+                <View style={s.onboardIconWrap}>
+                  <Ionicons name="shield-outline" size={52} color={C.primary} />
+                </View>
+                <Text style={s.onboardTitle}>Your Crew</Text>
+                {[
+                  { icon: "users" as const, label: "Create or join a crew" },
+                  { icon: "message-circle" as const, label: "Crew chat to plan and coordinate" },
+                  { icon: "calendar" as const, label: "Schedule group runs or rides together" },
+                  { icon: "clock" as const, label: "Crew history tracks every activity you've done together" },
+                ].map((step, i) => (
+                  <View key={i} style={s.onboardStep}>
+                    <View style={s.onboardStepIcon}>
+                      <Feather name={step.icon} size={18} color={C.primary} />
+                    </View>
+                    <Text style={s.onboardStepLabel}>{step.label}</Text>
+                  </View>
+                ))}
+              </ScrollView>
+
+              {/* Slide 4 — Ready */}
+              <ScrollView style={{ width: screenWidth - 48 }} contentContainerStyle={s.onboardContent} showsVerticalScrollIndicator={false} bounces={false}>
                 <View style={s.onboardIconWrap}>
                   <Ionicons name="trophy" size={52} color="#FFB800" />
                 </View>
@@ -1664,29 +1704,56 @@ export default function DiscoverScreen() {
 
             {/* Dots */}
             <View style={s.onboardDots}>
-              {[0, 1, 2].map((i) => (
+              {[0, 1, 2, 3, 4].map((i) => (
                 <View key={i} style={[s.onboardDot, onboardSlide === i && s.onboardDotActive]} />
               ))}
             </View>
 
             {/* CTA button */}
-            {onboardSlide < 2 ? (
+            {onboardSlide < 4 ? (
               <Pressable
-                style={s.onboardBtn}
+                style={[s.onboardBtn, slideCountdown > 0 && s.onboardBtnDisabled]}
                 onPress={() => {
+                  if (slideCountdown > 0) return;
                   const next = onboardSlide + 1;
                   onboardScrollRef.current?.scrollTo({ x: next * (screenWidth - 48), animated: true });
                   setOnboardSlide(next);
                 }}
                 testID="onboarding-next"
               >
-                <Text style={s.onboardBtnTxt}>Next</Text>
-                <Feather name="arrow-right" size={16} color={C.bg} />
+                {slideCountdown > 0 ? (
+                  <>
+                    <View style={s.onboardCountBadge}>
+                      <Text style={s.onboardCountTxt}>{slideCountdown}</Text>
+                    </View>
+                    <Text style={s.onboardBtnTxt}>Read to continue</Text>
+                  </>
+                ) : (
+                  <>
+                    <Text style={s.onboardBtnTxt}>Next</Text>
+                    <Feather name="arrow-right" size={16} color={C.bg} />
+                  </>
+                )}
               </Pressable>
             ) : (
-              <Pressable style={s.onboardBtn} onPress={finishOnboarding} testID="onboarding-letsgo">
-                <Text style={s.onboardBtnTxt}>Let's Go</Text>
-                <Feather name="arrow-right" size={16} color={C.bg} />
+              <Pressable
+                style={[s.onboardBtn, slideCountdown > 0 && s.onboardBtnDisabled]}
+                onPress={() => { if (slideCountdown > 0) return; finishOnboarding(); }}
+                testID="onboarding-letsgo"
+              >
+                {slideCountdown > 0 ? (
+                  <>
+                    <View style={s.onboardCountBadge}>
+                      <Text style={s.onboardCountTxt}>{slideCountdown}</Text>
+                    </View>
+                    <Text style={s.onboardBtnTxt}>Read to continue</Text>
+                  </>
+                ) : (
+                  <>
+                    <Text style={s.onboardBtnTxt}>Let's Go</Text>
+                    <Feather name="arrow-right" size={16} color={C.bg} />
+                  </>
+                )}
               </Pressable>
             )}
           </View>
@@ -2913,6 +2980,22 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   onboardBtnTxt: {
     fontFamily: "Outfit_700Bold",
     fontSize: 16,
+    color: C.bg,
+  },
+  onboardBtnDisabled: {
+    backgroundColor: C.textMuted,
+  },
+  onboardCountBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.25)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  onboardCountTxt: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 13,
     color: C.bg,
   },
 
