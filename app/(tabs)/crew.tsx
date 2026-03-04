@@ -874,7 +874,7 @@ function CrewDetailSheet({
                 )}
 
                 {/* ── Upcoming Events (big cards) ── */}
-                <View style={s.detailSection}>
+                <View style={[s.detailSection, { paddingBottom: 5 }]}>
                   <View style={s.detailSectionHeader}>
                     <Text style={s.detailSectionTitle}>
                       Upcoming {activityFilter === "ride" ? "Rides" : "Runs"}
