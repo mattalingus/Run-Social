@@ -711,6 +711,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/runs/community-activity", async (_req, res) => {
+    try {
+      const runs = await storage.getRecentCommunityActivity();
+      res.json({ runs });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.get("/api/runs/:id", async (req, res) => {
     try {
       const run = await storage.getRunById(req.params.id);

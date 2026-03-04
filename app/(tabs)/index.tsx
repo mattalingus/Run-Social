@@ -34,6 +34,15 @@ import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import WebFAB from "@/components/WebFAB";
 
+function formatDaysAgo(dateStr: string): string {
+  const d = new Date(dateStr);
+  const diffMs = Date.now() - d.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays === 0) return "today";
+  if (diffDays === 1) return "yesterday";
+  return `${diffDays} days ago`;
+}
+
 function resolveImgUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   if (url.startsWith("http")) return url;
@@ -674,6 +683,10 @@ export default function DiscoverScreen() {
   const { activityFilter, setActivityFilter } = useActivity();
   const [showFilter, setShowFilter] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardSlide, setOnboardSlide] = useState(0);
+  const [checklistDismissed, setChecklistDismissed] = useState(true);
+  const [checklistAllDone, setChecklistAllDone] = useState(false);
 
   const { data: notifications = [], refetch: refetchNotifs } = useQuery({
     queryKey: ["/api/notifications"],
@@ -949,6 +962,31 @@ export default function DiscoverScreen() {
     })();
   }, []);
 
+  useEffect(() => {
+    if (!user) return;
+    AsyncStorage.getItem("fara_has_onboarded").then((v) => {
+      if (!v) setShowOnboarding(true);
+    });
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user) return;
+    AsyncStorage.getItem("fara_checklist_dismissed").then((v) => {
+      if (v !== "true") setChecklistDismissed(false);
+    });
+  }, [user?.id]);
+
+  const finishOnboarding = () => {
+    AsyncStorage.setItem("fara_has_onboarded", "true");
+    setShowOnboarding(false);
+    setOnboardSlide(0);
+  };
+
+  const dismissChecklist = () => {
+    AsyncStorage.setItem("fara_checklist_dismissed", "true");
+    setChecklistDismissed(true);
+  };
+
   // ─── Data ──────────────────────────────────────────────────────────────────
 
   const { data: runs = [], isLoading, refetch, isRefetching } = useQuery<Run[]>({
@@ -995,6 +1033,48 @@ export default function DiscoverScreen() {
     staleTime: 0,
     enabled: !!user,
   });
+
+  const { data: communityData } = useQuery<{ runs: any[] }>({
+    queryKey: ["/api/runs/community-activity"],
+    staleTime: 300_000,
+  });
+  const communityRuns = communityData?.runs ?? [];
+
+  const checklistItems = useMemo(() => [
+    {
+      label: "Set your pace",
+      done: (user as any)?.avg_pace != null,
+      action: () => router.push("/(tabs)/profile" as any),
+    },
+    {
+      label: "Log a solo run",
+      done: ((user as any)?.completed_runs ?? 0) > 0,
+      action: () => router.push("/(tabs)/solo" as any),
+    },
+    {
+      label: "Host your first run",
+      done: ((user as any)?.hosted_runs ?? 0) > 0,
+      action: () => setShowHostModal(true),
+    },
+    {
+      label: "Add a friend",
+      done: friends.length > 0,
+      action: () => router.push("/(tabs)/crew" as any),
+    },
+  ], [user, friends]);
+
+  const completedCount = checklistItems.filter((i) => i.done).length;
+
+  useEffect(() => {
+    if (completedCount === 4 && !checklistDismissed && !checklistAllDone) {
+      setChecklistAllDone(true);
+      const t = setTimeout(() => {
+        dismissChecklist();
+        setChecklistAllDone(false);
+      }, 2000);
+      return () => clearTimeout(t);
+    }
+  }, [completedCount, checklistDismissed]);
 
   const removePlanMutation = useMutation({
     mutationFn: (runId: string) => apiRequest("POST", `/api/runs/${runId}/plan`),
@@ -1332,6 +1412,48 @@ export default function DiscoverScreen() {
                 </ScrollView>
               </View>
             )}
+            {/* Onboarding checklist */}
+            {user && !checklistDismissed && (
+              <View style={s.checklistCard}>
+                {checklistAllDone ? (
+                  <View style={{ alignItems: "center", paddingVertical: 12 }}>
+                    <Ionicons name="checkmark-circle" size={28} color={C.primary} />
+                    <Text style={[s.checklistHeader, { color: C.primary, marginTop: 6 }]}>You're all set!</Text>
+                  </View>
+                ) : (
+                  <>
+                    <View style={s.checklistHeaderRow}>
+                      <Text style={s.checklistHeader}>Getting started</Text>
+                      <Text style={s.checklistFraction}>{completedCount} / {checklistItems.length}</Text>
+                      <Pressable onPress={dismissChecklist} hitSlop={12}>
+                        <Feather name="x" size={16} color={C.textMuted} />
+                      </Pressable>
+                    </View>
+                    <View style={s.checklistBar}>
+                      <View style={[s.checklistBarFill, { width: `${(completedCount / checklistItems.length) * 100}%` as any }]} />
+                    </View>
+                    {checklistItems.map((item, idx) => (
+                      <Pressable
+                        key={idx}
+                        style={s.checklistItem}
+                        onPress={item.done ? undefined : item.action}
+                        disabled={item.done}
+                      >
+                        <Ionicons
+                          name={item.done ? "checkmark-circle" : "ellipse-outline"}
+                          size={20}
+                          color={item.done ? C.primary : C.textMuted}
+                        />
+                        <Text style={[s.checklistLabel, item.done && s.checklistLabelDone]}>
+                          {item.label}
+                        </Text>
+                        {!item.done && <Feather name="chevron-right" size={14} color={C.textMuted} style={{ marginLeft: "auto" }} />}
+                      </Pressable>
+                    ))}
+                  </>
+                )}
+              </View>
+            )}
             <Text style={s.nearbyLabel}>{activityFilter === "ride" ? "Upcoming Rides Nearby" : "Upcoming Runs Nearby"}</Text>
             </View>
           }
@@ -1350,15 +1472,62 @@ export default function DiscoverScreen() {
             />
           )}
           ListEmptyComponent={
-            <View style={s.empty}>
-              <Ionicons name={activityFilter === "ride" ? "bicycle-outline" : "walk-outline"} size={44} color={C.textMuted} />
-              <Text style={s.emptyTitle}>{activityFilter === "ride" ? "No rides found" : "No runs found"}</Text>
-              <Text style={s.emptySub}>
-                {search || isFiltered
-                  ? "Try adjusting your filters"
-                  : activityFilter === "ride" ? "Check back soon for upcoming rides" : "Check back soon for upcoming runs"}
-              </Text>
-            </View>
+            search || isFiltered ? (
+              <View style={s.empty}>
+                <Ionicons name={activityFilter === "ride" ? "bicycle-outline" : "walk-outline"} size={44} color={C.textMuted} />
+                <Text style={s.emptyTitle}>{activityFilter === "ride" ? "No rides found" : "No runs found"}</Text>
+                <Text style={s.emptySub}>Try adjusting your filters</Text>
+              </View>
+            ) : (
+              <View style={s.richEmpty}>
+                {/* Host CTA */}
+                <Pressable style={s.hostCtaCard} onPress={() => { if (user) setShowHostModal(true); else router.push("/login" as any); }}>
+                  <View style={s.hostCtaIcon}>
+                    <Feather name="map-pin" size={26} color={C.primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.hostCtaTitle}>Be the first to host in your area</Text>
+                    <Text style={s.hostCtaBody}>Create a run and invite others — it only takes a minute.</Text>
+                  </View>
+                </Pressable>
+                <Pressable
+                  style={s.hostCtaBtn}
+                  onPress={() => { if (user) setShowHostModal(true); else router.push("/login" as any); }}
+                >
+                  <Feather name="plus" size={16} color={C.bg} />
+                  <Text style={s.hostCtaBtnTxt}>Host a {activityFilter === "ride" ? "Ride" : "Run"}</Text>
+                </Pressable>
+
+                {/* Community activity */}
+                {communityRuns.length > 0 ? (
+                  <View style={s.communitySection}>
+                    <Text style={s.communitySectionLabel}>Recent activity nearby</Text>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={{ gap: 10, paddingRight: 4 }}
+                    >
+                      {communityRuns.map((cr: any) => (
+                        <View key={cr.id} style={s.communityCard}>
+                          <Ionicons
+                            name={cr.activity_type === "ride" ? "bicycle" : "walk"}
+                            size={18}
+                            color={C.primary}
+                          />
+                          <Text style={s.communityTitle} numberOfLines={1}>{cr.title}</Text>
+                          <Text style={s.communityMeta}>
+                            {cr.participant_count > 0 ? `${cr.participant_count} ran this` : "Completed"}{cr.location_name ? ` · ${cr.location_name}` : ""}
+                          </Text>
+                          <Text style={s.communityTime}>{cr.completed_at ? formatDaysAgo(cr.completed_at) : ""}</Text>
+                        </View>
+                      ))}
+                    </ScrollView>
+                  </View>
+                ) : (
+                  <Text style={s.communityFallback}>Be the first to create a run — others will follow.</Text>
+                )}
+              </View>
+            )
           }
         />
       )}
@@ -1375,6 +1544,88 @@ export default function DiscoverScreen() {
         sortOption={sortOption}
         setSortOption={setSortOption}
       />
+
+      {/* ── Welcome Onboarding Modal ───────────────────────────────────────────── */}
+      <Modal
+        visible={showOnboarding}
+        transparent
+        animationType="fade"
+        onRequestClose={finishOnboarding}
+      >
+        <View style={s.onboardOverlay}>
+          <View style={[s.onboardSheet, { paddingBottom: insets.bottom + 24 }]}>
+            {/* Skip button */}
+            {onboardSlide < 2 && (
+              <Pressable style={s.onboardSkip} onPress={finishOnboarding}>
+                <Text style={s.onboardSkipTxt}>Skip</Text>
+              </Pressable>
+            )}
+
+            {/* Slide content */}
+            {onboardSlide === 0 && (
+              <View style={s.onboardContent}>
+                <View style={s.onboardIconWrap}>
+                  <Ionicons name="walk" size={56} color={C.primary} />
+                </View>
+                <Text style={s.onboardTitle}>Welcome to FARA</Text>
+                <Text style={s.onboardBody}>
+                  Discover group runs and rides near you. Track your progress. Build your crew.
+                </Text>
+              </View>
+            )}
+
+            {onboardSlide === 1 && (
+              <View style={s.onboardContent}>
+                <Text style={s.onboardTitle}>How it works</Text>
+                {[
+                  { icon: "map-pin" as const, label: "Find a run near you" },
+                  { icon: "check-circle" as const, label: "Confirm your spot" },
+                  { icon: "users" as const, label: "Show up and run together" },
+                ].map((step, i) => (
+                  <View key={i} style={s.onboardStep}>
+                    <View style={s.onboardStepIcon}>
+                      <Feather name={step.icon} size={20} color={C.primary} />
+                    </View>
+                    <Text style={s.onboardStepLabel}>{step.label}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {onboardSlide === 2 && (
+              <View style={s.onboardContent}>
+                <View style={s.onboardIconWrap}>
+                  <Ionicons name="trophy" size={52} color="#FFB800" />
+                </View>
+                <Text style={s.onboardTitle}>You're ready to run</Text>
+                <Text style={s.onboardBody}>
+                  Explore runs near you, join a crew, or host your own. The community is waiting.
+                </Text>
+              </View>
+            )}
+
+            {/* Dots */}
+            <View style={s.onboardDots}>
+              {[0, 1, 2].map((i) => (
+                <View key={i} style={[s.onboardDot, onboardSlide === i && s.onboardDotActive]} />
+              ))}
+            </View>
+
+            {/* CTA button */}
+            {onboardSlide < 2 ? (
+              <Pressable style={s.onboardBtn} onPress={() => setOnboardSlide(onboardSlide + 1)}>
+                <Text style={s.onboardBtnTxt}>Next</Text>
+                <Feather name="arrow-right" size={16} color={C.bg} />
+              </Pressable>
+            ) : (
+              <Pressable style={s.onboardBtn} onPress={finishOnboarding}>
+                <Text style={s.onboardBtnTxt}>Let's Go</Text>
+                <Feather name="arrow-right" size={16} color={C.bg} />
+              </Pressable>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       {/* ── Notifications Modal ────────────────────────────────────────────────── */}
       <Modal
@@ -1791,7 +2042,7 @@ export default function DiscoverScreen() {
             )}
 
             {/* Strict Mode */}
-            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: C.card, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: hStrict ? C.primary + "55" : C.border }}>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: C.card, borderRadius: 12, padding: 14, borderWidth: hStrict ? 2 : 1, borderColor: hStrict ? C.primary : C.border }}>
               <View style={{ flex: 1, marginRight: 12 }}>
                 <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text }}>Strict Mode</Text>
                 <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, marginTop: 2 }}>
@@ -2319,6 +2570,259 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     color: C.textSecondary,
     textAlign: "center",
     paddingHorizontal: 40,
+  },
+
+  // ─── Rich Empty State ─────────────────────────────────────────────────────
+  richEmpty: { paddingTop: 24, paddingHorizontal: 16 },
+  hostCtaCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    backgroundColor: C.card,
+    borderRadius: 16,
+    padding: 16,
+    borderLeftWidth: 3,
+    borderLeftColor: C.primary,
+    marginBottom: 12,
+  },
+  hostCtaIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#00D97E18",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  hostCtaTitle: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 15,
+    color: C.text,
+    marginBottom: 4,
+  },
+  hostCtaBody: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 13,
+    color: C.textSecondary,
+    lineHeight: 18,
+  },
+  hostCtaBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: C.primary,
+    borderRadius: 12,
+    paddingVertical: 13,
+    marginBottom: 24,
+  },
+  hostCtaBtnTxt: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 15,
+    color: C.bg,
+  },
+  communitySection: { marginBottom: 16 },
+  communitySectionLabel: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 11,
+    color: C.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 10,
+  },
+  communityCard: {
+    width: 160,
+    backgroundColor: C.card,
+    borderRadius: 14,
+    padding: 14,
+    gap: 4,
+  },
+  communityTitle: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 13,
+    color: C.text,
+  },
+  communityMeta: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 11,
+    color: C.textSecondary,
+  },
+  communityTime: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 11,
+    color: C.textMuted,
+    marginTop: 2,
+  },
+  communityFallback: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 13,
+    color: C.textMuted,
+    textAlign: "center",
+    paddingVertical: 16,
+  },
+
+  // ─── Checklist Card ───────────────────────────────────────────────────────
+  checklistCard: {
+    backgroundColor: C.card,
+    borderRadius: 16,
+    padding: 14,
+    marginHorizontal: 16,
+    marginBottom: 14,
+    borderTopWidth: 1,
+    borderTopColor: C.primary,
+  },
+  checklistHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+    gap: 8,
+  },
+  checklistHeader: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 14,
+    color: C.text,
+    flex: 1,
+  },
+  checklistFraction: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 12,
+    color: C.textMuted,
+  },
+  checklistBar: {
+    height: 4,
+    backgroundColor: C.border,
+    borderRadius: 2,
+    marginBottom: 10,
+    overflow: "hidden",
+  },
+  checklistBarFill: {
+    height: 4,
+    backgroundColor: C.primary,
+    borderRadius: 2,
+  },
+  checklistItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 8,
+  },
+  checklistLabel: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 14,
+    color: C.text,
+    flex: 1,
+  },
+  checklistLabelDone: {
+    color: C.textMuted,
+    textDecorationLine: "line-through",
+  },
+
+  // ─── Onboarding Modal ─────────────────────────────────────────────────────
+  onboardOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.75)",
+    justifyContent: "flex-end",
+  },
+  onboardSheet: {
+    backgroundColor: C.surface,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    minHeight: 420,
+  },
+  onboardSkip: {
+    position: "absolute",
+    top: 16,
+    right: 24,
+    zIndex: 10,
+  },
+  onboardSkipTxt: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 14,
+    color: C.textMuted,
+  },
+  onboardContent: {
+    alignItems: "center",
+    paddingTop: 24,
+    paddingBottom: 20,
+    gap: 12,
+    flex: 1,
+  },
+  onboardIconWrap: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: "#00D97E14",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+  },
+  onboardTitle: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 24,
+    color: C.text,
+    textAlign: "center",
+  },
+  onboardBody: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 15,
+    color: C.textSecondary,
+    textAlign: "center",
+    lineHeight: 22,
+    paddingHorizontal: 8,
+  },
+  onboardStep: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    width: "100%",
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    backgroundColor: C.card,
+    borderRadius: 12,
+  },
+  onboardStepIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#00D97E18",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  onboardStepLabel: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 15,
+    color: C.text,
+  },
+  onboardDots: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 6,
+    marginBottom: 20,
+  },
+  onboardDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: C.border,
+  },
+  onboardDotActive: {
+    backgroundColor: C.primary,
+    width: 20,
+  },
+  onboardBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: C.primary,
+    borderRadius: 14,
+    paddingVertical: 14,
+  },
+  onboardBtnTxt: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 16,
+    color: C.bg,
   },
 
   // ─── FAB ──────────────────────────────────────────────────────────────────

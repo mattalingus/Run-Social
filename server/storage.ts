@@ -2889,3 +2889,25 @@ export async function getDmUnreadCount(userId: string): Promise<number> {
   );
   return parseInt(res.rows[0].cnt, 10);
 }
+
+export async function getRecentCommunityActivity() {
+  const res = await pool.query(`
+    SELECT r.id, r.title, r.location_name, r.activity_type,
+           COALESCE(r.started_at, r.date) AS completed_at,
+           u.name AS host_name,
+           COUNT(DISTINCT rp.user_id) AS participant_count
+    FROM runs r
+    JOIN users u ON u.id = r.host_id
+    LEFT JOIN run_participants rp
+      ON rp.run_id = r.id AND rp.status IN ('confirmed', 'joined')
+    WHERE r.is_completed = true
+      AND COALESCE(r.started_at, r.date) >= NOW() - INTERVAL '14 days'
+    GROUP BY r.id, u.name
+    ORDER BY COALESCE(r.started_at, r.date) DESC
+    LIMIT 6
+  `);
+  return res.rows.map((row) => ({
+    ...row,
+    participant_count: parseInt(row.participant_count, 10),
+  }));
+}
