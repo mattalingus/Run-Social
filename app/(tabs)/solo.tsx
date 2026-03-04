@@ -1332,8 +1332,14 @@ export default function SoloScreen() {
             {/* ── Scrollable body ─────────────────────────────────── */}
             <View style={{ flex: 1 }}>
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
-                {/* ── SVG Route preview ──────────────────────────────── */}
-                <PathRoutePreview path={selectedSavedPath.route_path ?? []} primary={C.primary} />
+                {/* ── Route preview (MapView on native, SVG on web) ──── */}
+                {Platform.OS !== "web" && selectedSavedPath.route_path && selectedSavedPath.route_path.length >= 2 ? (
+                  <View style={{ marginTop: 14 }}>
+                    <MiniRouteMap path={selectedSavedPath.route_path} height={220} />
+                  </View>
+                ) : (
+                  <PathRoutePreview path={selectedSavedPath.route_path ?? []} primary={C.primary} />
+                )}
 
                 {/* ── 2×2 stats grid ──────────────────────────────── */}
                 <View style={s.pathStatsGrid}>
