@@ -967,15 +967,32 @@ export default function DiscoverScreen() {
 
   useEffect(() => {
     if (!user?.id) return;
-    AsyncStorage.getItem(`paceup_has_onboarded_${user.id}`).then((v) => {
-      if (!v) setShowOnboarding(true);
+    Promise.all([
+      AsyncStorage.getItem(`paceup_has_onboarded_${user.id}`),
+      AsyncStorage.getItem(`fara_has_onboarded_${user.id}`),
+    ]).then(([newKey, oldKey]) => {
+      if (!newKey && !oldKey) {
+        setShowOnboarding(true);
+      } else if (oldKey && !newKey) {
+        AsyncStorage.setItem(`paceup_has_onboarded_${user.id}`, "true");
+      }
     });
   }, [user?.id]);
 
   useEffect(() => {
     if (!user?.id) return;
-    AsyncStorage.getItem(`paceup_checklist_dismissed_${user.id}`).then((v) => {
-      if (v !== "true") setChecklistDismissed(false);
+    Promise.all([
+      AsyncStorage.getItem(`paceup_checklist_dismissed_${user.id}`),
+      AsyncStorage.getItem(`fara_checklist_dismissed_${user.id}`),
+    ]).then(([newKey, oldKey]) => {
+      if (newKey === "true" || oldKey === "true") {
+        setChecklistDismissed(true);
+        if (oldKey === "true" && newKey !== "true") {
+          AsyncStorage.setItem(`paceup_checklist_dismissed_${user.id}`, "true");
+        }
+      } else {
+        setChecklistDismissed(false);
+      }
     });
   }, [user?.id]);
 
