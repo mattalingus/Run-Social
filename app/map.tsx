@@ -443,7 +443,7 @@ export default function MapScreen() {
       }
     }
 
-    const totalOpen = visibleRuns.reduce((acc, r) => acc + Math.max(0, r.max_participants - r.participant_count), 0);
+    const totalOpen = visibleRuns.filter(r => r.max_participants < 9999).reduce((acc, r) => acc + Math.max(0, r.max_participants - r.participant_count), 0);
     if (totalOpen > 0) result.push({ icon: "users", lib: "feather", text: `${totalOpen} open spot${totalOpen !== 1 ? "s" : ""}`, color: C.blue });
 
     const fastest = visibleRuns.reduce((a, b) => a.min_pace < b.min_pace ? a : b);
