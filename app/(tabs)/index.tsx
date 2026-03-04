@@ -1544,36 +1544,38 @@ export default function DiscoverScreen() {
                   <Text style={s.hostCtaBtnTxt}>Host a {activityFilter === "ride" ? "Ride" : "Run"}</Text>
                 </Pressable>
 
-                {/* Community activity */}
-                {communityRuns.length > 0 ? (
-                  <View style={s.communitySection}>
-                    <Text style={s.communitySectionLabel}>Recent activity nearby</Text>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={{ gap: 10, paddingRight: 4 }}
-                    >
-                      {communityRuns.map((cr: any) => (
-                        <View key={cr.id} style={s.communityCard}>
-                          <Ionicons
-                            name={cr.activity_type === "ride" ? "bicycle" : "walk"}
-                            size={18}
-                            color={C.primary}
-                          />
-                          <Text style={s.communityTitle} numberOfLines={1}>{cr.title}</Text>
-                          <Text style={s.communityMeta}>
-                            {cr.participant_count > 0 ? `${cr.participant_count} ran this` : "Completed"}{cr.location_name ? ` · ${cr.location_name}` : ""}
-                          </Text>
-                          <Text style={s.communityTime}>{cr.completed_at ? formatDaysAgo(cr.completed_at) : ""}</Text>
-                        </View>
-                      ))}
-                    </ScrollView>
-                  </View>
-                ) : (
-                  <Text style={s.communityFallback}>Be the first to create a run — others will follow.</Text>
-                )}
+                <Text style={s.communityFallback}>Be the first to create a run — others will follow.</Text>
               </View>
             )
+          }
+          ListFooterComponent={
+            communityRuns.filter((cr: any) => cr.activity_type === activityFilter).length > 0 ? (
+              <View style={s.communitySection}>
+                <Text style={s.communitySectionLabel}>
+                  {activityFilter === "ride" ? "Recent Rides" : "Recent Runs"}
+                </Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ gap: 10, paddingRight: 4 }}
+                >
+                  {communityRuns.filter((cr: any) => cr.activity_type === activityFilter).map((cr: any) => (
+                    <View key={cr.id} style={s.communityCard}>
+                      <Ionicons
+                        name={cr.activity_type === "ride" ? "bicycle" : "walk"}
+                        size={18}
+                        color={C.primary}
+                      />
+                      <Text style={s.communityTitle} numberOfLines={1}>{cr.title}</Text>
+                      <Text style={s.communityMeta}>
+                        {cr.participant_count > 0 ? `${cr.participant_count} ${cr.activity_type === "ride" ? "rode" : "ran"} this` : "Completed"}{cr.location_name ? ` · ${cr.location_name}` : ""}
+                      </Text>
+                      <Text style={s.communityTime}>{cr.completed_at ? formatDaysAgo(cr.completed_at) : ""}</Text>
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            ) : null
           }
         />
       )}
