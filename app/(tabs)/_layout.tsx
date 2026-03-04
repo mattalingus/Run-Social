@@ -7,6 +7,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getApiUrl } from "@/lib/query-client";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+const CREW_SINCE_KEY = "@paceup_crew_last_visited";
 
 const PILL_H      = 64;
 const PILL_RADIUS = 30;
@@ -30,17 +33,22 @@ export default function TabLayout() {
   const pathname = usePathname();
 
   const [hasCrewUnread, setHasCrewUnread] = useState(false);
-  const [crewSince, setCrewSince] = useState(() => {
-    const d = new Date();
-    d.setHours(d.getHours() - 24);
-    return d.toISOString();
-  });
+  const [crewSince, setCrewSince] = useState<string | null>(null);
   const onCrewTab = pathname === "/crew" || pathname.startsWith("/crew/");
+
+  // Load persisted timestamp on mount — defaults to now if never visited (no false positives)
+  useEffect(() => {
+    AsyncStorage.getItem(CREW_SINCE_KEY).then((stored) => {
+      setCrewSince(stored ?? new Date().toISOString());
+    });
+  }, []);
 
   useEffect(() => {
     if (onCrewTab) {
+      const now = new Date().toISOString();
       setHasCrewUnread(false);
-      setCrewSince(new Date().toISOString());
+      setCrewSince(now);
+      AsyncStorage.setItem(CREW_SINCE_KEY, now);
     }
   }, [onCrewTab]);
 
@@ -48,11 +56,11 @@ export default function TabLayout() {
     queryKey: ["/api/crew-chat/has-new", crewSince],
     queryFn: async () => {
       const url = new URL("/api/crew-chat/has-new", getApiUrl());
-      url.searchParams.set("since", crewSince);
+      url.searchParams.set("since", crewSince!);
       const res = await fetch(url.toString(), { credentials: "include" });
       return res.json();
     },
-    enabled: !!user && !onCrewTab,
+    enabled: !!user && !onCrewTab && crewSince !== null,
     refetchInterval: 10000,
     staleTime: 0,
   });
