@@ -1267,35 +1267,35 @@ export default function DiscoverScreen() {
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <View style={[s.header, { paddingTop: headerTopPad }]}>
         <View style={s.titleRow}>
-          <Text style={s.title}>PaceUp</Text>
+          <Text style={[s.title, { fontSize: screenWidth < 390 ? 26 : 36 }]} numberOfLines={1}>PaceUp</Text>
 
-          <View style={s.headerBtns}>
+          <View style={[s.headerBtns, { gap: screenWidth < 390 ? 4 : 6 }]}>
             {/* Messages */}
             <Pressable
-              style={s.hBtnRow}
+              style={[s.hBtnRow, { paddingHorizontal: screenWidth < 390 ? 8 : 11 }]}
               onPress={() => router.push("/(tabs)/messages")}
               testID="messages-button"
             >
               <View>
-                <Ionicons name="chatbubble-outline" size={15} color={C.primary} />
+                <Ionicons name="chatbubble-outline" size={screenWidth < 390 ? 13 : 15} color={C.primary} />
                 {unreadDmCount > 0 && <View style={s.dmDot} />}
               </View>
-              <Text style={s.hBtnTxt}>Messages</Text>
+              <Text style={[s.hBtnTxt, { fontSize: screenWidth < 390 ? 11 : 13 }]}>Messages</Text>
             </Pressable>
 
             {/* Host */}
-            <Pressable style={s.hBtnRow} onPress={openHostModal} testID="host-button">
-              <Feather name="plus" size={15} color={C.primary} />
-              <Text style={s.hBtnTxt}>Host</Text>
+            <Pressable style={[s.hBtnRow, { paddingHorizontal: screenWidth < 390 ? 8 : 11 }]} onPress={openHostModal} testID="host-button">
+              <Feather name="plus" size={screenWidth < 390 ? 13 : 15} color={C.primary} />
+              <Text style={[s.hBtnTxt, { fontSize: screenWidth < 390 ? 11 : 13 }]}>Host</Text>
             </Pressable>
 
             {/* Bell */}
             <Pressable
-              style={s.hBtn}
+              style={[s.hBtn, { width: screenWidth < 390 ? 34 : 38 }]}
               onPress={() => { setShowNotifs(true); Haptics.selectionAsync(); }}
             >
               <View>
-                <Feather name="bell" size={18} color={C.primary} />
+                <Feather name="bell" size={screenWidth < 390 ? 16 : 18} color={C.primary} />
                 {notifCount > 0 && <View style={s.notifBadge} />}
               </View>
             </Pressable>
