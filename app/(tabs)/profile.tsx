@@ -865,10 +865,6 @@ export default function ProfileScreen() {
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>My Stats</Text>
-          <Pressable onPress={() => setShowPace(true)} style={styles.editBtn}>
-            <Feather name="edit-2" size={14} color={C.primary} />
-            <Text style={styles.editBtnText}>Edit</Text>
-          </Pressable>
         </View>
         <View style={styles.statsRow}>
           <View style={styles.statsItem}>
