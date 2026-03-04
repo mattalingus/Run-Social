@@ -336,10 +336,12 @@ export async function getNotifications(userId: string) {
   );
 
   const crewInvites = await pool.query(
-    `SELECT cm.id, cm.crew_id, 'crew_invite' as type, c.name as crew_name, c.emoji, cm.joined_at as created_at
+    `SELECT cm.id, cm.crew_id, 'crew_invite' as type, c.name as crew_name, c.emoji,
+            u.name as invited_by_name, cm.joined_at as created_at
      FROM crew_members cm
      JOIN crews c ON c.id = cm.crew_id
-     WHERE cm.user_id = $1 AND cm.status = 'invited'`,
+     JOIN users u ON u.id = cm.invited_by
+     WHERE cm.user_id = $1 AND cm.status = 'pending' AND cm.invited_by != $1`,
     [userId]
   );
 
@@ -466,6 +468,8 @@ export async function getNotifications(userId: string) {
       type: 'friend_request',
       title: 'Friend Request',
       body: `${r.from_name} wants to connect on PaceUp`,
+      from_name: r.from_name,
+      from_photo: r.from_photo,
       data: { from_name: r.from_name, from_photo: r.from_photo },
       created_at: r.created_at,
     })),
@@ -473,7 +477,11 @@ export async function getNotifications(userId: string) {
       id: r.id,
       type: 'crew_invite',
       title: 'Crew Invite',
-      body: `You've been invited to join ${r.emoji} ${r.crew_name}`,
+      body: `${r.invited_by_name} invited you to join ${r.emoji ?? ''} ${r.crew_name}`,
+      crew_id: r.crew_id,
+      crew_name: r.crew_name,
+      emoji: r.emoji,
+      invited_by_name: r.invited_by_name,
       data: { crew_id: r.crew_id, crew_name: r.crew_name, emoji: r.emoji },
       created_at: r.created_at,
     })),

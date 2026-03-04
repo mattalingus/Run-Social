@@ -1724,11 +1724,11 @@ export default function DiscoverScreen() {
                     {notifData.crewInvites.map((inv) => (
                       <View key={inv.id} style={s.notifItem}>
                         <View style={s.notifAvatarFallback}>
-                          <Text style={{ fontSize: 20 }}>{inv.emoji || "🏃"}</Text>
+                          <Text style={{ fontSize: 20 }}>{(inv as any).emoji || "🏃"}</Text>
                         </View>
                         <View style={{ flex: 1 }}>
                           <Text style={s.notifText}>
-                            Invited you to join <Text style={{ fontFamily: "Outfit_600SemiBold" }}>{inv.crew_name}</Text>
+                            <Text style={{ fontFamily: "Outfit_600SemiBold" }}>{(inv as any).invited_by_name}</Text> invited you to join <Text style={{ fontFamily: "Outfit_600SemiBold" }}>{(inv as any).crew_name}</Text>
                           </Text>
                           <View style={s.notifActions}>
                             <Pressable style={[s.notifBtn, s.notifBtnPrimary]} onPress={() => respondCrew(inv.crew_id, "accept")}>
