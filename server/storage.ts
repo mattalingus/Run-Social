@@ -1389,12 +1389,10 @@ export async function checkAndAwardAchievements(userId: string, totalMiles: numb
 
   if (totalMiles >= 25) await awardSlug(userId, "miles_25");
   if (totalMiles >= 100) {
-    const isNew = await awardSlug(userId, "miles_100");
-    if (isNew) postMilestoneToAllCrews(userId, "🔥 Just hit 100 miles total — legend status!").catch(() => {});
+    await awardSlug(userId, "miles_100");
   }
   if (totalMiles >= 250) {
-    const isNew = await awardSlug(userId, "miles_250");
-    if (isNew) postMilestoneToAllCrews(userId, "🏅 Just crossed 250 miles total — absolute machine!").catch(() => {});
+    await awardSlug(userId, "miles_250");
   }
   if (completed_runs >= 1) await awardSlug(userId, "first_step");
   if (completed_runs >= 5) await awardSlug(userId, "five_alive");
