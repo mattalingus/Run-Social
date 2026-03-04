@@ -1661,7 +1661,7 @@ export default function CrewScreen() {
                 <Ionicons name="people-outline" size={52} color={C.textMuted} />
                 <Text style={s.emptyTitle}>No crews yet</Text>
                 <Text style={s.emptyBody}>
-                  Create a crew and invite your running friends — or accept an invite when one arrives.
+                  Create a crew and invite your friends — or accept an invite when one arrives.
                 </Text>
                 <TouchableOpacity style={[s.createCrewBtn, { marginHorizontal: 0, marginBottom: 12, alignSelf: "stretch" }]} onPress={() => setShowCreate(true)} testID="create-first-crew" activeOpacity={0.88}>
                   <Ionicons name="people" size={20} color={C.bg} />
