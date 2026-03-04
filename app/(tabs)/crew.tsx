@@ -946,6 +946,32 @@ function CrewDetailSheet({
                   )}
                 </View>
 
+                {/* Schedule Run/Ride */}
+                <TouchableOpacity
+                  style={s.scheduleBtn}
+                  onPress={() => {
+                    onClose();
+                    router.push({
+                      pathname: "/create-run",
+                      params: {
+                        activityType: activityFilter,
+                        crewId: crew?.id,
+                        crewName: crew?.name,
+                      },
+                    });
+                  }}
+                  testID="schedule-crew-run-btn"
+                >
+                  <Ionicons
+                    name={activityFilter === "ride" ? "bicycle-outline" : "walk-outline"}
+                    size={16}
+                    color={C.primary}
+                  />
+                  <Text style={s.scheduleBtnTxt}>
+                    Schedule a {activityFilter === "ride" ? "Ride" : "Run"}
+                  </Text>
+                </TouchableOpacity>
+
                 {/* ── Inline Crew Chat ── */}
                 <View
                   style={s.detailSection}
@@ -1229,32 +1255,6 @@ function CrewDetailSheet({
                       ))}
                   </View>
                 )}
-
-                {/* Schedule Run/Ride */}
-                <TouchableOpacity
-                  style={s.scheduleBtn}
-                  onPress={() => {
-                    onClose();
-                    router.push({
-                      pathname: "/create-run",
-                      params: {
-                        activityType: activityFilter,
-                        crewId: crew?.id,
-                        crewName: crew?.name,
-                      },
-                    });
-                  }}
-                  testID="schedule-crew-run-btn"
-                >
-                  <Ionicons
-                    name={activityFilter === "ride" ? "bicycle-outline" : "walk-outline"}
-                    size={16}
-                    color={C.primary}
-                  />
-                  <Text style={s.scheduleBtnTxt}>
-                    Schedule a {activityFilter === "ride" ? "Ride" : "Run"}
-                  </Text>
-                </TouchableOpacity>
 
                 {isCreator && (
                   <TouchableOpacity
