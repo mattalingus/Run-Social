@@ -529,6 +529,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/crew-chat/has-new", requireAuth, async (req, res) => {
+    try {
+      const since = req.query.since as string;
+      if (!since) return res.json({ hasNew: false });
+      const result = await pool.query(
+        `SELECT 1 FROM crew_messages cm
+         JOIN crew_members mem ON mem.crew_id = cm.crew_id
+           AND mem.user_id = $1
+           AND mem.status = 'member'
+         WHERE cm.created_at > $2
+           AND cm.user_id != $1
+         LIMIT 1`,
+        [req.session.userId, new Date(since)]
+      );
+      res.json({ hasNew: result.rows.length > 0 });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.get("/api/crews/:id/messages", requireAuth, async (req, res) => {
     try {
       const crewId = req.params.id;

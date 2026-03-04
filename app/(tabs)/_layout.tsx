@@ -1,8 +1,12 @@
-import { Tabs } from "expo-router";
+import { Tabs, usePathname } from "expo-router";
 import { Platform, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { useState, useEffect, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { getApiUrl } from "@/lib/query-client";
 
 const PILL_H      = 64;
 const PILL_RADIUS = 30;
@@ -12,10 +16,46 @@ function PillBackground({ bg, border }: { bg: string; border: string }) {
   return <View style={[styles.pill, { backgroundColor: bg, borderColor: border }]} />;
 }
 
+function GreenDot() {
+  return (
+    <View style={styles.dot} />
+  );
+}
+
 export default function TabLayout() {
-  const insets = useSafeAreaInsets();
-  const isWeb  = Platform.OS === "web";
-  const { C }  = useTheme();
+  const insets   = useSafeAreaInsets();
+  const isWeb    = Platform.OS === "web";
+  const { C }    = useTheme();
+  const { user } = useAuth();
+  const pathname = usePathname();
+
+  const [hasCrewUnread, setHasCrewUnread] = useState(false);
+  const [crewSince, setCrewSince] = useState(() => new Date().toISOString());
+  const onCrewTab = pathname === "/crew" || pathname.startsWith("/crew/");
+
+  useEffect(() => {
+    if (onCrewTab) {
+      setHasCrewUnread(false);
+      setCrewSince(new Date().toISOString());
+    }
+  }, [onCrewTab]);
+
+  const { data: crewNewData } = useQuery<{ hasNew: boolean }>({
+    queryKey: ["/api/crew-chat/has-new", crewSince],
+    queryFn: async () => {
+      const url = new URL("/api/crew-chat/has-new", getApiUrl());
+      url.searchParams.set("since", crewSince);
+      const res = await fetch(url.toString(), { credentials: "include" });
+      return res.json();
+    },
+    enabled: !!user && !onCrewTab,
+    refetchInterval: 30000,
+    staleTime: 0,
+  });
+
+  useEffect(() => {
+    if (crewNewData?.hasNew) setHasCrewUnread(true);
+  }, [crewNewData]);
 
   return (
     <Tabs
@@ -72,7 +112,10 @@ export default function TabLayout() {
         options={{
           title: "Crew",
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "people" : "people-outline"} size={22} color={color} />
+            <View>
+              <Ionicons name={focused ? "people" : "people-outline"} size={22} color={color} />
+              {hasCrewUnread && <GreenDot />}
+            </View>
           ),
         }}
       />
@@ -101,5 +144,16 @@ const styles = StyleSheet.create({
     borderRadius: PILL_RADIUS,
     overflow:     "hidden",
     borderWidth:  1,
+  },
+  dot: {
+    position:        "absolute",
+    top:             -2,
+    right:           -4,
+    width:           8,
+    height:          8,
+    borderRadius:    4,
+    backgroundColor: "#00D97E",
+    borderWidth:     1.5,
+    borderColor:     "#050C09",
   },
 });
