@@ -77,6 +77,212 @@ function calcPace(distanceMi: number, elapsedSec: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+// ─── Audio Coach Phrase Engine ────────────────────────────────────────────────
+
+function pick<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function spokenPace(paceMinTotal: number): string {
+  const m = Math.floor(paceMinTotal);
+  const s = Math.round((paceMinTotal - m) * 60);
+  if (s === 0) return `${m} minutes flat`;
+  if (s === 30) return `${m} thirty`;
+  if (s === 15) return `${m} fifteen`;
+  if (s === 45) return `${m} forty-five`;
+  return `${m} ${s < 10 ? "oh " + s : s}`;
+}
+
+function spokenTime(totalSeconds: number): string {
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  if (m === 0) return `${s} seconds`;
+  if (s === 0) return `${m} minute${m !== 1 ? "s" : ""}`;
+  if (s === 30) return `${m} and a half minutes`;
+  return `${m} minute${m !== 1 ? "s" : ""} ${s} second${s !== 1 ? "s" : ""}`;
+}
+
+function pickCoachPhrase(
+  distance: number,
+  paceMinTotal: number,
+  totalSeconds: number,
+  prevPace: number | null
+): string {
+  const pS = spokenPace(paceMinTotal);
+  const tS = spokenTime(totalSeconds);
+  const pM = Math.floor(paceMinTotal);
+  const pSec = Math.round((paceMinTotal - pM) * 60);
+  const totalM = Math.floor(totalSeconds / 60);
+  const isWhole = distance % 1 === 0;
+  const isHalf = distance === 0.5;
+  const is5K = Math.abs(distance - 3.107) < 0.06;
+  const is10K = Math.abs(distance - 6.214) < 0.06;
+  const wholeMiles = Math.floor(distance);
+  const NUM = ["zero","one","two","three","four","five","six","seven","eight","nine","ten",
+    "eleven","twelve","thirteen","fourteen","fifteen","sixteen","seventeen","eighteen","nineteen","twenty"];
+
+  // ── Distance intro ──────────────────────────────────────────────────────────
+  let distLine: string;
+  if (is10K) {
+    distLine = pick([
+      "Ten K done.", "You've hit 10K.", "Ten kilometers.",
+      "Six point two miles.", "10K complete.", "That's 10 kilometres.",
+    ]);
+  } else if (is5K) {
+    distLine = pick([
+      "5K mark.", "Three point one miles.", "You've hit 5K.",
+      "Five kilometres in.", "5K done.",
+    ]);
+  } else if (isHalf) {
+    distLine = pick([
+      "Half mile.", "Half a mile done.", "Point five miles.",
+      "Half mile in.", "That's half a mile.", "Opening half done.",
+      "Half-mile mark.", "Five hundred meters in.",
+    ]);
+  } else if (distance === 1) {
+    distLine = pick([
+      "One mile.", "Mile one.", "First mile done.",
+      "One mile in.", "That's one mile.", "One down.",
+      "Mile marker one.", "One mile complete.",
+    ]);
+  } else if (distance === 1.5) {
+    distLine = pick([
+      "Mile and a half.", "One point five miles.",
+      "One and a half miles.", "Halfway to three.", "One fifty.",
+    ]);
+  } else if (distance === 2) {
+    distLine = pick([
+      "Two miles.", "Two miles done.", "Two miles in.",
+      "That's two miles.", "Mile two.", "Two down.",
+    ]);
+  } else if (distance === 3) {
+    distLine = pick([
+      "Three miles.", "Three miles in.", "That's three miles.",
+      "Mile three.", "Three down.",
+    ]);
+  } else if (isWhole && wholeMiles <= 20) {
+    const w = NUM[wholeMiles];
+    distLine = pick([
+      `${w.charAt(0).toUpperCase() + w.slice(1)} miles.`,
+      `That's ${w} miles.`, `${w} miles in.`,
+      `${w} miles done.`, `Mile ${wholeMiles}.`, `${wholeMiles} miles.`,
+    ]);
+  } else if (!isWhole) {
+    const frac = distance % 1;
+    const fracWord = frac === 0.5 ? "and a half" : `point ${Math.round(frac * 10)}`;
+    const ww = wholeMiles <= 20 ? NUM[wholeMiles] : String(wholeMiles);
+    distLine = pick([
+      `${ww.charAt(0).toUpperCase() + ww.slice(1)} ${fracWord} miles.`,
+      `${distance.toFixed(1)} miles.`,
+      `${distance.toFixed(1)} miles in.`,
+      `${distance.toFixed(1)}.`,
+    ]);
+  } else {
+    distLine = `${distance} miles.`;
+  }
+
+  // ── Pace line ───────────────────────────────────────────────────────────────
+  const secPart = pSec > 0 ? ` ${pSec} second${pSec !== 1 ? "s" : ""}` : "";
+  const paceLines = [
+    `Running at ${pS} per mile.`,
+    `Current pace, ${pS} a mile.`,
+    `${pM} minute${secPart} miles.`,
+    `Averaging ${pS} per mile.`,
+    `${pS} per mile right now.`,
+    `Your pace is ${pS} a mile.`,
+    `Pace is sitting at ${pS}.`,
+    `Clocking ${pS} per mile.`,
+    `That's ${pS} per mile.`,
+    `${pS} a mile.`,
+    `Pace: ${pS} per mile.`,
+    `Holding ${pS} per mile.`,
+    `You're at ${pS} per mile.`,
+    `Average pace, ${pS}.`,
+    `Moving at ${pS} a mile.`,
+    `Pace right now is ${pS}.`,
+    `That puts you at ${pS} per mile.`,
+    `You're running ${pS} miles.`,
+    `Speed check: ${pS} per mile.`,
+    `${pS} on the pace.`,
+    `Tracking at ${pS} per mile.`,
+    `Mile pace: ${pS}.`,
+    `You're sitting on ${pS}.`,
+    `Pace check: ${pS} a mile.`,
+    `${pS} per mile this run.`,
+    `Effort translates to ${pS} per mile.`,
+    `That's ${pS} minute miles.`,
+    `${pS} through the mile.`,
+    `On pace at ${pS}.`,
+    `Holding a ${pS} per mile clip.`,
+    `Current split: ${pS} a mile.`,
+    `You're averaging ${pS}.`,
+    `Right now you're doing ${pS} a mile.`,
+    `Per mile pace is ${pS}.`,
+    `${pS} miles per minute.`,
+  ];
+  const paceLine = pick(paceLines);
+
+  // ── Pace context (trend or effort level) ────────────────────────────────────
+  let paceContext = "";
+  if (paceMinTotal < 6.5) {
+    if (Math.random() < 0.5) paceContext = pick(["That's a quick clip.", "Fast work.", "Moving well."]);
+  } else if (paceMinTotal < 7.5) {
+    if (Math.random() < 0.35) paceContext = pick(["Good speed.", "Strong pace.", "Nice clip."]);
+  } else if (paceMinTotal > 13) {
+    if (Math.random() < 0.4) paceContext = pick(["Easy effort.", "Nice and easy.", "Taking it steady."]);
+  }
+  if (!paceContext && prevPace !== null && prevPace - paceMinTotal > 0.25) {
+    if (Math.random() < 0.5) paceContext = pick([
+      "Picking it up.", "You're speeding up.", "Pace is improving.",
+      "You've got more in the tank.", "Negative splitting.",
+    ]);
+  }
+  if (!paceContext && prevPace !== null && paceMinTotal - prevPace > 0.3) {
+    if (Math.random() < 0.35) paceContext = pick([
+      "Settling in.", "Pace has eased back.", "Breathing room.",
+    ]);
+  }
+
+  // ── Time line ───────────────────────────────────────────────────────────────
+  const timeLines = [
+    `${tS} on the clock.`,
+    `You've been out ${tS}.`,
+    `Total time: ${tS}.`,
+    `${tS} elapsed.`,
+    `Time: ${tS}.`,
+    `${totalM} minute${totalM !== 1 ? "s" : ""} in.`,
+    `Running for ${tS}.`,
+    `${tS} so far.`,
+    `That's ${tS} of work.`,
+    `${tS} logged.`,
+    `Timer reads ${tS}.`,
+    `You're ${tS} into this run.`,
+    `${totalM} minute${totalM !== 1 ? "s" : ""} on the watch.`,
+    `Time at ${tS}.`,
+    `${tS} underway.`,
+    `Clock says ${tS}.`,
+    `${tS} into it.`,
+    `Elapsed: ${tS}.`,
+    `You've run for ${tS}.`,
+    `${tS} on the run.`,
+  ];
+  const timeLine = pick(timeLines);
+
+  // ── Optional closer (40% chance) ─────────────────────────────────────────
+  const closers = [
+    "Stay steady.", "Keep that cadence.", "Good form.", "Lock in.",
+    "Breathe easy.", "Settle in.", "Stay relaxed.", "Hold that pace.",
+    "Stay smooth.", "Keep it even.", "Relax your shoulders.",
+    "Light on your feet.", "Stay loose.", "Good rhythm.", "Keep rolling.",
+    "Stay controlled.", "Consistent effort.", "Keep your head up.",
+    "Drive the arms.", "Stay on it.", "Nice and controlled.",
+    "Hold your form.", "Stay tall.", "Chin up.", "Keep that stride.",
+  ];
+  const closer = Math.random() < 0.4 ? " " + pick(closers) : "";
+
+  return [distLine, paceLine, paceContext, timeLine].filter(Boolean).join(" ") + closer;
+}
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function RunTrackingScreen() {
@@ -96,6 +302,7 @@ export default function RunTrackingScreen() {
   const [coachEnabled, setCoachEnabled] = useState(true);
   const [coachInterval, setCoachInterval] = useState<"0.5" | "1" | "2">("1");
   const lastAnnouncedMileRef = useRef(0);
+  const lastAnnouncedPaceRef = useRef<number | null>(null);
 
   // Route Publishing state
   const [publishedPath, setPublishedPath] = useState<{ id: string; name: string } | null>(null);
@@ -161,27 +368,10 @@ export default function RunTrackingScreen() {
 
   const announcePace = useCallback((distance: number, totalSeconds: number) => {
     if (Platform.OS === "web") return;
-
-    // Build distance text
-    let distText = "";
-    if (distance === 0.5) distText = "Half mile.";
-    else if (distance === 1.5) distText = "1 and a half miles.";
-    else if (distance === 1) distText = "1 mile.";
-    else distText = `${distance} miles.`;
-
-    // Format pace
     const paceMinTotal = totalSeconds / 60 / distance;
-    const paceM = Math.floor(paceMinTotal);
-    const paceS = Math.round((paceMinTotal - paceM) * 60);
-    const paceText = `Pace: ${paceM} minute${paceM !== 1 ? "s" : ""} ${paceS} second${paceS !== 1 ? "s" : ""} per mile.`;
-
-    // Format time
-    const timeM = Math.floor(totalSeconds / 60);
-    const timeS = totalSeconds % 60;
-    const timeText = `Time: ${timeM} minute${timeM !== 1 ? "s" : ""} ${timeS} second${timeS !== 1 ? "s" : ""}.`;
-
-    const fullText = `${distText} ${paceText} ${timeText}`;
-    Speech.speak(fullText);
+    const text = pickCoachPhrase(distance, paceMinTotal, totalSeconds, lastAnnouncedPaceRef.current);
+    lastAnnouncedPaceRef.current = paceMinTotal;
+    Speech.speak(text, { rate: 0.95 });
   }, []);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -315,6 +505,7 @@ export default function RunTrackingScreen() {
     setElapsed(0);
     setPathSaved(false);
     lastAnnouncedMileRef.current = 0;
+    lastAnnouncedPaceRef.current = null;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setPhase("active");
   }
