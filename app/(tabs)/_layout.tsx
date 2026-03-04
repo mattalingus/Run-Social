@@ -30,7 +30,11 @@ export default function TabLayout() {
   const pathname = usePathname();
 
   const [hasCrewUnread, setHasCrewUnread] = useState(false);
-  const [crewSince, setCrewSince] = useState(() => new Date().toISOString());
+  const [crewSince, setCrewSince] = useState(() => {
+    const d = new Date();
+    d.setHours(d.getHours() - 24);
+    return d.toISOString();
+  });
   const onCrewTab = pathname === "/crew" || pathname.startsWith("/crew/");
 
   useEffect(() => {
@@ -49,7 +53,7 @@ export default function TabLayout() {
       return res.json();
     },
     enabled: !!user && !onCrewTab,
-    refetchInterval: 30000,
+    refetchInterval: 15000,
     staleTime: 0,
   });
 
