@@ -28,6 +28,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { formatDistance } from "@/lib/formatDistance";
 import MAP_STYLE from "@/lib/mapStyle";
 import MapView, { Polyline } from "react-native-maps";
+import Svg, { Polyline as SvgPolyline, Circle as SvgCircle } from "react-native-svg";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -59,7 +60,7 @@ interface SavedPath {
 
 type RoutePoint = { latitude: number; longitude: number };
 
-function MiniRouteMap({ path }: { path: RoutePoint[] }) {
+function MiniRouteMap({ path, height = 200 }: { path: RoutePoint[]; height?: number }) {
   const lats = path.map((p) => p.latitude);
   const lngs = path.map((p) => p.longitude);
   const minLat = Math.min(...lats);
@@ -71,7 +72,7 @@ function MiniRouteMap({ path }: { path: RoutePoint[] }) {
 
   return (
     <MapView
-      style={{ height: 130, borderRadius: 14, marginTop: 12, overflow: "hidden" }}
+      style={{ height, borderRadius: 16, overflow: "hidden" }}
       initialRegion={{
         latitude: (minLat + maxLat) / 2,
         longitude: (minLng + maxLng) / 2,
@@ -96,6 +97,92 @@ function MiniRouteMap({ path }: { path: RoutePoint[] }) {
     >
       <Polyline coordinates={path} strokeColor={C.primary} strokeWidth={3} lineCap="round" lineJoin="round" />
     </MapView>
+  );
+}
+
+// ─── SVG Route Helpers ────────────────────────────────────────────────────────
+
+const ROUTE_PREVIEW_W = 328; // CARD_W inside sheet (360 - 32px padding)
+const ROUTE_PREVIEW_H = 200;
+
+function normalizeRoute(pts: RoutePoint[], w: number, h: number): string {
+  if (pts.length < 2) return "";
+  const lats = pts.map(p => p.latitude);
+  const lngs = pts.map(p => p.longitude);
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+  const pad = 20;
+  const rngLat = maxLat - minLat || 0.001;
+  const rngLng = maxLng - minLng || 0.001;
+  return pts.map(p => {
+    const x = pad + ((p.longitude - minLng) / rngLng) * (w - pad * 2);
+    const y = (h - pad) - ((p.latitude - minLat) / rngLat) * (h - pad * 2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+}
+
+function getRouteEnds(pts: RoutePoint[], w: number, h: number) {
+  if (pts.length < 2) return null;
+  const lats = pts.map(p => p.latitude);
+  const lngs = pts.map(p => p.longitude);
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+  const pad = 20;
+  const rngLat = maxLat - minLat || 0.001;
+  const rngLng = maxLng - minLng || 0.001;
+  const toXY = (p: RoutePoint) => ({
+    x: pad + ((p.longitude - minLng) / rngLng) * (w - pad * 2),
+    y: (h - pad) - ((p.latitude - minLat) / rngLat) * (h - pad * 2),
+  });
+  return { start: toXY(pts[0]), end: toXY(pts[pts.length - 1]) };
+}
+
+function PathRoutePreview({ path, primary }: { path: RoutePoint[]; primary: string }) {
+  const W = ROUTE_PREVIEW_W;
+  const H = ROUTE_PREVIEW_H;
+  const hasRoute = path?.length >= 2;
+  const svgPoints = hasRoute ? normalizeRoute(path, W, H) : "";
+  const ends = hasRoute ? getRouteEnds(path, W, H) : null;
+
+  return (
+    <View style={{ width: "100%", height: H, backgroundColor: "#0D1510", borderRadius: 16, overflow: "hidden", marginTop: 14 }}>
+      {/* Subtle grid */}
+      {[0.25, 0.5, 0.75].map(f => (
+        <View key={`h${f}`} style={{ position: "absolute", left: 0, right: 0, top: `${f * 100}%` as any, height: 1, backgroundColor: "#FFFFFF08" }} />
+      ))}
+      {[0.25, 0.5, 0.75].map(f => (
+        <View key={`v${f}`} style={{ position: "absolute", top: 0, bottom: 0, left: `${f * 100}%` as any, width: 1, backgroundColor: "#FFFFFF08" }} />
+      ))}
+
+      {hasRoute ? (
+        <Svg width={W} height={H} style={{ position: "absolute", top: 0, left: 0 }}>
+          {/* Glow underlay */}
+          <SvgPolyline points={svgPoints} fill="none" stroke={primary + "40"} strokeWidth={8} strokeLinecap="round" strokeLinejoin="round" />
+          {/* Main line */}
+          <SvgPolyline points={svgPoints} fill="none" stroke={primary} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+          {ends && <SvgCircle cx={ends.start.x} cy={ends.start.y} r={5} fill="#FFFFFF" />}
+          {ends && (
+            <>
+              <SvgCircle cx={ends.end.x} cy={ends.end.y} r={7} fill={primary + "55"} />
+              <SvgCircle cx={ends.end.x} cy={ends.end.y} r={4} fill={primary} />
+            </>
+          )}
+        </Svg>
+      ) : (
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 8 }}>
+          <Feather name="map" size={28} color="#FFFFFF30" />
+          <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: "#FFFFFF40" }}>No GPS data</Text>
+        </View>
+      )}
+
+      {/* GPS badge */}
+      {hasRoute && (
+        <View style={{ position: "absolute", bottom: 10, left: 12, flexDirection: "row", alignItems: "center", backgroundColor: "#00000066", borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 }}>
+          <Feather name="map-pin" size={9} color={primary} style={{ marginRight: 3 }} />
+          <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 9, color: primary, letterSpacing: 0.3 }}>GPS Route</Text>
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -405,6 +492,18 @@ export default function SoloScreen() {
     enabled: !!selectedSavedPath,
     staleTime: 30_000,
   });
+
+  const pathStats = useMemo(() => {
+    const paces = pathRuns.map(r => r.pace_min_per_mile).filter((p): p is number => !!p && p > 0);
+    const dists = pathRuns.map(r => r.distance_miles).filter(d => d > 0);
+    const times = pathRuns.map(r => r.duration_seconds).filter((t): t is number => !!t && t > 0);
+    return {
+      bestPace: paces.length ? Math.min(...paces) : null,
+      bestDist: dists.length ? Math.max(...dists) : null,
+      bestTime: times.length ? Math.max(...times) : null,
+      actType: pathRuns[0]?.activity_type ?? "run",
+    };
+  }, [pathRuns]);
 
   const deletePathMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -1225,77 +1324,74 @@ export default function SoloScreen() {
               <Text style={s.scheduledModalDate}>{formatDistance(selectedSavedPath.distance_miles)} mi route</Text>
             )}
 
-            <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
-              {/* Mini map */}
-              {selectedSavedPath.route_path?.length > 1 && (
-                <MiniRouteMap path={selectedSavedPath.route_path} />
-              )}
+            {/* ── Scrollable body ─────────────────────────────────── */}
+            <View style={{ flex: 1 }}>
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
+                {/* ── SVG Route preview ──────────────────────────────── */}
+                <PathRoutePreview path={selectedSavedPath.route_path ?? []} primary={C.primary} />
 
-              {/* Personal Records */}
-              {(() => {
-                const paces = pathRuns.map(r => r.pace_min_per_mile).filter((p): p is number => !!p && p > 0);
-                const dists = pathRuns.map(r => r.distance_miles).filter(d => d > 0);
-                const times = pathRuns.map(r => r.duration_seconds).filter((t): t is number => !!t && t > 0);
-                const bestPace = paces.length ? Math.min(...paces) : null;
-                const bestDist = dists.length ? Math.max(...dists) : null;
-                const bestTime = times.length ? Math.max(...times) : null;
-                return (
-                  <View style={s.pathPRRow}>
-                    <View style={s.pathPRBlock}>
-                      <Text style={s.pathPRLabel}>Best Pace</Text>
-                      <Text style={s.pathPRValue}>{bestPace ? formatPace(bestPace) : "--"}</Text>
-                      <Text style={s.pathPRUnit}>min/mi</Text>
-                    </View>
-                    <View style={s.pathPRDivider} />
-                    <View style={s.pathPRBlock}>
-                      <Text style={s.pathPRLabel}>Furthest</Text>
-                      <Text style={s.pathPRValue}>{bestDist ? formatDistance(bestDist) : "--"}</Text>
-                      <Text style={s.pathPRUnit}>miles</Text>
-                    </View>
-                    <View style={s.pathPRDivider} />
-                    <View style={s.pathPRBlock}>
-                      <Text style={s.pathPRLabel}>Longest</Text>
-                      <Text style={s.pathPRValue}>{bestTime ? formatDuration(bestTime) : "--"}</Text>
-                      <Text style={s.pathPRUnit}>time</Text>
-                    </View>
+                {/* ── 2×2 stats grid ──────────────────────────────── */}
+                <View style={s.pathStatsGrid}>
+                  <View style={s.pathStatCell}>
+                    <Text style={s.pathStatLabel}>Times Run</Text>
+                    <Text style={s.pathStatValue}>{String(pathRuns.length)}</Text>
+                    <Text style={s.pathStatUnit}>runs</Text>
                   </View>
-                );
-              })()}
-
-              {/* Run history on this path */}
-              {pathRunsLoading ? (
-                <ActivityIndicator color={C.primary} style={{ marginTop: 20 }} />
-              ) : pathRuns.length === 0 ? (
-                <View style={s.pathNoRunsWrap}>
-                  <Feather name="flag" size={24} color={C.textMuted} />
-                  <Text style={s.pathNoRunsTxt}>No runs recorded on this path yet.</Text>
-                  <Text style={s.pathNoRunsSub}>Complete a run while following this path to see your history here.</Text>
+                  <View style={[s.pathStatCell, s.pathStatCellRight]}>
+                    <Text style={s.pathStatLabel}>Fastest Pace</Text>
+                    <Text style={s.pathStatValue}>{pathStats.bestPace ? formatPace(pathStats.bestPace) : "--"}</Text>
+                    <Text style={s.pathStatUnit}>min/mi</Text>
+                  </View>
+                  <View style={[s.pathStatCell, s.pathStatCellBottom]}>
+                    <Text style={s.pathStatLabel}>Longest Dist</Text>
+                    <Text style={s.pathStatValue}>{pathStats.bestDist ? formatDistance(pathStats.bestDist) : "--"}</Text>
+                    <Text style={s.pathStatUnit}>miles</Text>
+                  </View>
+                  <View style={[s.pathStatCell, s.pathStatCellRight, s.pathStatCellBottom]}>
+                    <Text style={s.pathStatLabel}>Longest Time</Text>
+                    <Text style={s.pathStatValue}>{pathStats.bestTime ? formatDuration(pathStats.bestTime) : "--"}</Text>
+                    <Text style={s.pathStatUnit}>time</Text>
+                  </View>
                 </View>
-              ) : (
-                <View style={{ gap: 8, marginTop: 12 }}>
-                  {pathRuns.map((run) => (
-                    <View key={run.id} style={s.pathRunCard}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={s.pathRunDate}>{new Date(run.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</Text>
-                        <Text style={s.pathRunTitle} numberOfLines={1}>{run.title || `${formatDistance(run.distance_miles)} mi ${run.activity_type === "ride" ? "ride" : "run"}`}</Text>
-                      </View>
-                      <View style={s.pathRunStats}>
-                        <Text style={s.pathRunStat}>{formatDistance(run.distance_miles)} mi</Text>
-                        {run.pace_min_per_mile ? <Text style={s.pathRunStatMuted}>{formatPace(run.pace_min_per_mile)}/mi</Text> : null}
-                        {run.duration_seconds ? <Text style={s.pathRunStatMuted}>{formatDuration(run.duration_seconds)}</Text> : null}
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              )}
-            </ScrollView>
 
-            {/* Run this path CTA */}
+                {/* ── Previous Runs header ─────────────────────────── */}
+                <Text style={s.pathHistoryLabel}>Previous Runs</Text>
+
+                {/* ── Run history ──────────────────────────────────── */}
+                {pathRunsLoading ? (
+                  <ActivityIndicator color={C.primary} style={{ marginTop: 20 }} />
+                ) : pathRuns.length === 0 ? (
+                  <View style={s.pathNoRunsWrap}>
+                    <Feather name="flag" size={24} color={C.textMuted} />
+                    <Text style={s.pathNoRunsTxt}>No runs recorded on this path yet.</Text>
+                    <Text style={s.pathNoRunsSub}>Tap the button below to start a tracked activity on this route — it'll appear here automatically.</Text>
+                  </View>
+                ) : (
+                  <View style={{ gap: 8 }}>
+                    {pathRuns.map((run) => (
+                      <View key={run.id} style={s.pathRunCard}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={s.pathRunDate}>{new Date(run.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</Text>
+                          <Text style={s.pathRunTitle} numberOfLines={1}>{run.title || `${formatDistance(run.distance_miles)} mi ${run.activity_type === "ride" ? "ride" : "run"}`}</Text>
+                        </View>
+                        <View style={s.pathRunStats}>
+                          <Text style={s.pathRunStat}>{formatDistance(run.distance_miles)} mi</Text>
+                          {run.pace_min_per_mile ? <Text style={s.pathRunStatMuted}>{formatPace(run.pace_min_per_mile)}/mi</Text> : null}
+                          {run.duration_seconds ? <Text style={s.pathRunStatMuted}>{formatDuration(run.duration_seconds)}</Text> : null}
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </ScrollView>
+            </View>
+
+            {/* ── CTA button ───────────────────────────────────── */}
             <Pressable
               style={s.runPathBtn}
               onPress={() => {
                 const pathId = selectedSavedPath.id;
-                const actType = pathRuns[0]?.activity_type ?? "run";
+                const actType = pathStats.actType;
                 setSelectedSavedPath(null);
                 setTimeout(() => {
                   setActivityFilter(actType);
@@ -1303,8 +1399,8 @@ export default function SoloScreen() {
                 }, 350);
               }}
             >
-              <Feather name="play" size={16} color={C.bg} />
-              <Text style={s.runPathBtnTxt}>Run This Path</Text>
+              <Feather name={pathStats.actType === "ride" ? "trending-up" : "play"} size={16} color={C.bg} />
+              <Text style={s.runPathBtnTxt}>{pathStats.actType === "ride" ? "Ride This Path" : "Run This Path"}</Text>
             </Pressable>
           </View>
         )}
@@ -1683,23 +1779,44 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   savedPathName: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text },
   savedPathMeta: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, marginTop: 2 },
 
-  pathPRRow: {
+  pathStatsGrid: {
     flexDirection: "row",
-    alignItems: "center",
+    flexWrap: "wrap",
     backgroundColor: C.card,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: C.border,
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    marginTop: 16,
-    marginBottom: 4,
+    overflow: "hidden",
+    marginTop: 14,
   },
-  pathPRBlock: { flex: 1, alignItems: "center", gap: 3 },
-  pathPRDivider: { width: 1, height: 40, backgroundColor: C.border },
-  pathPRLabel: { fontFamily: "Outfit_400Regular", fontSize: 10, color: C.textMuted, textTransform: "uppercase", letterSpacing: 0.5 },
-  pathPRValue: { fontFamily: "Outfit_700Bold", fontSize: 20, color: C.primary, letterSpacing: -0.5 },
-  pathPRUnit: { fontFamily: "Outfit_400Regular", fontSize: 10, color: C.textMuted },
+  pathStatCell: {
+    width: "50%",
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    gap: 3,
+  },
+  pathStatCellRight: {
+    borderLeftWidth: 1,
+    borderLeftColor: C.border,
+  },
+  pathStatCellBottom: {
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+  },
+  pathStatLabel: { fontFamily: "Outfit_400Regular", fontSize: 10, color: C.textMuted, textTransform: "uppercase", letterSpacing: 0.5 },
+  pathStatValue: { fontFamily: "Outfit_700Bold", fontSize: 20, color: C.primary, letterSpacing: -0.5 },
+  pathStatUnit: { fontFamily: "Outfit_400Regular", fontSize: 10, color: C.textMuted },
+
+  pathHistoryLabel: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 12,
+    color: C.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginTop: 20,
+    marginBottom: 8,
+  },
 
   pathNoRunsWrap: { alignItems: "center", paddingVertical: 28, gap: 8 },
   pathNoRunsTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.textSecondary, textAlign: "center" },
