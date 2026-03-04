@@ -2184,7 +2184,7 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     marginHorizontal: 24,
-    marginTop: 24,
+    marginTop: 12,
     marginBottom: 0,
     paddingVertical: 14,
     borderRadius: 14,
