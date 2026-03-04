@@ -455,7 +455,7 @@ export default function MapScreen() {
       result.push({ icon: "target", lib: "feather", text: `${toDisplayDist(minD, distUnit)}–${toDisplayDist(maxD, distUnit)} range`, color: C.textSecondary });
     }
 
-    const totalRunners = visibleRuns.reduce((acc, r) => acc + r.participant_count, 0);
+    const totalRunners = visibleRuns.reduce((acc, r) => acc + Number(r.participant_count), 0);
     if (totalRunners > 0) result.push({ icon: "walk", lib: "ion", text: `${totalRunners} runner${totalRunners !== 1 ? "s" : ""} signed up`, color: C.primary });
 
     const fiveK = upcoming.filter((r) => r.min_distance <= 3.3 && r.max_distance >= 2.8);
