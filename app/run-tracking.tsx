@@ -568,6 +568,41 @@ export default function RunTrackingScreen() {
 
           {savedRunId ? (
             <>
+              {/* ─── Share ──────────────────────────────────────────────── */}
+              <Pressable
+                style={t.shareBtn}
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowShare(true); }}
+              >
+                <Feather name="share-2" size={16} color={C.primary} />
+                <Text style={t.shareBtnTxt}>{activityFilter === "ride" ? "Share Ride" : "Share Run"}</Text>
+              </Pressable>
+
+              {/* ─── Photo section ─────────────────────────────────────── */}
+              <View style={t.photoSection}>
+                <Text style={t.photoSectionTitle}>Add a photo</Text>
+                {runPhotos.length > 0 && (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={t.photoScroll}>
+                    {runPhotos.map((p: any) => (
+                      <Image key={p.id} source={{ uri: p.photo_url }} style={t.photoThumb} />
+                    ))}
+                  </ScrollView>
+                )}
+                <Pressable
+                  style={[t.photoAddBtn, uploadingPhoto && { opacity: 0.6 }]}
+                  onPress={pickAndUploadSoloPhoto}
+                  disabled={uploadingPhoto}
+                >
+                  {uploadingPhoto ? (
+                    <ActivityIndicator color={C.primary} size="small" />
+                  ) : (
+                    <>
+                      <Feather name="camera" size={16} color={C.primary} />
+                      <Text style={t.photoAddTxt}>{runPhotos.length > 0 ? "Add another" : "Add photo"}</Text>
+                    </>
+                  )}
+                </Pressable>
+              </View>
+
               {/* ─── Route Publishing ───────────────────────────────────── */}
               {IS_NATIVE && routeState.length > 1 && (
                 publishedPath ? (
@@ -624,32 +659,7 @@ export default function RunTrackingScreen() {
                 )
               )}
 
-              {/* ─── Photo section ─────────────────────────────────────── */}
-              <View style={t.photoSection}>
-                <Text style={t.photoSectionTitle}>Add a photo</Text>
-                {runPhotos.length > 0 && (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={t.photoScroll}>
-                    {runPhotos.map((p: any) => (
-                      <Image key={p.id} source={{ uri: p.photo_url }} style={t.photoThumb} />
-                    ))}
-                  </ScrollView>
-                )}
-                <Pressable
-                  style={[t.photoAddBtn, uploadingPhoto && { opacity: 0.6 }]}
-                  onPress={pickAndUploadSoloPhoto}
-                  disabled={uploadingPhoto}
-                >
-                  {uploadingPhoto ? (
-                    <ActivityIndicator color={C.primary} size="small" />
-                  ) : (
-                    <>
-                      <Feather name="camera" size={16} color={C.primary} />
-                      <Text style={t.photoAddTxt}>{runPhotos.length > 0 ? "Add another" : "Add photo"}</Text>
-                    </>
-                  )}
-                </Pressable>
-              </View>
-
+              {/* ─── Save this path ─────────────────────────────────────── */}
               {routePathRef.current.length > 1 && (
                 pathSaved ? (
                   <View style={t.pathSavedRow}>
@@ -669,14 +679,6 @@ export default function RunTrackingScreen() {
                   </Pressable>
                 )
               )}
-
-              <Pressable
-                style={t.shareBtn}
-                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowShare(true); }}
-              >
-                <Feather name="share-2" size={16} color={C.primary} />
-                <Text style={t.shareBtnTxt}>{activityFilter === "ride" ? "Share Ride" : "Share Run"}</Text>
-              </Pressable>
 
               <Pressable style={t.saveBtn} onPress={finishAndNavigate}>
                 <Text style={t.saveBtnTxt}>Done</Text>

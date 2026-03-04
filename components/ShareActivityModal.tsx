@@ -64,6 +64,7 @@ export default function ShareActivityModal({ visible, onClose, runData }: Props)
   const [caption, setCaption] = useState("");
   const [backgroundPhoto, setBackgroundPhoto] = useState<string | null>(null);
   const [activeAction, setActiveAction] = useState<ActiveAction>(null);
+  const [captionFont, setCaptionFont] = useState<"Outfit_700Bold" | "PlayfairDisplay_700Bold" | "DancingScript_700Bold">("Outfit_700Bold");
 
   // ─── Capture card as image ─────────────────────────────────────────────────
 
@@ -222,6 +223,7 @@ export default function ShareActivityModal({ visible, onClose, runData }: Props)
     ...runData,
     caption,
     backgroundPhoto,
+    captionFont,
   };
 
   return (
@@ -274,7 +276,7 @@ export default function ShareActivityModal({ visible, onClose, runData }: Props)
           {/* ── Caption input ─────────────────────────────────────────────── */}
           <View style={st.captionWrap}>
             <TextInput
-              style={st.captionInput}
+              style={[st.captionInput, { fontFamily: captionFont, fontStyle: captionFont === "DancingScript_700Bold" ? "normal" : "italic" }]}
               placeholder="Add a caption…"
               placeholderTextColor={TEXT_MUTED}
               value={caption}
@@ -287,6 +289,32 @@ export default function ShareActivityModal({ visible, onClose, runData }: Props)
               <Text style={st.captionCount}>{160 - caption.length}</Text>
             )}
           </View>
+
+          {/* ── Font picker ────────────────────────────────────────────────── */}
+          {caption.length > 0 && (
+            <View style={st.fontPickerRow}>
+              {(
+                [
+                  { key: "Outfit_700Bold", label: "Aa" },
+                  { key: "PlayfairDisplay_700Bold", label: "Aa" },
+                  { key: "DancingScript_700Bold", label: "Aa" },
+                ] as const
+              ).map(({ key, label }) => {
+                const active = captionFont === key;
+                return (
+                  <Pressable
+                    key={key}
+                    style={[st.fontPill, active && st.fontPillActive]}
+                    onPress={() => { setCaptionFont(key); Haptics.selectionAsync(); }}
+                  >
+                    <Text style={[st.fontPillTxt, { fontFamily: key }, active && st.fontPillTxtActive]}>
+                      {label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
 
           {/* ── Share action row ──────────────────────────────────────────── */}
           <View style={st.actionsRow}>
@@ -452,6 +480,35 @@ const st = StyleSheet.create({
     fontFamily: "Outfit_600SemiBold",
     fontSize: 12,
     color: TEXT_SEC,
+  },
+
+  // Font picker
+  fontPickerRow: {
+    flexDirection: "row",
+    gap: 10,
+    width: "100%",
+    justifyContent: "center",
+  },
+  fontPill: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: SURFACE,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  fontPillActive: {
+    borderColor: PRIMARY,
+    backgroundColor: PRIMARY + "18",
+  },
+  fontPillTxt: {
+    fontSize: 18,
+    color: TEXT_SEC,
+  },
+  fontPillTxtActive: {
+    color: PRIMARY,
   },
 
   // Hint

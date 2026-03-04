@@ -2,6 +2,7 @@ import React, { forwardRef } from "react";
 import { View, Text, Image, StyleSheet } from "react-native";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import Svg, { Polyline, Circle } from "react-native-svg";
+import { LinearGradient } from "expo-linear-gradient";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -118,6 +119,7 @@ export interface ShareCardProps {
   eventTitle?: string;
   caption?: string;
   backgroundPhoto?: string | null;
+  captionFont?: string;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -141,6 +143,7 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
     eventTitle,
     caption,
     backgroundPhoto,
+    captionFont = "Outfit_700Bold",
   },
   ref
 ) {
@@ -148,81 +151,151 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
   const isGroup = participantCount != null && participantCount > 1;
   const isRide = activityType === "ride";
 
+  // ── Standard SVG (route panel height) ──────────────────────────────────────
   const svgPoints = hasRoute ? normalizePath(routePath, CARD_W, ROUTE_H) : "";
   const endPts = hasRoute ? getEndPoints(routePath, CARD_W, ROUTE_H) : null;
 
-  return (
-    <View ref={ref} style={s.card}>
-      {/* ── Header row ─────────────────────────────────────────────────────── */}
-      <View style={s.headerRow}>
-        <Text style={s.logo}>FARA</Text>
-        <View style={s.actPill}>
-          <Ionicons
-            name={isRide ? "bicycle" : "walk"}
-            size={11}
-            color={PRIMARY}
-            style={{ marginRight: 4 }}
-          />
-          <Text style={s.actPillTxt}>{isRide ? "Ride" : "Run"}</Text>
+  // ── Photo-mode SVG (full card height, faint overlay) ───────────────────────
+  const svgPointsFull = hasRoute ? normalizePath(routePath, CARD_W, CARD_H) : "";
+
+  // ── Shared sub-components ──────────────────────────────────────────────────
+  const HeaderRow = (
+    <View style={s.headerRow}>
+      <Text style={s.logo}>FARA</Text>
+      <View style={s.actPill}>
+        <Ionicons name={isRide ? "bicycle" : "walk"} size={11} color={PRIMARY} style={{ marginRight: 4 }} />
+        <Text style={s.actPillTxt}>{isRide ? "Ride" : "Run"}</Text>
+      </View>
+    </View>
+  );
+
+  const FooterStrip = (
+    <View style={s.footer}>
+      <View style={s.footerLine} />
+      <View style={s.footerRow}>
+        <Text style={s.footerLogo}>FARA</Text>
+        <Text style={s.footerSep}>·</Text>
+        <Text style={s.footerTagline}>Run Together</Text>
+      </View>
+    </View>
+  );
+
+  // ── PHOTO MODE ─────────────────────────────────────────────────────────────
+  if (backgroundPhoto) {
+    return (
+      <View ref={ref} style={s.card}>
+        {/* Full-bleed photo */}
+        <Image source={{ uri: backgroundPhoto }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+
+        {/* Route SVG overlay — faint, spans full card */}
+        {hasRoute && (
+          <Svg width={CARD_W} height={CARD_H} style={StyleSheet.absoluteFillObject}>
+            <Polyline
+              points={svgPointsFull}
+              fill="none"
+              stroke={PRIMARY + "55"}
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </Svg>
+        )}
+
+        {/* Top gradient scrim — protects header readability */}
+        <LinearGradient
+          colors={["rgba(0,0,0,0.72)", "transparent"]}
+          style={s.topScrim}
+        />
+
+        {/* Bottom gradient scrim — protects stats + caption */}
+        <LinearGradient
+          colors={["transparent", "rgba(0,0,0,0.88)"]}
+          style={s.bottomScrim}
+        />
+
+        {/* Header overlaid at top */}
+        <View style={s.photoHeaderRow}>
+          <Text style={s.logo}>FARA</Text>
+          <View style={s.actPill}>
+            <Ionicons name={isRide ? "bicycle" : "walk"} size={11} color={PRIMARY} style={{ marginRight: 4 }} />
+            <Text style={s.actPillTxt}>{isRide ? "Ride" : "Run"}</Text>
+          </View>
+        </View>
+
+        {/* Bottom content block */}
+        <View style={s.photoBottomBlock}>
+          {/* Group badges */}
+          {isGroup && (
+            <View style={[s.groupRow, { paddingHorizontal: 22, paddingBottom: 8 }]}>
+              <View style={s.groupPill}>
+                <Ionicons name="people" size={13} color={GOLD} style={{ marginRight: 5 }} />
+                <Text style={s.groupPillTxt}>{participantCount} {isRide ? "Riders" : "Runners"}</Text>
+              </View>
+              {finishRank != null && (
+                <View style={s.rankPill}>
+                  <Ionicons name="trophy" size={11} color={PRIMARY} style={{ marginRight: 4 }} />
+                  <Text style={s.rankPillTxt}>{ordinal(finishRank)}</Text>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Caption overlaid */}
+          {!!caption && (
+            <Text style={[s.photoCaption, { fontFamily: captionFont }]} numberOfLines={3}>
+              {caption}
+            </Text>
+          )}
+
+          {/* Stats row — white text */}
+          <View style={s.photoStatsRow}>
+            <View style={[s.statBlock, { flex: 1.4 }]}>
+              <Text style={s.photoStatBig}>{formatDist(distanceMi)}</Text>
+              <Text style={s.photoStatUnit}>miles</Text>
+            </View>
+            <View style={s.photoStatDivider} />
+            <View style={s.statBlock}>
+              <Text style={s.photoStatMid}>{formatPace(paceMinPerMile)}</Text>
+              <Text style={s.photoStatUnit}>min/mi</Text>
+            </View>
+            <View style={s.photoStatDivider} />
+            <View style={s.statBlock}>
+              <Text style={s.photoStatMid}>{formatDuration(durationSeconds)}</Text>
+              <Text style={s.photoStatUnit}>time</Text>
+            </View>
+          </View>
+
+          {FooterStrip}
         </View>
       </View>
+    );
+  }
 
-      {/* ── Route panel ────────────────────────────────────────────────────── */}
+  // ── STANDARD MODE (no photo) ───────────────────────────────────────────────
+  return (
+    <View ref={ref} style={s.card}>
+      {HeaderRow}
+
+      {/* ── Route panel ──────────────────────────────────────────────────── */}
       <View style={s.routePanel}>
-        {/* Background: photo or dark */}
-        {backgroundPhoto ? (
-          <Image
-            source={{ uri: backgroundPhoto }}
-            style={StyleSheet.absoluteFillObject}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={[StyleSheet.absoluteFillObject, { backgroundColor: CARD_BG }]} />
-        )}
+        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: CARD_BG }]} />
 
-        {/* Dark overlay when photo is shown — ensures route is visible */}
-        {backgroundPhoto && (
-          <View style={[StyleSheet.absoluteFillObject, s.photoOverlay]} />
-        )}
-
-        {/* Grid lines (subtle) */}
-        {!backgroundPhoto && (
-          <View style={[StyleSheet.absoluteFillObject, s.gridContainer]}>
-            {[0.25, 0.5, 0.75].map((f) => (
-              <View key={f} style={[s.gridLine, { top: `${f * 100}%` as any }]} />
-            ))}
-            {[0.25, 0.5, 0.75].map((f) => (
-              <View key={f} style={[s.gridLineV, { left: `${f * 100}%` as any }]} />
-            ))}
-          </View>
-        )}
+        {/* Grid lines */}
+        <View style={[StyleSheet.absoluteFillObject, s.gridContainer]}>
+          {[0.25, 0.5, 0.75].map((f) => (
+            <View key={f} style={[s.gridLine, { top: `${f * 100}%` as any }]} />
+          ))}
+          {[0.25, 0.5, 0.75].map((f) => (
+            <View key={f} style={[s.gridLineV, { left: `${f * 100}%` as any }]} />
+          ))}
+        </View>
 
         {/* SVG Route */}
         {hasRoute ? (
           <Svg width={CARD_W} height={ROUTE_H} style={s.svg}>
-            {/* Glow underlay */}
-            <Polyline
-              points={svgPoints}
-              fill="none"
-              stroke={PRIMARY + "40"}
-              strokeWidth={8}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            {/* Main line */}
-            <Polyline
-              points={svgPoints}
-              fill="none"
-              stroke={PRIMARY}
-              strokeWidth={3}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            {/* Start dot */}
-            {endPts && (
-              <Circle cx={endPts.startX} cy={endPts.startY} r={5} fill="#FFFFFF" />
-            )}
-            {/* End dot */}
+            <Polyline points={svgPoints} fill="none" stroke={PRIMARY + "40"} strokeWidth={8} strokeLinecap="round" strokeLinejoin="round" />
+            <Polyline points={svgPoints} fill="none" stroke={PRIMARY} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+            {endPts && <Circle cx={endPts.startX} cy={endPts.startY} r={5} fill="#FFFFFF" />}
             {endPts && (
               <>
                 <Circle cx={endPts.endX} cy={endPts.endY} r={7} fill={PRIMARY + "55"} />
@@ -237,14 +310,13 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
           </View>
         )}
 
-        {/* Route label badge */}
         <View style={s.routeBadge}>
           <Feather name="map-pin" size={9} color={PRIMARY} style={{ marginRight: 3 }} />
           <Text style={s.routeBadgeTxt}>GPS Route</Text>
         </View>
       </View>
 
-      {/* ── Stats row ──────────────────────────────────────────────────────── */}
+      {/* ── Stats row ────────────────────────────────────────────────────── */}
       <View style={s.statsRow}>
         <View style={[s.statBlock, { flex: 1.4 }]}>
           <Text style={s.statBig}>{formatDist(distanceMi)}</Text>
@@ -262,17 +334,15 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
         </View>
       </View>
 
-      {/* ── Divider ────────────────────────────────────────────────────────── */}
+      {/* ── Divider ──────────────────────────────────────────────────────── */}
       <View style={s.divider} />
 
-      {/* ── Group badge + event title ───────────────────────────────────────── */}
+      {/* ── Group badge + event title ─────────────────────────────────────── */}
       {isGroup && (
         <View style={s.groupRow}>
           <View style={s.groupPill}>
             <Ionicons name="people" size={13} color={GOLD} style={{ marginRight: 5 }} />
-            <Text style={s.groupPillTxt}>
-              {participantCount} {isRide ? "Riders" : "Runners"}
-            </Text>
+            <Text style={s.groupPillTxt}>{participantCount} {isRide ? "Riders" : "Runners"}</Text>
           </View>
           {finishRank != null && (
             <View style={s.rankPill}>
@@ -280,31 +350,19 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
               <Text style={s.rankPillTxt}>{ordinal(finishRank)}</Text>
             </View>
           )}
-          {eventTitle && (
-            <Text style={s.eventTitle} numberOfLines={1}>{eventTitle}</Text>
-          )}
+          {eventTitle && <Text style={s.eventTitle} numberOfLines={1}>{eventTitle}</Text>}
         </View>
       )}
 
-      {/* ── Caption ────────────────────────────────────────────────────────── */}
+      {/* ── Caption ──────────────────────────────────────────────────────── */}
       {!!caption && (
         <View style={s.captionArea}>
-          <Text style={s.captionTxt}>{caption}</Text>
+          <Text style={[s.captionTxt, { fontFamily: captionFont }]}>{caption}</Text>
         </View>
       )}
 
-      {/* ── Spacer to push footer down ──────────────────────────────────────── */}
       <View style={{ flex: 1 }} />
-
-      {/* ── Footer strip ───────────────────────────────────────────────────── */}
-      <View style={s.footer}>
-        <View style={s.footerLine} />
-        <View style={s.footerRow}>
-          <Text style={s.footerLogo}>FARA</Text>
-          <Text style={s.footerSep}>·</Text>
-          <Text style={s.footerTagline}>Run Together</Text>
-        </View>
-      </View>
+      {FooterStrip}
     </View>
   );
 });
@@ -557,5 +615,78 @@ const s = StyleSheet.create({
     fontSize: 11,
     color: TEXT_MUTED,
     letterSpacing: 0.3,
+  },
+
+  // Photo-mode styles
+  topScrim: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 140,
+  },
+  bottomScrim: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 240,
+  },
+  photoHeaderRow: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 22,
+    paddingTop: 22,
+    paddingBottom: 14,
+  },
+  photoBottomBlock: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
+  photoCaption: {
+    fontSize: 17,
+    fontStyle: "italic",
+    color: "#FFFFFF",
+    paddingHorizontal: 22,
+    paddingBottom: 10,
+    lineHeight: 24,
+  },
+  photoStatsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 22,
+    paddingVertical: 16,
+  },
+  photoStatBig: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 34,
+    color: "#FFFFFF",
+    letterSpacing: -1,
+    lineHeight: 38,
+  },
+  photoStatMid: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 20,
+    color: "#FFFFFF",
+    letterSpacing: -0.5,
+  },
+  photoStatUnit: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 10,
+    color: "rgba(255,255,255,0.55)",
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+  },
+  photoStatDivider: {
+    width: 1,
+    height: 44,
+    backgroundColor: "rgba(255,255,255,0.2)",
   },
 });

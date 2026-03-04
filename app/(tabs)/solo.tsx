@@ -739,40 +739,6 @@ export default function SoloScreen() {
           <Text style={s.runSoloBtnTxt}>{activityFilter === "ride" ? "Ride Solo" : "Run Solo"}</Text>
         </Pressable>
 
-        {/* ─── Saved Paths ─────────────────────────────────────────────── */}
-        {savedPaths.length > 0 && (
-          <View style={s.section}>
-            <Text style={s.sectionTitle}>Saved Paths</Text>
-            {savedPaths.map((path) => (
-              <View key={path.id} style={s.pathCard}>
-                <View style={s.pathCardRow}>
-                  <View style={s.pathIconWrap}>
-                    <Feather name="bookmark" size={15} color={C.primary} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.pathName} numberOfLines={1}>{path.name}</Text>
-                    <Text style={s.pathMeta}>
-                      {path.distance_miles != null ? `${formatDistance(path.distance_miles)} mi` : ""}
-                      {path.distance_miles != null ? " · " : ""}
-                      Saved {new Date(path.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                    </Text>
-                  </View>
-                  <Pressable
-                    onPress={() => confirmDeletePath(path.id)}
-                    hitSlop={12}
-                    style={{ paddingLeft: 8 }}
-                  >
-                    <Feather name="trash-2" size={16} color={C.textMuted} />
-                  </Pressable>
-                </View>
-                {path.route_path && path.route_path.length > 1 && Platform.OS !== "web" && (
-                  <MiniRouteMap path={path.route_path} />
-                )}
-              </View>
-            ))}
-          </View>
-        )}
-
         {/* ─── Scheduled Runs ──────────────────────────────────────────── */}
         {scheduledRuns.length > 0 && (
           <View style={[s.section, { marginTop: 5 }]}>
