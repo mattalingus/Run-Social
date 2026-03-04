@@ -823,7 +823,7 @@ export async function toggleStarSoloRun(id: string, userId: string) {
 }
 
 export async function updateSoloRun(id: string, userId: string, updates: Record<string, any>) {
-  const allowed = ["title", "date", "distance_miles", "pace_min_per_mile", "duration_seconds", "completed", "planned", "notes", "route_path", "is_starred", "elevation_gain_ft"];
+  const allowed = ["title", "date", "distance_miles", "pace_min_per_mile", "duration_seconds", "completed", "planned", "notes", "route_path", "is_starred", "elevation_gain_ft", "saved_path_id"];
   const entries = Object.entries(updates).filter(([k]) => allowed.includes(k));
   if (!entries.length) return null;
   const fields = entries.map(([k], i) => `${k} = $${i + 3}`).join(", ");

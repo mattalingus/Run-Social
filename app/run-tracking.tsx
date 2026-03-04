@@ -214,7 +214,12 @@ export default function RunTrackingScreen() {
     return () => { stopWatching(); };
   }, [phase]);
 
-  const handleCoord = useCallback((latitude: number, longitude: number) => {
+  const handleCoord = useCallback((latitude: number, longitude: number, accuracy?: number) => {
+    // Skip poor-accuracy fixes that occur during GPS warm-up (first few seconds)
+    // Native threshold: 40m, web threshold: 100m (web GPS is inherently less accurate)
+    const maxAccuracy = Platform.OS === "web" ? 100 : 40;
+    if (accuracy != null && accuracy > maxAccuracy) return;
+
     const coord: Coord = { latitude, longitude };
     routePathRef.current.push(coord);
     setRouteState((prev) => [...prev, coord]);
@@ -255,7 +260,7 @@ export default function RunTrackingScreen() {
     if (Platform.OS === "web") {
       if (typeof navigator !== "undefined" && navigator.geolocation) {
         webWatchIdRef.current = navigator.geolocation.watchPosition(
-          (pos) => handleCoord(pos.coords.latitude, pos.coords.longitude),
+          (pos) => handleCoord(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy ?? undefined),
           () => {},
           { enableHighAccuracy: true, maximumAge: 3000 }
         );
@@ -269,7 +274,7 @@ export default function RunTrackingScreen() {
           distanceInterval: 5,
           timeInterval: 3000,
         },
-        (loc) => handleCoord(loc.coords.latitude, loc.coords.longitude)
+        (loc) => handleCoord(loc.coords.latitude, loc.coords.longitude, loc.coords.accuracy ?? undefined)
       );
       locationSubRef.current = sub;
     } catch (_) {}
@@ -319,12 +324,22 @@ export default function RunTrackingScreen() {
     if (!name) { Alert.alert("Name required", "Enter a name for this path"); return; }
     setSavingPath(true);
     try {
-      await apiRequest("POST", "/api/saved-paths", {
+      const res = await apiRequest("POST", "/api/saved-paths", {
         name,
         routePath: routePathRef.current,
         distanceMiles: totalDistRef.current,
       });
+      const newPath = await res.json();
       qc.invalidateQueries({ queryKey: ["/api/saved-paths"] });
+
+      if (savedRunId && newPath?.id) {
+        try {
+          await apiRequest("PUT", `/api/solo-runs/${savedRunId}`, { saved_path_id: newPath.id });
+          qc.invalidateQueries({ queryKey: ["/api/solo-runs"] });
+          qc.invalidateQueries({ queryKey: ["/api/saved-paths", newPath.id, "runs"] });
+        } catch (_) {}
+      }
+
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setPathSaved(true);
       setShowSaveNameModal(false);
