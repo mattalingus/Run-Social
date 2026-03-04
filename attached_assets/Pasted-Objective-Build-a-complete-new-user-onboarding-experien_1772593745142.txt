@@ -1,0 +1,149 @@
+Objective
+Build a complete new-user onboarding experience for FARA that makes an empty Discover tab feel welcoming and action-oriented rather than dead. Four interconnected parts:
+
+Welcome flow — a one-time modal shown the first time a logged-in user opens the app
+Discover empty state redesign — "Be the first to host" CTA replaces the dead icon + text
+Recent community activity — social proof cards showing past runs even when nothing is upcoming
+Onboarding checklist — a persistent card guiding new users through key first actions
+Tasks
+T001: Backend — recent community activity endpoint
+Blocked By: []
+
+Files: server/routes.ts, server/storage.ts
+
+Details: Add GET /api/runs/community-activity (public, no auth required). Returns up to 6 group runs completed in the last 14 days, with participant count and host name — used as social proof on the Discover empty state.
+
+Add getRecentCommunityActivity() in storage.ts:
+
+SELECT r.id, r.title, r.location_name, r.activity_type,
+       r.distance AS planned_distance, r.completed_at,
+       u.name AS host_name,
+       COUNT(DISTINCT rp.user_id) AS participant_count
+FROM runs r
+JOIN users u ON u.id = r.host_id
+LEFT JOIN run_participants rp
+  ON rp.run_id = r.id AND rp.status IN ('confirmed', 'attended')
+WHERE r.is_completed = true
+  AND r.completed_at >= NOW() - INTERVAL '14 days'
+GROUP BY r.id, u.name
+ORDER BY r.completed_at DESC
+LIMIT 6
+Register the route before GET /api/runs/:id in routes.ts so it isn't swallowed by the param route. Returns { runs: [...] }.
+
+Acceptance: GET /api/runs/community-activity returns an array (empty array if no data, up to 6 items each with participant_count, host_name, location_name, activity_type, completed_at).
+
+T002: Backend — expose created_at on /api/me
+Blocked By: []
+
+Files: server/routes.ts
+
+Details: The checklist needs to know if a user is "new" (account < 7 days old). Ensure the GET /api/me response includes created_at from the users row. No schema change needed — the column already exists. Just verify it is included in the SELECT and returned in the response JSON.
+
+Acceptance: GET /api/me response JSON includes a created_at ISO timestamp string.
+
+T003: Frontend — Welcome onboarding modal
+Blocked By: []
+
+Files: app/(tabs)/index.tsx
+
+Details: A full-screen modal shown exactly once, the first time a logged-in user opens the app. Controlled by AsyncStorage key fara_has_onboarded.
+
+State logic:
+
+const [showOnboarding, setShowOnboarding] = useState(false);
+const [onboardSlide, setOnboardSlide] = useState(0);
+useEffect(() => {
+  if (!user) return;
+  AsyncStorage.getItem("fara_has_onboarded").then(v => {
+    if (!v) setShowOnboarding(true);
+  });
+}, [user?.id]);
+const finishOnboarding = () => {
+  AsyncStorage.setItem("fara_has_onboarded", "true");
+  setShowOnboarding(false);
+  setOnboardSlide(0);
+};
+3 slides:
+
+Welcome — Large running icon (Ionicons body or walk), "Welcome to FARA" in PlayfairDisplay_700Bold, "Discover group runs and rides near you. Track your progress. Build your crew." in Outfit_400Regular
+How it works — 3 icon+text rows stacked vertically:
+map-pin → "Find a run near you"
+checkmark-circle → "Confirm your spot"
+people → "Show up and run together"
+You're ready — Trophy/star icon, "You're all set!", "Tap below to start exploring" — single "Let's Go" button that calls finishOnboarding()
+Navigation: "Next →" button at bottom advances slides. Skip button (top-right, text style) on slides 0 and 1 calls finishOnboarding() directly. Slide indicator dots at bottom.
+
+Styling: Modal fills the screen (flex: 1), dark background matching app (C.bg), primary green accent on buttons and dots. Use existing theme colors — no hardcoded hex except for the already-established #00D97E primary.
+
+Acceptance: Modal appears once for a new logged-in user. After dismissal (any path), never shows again. Skip works from slides 0 and 1. "Let's Go" on slide 2 dismisses. Not shown to logged-out users.
+
+T004: Frontend — Discover empty state redesign
+Blocked By: [T001]
+
+Files: app/(tabs)/index.tsx
+
+Details: Replace the current ListEmptyComponent (icon + "No runs found" + "Check back soon") with a two-part rich empty state. The search/filter no-results case keeps a simple message.
+
+Condition split:
+
+ListEmptyComponent={
+  search || isFiltered
+    ? <SimpleNoResults />        // keep current icon + "Try adjusting your filters"
+    : <RichEmptyState />         // new two-part layout
+}
+Part A — Host CTA card (always visible in RichEmptyState):
+
+Card with C.card background, left 3px border in C.primary
+map-pin icon (primary green, size 28)
+Title: "Be the first to host in your area" (Outfit_700Bold, 17)
+Body: "Create a run and invite others — it only takes a minute." (Outfit_400Regular, 14, textSecondary)
+Full-width "Host a Run →" Pressable in primary green → calls setShowCreateRun(true) (the existing create-run sheet state)
+Part B — Community activity section (below CTA, only if communityRuns.length > 0):
+
+Query: useQuery({ queryKey: ["/api/runs/community-activity"] })
+Section label: "Recent activity nearby" (uppercase, muted, small)
+Horizontal ScrollView of activity cards. Each card:
+Walk or bicycle icon (activity_type)
+Run title (truncated to 1 line)
+{participant_count} ran this · {location_name} (muted, small)
+X days ago relative time
+If no community data: small muted text "Be the first to create a run — others will follow."
+Acceptance: Empty discover (no filters) shows the host CTA and community runs. Search/filter empty state still shows "Try adjusting your filters". CTA button opens the create run sheet.
+
+T005: Frontend — Onboarding checklist card
+Blocked By: [T002]
+
+Files: app/(tabs)/index.tsx
+
+Details: A dismissible card rendered above the run list (not inside ListEmptyComponent) for users who haven't dismissed it. Controlled by AsyncStorage key fara_checklist_dismissed.
+
+Show condition: user && !checklistDismissed
+
+State + init:
+
+const [checklistDismissed, setChecklistDismissed] = useState(true);
+useEffect(() => {
+  if (!user) return;
+  AsyncStorage.getItem("fara_checklist_dismissed").then(v => {
+    if (v !== "true") setChecklistDismissed(false);
+  });
+}, [user?.id]);
+const dismissChecklist = () => {
+  AsyncStorage.setItem("fara_checklist_dismissed", "true");
+  setChecklistDismissed(true);
+};
+4 checklist items — derive completion from already-fetched data:
+
+#	Label	Complete when	Tap action
+1	Set your pace	user.avg_pace != null	Navigate to profile tab
+2	Log a solo run	soloRuns.length > 0 (reuse existing /api/solo-runs query or fetch count)	Navigate to Solo tab
+3	Host your first run	runs from /api/runs/mine where host_id === user.id count > 0	Open create run sheet
+4	Add a friend	friends.length > 0 (already fetched)	Navigate to Crew tab
+Visual design:
+
+Card background C.card, borderRadius 16, marginHorizontal 16, marginBottom 12
+Header row: "Getting started" (Outfit_600SemiBold, 14, primary) + spacer + "2 / 4" fraction (muted) + ✕ dismiss icon
+Thin 4px-height progress bar below header: C.primary fill at completedCount/4 * 100%, C.border track
+Each item row: checkmark-circle (green, size 18) if done else circle (muted), label text, chevron-right if incomplete
+Auto-dismiss with 1.5s delay + a brief "All done! 🎉" text swap when all 4 complete
+Acceptance: Card appears for new users, each item reflects real data, tapping incomplete items navigates correctly, dismiss hides it permanently, auto-dismisses when all 4 done.

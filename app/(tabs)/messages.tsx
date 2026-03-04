@@ -253,7 +253,7 @@ function SwipeableConvoRow({
           </View>
           <View style={s.convoMeta}>
             <View style={s.convoNameRow}>
-              <Text style={s.convoName}>{item.friend_name}</Text>
+              <Text style={s.convoName}>{item.friend_username ? `@${item.friend_username}` : item.friend_name}</Text>
               <Text style={s.convoTime}>{formatTime(item.last_message_at)}</Text>
             </View>
             <View style={s.convoPreviewRow}>
@@ -409,7 +409,7 @@ export default function MessagesScreen() {
                     <Text style={s.avatarLetter}>{avatarLetter(item.name)}</Text>
                   )}
                 </View>
-                <Text style={s.friendName}>{item.name}</Text>
+                <Text style={s.friendName}>{item.username ? `@${item.username}` : item.name}</Text>
               </TouchableOpacity>
             )}
           />

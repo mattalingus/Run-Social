@@ -600,6 +600,7 @@ export default function DmThread() {
                 keyExtractor={(item) => item.id}
                 contentContainerStyle={{ padding: 8, gap: 6 }}
                 columnWrapperStyle={{ gap: 6 }}
+                keyboardShouldPersistTaps="handled"
                 renderItem={({ item }) => (
                   <TouchableOpacity
                     style={s.gifGridCell}
@@ -608,7 +609,7 @@ export default function DmThread() {
                       setShowGifPicker(false);
                     }}
                   >
-                    <ExpoImage source={{ uri: item.preview_url }} style={s.gifGridImg} contentFit="cover" />
+                    <ExpoImage source={{ uri: item.gif_url }} style={s.gifGridImg} contentFit="cover" />
                   </TouchableOpacity>
                 )}
               />

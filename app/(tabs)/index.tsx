@@ -963,27 +963,27 @@ export default function DiscoverScreen() {
   }, []);
 
   useEffect(() => {
-    if (!user) return;
-    AsyncStorage.getItem("fara_has_onboarded").then((v) => {
+    if (!user?.id) return;
+    AsyncStorage.getItem(`fara_has_onboarded_${user.id}`).then((v) => {
       if (!v) setShowOnboarding(true);
     });
   }, [user?.id]);
 
   useEffect(() => {
-    if (!user) return;
-    AsyncStorage.getItem("fara_checklist_dismissed").then((v) => {
+    if (!user?.id) return;
+    AsyncStorage.getItem(`fara_checklist_dismissed_${user.id}`).then((v) => {
       if (v !== "true") setChecklistDismissed(false);
     });
   }, [user?.id]);
 
   const finishOnboarding = () => {
-    AsyncStorage.setItem("fara_has_onboarded", "true");
+    if (user?.id) AsyncStorage.setItem(`fara_has_onboarded_${user.id}`, "true");
     setShowOnboarding(false);
     setOnboardSlide(0);
   };
 
   const dismissChecklist = () => {
-    AsyncStorage.setItem("fara_checklist_dismissed", "true");
+    if (user?.id) AsyncStorage.setItem(`fara_checklist_dismissed_${user.id}`, "true");
     setChecklistDismissed(true);
   };
 
@@ -1551,12 +1551,13 @@ export default function DiscoverScreen() {
         transparent
         animationType="fade"
         onRequestClose={finishOnboarding}
+        testID="onboarding-modal"
       >
-        <View style={s.onboardOverlay}>
-          <View style={[s.onboardSheet, { paddingBottom: insets.bottom + 24 }]}>
+        <View style={s.onboardOverlay} testID="onboarding-overlay">
+          <View style={[s.onboardSheet, { paddingBottom: insets.bottom + 24 }]} testID="onboarding-sheet">
             {/* Skip button */}
             {onboardSlide < 2 && (
-              <Pressable style={s.onboardSkip} onPress={finishOnboarding}>
+              <Pressable style={s.onboardSkip} onPress={finishOnboarding} testID="onboarding-skip">
                 <Text style={s.onboardSkipTxt}>Skip</Text>
               </Pressable>
             )}
@@ -1578,9 +1579,9 @@ export default function DiscoverScreen() {
               <View style={s.onboardContent}>
                 <Text style={s.onboardTitle}>How it works</Text>
                 {[
-                  { icon: "map-pin" as const, label: "Find a run near you" },
+                  { icon: "map-pin" as const, label: "Find a run or ride near you" },
                   { icon: "check-circle" as const, label: "Confirm your spot" },
-                  { icon: "users" as const, label: "Show up and run together" },
+                  { icon: "users" as const, label: "Show up and run/ride together" },
                 ].map((step, i) => (
                   <View key={i} style={s.onboardStep}>
                     <View style={s.onboardStepIcon}>
@@ -1599,7 +1600,7 @@ export default function DiscoverScreen() {
                 </View>
                 <Text style={s.onboardTitle}>You're ready to run</Text>
                 <Text style={s.onboardBody}>
-                  Explore runs near you, join a crew, or host your own. The community is waiting.
+                  Explore runs & rides near you, join a crew, or host your own. The community is waiting.
                 </Text>
               </View>
             )}
@@ -1613,12 +1614,12 @@ export default function DiscoverScreen() {
 
             {/* CTA button */}
             {onboardSlide < 2 ? (
-              <Pressable style={s.onboardBtn} onPress={() => setOnboardSlide(onboardSlide + 1)}>
+              <Pressable style={s.onboardBtn} onPress={() => setOnboardSlide(onboardSlide + 1)} testID="onboarding-next">
                 <Text style={s.onboardBtnTxt}>Next</Text>
                 <Feather name="arrow-right" size={16} color={C.bg} />
               </Pressable>
             ) : (
-              <Pressable style={s.onboardBtn} onPress={finishOnboarding}>
+              <Pressable style={s.onboardBtn} onPress={finishOnboarding} testID="onboarding-letsgo">
                 <Text style={s.onboardBtnTxt}>Let's Go</Text>
                 <Feather name="arrow-right" size={16} color={C.bg} />
               </Pressable>
