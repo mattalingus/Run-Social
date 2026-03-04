@@ -692,9 +692,12 @@ export default function DiscoverScreen() {
 
   const notifData = useMemo(() => {
     return {
+      hostArrivals: notifications.filter((n: any) => n.type === "host_arrived"),
       friendRequests: notifications.filter((n: any) => n.type === "friend_request"),
       crewInvites: notifications.filter((n: any) => n.type === "crew_invite"),
       joinRequests: notifications.filter((n: any) => n.type === "join_request"),
+      eventReminders: notifications.filter((n: any) => n.type === "event_reminder"),
+      prNotifs: notifications.filter((n: any) => n.type === "pr_notification"),
     };
   }, [notifications]);
 
@@ -1425,7 +1428,7 @@ export default function DiscoverScreen() {
                             <Pressable style={[s.notifBtn, s.notifBtnPrimary]} onPress={() => respondFriend(req.id, "accept")}>
                               <Text style={s.notifBtnText}>Accept</Text>
                             </Pressable>
-                            <Pressable style={s.notifBtn} onPress={() => respondFriend(req.id, "reject")}>
+                            <Pressable style={s.notifBtn} onPress={() => respondFriend(req.id, "decline")}>
                               <Text style={[s.notifBtnText, { color: C.textSecondary }]}>Decline</Text>
                             </Pressable>
                           </View>
@@ -1451,10 +1454,71 @@ export default function DiscoverScreen() {
                             <Pressable style={[s.notifBtn, s.notifBtnPrimary]} onPress={() => respondCrew(inv.crew_id, "accept")}>
                               <Text style={s.notifBtnText}>Join</Text>
                             </Pressable>
-                            <Pressable style={s.notifBtn} onPress={() => respondCrew(inv.crew_id, "reject")}>
+                            <Pressable style={s.notifBtn} onPress={() => respondCrew(inv.crew_id, "decline")}>
                               <Text style={[s.notifBtnText, { color: C.textSecondary }]}>Decline</Text>
                             </Pressable>
                           </View>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {notifData.hostArrivals.length > 0 && (
+                  <View style={s.notifSection}>
+                    <Text style={s.notifSectionTitle}>Host Has Arrived</Text>
+                    {notifData.hostArrivals.map((n: any) => (
+                      <Pressable
+                        key={n.id}
+                        style={s.notifInfoCard}
+                        onPress={() => { setShowNotifs(false); router.push(`/run/${n.data.run_id}` as any); }}
+                      >
+                        <View style={[s.notifIconWrap, { backgroundColor: "#00D97E22" }]}>
+                          <Feather name="map-pin" size={18} color={C.primary} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={s.notifInfoTitle}>{n.title}</Text>
+                          <Text style={s.notifInfoBody}>{n.body}</Text>
+                        </View>
+                        <Feather name="chevron-right" size={14} color={C.textMuted} />
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+
+                {notifData.eventReminders.length > 0 && (
+                  <View style={s.notifSection}>
+                    <Text style={s.notifSectionTitle}>Upcoming</Text>
+                    {notifData.eventReminders.map((n: any) => (
+                      <Pressable
+                        key={n.id}
+                        style={s.notifInfoCard}
+                        onPress={() => { setShowNotifs(false); router.push(`/run/${n.data.run_id}` as any); }}
+                      >
+                        <View style={[s.notifIconWrap, { backgroundColor: "#00D97E22" }]}>
+                          <Feather name="clock" size={18} color={C.primary} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={s.notifInfoTitle}>{n.title}</Text>
+                          <Text style={s.notifInfoBody}>{n.body}</Text>
+                        </View>
+                        <Feather name="chevron-right" size={14} color={C.textMuted} />
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+
+                {notifData.prNotifs.length > 0 && (
+                  <View style={s.notifSection}>
+                    <Text style={s.notifSectionTitle}>Personal Records</Text>
+                    {notifData.prNotifs.map((n: any) => (
+                      <View key={n.id} style={s.notifInfoCard}>
+                        <View style={[s.notifIconWrap, { backgroundColor: "#FFB80022" }]}>
+                          <Feather name="award" size={18} color="#FFB800" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={s.notifInfoTitle}>{n.title}</Text>
+                          <Text style={s.notifInfoBody}>{n.body}</Text>
                         </View>
                       </View>
                     ))}
@@ -2055,6 +2119,34 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     fontFamily: "Outfit_600SemiBold",
     fontSize: 13,
     color: "#FFF",
+  },
+  notifInfoCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: C.card,
+    padding: 12,
+    borderRadius: 16,
+    marginBottom: 8,
+  },
+  notifIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  notifInfoTitle: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 13,
+    color: C.text,
+    marginBottom: 2,
+  },
+  notifInfoBody: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 13,
+    color: C.textSecondary,
+    lineHeight: 18,
   },
   emptyNotifs: {
     alignItems: "center",

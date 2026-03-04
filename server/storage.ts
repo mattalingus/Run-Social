@@ -348,14 +348,122 @@ export async function getNotifications(userId: string) {
     [userId]
   );
 
+  // Upcoming confirmed runs within the next 24 hours
+  const eventReminders = await pool.query(
+    `SELECT r.id, r.title, r.date, r.location_name, u.name as host_name, r.activity_type
+     FROM run_participants rp
+     JOIN runs r ON r.id = rp.run_id
+     JOIN users u ON u.id = r.host_id
+     WHERE rp.user_id = $1
+       AND rp.status = 'confirmed'
+       AND r.host_id != $1
+       AND r.date BETWEEN NOW() AND NOW() + INTERVAL '24 hours'
+       AND (r.is_active = false OR r.is_active IS NULL)
+     ORDER BY r.date ASC`,
+    [userId]
+  );
+
+  // Runs that just went active (host started) where user is a confirmed participant
+  const hostArrivals = await pool.query(
+    `SELECT r.id, r.title, r.started_at, r.location_name, u.name as host_name, r.activity_type
+     FROM run_participants rp
+     JOIN runs r ON r.id = rp.run_id
+     JOIN users u ON u.id = r.host_id
+     WHERE rp.user_id = $1
+       AND rp.status = 'confirmed'
+       AND r.host_id != $1
+       AND r.is_active = true
+       AND r.started_at >= NOW() - INTERVAL '4 hours'
+     ORDER BY r.started_at DESC`,
+    [userId]
+  );
+
+  // Recent distance PRs (within 72h, must beat a prior run)
+  const distPRs = await pool.query(
+    `SELECT sr.id, sr.distance_miles, sr.date, sr.activity_type
+     FROM solo_runs sr
+     WHERE sr.user_id = $1
+       AND sr.completed = true
+       AND sr.is_deleted IS NOT TRUE
+       AND sr.date >= NOW() - INTERVAL '72 hours'
+       AND EXISTS (
+         SELECT 1 FROM solo_runs s3
+         WHERE s3.user_id = $1 AND s3.completed = true
+           AND s3.is_deleted IS NOT TRUE AND s3.id != sr.id AND s3.date < sr.date
+       )
+       AND sr.distance_miles > COALESCE((
+         SELECT MAX(s2.distance_miles) FROM solo_runs s2
+         WHERE s2.user_id = $1 AND s2.completed = true
+           AND s2.is_deleted IS NOT TRUE AND s2.id != sr.id AND s2.date < sr.date
+       ), 0)
+     ORDER BY sr.date DESC
+     LIMIT 1`,
+    [userId]
+  );
+
+  // Recent pace PRs (within 72h, must beat a prior qualifying run)
+  const pacePRs = await pool.query(
+    `SELECT sr.id, sr.pace_min_per_mile, sr.date, sr.activity_type
+     FROM solo_runs sr
+     WHERE sr.user_id = $1
+       AND sr.completed = true
+       AND sr.is_deleted IS NOT TRUE
+       AND sr.distance_miles > 0.5
+       AND sr.pace_min_per_mile >= 2.0
+       AND sr.date >= NOW() - INTERVAL '72 hours'
+       AND EXISTS (
+         SELECT 1 FROM solo_runs s3
+         WHERE s3.user_id = $1 AND s3.completed = true
+           AND s3.is_deleted IS NOT TRUE AND s3.id != sr.id
+           AND s3.distance_miles > 0.5 AND s3.pace_min_per_mile >= 2.0
+           AND s3.date < sr.date
+       )
+       AND sr.pace_min_per_mile < COALESCE((
+         SELECT MIN(s2.pace_min_per_mile) FROM solo_runs s2
+         WHERE s2.user_id = $1 AND s2.completed = true
+           AND s2.is_deleted IS NOT TRUE AND s2.id != sr.id
+           AND s2.distance_miles > 0.5 AND s2.pace_min_per_mile >= 2.0
+           AND s2.date < sr.date
+       ), 999)
+     ORDER BY sr.date DESC
+     LIMIT 1`,
+    [userId]
+  );
+
+  // Deduplicate PR notifications by run id (a run could be both a dist and pace PR)
+  const prRunIds = new Set<string>();
+  const prRows: any[] = [];
+  for (const row of [...distPRs.rows, ...pacePRs.rows]) {
+    if (!prRunIds.has(row.id)) {
+      prRunIds.add(row.id);
+      prRows.push(row);
+    }
+  }
+
+  function fmtPace(p: number) {
+    const m = Math.floor(p);
+    const s = Math.round((p - m) * 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  }
+
+  const now = new Date();
+
   const notifications = [
+    ...hostArrivals.rows.map(r => ({
+      id: `ha_${r.id}`,
+      type: 'host_arrived',
+      title: 'Host Has Arrived',
+      body: `${r.host_name} just started "${r.title}" — head over!`,
+      data: { run_id: r.id, host_name: r.host_name, location_name: r.location_name, activity_type: r.activity_type },
+      created_at: r.started_at,
+    })),
     ...friendRequests.rows.map(r => ({
       id: r.id,
       type: 'friend_request',
       title: 'Friend Request',
       body: `${r.from_name} wants to be your running buddy`,
       data: { from_name: r.from_name, from_photo: r.from_photo },
-      created_at: r.created_at
+      created_at: r.created_at,
     })),
     ...crewInvites.rows.map(r => ({
       id: r.id,
@@ -363,7 +471,7 @@ export async function getNotifications(userId: string) {
       title: 'Crew Invite',
       body: `You've been invited to join ${r.emoji} ${r.crew_name}`,
       data: { crew_id: r.crew_id, crew_name: r.crew_name, emoji: r.emoji },
-      created_at: r.created_at
+      created_at: r.created_at,
     })),
     ...joinRequests.rows.map(r => ({
       id: r.id,
@@ -371,8 +479,39 @@ export async function getNotifications(userId: string) {
       title: 'Join Request',
       body: `${r.from_name} wants to join "${r.run_title}"`,
       data: { participant_id: r.id, from_name: r.from_name, run_title: r.run_title },
-      created_at: r.created_at
-    }))
+      created_at: r.created_at,
+    })),
+    ...eventReminders.rows.map(r => {
+      const diffMs = new Date(r.date).getTime() - now.getTime();
+      const diffH = Math.floor(diffMs / 3600000);
+      const diffM = Math.floor((diffMs % 3600000) / 60000);
+      const timeStr = diffH > 0 ? `${diffH}h ${diffM}m` : `${diffM}m`;
+      const actLabel = r.activity_type === 'ride' ? 'ride' : 'run';
+      return {
+        id: `er_${r.id}`,
+        type: 'event_reminder',
+        title: `Upcoming ${actLabel === 'ride' ? 'Ride' : 'Run'}`,
+        body: `"${r.title}" with ${r.host_name} starts in ${timeStr}${r.location_name ? ` · ${r.location_name}` : ''}`,
+        data: { run_id: r.id, host_name: r.host_name, location_name: r.location_name, date: r.date, activity_type: r.activity_type },
+        created_at: r.date,
+      };
+    }),
+    ...prRows.map(r => {
+      const isPacePR = distPRs.rows.find((d: any) => d.id === r.id) == null;
+      const isDistPR = distPRs.rows.find((d: any) => d.id === r.id) != null;
+      const isPPR = pacePRs.rows.find((p: any) => p.id === r.id) != null;
+      const parts: string[] = [];
+      if (isDistPR && r.distance_miles) parts.push(`${Math.round(r.distance_miles * 100) / 100} mi longest run`);
+      if (isPPR && r.pace_min_per_mile) parts.push(`${fmtPace(r.pace_min_per_mile)}/mi fastest pace`);
+      return {
+        id: `pr_${r.id}`,
+        type: 'pr_notification',
+        title: '🏆 New Personal Record',
+        body: parts.length ? parts.join(' · ') : 'You set a new personal record!',
+        data: { run_id: r.id, activity_type: r.activity_type },
+        created_at: r.date,
+      };
+    }),
   ];
 
   return notifications.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
