@@ -15,6 +15,7 @@ import {
   Alert,
   Image,
   Animated,
+  useWindowDimensions,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { router, useFocusEffect } from "expo-router";
@@ -686,8 +687,10 @@ export default function DiscoverScreen() {
   const { activityFilter, setActivityFilter } = useActivity();
   const [showFilter, setShowFilter] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
+  const { width: screenWidth } = useWindowDimensions();
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardSlide, setOnboardSlide] = useState(0);
+  const onboardScrollRef = useRef<ScrollView>(null);
   const [checklistDismissed, setChecklistDismissed] = useState(true);
   const [checklistAllDone, setChecklistAllDone] = useState(false);
 
@@ -1590,9 +1593,27 @@ export default function DiscoverScreen() {
               </Pressable>
             )}
 
-            {/* Slide content */}
-            {onboardSlide === 0 && (
-              <View style={s.onboardContent}>
+            {/* Swipeable slides */}
+            <ScrollView
+              ref={onboardScrollRef}
+              horizontal
+              pagingEnabled
+              scrollEnabled
+              showsHorizontalScrollIndicator={false}
+              style={s.onboardPager}
+              onMomentumScrollEnd={(e) => {
+                const slideW = screenWidth - 48;
+                const idx = Math.round(e.nativeEvent.contentOffset.x / slideW);
+                setOnboardSlide(Math.min(2, Math.max(0, idx)));
+              }}
+            >
+              {/* Slide 0 — Welcome */}
+              <ScrollView
+                style={{ width: screenWidth - 48 }}
+                contentContainerStyle={s.onboardContent}
+                showsVerticalScrollIndicator={false}
+                bounces={false}
+              >
                 <View style={s.onboardIconWrap}>
                   <Ionicons name="walk" size={56} color={C.primary} />
                 </View>
@@ -1600,11 +1621,15 @@ export default function DiscoverScreen() {
                 <Text style={s.onboardBody}>
                   Discover group runs and rides near you. Track your progress. Build your crew.
                 </Text>
-              </View>
-            )}
+              </ScrollView>
 
-            {onboardSlide === 1 && (
-              <View style={s.onboardContent}>
+              {/* Slide 1 — How it works */}
+              <ScrollView
+                style={{ width: screenWidth - 48 }}
+                contentContainerStyle={s.onboardContent}
+                showsVerticalScrollIndicator={false}
+                bounces={false}
+              >
                 <Text style={s.onboardTitle}>How it works</Text>
                 {[
                   { icon: "map-pin" as const, label: "Find a run or ride near you" },
@@ -1618,11 +1643,15 @@ export default function DiscoverScreen() {
                     <Text style={s.onboardStepLabel}>{step.label}</Text>
                   </View>
                 ))}
-              </View>
-            )}
+              </ScrollView>
 
-            {onboardSlide === 2 && (
-              <View style={s.onboardContent}>
+              {/* Slide 2 — Ready */}
+              <ScrollView
+                style={{ width: screenWidth - 48 }}
+                contentContainerStyle={s.onboardContent}
+                showsVerticalScrollIndicator={false}
+                bounces={false}
+              >
                 <View style={s.onboardIconWrap}>
                   <Ionicons name="trophy" size={52} color="#FFB800" />
                 </View>
@@ -1630,8 +1659,8 @@ export default function DiscoverScreen() {
                 <Text style={s.onboardBody}>
                   Explore runs & rides near you, join a crew, or host your own. The community is waiting.
                 </Text>
-              </View>
-            )}
+              </ScrollView>
+            </ScrollView>
 
             {/* Dots */}
             <View style={s.onboardDots}>
@@ -1642,7 +1671,15 @@ export default function DiscoverScreen() {
 
             {/* CTA button */}
             {onboardSlide < 2 ? (
-              <Pressable style={s.onboardBtn} onPress={() => setOnboardSlide(onboardSlide + 1)} testID="onboarding-next">
+              <Pressable
+                style={s.onboardBtn}
+                onPress={() => {
+                  const next = onboardSlide + 1;
+                  onboardScrollRef.current?.scrollTo({ x: next * (screenWidth - 48), animated: true });
+                  setOnboardSlide(next);
+                }}
+                testID="onboarding-next"
+              >
                 <Text style={s.onboardBtnTxt}>Next</Text>
                 <Feather name="arrow-right" size={16} color={C.bg} />
               </Pressable>
@@ -2781,7 +2818,9 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     borderTopRightRadius: 28,
     paddingHorizontal: 24,
     paddingTop: 32,
-    minHeight: 420,
+  },
+  onboardPager: {
+    flexGrow: 0,
   },
   onboardSkip: {
     position: "absolute",
@@ -2799,7 +2838,6 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     paddingTop: 24,
     paddingBottom: 20,
     gap: 12,
-    flex: 1,
   },
   onboardIconWrap: {
     width: 100,
