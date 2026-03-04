@@ -1474,6 +1474,7 @@ export default function DiscoverScreen() {
                 )}
               </View>
             )}
+            <Text style={s.nearbyLabel}>{activityFilter === "ride" ? "Upcoming Rides Nearby" : "Upcoming Runs Nearby"}</Text>
             <Pressable
               style={s.viewOnMapBtn}
               onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); goToMap(); }}
@@ -1482,7 +1483,6 @@ export default function DiscoverScreen() {
               <Text style={s.viewOnMapBtnTxt}>View On Map</Text>
               <Feather name="chevron-right" size={15} color={C.primary} />
             </Pressable>
-            <Text style={s.nearbyLabel}>{activityFilter === "ride" ? "Upcoming Rides Nearby" : "Upcoming Runs Nearby"}</Text>
             </View>
           }
           renderItem={({ item }) => (
