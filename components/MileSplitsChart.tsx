@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { View, Text, StyleSheet } from "react-native";
-import { useTheme } from "@/components/ThemeContext";
+import { useTheme } from "@/contexts/ThemeContext";
 
 export type MileSplit = {
   label: string;

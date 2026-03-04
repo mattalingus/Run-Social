@@ -319,6 +319,9 @@ export default function RunTrackingScreen() {
   const [savingPath, setSavingPath] = useState(false);
   const [pathSaved, setPathSaved] = useState(false);
 
+  // Mile splits state
+  const [mileSplits, setMileSplits] = useState<MileSplit[]>([]);
+
   // Post-run photo state
   const [savedRunId, setSavedRunId] = useState<string | null>(null);
   const [runPhotos, setRunPhotos] = useState<any[]>([]);
@@ -382,6 +385,10 @@ export default function RunTrackingScreen() {
   const totalDistRef = useRef(0);
   const routePathRef = useRef<Coord[]>([]);
   const mapRef = useRef<any>(null);
+  const elapsedRef = useRef(0);
+  const mileSplitsRef = useRef<MileSplit[]>([]);
+  const lastSplitMileRef = useRef(0);
+  const prevMileElapsedRef = useRef(0);
 
   // ─── Timer ─────────────────────────────────────────────────────────────────
 
@@ -393,6 +400,8 @@ export default function RunTrackingScreen() {
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [phase]);
+
+  useEffect(() => { elapsedRef.current = elapsed; }, [elapsed]);
 
   // ─── GPS ───────────────────────────────────────────────────────────────────
 
@@ -433,6 +442,19 @@ export default function RunTrackingScreen() {
             lastAnnouncedMileRef.current += interval;
             announcePace(lastAnnouncedMileRef.current, elapsed);
           }
+        }
+
+        // Mile split tracking — uses elapsedRef to avoid stale closure
+        if (totalDistRef.current >= lastSplitMileRef.current + 1) {
+          const segmentSeconds = elapsedRef.current - prevMileElapsedRef.current;
+          const splitPace = Math.min(Math.max(segmentSeconds / 60, 1), 30);
+          mileSplitsRef.current.push({
+            label: `M${mileSplitsRef.current.length + 1}`,
+            paceMinPerMile: splitPace,
+            isPartial: false,
+          });
+          lastSplitMileRef.current += 1;
+          prevMileElapsedRef.current = elapsedRef.current;
         }
       }
     }
@@ -507,6 +529,10 @@ export default function RunTrackingScreen() {
     setPathSaved(false);
     lastAnnouncedMileRef.current = 0;
     lastAnnouncedPaceRef.current = null;
+    mileSplitsRef.current = [];
+    lastSplitMileRef.current = 0;
+    prevMileElapsedRef.current = 0;
+    setMileSplits([]);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setPhase("active");
   }
@@ -557,6 +583,19 @@ export default function RunTrackingScreen() {
   function handleFinish() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     if (Platform.OS !== "web") Speech.stop();
+    // Compute final partial-mile split before transitioning to done screen
+    const finalSplits = [...mileSplitsRef.current];
+    const remainingDist = totalDistRef.current - lastSplitMileRef.current;
+    if (remainingDist > 0.05 && elapsedRef.current > prevMileElapsedRef.current) {
+      const remainingSeconds = elapsedRef.current - prevMileElapsedRef.current;
+      const partialPace = Math.min(Math.max((remainingSeconds / 60) / remainingDist, 1), 30);
+      finalSplits.push({
+        label: remainingDist.toFixed(1),
+        paceMinPerMile: partialPace,
+        isPartial: true,
+      });
+    }
+    setMileSplits(finalSplits);
     setPhase("done");
   }
 
@@ -596,6 +635,7 @@ export default function RunTrackingScreen() {
         routePath: routePathRef.current.length > 1 ? routePathRef.current : null,
         activityType: activityFilter,
         savedPathId: selectedPath?.id ?? null,
+        mileSplits: mileSplits.length > 0 ? mileSplits : null,
       });
       const saved = await res.json();
       setSavedRunId(saved.id);
@@ -748,7 +788,14 @@ export default function RunTrackingScreen() {
           </View>
         )}
 
-        <View style={[t.summaryCard, !hasRoute && { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 48) }]}>
+        <ScrollView
+          style={t.summaryCard}
+          contentContainerStyle={[
+            t.summaryCardContent,
+            !hasRoute && { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 48) },
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={t.checkCircle}>
             <Feather name="check" size={28} color={C.primary} />
           </View>
@@ -772,6 +819,10 @@ export default function RunTrackingScreen() {
               <Text style={t.statUnit}>min/mi</Text>
             </View>
           </View>
+
+          {mileSplits.length > 0 && (
+            <MileSplitsChart splits={mileSplits} activityType={activityFilter} />
+          )}
 
           {savedRunId ? (
             <>
@@ -913,7 +964,7 @@ export default function RunTrackingScreen() {
               </Pressable>
             </>
           )}
-        </View>
+        </ScrollView>
 
         {/* ─── Save path name modal ─────────────────────────────────────────── */}
         {showSaveNameModal && (
@@ -1421,9 +1472,13 @@ const t = StyleSheet.create({
   summaryCard: {
     flex: 1,
     marginHorizontal: 20,
+  },
+  summaryCardContent: {
+    flexGrow: 1,
     alignItems: "center",
     justifyContent: "center",
     gap: 20,
+    paddingBottom: 16,
   },
   checkCircle: {
     width: 72,

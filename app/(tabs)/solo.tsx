@@ -29,6 +29,7 @@ import { formatDistance } from "@/lib/formatDistance";
 import MAP_STYLE from "@/lib/mapStyle";
 import MapView, { Polyline } from "react-native-maps";
 import Svg, { Polyline as SvgPolyline, Circle as SvgCircle } from "react-native-svg";
+import MileSplitsChart from "@/components/MileSplitsChart";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -48,6 +49,7 @@ interface SoloRun {
   activity_type: "run" | "ride";
   is_starred: boolean;
   elevation_gain_ft: number | null;
+  mile_splits: Array<{ label: string; paceMinPerMile: number; isPartial: boolean }> | null;
 }
 
 interface SavedPath {
@@ -1023,6 +1025,11 @@ export default function SoloScreen() {
                           </View>
                         )}
                       </View>
+                    </View>
+                  )}
+                  {isExpanded && run.mile_splits && run.mile_splits.length > 0 && (
+                    <View style={{ paddingHorizontal: 12, paddingBottom: 14 }}>
+                      <MileSplitsChart splits={run.mile_splits} activityType={run.activity_type} />
                     </View>
                   )}
                 </View>
