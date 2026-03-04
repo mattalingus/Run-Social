@@ -53,7 +53,7 @@ export default function TabLayout() {
       return res.json();
     },
     enabled: !!user && !onCrewTab,
-    refetchInterval: 15000,
+    refetchInterval: 10000,
     staleTime: 0,
   });
 
