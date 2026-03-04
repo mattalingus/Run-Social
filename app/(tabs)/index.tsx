@@ -2953,6 +2953,7 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     fontFamily: "Outfit_600SemiBold",
     fontSize: 15,
     color: C.text,
+    flex: 1,
   },
   onboardDots: {
     flexDirection: "row",
