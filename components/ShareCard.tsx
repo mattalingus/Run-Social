@@ -120,6 +120,7 @@ export interface ShareCardProps {
   caption?: string;
   backgroundPhoto?: string | null;
   captionFont?: string;
+  captionSize?: number;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -144,6 +145,7 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
     caption,
     backgroundPhoto,
     captionFont = "Outfit_700Bold",
+    captionSize = 32,
   },
   ref
 ) {
@@ -187,14 +189,24 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
         {/* Full-bleed photo */}
         <Image source={{ uri: backgroundPhoto }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
 
-        {/* Route SVG overlay — faint, spans full card */}
+        {/* Route SVG overlay — vibrant, spans full card */}
         {hasRoute && (
           <Svg width={CARD_W} height={CARD_H} style={StyleSheet.absoluteFillObject}>
+            {/* Glow underlay */}
             <Polyline
               points={svgPointsFull}
               fill="none"
-              stroke={PRIMARY + "55"}
-              strokeWidth={2}
+              stroke={PRIMARY + "50"}
+              strokeWidth={10}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            {/* Main vibrant line */}
+            <Polyline
+              points={svgPointsFull}
+              fill="none"
+              stroke={PRIMARY}
+              strokeWidth={3}
               strokeLinecap="round"
               strokeLinejoin="round"
             />
@@ -242,7 +254,7 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
 
           {/* Caption overlaid */}
           {!!caption && (
-            <Text style={[s.photoCaption, { fontFamily: captionFont }]} numberOfLines={3}>
+            <Text style={[s.photoCaption, { fontFamily: captionFont, fontSize: captionSize, lineHeight: captionSize * 1.2 }]} numberOfLines={3}>
               {caption}
             </Text>
           )}

@@ -65,6 +65,7 @@ export default function ShareActivityModal({ visible, onClose, runData }: Props)
   const [backgroundPhoto, setBackgroundPhoto] = useState<string | null>(null);
   const [activeAction, setActiveAction] = useState<ActiveAction>(null);
   const [captionFont, setCaptionFont] = useState<"Outfit_700Bold" | "PlayfairDisplay_700Bold" | "DancingScript_700Bold">("Outfit_700Bold");
+  const [captionSize, setCaptionSize] = useState<20 | 32 | 46>(32);
 
   // ─── Capture card as image ─────────────────────────────────────────────────
 
@@ -224,6 +225,7 @@ export default function ShareActivityModal({ visible, onClose, runData }: Props)
     caption,
     backgroundPhoto,
     captionFont,
+    captionSize,
   };
 
   return (
@@ -290,30 +292,57 @@ export default function ShareActivityModal({ visible, onClose, runData }: Props)
             )}
           </View>
 
-          {/* ── Font picker ────────────────────────────────────────────────── */}
+          {/* ── Font + Size pickers ─────────────────────────────────────── */}
           {caption.length > 0 && (
-            <View style={st.fontPickerRow}>
-              {(
-                [
-                  { key: "Outfit_700Bold", label: "Aa" },
-                  { key: "PlayfairDisplay_700Bold", label: "Aa" },
-                  { key: "DancingScript_700Bold", label: "Aa" },
-                ] as const
-              ).map(({ key, label }) => {
-                const active = captionFont === key;
-                return (
-                  <Pressable
-                    key={key}
-                    style={[st.fontPill, active && st.fontPillActive]}
-                    onPress={() => { setCaptionFont(key); Haptics.selectionAsync(); }}
-                  >
-                    <Text style={[st.fontPillTxt, { fontFamily: key }, active && st.fontPillTxtActive]}>
-                      {label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+            <>
+              {/* Font style row */}
+              <View style={st.fontPickerRow}>
+                {(
+                  [
+                    { key: "Outfit_700Bold", label: "Aa" },
+                    { key: "PlayfairDisplay_700Bold", label: "Aa" },
+                    { key: "DancingScript_700Bold", label: "Aa" },
+                  ] as const
+                ).map(({ key, label }) => {
+                  const active = captionFont === key;
+                  return (
+                    <Pressable
+                      key={key}
+                      style={[st.fontPill, active && st.fontPillActive]}
+                      onPress={() => { setCaptionFont(key); Haptics.selectionAsync(); }}
+                    >
+                      <Text style={[st.fontPillTxt, { fontFamily: key }, active && st.fontPillTxtActive]}>
+                        {label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {/* Size row */}
+              <View style={st.fontPickerRow}>
+                {(
+                  [
+                    { size: 20 as const, label: "S", display: 15 },
+                    { size: 32 as const, label: "M", display: 20 },
+                    { size: 46 as const, label: "L", display: 26 },
+                  ]
+                ).map(({ size, label, display }) => {
+                  const active = captionSize === size;
+                  return (
+                    <Pressable
+                      key={size}
+                      style={[st.fontPill, active && st.fontPillActive]}
+                      onPress={() => { setCaptionSize(size); Haptics.selectionAsync(); }}
+                    >
+                      <Text style={[st.fontPillTxt, { fontSize: display, fontFamily: captionFont }, active && st.fontPillTxtActive]}>
+                        {label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </>
           )}
 
           {/* ── Share action row ──────────────────────────────────────────── */}
