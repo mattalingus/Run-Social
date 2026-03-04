@@ -286,7 +286,7 @@ export default function DiscoverScreen() {
                   <View style={st.cardStats}>
                     <View style={st.stat}>
                       <Ionicons name="walk" size={12} color={C.orange} />
-                      <Text style={st.statText}>{formatPace(run.min_pace)}–{formatPace(run.max_pace)}/mi</Text>
+                      <Text style={st.statText}>{run.min_pace === run.max_pace ? `${formatPace(run.min_pace)}/mi` : `${formatPace(run.min_pace)}–${formatPace(run.max_pace)}/mi`}</Text>
                     </View>
                     <View style={st.divDot} />
                     <View style={st.stat}>

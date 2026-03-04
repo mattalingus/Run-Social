@@ -625,7 +625,7 @@ function RunCard({
           <View style={s.cardStats}>
             <View style={s.stat}>
               <Ionicons name={run.activity_type === "ride" ? "bicycle" : "walk"} size={12} color={getPaceColor(run.min_pace, run.max_pace, C)} />
-              <Text style={[s.statLabel, { color: getPaceColor(run.min_pace, run.max_pace, C) }]}>{toDisplayPace(run.min_pace, distUnit)}–{toDisplayPace(run.max_pace, distUnit)}</Text>
+              <Text style={[s.statLabel, { color: getPaceColor(run.min_pace, run.max_pace, C) }]}>{run.min_pace === run.max_pace ? toDisplayPace(run.min_pace, distUnit) : `${toDisplayPace(run.min_pace, distUnit)}–${toDisplayPace(run.max_pace, distUnit)}`}</Text>
             </View>
             <View style={s.statDiv} />
             <View style={s.stat}>
@@ -1425,7 +1425,7 @@ export default function DiscoverScreen() {
                       </View>
                       <View style={s.plannedPace}>
                         <Ionicons name="walk" size={12} color={C.orange} />
-                        <Text style={s.plannedPaceTxt}>{toDisplayPace(r.min_pace, (user as any)?.distance_unit ?? "miles")}–{toDisplayPace(r.max_pace, (user as any)?.distance_unit ?? "miles")}</Text>
+                        <Text style={s.plannedPaceTxt}>{r.min_pace === r.max_pace ? toDisplayPace(r.min_pace, (user as any)?.distance_unit ?? "miles") : `${toDisplayPace(r.min_pace, (user as any)?.distance_unit ?? "miles")}–${toDisplayPace(r.max_pace, (user as any)?.distance_unit ?? "miles")}`}</Text>
                       </View>
                     </Pressable>
                   ))}

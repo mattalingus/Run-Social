@@ -777,7 +777,7 @@ export default function MapScreen() {
                 <View style={s.chip}>
                   <Ionicons name="walk" size={11} color={C.orange} />
                   <Text style={[s.chipTxt, { color: C.orange }]}>
-                    {toDisplayPace(selectedRun.min_pace, distUnit)}–{toDisplayPace(selectedRun.max_pace, distUnit)}
+                    {selectedRun.min_pace === selectedRun.max_pace ? toDisplayPace(selectedRun.min_pace, distUnit) : `${toDisplayPace(selectedRun.min_pace, distUnit)}–${toDisplayPace(selectedRun.max_pace, distUnit)}`}
                   </Text>
                 </View>
                 <View style={s.chip}>

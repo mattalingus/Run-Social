@@ -682,7 +682,7 @@ export default function RunDetailScreen() {
           <View style={styles.requirementsGrid}>
             <View style={styles.reqItem}>
               <Ionicons name="walk" size={20} color={C.orange} />
-              <Text style={styles.reqValue}>{toDisplayPace(run.min_pace, distUnit)} – {toDisplayPace(run.max_pace, distUnit)}</Text>
+              <Text style={styles.reqValue}>{run.min_pace === run.max_pace ? toDisplayPace(run.min_pace, distUnit) : `${toDisplayPace(run.min_pace, distUnit)} – ${toDisplayPace(run.max_pace, distUnit)}`}</Text>
               <Text style={styles.reqLabel}>{`Pace (min/${unitLabel(distUnit)})`}</Text>
             </View>
             <View style={styles.reqDivider} />
