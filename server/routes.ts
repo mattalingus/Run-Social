@@ -9,7 +9,7 @@ import { generateDummyRuns, clearAndReseedRuns, getRunCount } from "./seed";
 import { uploadPhotoBuffer, streamObject } from "./objectStorage";
 import { sendPushNotification, userWantsNotif } from "./notifications";
 import crypto from "crypto";
-const OAuth = require("oauth-1.0a");
+import OAuth from "oauth-1.0a";
 
 const GARMIN_REQUEST_TOKEN_URL = "https://connectapi.garmin.com/oauth-service/oauth/request_token";
 const GARMIN_AUTH_URL = "https://connect.garmin.com/oauthConfirm";
