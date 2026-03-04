@@ -1108,11 +1108,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/saved-paths", requireAuth, async (req, res) => {
     try {
-      const { name, routePath, distanceMiles } = req.body;
+      const { name, routePath, distanceMiles, activityType } = req.body;
       if (!name || !routePath || !Array.isArray(routePath)) {
         return res.status(400).json({ message: "name and routePath are required" });
       }
-      const path = await storage.createSavedPath(req.session.userId!, { name, routePath, distanceMiles });
+      const path = await storage.createSavedPath(req.session.userId!, { name, routePath, distanceMiles, activityType });
       storage.matchCommunityPath(req.session.userId!, path.id, routePath, distanceMiles ?? null).catch(console.error);
       res.json(path);
     } catch (e: any) {

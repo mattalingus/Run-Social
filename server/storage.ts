@@ -188,6 +188,7 @@ export async function initDb() {
     );
 
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS saved_path_id VARCHAR REFERENCES saved_paths(id) ON DELETE SET NULL;
+    ALTER TABLE saved_paths ADD COLUMN IF NOT EXISTS activity_type TEXT DEFAULT 'run';
 
     CREATE TABLE IF NOT EXISTS bookmarked_runs (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -2052,12 +2053,12 @@ export async function getSavedPaths(userId: string) {
 
 export async function createSavedPath(
   userId: string,
-  data: { name: string; routePath: Array<{ latitude: number; longitude: number }>; distanceMiles?: number }
+  data: { name: string; routePath: Array<{ latitude: number; longitude: number }>; distanceMiles?: number; activityType?: string }
 ) {
   const res = await pool.query(
-    `INSERT INTO saved_paths (user_id, name, route_path, distance_miles)
-     VALUES ($1, $2, $3, $4) RETURNING *`,
-    [userId, data.name, JSON.stringify(data.routePath), data.distanceMiles ?? null]
+    `INSERT INTO saved_paths (user_id, name, route_path, distance_miles, activity_type)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [userId, data.name, JSON.stringify(data.routePath), data.distanceMiles ?? null, data.activityType ?? "run"]
   );
   return res.rows[0];
 }

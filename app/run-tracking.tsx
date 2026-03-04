@@ -333,6 +333,10 @@ export default function RunTrackingScreen() {
     staleTime: 60_000,
   });
 
+  const filteredSavedPaths = savedPaths.filter(
+    (p: any) => (p.activity_type ?? "run") === activityFilter
+  );
+
   // ─── Auto-select path from URL param ─────────────────────────────────────
 
   useEffect(() => {
@@ -546,6 +550,7 @@ export default function RunTrackingScreen() {
         name,
         routePath: routePathRef.current,
         distanceMiles: totalDistRef.current,
+        activityType: activityFilter,
       });
       const newPath = await res.json();
       qc.invalidateQueries({ queryKey: ["/api/saved-paths"] });
@@ -1227,11 +1232,11 @@ export default function RunTrackingScreen() {
           <View style={[t.pickerSheet, { paddingBottom: insets.bottom + 16 }]}>
             <View style={t.nameModalHandle} />
             <Text style={t.nameModalTitle}>Follow a saved path</Text>
-            {savedPaths.length === 0 ? (
-              <Text style={t.pickerEmpty}>No saved paths yet. Complete a run and save its path first.</Text>
+            {filteredSavedPaths.length === 0 ? (
+              <Text style={t.pickerEmpty}>No saved paths yet. Complete a {activityFilter} and save its path first.</Text>
             ) : (
               <ScrollView showsVerticalScrollIndicator={false}>
-                {savedPaths.map((p: any) => (
+                {filteredSavedPaths.map((p: any) => (
                   <Pressable
                     key={p.id}
                     style={t.pickerRow}

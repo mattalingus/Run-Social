@@ -58,6 +58,7 @@ interface SavedPath {
   route_path: Array<{ latitude: number; longitude: number }>;
   distance_miles: number | null;
   created_at: string;
+  activity_type?: string | null;
 }
 
 type RoutePoint = { latitude: number; longitude: number };
@@ -489,6 +490,11 @@ export default function SoloScreen() {
     staleTime: 30_000,
   });
 
+  const filteredSavedPaths = useMemo(
+    () => savedPaths.filter((p) => (p.activity_type ?? "run") === activityFilter),
+    [savedPaths, activityFilter]
+  );
+
   const { data: pathRuns = [], isLoading: pathRunsLoading } = useQuery<SoloRun[]>({
     queryKey: ["/api/saved-paths", selectedSavedPath?.id, "runs"],
     enabled: !!selectedSavedPath,
@@ -880,10 +886,10 @@ export default function SoloScreen() {
         )}
 
         {/* ─── Saved Paths ──────────────────────────────────────────────── */}
-        {savedPaths.length > 0 && (
+        {filteredSavedPaths.length > 0 && (
           <View style={[s.section, { marginTop: 5 }]}>
             <Text style={s.sectionTitle}>Saved Paths</Text>
-            {savedPaths.map((path) => (
+            {filteredSavedPaths.map((path) => (
               <Pressable
                 key={path.id}
                 style={({ pressed }) => [s.savedPathCard, { opacity: pressed ? 0.85 : 1 }]}
