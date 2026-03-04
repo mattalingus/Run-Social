@@ -1304,9 +1304,14 @@ export default function SoloScreen() {
         animationType="slide"
         onRequestClose={() => setSelectedSavedPath(null)}
       >
-        <Pressable style={s.overlay} onPress={() => setSelectedSavedPath(null)} />
+        {/* flex: 1 + justifyContent: "flex-end" gives the sheet a real height context */}
+        <View style={{ flex: 1, justifyContent: "flex-end" }}>
+          <Pressable
+            style={[StyleSheet.absoluteFillObject, { backgroundColor: "rgba(0,0,0,0.55)" }]}
+            onPress={() => setSelectedSavedPath(null)}
+          />
         {selectedSavedPath && (
-          <View style={[s.sheet, { paddingBottom: insets.bottom + 24, maxHeight: "88%" }]}>
+          <View style={[s.sheet, { paddingBottom: insets.bottom + 24, maxHeight: "88%", flex: 1 }]}>
             <View style={s.sheetHandle} />
 
             {/* Header */}
@@ -1404,6 +1409,7 @@ export default function SoloScreen() {
             </Pressable>
           </View>
         )}
+        </View>
       </Modal>
     </View>
   );
