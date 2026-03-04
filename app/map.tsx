@@ -1416,14 +1416,14 @@ function makeSStyles(C: ColorScheme) { return StyleSheet.create({
   emptyTitle: {
     fontFamily: "Outfit_700Bold",
     fontSize: 18,
-    color: C.text,
+    color: "#FFFFFF",
     textAlign: "center",
     marginBottom: 8,
   },
   emptySub: {
     fontFamily: "Outfit_400Regular",
     fontSize: 14,
-    color: C.textSecondary,
+    color: "rgba(255,255,255,0.75)",
     textAlign: "center",
   },
 }); }
