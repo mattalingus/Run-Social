@@ -1022,7 +1022,7 @@ export default function DiscoverScreen() {
       return res.json();
     },
     onSuccess: (run: any) => {
-      qc.invalidateQueries({ queryKey: ["/api/runs"] });
+      qc.refetchQueries({ queryKey: ["/api/runs"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setShowHostModal(false);
       resetHostForm();

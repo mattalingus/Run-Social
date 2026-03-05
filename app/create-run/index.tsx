@@ -229,7 +229,7 @@ export default function CreateRunScreen() {
       return res.json();
     },
     onSuccess: (run: any) => {
-      qc.invalidateQueries({ queryKey: ["/api/runs"] });
+      qc.refetchQueries({ queryKey: ["/api/runs"] });
       qc.invalidateQueries({ queryKey: ["/api/runs/mine"] });
       if (effectiveCrewId) {
         qc.invalidateQueries({ queryKey: ["/api/crews", effectiveCrewId, "runs"] });
