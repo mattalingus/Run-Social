@@ -2311,7 +2311,7 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     borderStyle: "dashed",
     padding: 16,
     marginBottom: 12,
-    opacity: 0.85,
+    opacity: 0.95,
     alignSelf: "stretch",
   },
   ghostCrewEmoji: {

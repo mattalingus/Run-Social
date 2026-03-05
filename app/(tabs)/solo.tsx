@@ -1815,7 +1815,7 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     borderWidth: 1,
     borderColor: C.border,
     borderStyle: "dashed",
-    opacity: 0.85,
+    opacity: 0.95,
     flexDirection: "column",
     alignSelf: "stretch",
   },
