@@ -458,6 +458,7 @@ export default function SoloScreen() {
   const { C } = useTheme();
   const s = useMemo(() => makeStyles(C), [C]);
   const qc = useQueryClient();
+  const [ghostSoloDone, setGhostSoloDone] = useState(true);
 
   // T002: Check for unsaved draft run on mount and offer recovery
   useEffect(() => {
@@ -666,6 +667,21 @@ export default function SoloScreen() {
     () => filteredSoloRuns.filter((r) => r.completed),
     [filteredSoloRuns]
   );
+
+  useEffect(() => {
+    if (!user?.id) return;
+    AsyncStorage.getItem(`paceup_ghost_solo_done_${user.id}`).then((v) => {
+      setGhostSoloDone(v === "true");
+    });
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id || ghostSoloDone) return;
+    if (historyRuns.length > 0) {
+      setGhostSoloDone(true);
+      AsyncStorage.setItem(`paceup_ghost_solo_done_${user.id}`, "true");
+    }
+  }, [historyRuns.length, user?.id, ghostSoloDone]);
 
   const completedRuns = useMemo(
     () => filteredSoloRuns.filter((r) => r.completed && r.pace_min_per_mile),
@@ -1022,50 +1038,50 @@ export default function SoloScreen() {
             <ActivityIndicator color={C.primary} style={{ marginTop: 20 }} />
           ) : historyRuns.length === 0 ? (
             <View style={s.emptyCard}>
-              {/* Ghost history card — looks like a real entry with a fake route path */}
-              <View style={s.ghostHistoryCard}>
-                <View style={s.historyRow}>
-                  <View style={s.historyLeft}>
-                    <View style={[s.historyStatus, { backgroundColor: C.primary + "22" }]}>
-                      <Feather name="check" size={12} color={C.primary + "80"} />
+              {!ghostSoloDone && (
+                <View style={s.ghostHistoryCard}>
+                  <View style={s.historyRow}>
+                    <View style={s.historyLeft}>
+                      <View style={[s.historyStatus, { backgroundColor: C.primary + "22" }]}>
+                        <Feather name="check" size={12} color={C.primary + "80"} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.ghostHistoryTitle}>
+                          {activityFilter === "ride" ? "Morning 14.0mi Ride" : "Morning 3.1mi Run"}
+                        </Text>
+                        <Text style={s.ghostHistoryMeta}>
+                          {activityFilter === "ride" ? "Today · 18.2 mph · 46:12" : "Today · 9:23/mi · 28:43"}
+                        </Text>
+                      </View>
                     </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={s.ghostHistoryTitle}>
-                        {activityFilter === "ride" ? "Morning 14.0mi Ride" : "Morning 3.1mi Run"}
-                      </Text>
-                      <Text style={s.ghostHistoryMeta}>
-                        {activityFilter === "ride" ? "Today · 18.2 mph · 46:12" : "Today · 9:23/mi · 28:43"}
-                      </Text>
-                    </View>
+                    <Text style={s.ghostHistoryDist}>
+                      {activityFilter === "ride" ? "14.0" : "3.1"}
+                    </Text>
                   </View>
-                  <Text style={s.ghostHistoryDist}>
-                    {activityFilter === "ride" ? "14.0" : "3.1"}
-                  </Text>
+                  <Svg width="100%" height={44} viewBox="0 0 160 44" style={{ marginTop: 8, marginBottom: 4 }}>
+                    <SvgPolyline
+                      points="8,36 22,18 38,28 54,10 70,22 86,8 102,20 118,12 134,24 150,8"
+                      fill="none"
+                      stroke={C.primary + "50"}
+                      strokeWidth={8}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <SvgPolyline
+                      points="8,36 22,18 38,28 54,10 70,22 86,8 102,20 118,12 134,24 150,8"
+                      fill="none"
+                      stroke={C.primary + "90"}
+                      strokeWidth={2}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </Svg>
+                  <View style={s.ghostTipRow}>
+                    <Feather name="info" size={10} color={C.textMuted} />
+                    <Text style={s.ghostHistoryTip}>Your runs save here — every route, pace, and split</Text>
+                  </View>
                 </View>
-                {/* Fake route SVG */}
-                <Svg width="100%" height={44} viewBox="0 0 160 44" style={{ marginTop: 8, marginBottom: 4 }}>
-                  <SvgPolyline
-                    points="8,36 22,18 38,28 54,10 70,22 86,8 102,20 118,12 134,24 150,8"
-                    fill="none"
-                    stroke={C.primary + "50"}
-                    strokeWidth={8}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <SvgPolyline
-                    points="8,36 22,18 38,28 54,10 70,22 86,8 102,20 118,12 134,24 150,8"
-                    fill="none"
-                    stroke={C.primary + "90"}
-                    strokeWidth={2}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </Svg>
-                <View style={s.ghostTipRow}>
-                  <Feather name="info" size={10} color={C.textMuted} />
-                  <Text style={s.ghostHistoryTip}>Your runs save here — every route, pace, and split</Text>
-                </View>
-              </View>
+              )}
               <Pressable
                 style={s.emptyCtaBtn}
                 onPress={() => router.push("/run-tracking")}
@@ -1799,7 +1815,7 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     borderWidth: 1,
     borderColor: C.border,
     borderStyle: "dashed",
-    opacity: 0.7,
+    opacity: 0.85,
     flexDirection: "column",
     alignSelf: "stretch",
   },

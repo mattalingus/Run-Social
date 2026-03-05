@@ -780,6 +780,9 @@ export default function DiscoverScreen() {
   const onboardScrollRef = useRef<ScrollView>(null);
   const [checklistDismissed, setChecklistDismissed] = useState(true);
   const [checklistAllDone, setChecklistAllDone] = useState(false);
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+  const [ghostBookmarkDone, setGhostBookmarkDone] = useState(true);
+  const [ghostPlannedDone, setGhostPlannedDone] = useState(true);
 
   const { data: notifications = [], refetch: refetchNotifs } = useQuery({
     queryKey: ["/api/notifications"],
@@ -1110,6 +1113,17 @@ export default function DiscoverScreen() {
     setChecklistDismissed(true);
   };
 
+  useEffect(() => {
+    if (!user?.id) return;
+    Promise.all([
+      AsyncStorage.getItem(`paceup_ghost_bookmark_done_${user.id}`),
+      AsyncStorage.getItem(`paceup_ghost_planned_done_${user.id}`),
+    ]).then(([b, p]) => {
+      setGhostBookmarkDone(b === "true");
+      setGhostPlannedDone(p === "true");
+    });
+  }, [user?.id]);
+
   // ─── Data ──────────────────────────────────────────────────────────────────
 
   const { data: runs = [], isLoading, refetch, isRefetching } = useQuery<Run[]>({
@@ -1117,6 +1131,10 @@ export default function DiscoverScreen() {
     staleTime: 30_000,
     refetchInterval: 30_000,
   });
+
+  useEffect(() => {
+    if (!isRefetching) setIsManualRefreshing(false);
+  }, [isRefetching]);
 
   const { data: friends = [] } = useQuery<{ id: string }[]>({
     queryKey: ["/api/friends"],
@@ -1156,6 +1174,22 @@ export default function DiscoverScreen() {
     staleTime: 0,
     enabled: !!user,
   });
+
+  useEffect(() => {
+    if (!user?.id || ghostBookmarkDone) return;
+    if (bookmarkedRuns.length > 0) {
+      setGhostBookmarkDone(true);
+      AsyncStorage.setItem(`paceup_ghost_bookmark_done_${user.id}`, "true");
+    }
+  }, [bookmarkedRuns.length, user?.id, ghostBookmarkDone]);
+
+  useEffect(() => {
+    if (!user?.id || ghostPlannedDone) return;
+    if (plannedRuns.length > 0) {
+      setGhostPlannedDone(true);
+      AsyncStorage.setItem(`paceup_ghost_planned_done_${user.id}`, "true");
+    }
+  }, [plannedRuns.length, user?.id, ghostPlannedDone]);
 
   const { data: communityData } = useQuery<{ runs: any[] }>({
     queryKey: ["/api/runs/community-activity"],
@@ -1457,11 +1491,11 @@ export default function DiscoverScreen() {
           showsVerticalScrollIndicator={false}
           scrollEnabled={true}
           refreshControl={
-            <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={C.primary} />
+            <RefreshControl refreshing={isManualRefreshing} onRefresh={() => { setIsManualRefreshing(true); refetch(); }} tintColor={C.primary} />
           }
           ListHeaderComponent={
             <View>
-            {user && (
+            {user && (!ghostBookmarkDone || sortedBookmarkedRuns.length > 0) && (
               <View style={s.savedSection}>
                 <Text style={s.savedSectionTitle}>{activityFilter === "ride" ? "Saved Rides" : "Saved Runs"}</Text>
                 <ScrollView
@@ -1519,7 +1553,7 @@ export default function DiscoverScreen() {
                 </ScrollView>
               </View>
             )}
-            {user && (
+            {user && (!ghostPlannedDone || plannedRuns.filter((r) => (r.activity_type ?? "run") === activityFilter).length > 0) && (
               <View style={s.savedSection}>
                 <Text style={s.savedSectionTitle}>{activityFilter === "ride" ? "Planning to Ride" : "Planning to Run"}</Text>
                 <ScrollView
@@ -1569,7 +1603,11 @@ export default function DiscoverScreen() {
                         <Text style={s.ghostPlannedLabel}>{activityFilter === "ride" ? "Planning to ride" : "Planning to run"}</Text>
                         <Ionicons name="calendar-outline" size={16} color={C.textMuted} />
                       </View>
-                      <Text style={s.ghostPlannedTitle} numberOfLines={2}>{activityFilter === "ride" ? "Sunday Morning Group Ride" : "Morning Group Run — Central Park"}</Text>
+                      <Text style={s.ghostPlannedTitle}>
+                        {activityFilter === "ride"
+                          ? "Tap 🗓 on any event\nyou plan on riding"
+                          : "Tap 🗓 on any event\nyou plan on running"}
+                      </Text>
                       <View style={s.savedCardMeta}>
                         <Feather name="calendar" size={12} color={C.textMuted} />
                         <Text style={s.ghostMetaTxt}>Sun, Mar 15 · 8:00 AM</Text>
@@ -1581,10 +1619,6 @@ export default function DiscoverScreen() {
                       <View style={s.savedCardMeta}>
                         <Ionicons name={activityFilter === "ride" ? "bicycle-outline" : "walk-outline"} size={12} color={C.textMuted} />
                         <Text style={s.ghostMetaTxt}>{activityFilter === "ride" ? "16–20 mph" : "9:00–11:00 /mi"}</Text>
-                      </View>
-                      <View style={s.ghostTipRow}>
-                        <Feather name="info" size={10} color={C.textMuted} />
-                        <Text style={s.ghostTipTxt}>Tap 🗓 on any event you plan on going to</Text>
                       </View>
                     </View>
                   )}
@@ -2828,7 +2862,7 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     borderWidth: 1,
     borderColor: C.border,
     borderStyle: "dashed",
-    opacity: 0.65,
+    opacity: 0.85,
     gap: 6,
   },
   ghostSavedCardTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textMuted, flex: 1, lineHeight: 18 },
@@ -2840,7 +2874,7 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     borderWidth: 1,
     borderColor: C.border,
     borderStyle: "dashed",
-    opacity: 0.65,
+    opacity: 0.85,
     gap: 8,
   },
   ghostPlannedLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.textMuted, flex: 1 },

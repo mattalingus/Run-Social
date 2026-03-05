@@ -21,6 +21,7 @@ import * as Haptics from "expo-haptics";
 import { Ionicons } from "@expo/vector-icons";
 import { Feather } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
@@ -1789,10 +1790,26 @@ export default function CrewScreen() {
   const searchUrl = `/api/crews/search?q=${encodeURIComponent(searchText.trim())}&friends=${friendsOnly}`;
 
   const { user: currentUser } = useAuth();
+  const [ghostCrewDone, setGhostCrewDone] = useState(true);
 
   const { data: crews = [], isLoading } = useQuery<Crew[]>({
     queryKey: ["/api/crews"],
   });
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    AsyncStorage.getItem(`paceup_ghost_crew_done_${currentUser.id}`).then((v) => {
+      setGhostCrewDone(v === "true");
+    });
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    if (!currentUser?.id || ghostCrewDone) return;
+    if (crews.length > 0) {
+      setGhostCrewDone(true);
+      AsyncStorage.setItem(`paceup_ghost_crew_done_${currentUser.id}`, "true");
+    }
+  }, [crews.length, currentUser?.id, ghostCrewDone]);
 
   const { data: invites = [], refetch: refetchInvites } = useQuery<CrewInvite[]>({
     queryKey: ["/api/crew-invites"],
@@ -1970,32 +1987,34 @@ export default function CrewScreen() {
               </View>
             ) : (
               <View style={s.emptyState}>
-                {/* Ghost crew card */}
-                <View style={s.ghostCrewCard}>
-                  <View style={s.crewCardLeft}>
-                    <View style={s.ghostCrewEmoji}>
-                      <Text style={{ fontSize: 28 }}>🏃</Text>
-                    </View>
-                    <View style={{ flex: 1, gap: 4 }}>
-                      <Text style={s.ghostCrewName}>The Morning Milers</Text>
-                      <Text style={s.ghostCrewDesc} numberOfLines={1}>Early risers crushing miles together</Text>
-                      <View style={s.ghostCrewMeta}>
-                        <Ionicons name="people-outline" size={13} color={C.textMuted} />
-                        <Text style={s.ghostCrewMetaTxt}> 6 members</Text>
+                {!ghostCrewDone && (
+                  <>
+                    <View style={s.ghostCrewCard}>
+                      <View style={s.crewCardLeft}>
+                        <View style={s.ghostCrewEmoji}>
+                          <Text style={{ fontSize: 28 }}>🏃</Text>
+                        </View>
+                        <View style={{ flex: 1, gap: 4 }}>
+                          <Text style={s.ghostCrewName}>The Morning Milers</Text>
+                          <Text style={s.ghostCrewDesc} numberOfLines={1}>Early risers crushing miles together</Text>
+                          <View style={s.ghostCrewMeta}>
+                            <Ionicons name="people-outline" size={13} color={C.textMuted} />
+                            <Text style={s.ghostCrewMetaTxt}> 6 members</Text>
+                          </View>
+                          <View style={s.ghostCrewChips}>
+                            <View style={s.ghostChip}><Text style={s.ghostChipTxt}>Social</Text></View>
+                            <View style={s.ghostChip}><Text style={s.ghostChipTxt}>Casual</Text></View>
+                          </View>
+                        </View>
                       </View>
-                      <View style={s.ghostCrewChips}>
-                        <View style={s.ghostChip}><Text style={s.ghostChipTxt}>Social</Text></View>
-                        <View style={s.ghostChip}><Text style={s.ghostChipTxt}>Casual</Text></View>
-                      </View>
+                      <Ionicons name="chevron-forward" size={18} color={C.textMuted} />
                     </View>
-                  </View>
-                  <Ionicons name="chevron-forward" size={18} color={C.textMuted} />
-                </View>
-                {/* Tip */}
-                <View style={s.ghostCrewTipRow}>
-                  <Feather name="info" size={11} color={C.textMuted} />
-                  <Text style={s.ghostCrewTipTxt}>Join a crew to train, achieve, and grow together</Text>
-                </View>
+                    <View style={s.ghostCrewTipRow}>
+                      <Feather name="info" size={11} color={C.textMuted} />
+                      <Text style={s.ghostCrewTipTxt}>Join a crew to train, achieve, and grow together</Text>
+                    </View>
+                  </>
+                )}
                 <TouchableOpacity style={[s.createCrewBtn, { marginHorizontal: 0, marginBottom: 12, alignSelf: "stretch" }]} onPress={() => setShowCreate(true)} testID="create-first-crew" activeOpacity={0.88}>
                   <Ionicons name="people" size={20} color={C.bg} />
                   <Text style={s.createCrewBtnTxt}>Create a Crew</Text>
@@ -2292,7 +2311,7 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     borderStyle: "dashed",
     padding: 16,
     marginBottom: 12,
-    opacity: 0.65,
+    opacity: 0.85,
     alignSelf: "stretch",
   },
   ghostCrewEmoji: {
