@@ -129,6 +129,14 @@ function formatPaceSolo(p: number) {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+function fmtTotalTime(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
 function formatDurationSolo(seconds: number) {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
@@ -430,7 +438,11 @@ export default function ProfileScreen() {
     const avgPace = withPace.length > 0
       ? withPace.reduce((s, r) => s + r.pace_min_per_mile!, 0) / withPace.length
       : null;
-    return { totalMiles, monthMiles, yearMiles, count: filtered.length, avgPace };
+    const totalMovingSeconds = filtered.reduce((s, r) => {
+      const secs = (r as any).move_time_seconds ?? r.duration_seconds ?? 0;
+      return s + secs;
+    }, 0);
+    return { totalMiles, monthMiles, yearMiles, count: filtered.length, avgPace, totalMovingSeconds };
   }, [soloRuns, profileActivity]);
 
   const computedTopRuns = React.useMemo(() => {
@@ -838,6 +850,10 @@ export default function ProfileScreen() {
         <View style={styles.statCard}>
           <Text style={styles.statNum}>{toDisplayDist(actStats.totalMiles, distUnit)}</Text>
           <Text style={styles.statName}>{distUnit === "km" ? "Total KM" : "Total Miles"}</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statNum}>{actStats.totalMovingSeconds > 0 ? fmtTotalTime(actStats.totalMovingSeconds) : "—"}</Text>
+          <Text style={styles.statName}>Total Time</Text>
         </View>
         <View style={styles.statCard}>
           <Text style={styles.statNum}>{actStats.count}</Text>
