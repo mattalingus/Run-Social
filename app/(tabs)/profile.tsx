@@ -741,7 +741,18 @@ export default function ProfileScreen() {
                           style={[styles.achGridCell, isSelected && styles.achGridCellSelected]}
                           onPress={() => setSelectedAchievement(isSelected ? null : ach)}
                         >
-                          <Text style={{ fontSize: 36, opacity: earned ? 1 : 0.2 }}>{ach.icon}</Text>
+                          <View style={[
+                            styles.achBadge,
+                            earned
+                              ? { backgroundColor: ach.iconBg, borderColor: ach.iconColor + "55" }
+                              : { backgroundColor: C.surface, borderColor: C.border },
+                          ]}>
+                            <Ionicons
+                              name={ach.icon as any}
+                              size={20}
+                              color={earned ? ach.iconColor : C.textMuted}
+                            />
+                          </View>
                           {earned && <View style={styles.achGridDot} />}
                         </Pressable>
                       );
@@ -763,8 +774,19 @@ export default function ProfileScreen() {
               const pct = Math.min(current / target, 1);
               return (
                 <View style={styles.achDetailPanel}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    <Text style={{ fontSize: 28 }}>{ach.icon}</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                    <View style={[
+                      styles.achBadgeLarge,
+                      earned
+                        ? { backgroundColor: ach.iconBg, borderColor: ach.iconColor + "66" }
+                        : { backgroundColor: C.surface, borderColor: C.border },
+                    ]}>
+                      <Ionicons
+                        name={ach.icon as any}
+                        size={26}
+                        color={earned ? ach.iconColor : C.textMuted}
+                      />
+                    </View>
                     <View style={{ flex: 1 }}>
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                         <Text style={styles.goalLabel}>{ach.name}</Text>
@@ -2124,6 +2146,16 @@ function makeStyles(C: ReturnType<typeof import("@/contexts/ThemeContext").useTh
   },
   achGridCellSelected: { backgroundColor: C.primaryMuted },
   achGridIcon: { fontSize: 32 },
+  achBadge: {
+    width: 46, height: 46, borderRadius: 23,
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 1.5,
+  },
+  achBadgeLarge: {
+    width: 54, height: 54, borderRadius: 27,
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 2,
+  },
   achGridDot: {
     width: 5, height: 5, borderRadius: 3,
     backgroundColor: C.primary, marginTop: 3,
