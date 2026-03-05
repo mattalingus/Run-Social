@@ -1154,6 +1154,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/runs/:id/tracking-path", async (req, res) => {
+    try {
+      const points = await storage.getHostRoutePath(req.params.id);
+      res.json({ path: points });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.post("/api/runs/:id/runner-finish", requireAuth, async (req, res) => {
     try {
       const { finalDistance, finalPace } = req.body;

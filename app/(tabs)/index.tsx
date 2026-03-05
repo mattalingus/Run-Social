@@ -24,7 +24,8 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import MapView, { Marker } from "react-native-maps";
+import MapView, { Marker, Polyline } from "react-native-maps";
+import MAP_STYLE from "@/lib/mapStyle";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "@/contexts/ThemeContext";
 import { darkColors as C, type ColorScheme } from "@/constants/colors";
@@ -502,6 +503,89 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
   );
 }
 
+// ─── Live Card Expansion ──────────────────────────────────────────────────────
+
+const LIVE_DOT_COLORS = ["#FF6B6B","#4ECDC4","#FFE66D","#A855F7","#F97316","#38BDF8","#FB7185"];
+
+function LiveCardExpansion({ runId }: { runId: string }) {
+  const { C, theme } = useTheme();
+  const { data: liveData } = useQuery<any>({
+    queryKey: ["/api/runs", runId, "live"],
+    queryFn: async () => { const r = await apiRequest("GET", `/api/runs/${runId}/live`); return r.json(); },
+    refetchInterval: 5000,
+    staleTime: 0,
+  });
+  const { data: pathData } = useQuery<any>({
+    queryKey: ["/api/runs", runId, "tracking-path"],
+    queryFn: async () => { const r = await apiRequest("GET", `/api/runs/${runId}/tracking-path`); return r.json(); },
+    refetchInterval: 10000,
+    staleTime: 0,
+  });
+  const participants: any[] = liveData?.participants ?? [];
+  const present = participants.filter((p) => p.is_present && p.latitude && p.longitude);
+  const presentCount: number = liveData?.presentCount ?? 0;
+  const path: { latitude: number; longitude: number }[] = Array.isArray(pathData?.path) ? pathData.path : [];
+  const avgDist = present.length > 0
+    ? present.reduce((s: number, p: any) => s + (p.cumulative_distance ?? 0), 0) / present.length : 0;
+  const validPaces = present.filter((p: any) => (p.current_pace ?? 0) > 0).map((p: any) => p.current_pace);
+  const leadPace = validPaces.length > 0 ? Math.min(...validPaces) : 0;
+  const startCoord = path.length > 0 ? path[0] : null;
+  const initialRegion = startCoord
+    ? { latitude: startCoord.latitude, longitude: startCoord.longitude, latitudeDelta: 0.012, longitudeDelta: 0.012 }
+    : undefined;
+
+  const fmtPace = (p: number) => {
+    const m = Math.floor(p); const s = Math.round((p - m) * 60);
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
+
+  return (
+    <View style={{ backgroundColor: C.surface, borderBottomLeftRadius: 14, borderBottomRightRadius: 14, overflow: "hidden", marginTop: -2, borderWidth: 1, borderTopWidth: 0, borderColor: C.border }}>
+      {Platform.OS !== "web" ? (
+        <MapView
+          style={{ height: 180, pointerEvents: "none" as any }}
+          customMapStyle={theme === "dark" ? MAP_STYLE : []}
+          initialRegion={initialRegion}
+          scrollEnabled={false}
+          zoomEnabled={false}
+          pitchEnabled={false}
+          rotateEnabled={false}
+          showsUserLocation={false}
+        >
+          {path.length > 1 && <Polyline coordinates={path} strokeColor="#00D97E" strokeWidth={3} />}
+          {present.map((p: any, i: number) => (
+            <Marker key={p.user_id} coordinate={{ latitude: p.latitude, longitude: p.longitude }} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
+              <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: LIVE_DOT_COLORS[i % LIVE_DOT_COLORS.length], alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#fff" }}>
+                <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 10, color: "#fff" }}>{p.name?.[0]?.toUpperCase() ?? "?"}</Text>
+              </View>
+            </Marker>
+          ))}
+        </MapView>
+      ) : (
+        <View style={{ height: 90, alignItems: "center", justifyContent: "center" }}>
+          <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textMuted }}>Open on mobile to watch live</Text>
+        </View>
+      )}
+      <View style={{ flexDirection: "row", paddingVertical: 12, paddingHorizontal: 8, borderTopWidth: 1, borderColor: C.border }}>
+        <View style={{ flex: 1, alignItems: "center" }}>
+          <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text }}>{presentCount}</Text>
+          <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted }}>in</Text>
+        </View>
+        <View style={{ width: 1, backgroundColor: C.border, marginVertical: 4 }} />
+        <View style={{ flex: 1, alignItems: "center" }}>
+          <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text }}>{avgDist.toFixed(2)}</Text>
+          <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted }}>avg mi</Text>
+        </View>
+        <View style={{ width: 1, backgroundColor: C.border, marginVertical: 4 }} />
+        <View style={{ flex: 1, alignItems: "center" }}>
+          <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text }}>{leadPace > 0 ? fmtPace(leadPace) : "--:--"}</Text>
+          <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted }}>lead pace</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 // ─── RunCard ──────────────────────────────────────────────────────────────────
 
 function RunCard({
@@ -687,6 +771,7 @@ export default function DiscoverScreen() {
   const { activityFilter, setActivityFilter } = useActivity();
   const [showFilter, setShowFilter] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
+  const [expandedLiveId, setExpandedLiveId] = useState<string | null>(null);
   const { width: screenWidth } = useWindowDimensions();
   const SLIDE_TIMERS = [3, 4, 5, 4, 3];
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -1504,22 +1589,27 @@ export default function DiscoverScreen() {
             </View>
           }
           renderItem={({ item }) => (
-            <RunCard
-              run={item}
-              distanceMi={userLocation ? distanceMap[item.id] : undefined}
-              isBookmarked={bookmarkedIds.has(item.id)}
-              isFriend={friendIdSet.has(item.host_id)}
-              isCrew={!!item.crew_id}
-              onBookmark={user ? () => bookmarkMutation.mutate(item.id) : undefined}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                if (item.is_active && !item.is_completed) {
-                  router.push(`/run-spectate/${item.id}` as any);
-                } else {
-                  router.push(`/run/${item.id}`);
-                }
-              }}
-            />
+            <View>
+              <RunCard
+                run={item}
+                distanceMi={userLocation ? distanceMap[item.id] : undefined}
+                isBookmarked={bookmarkedIds.has(item.id)}
+                isFriend={friendIdSet.has(item.host_id)}
+                isCrew={!!item.crew_id}
+                onBookmark={user ? () => bookmarkMutation.mutate(item.id) : undefined}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  if (item.is_active && !item.is_completed) {
+                    setExpandedLiveId((prev) => prev === item.id ? null : item.id);
+                  } else {
+                    router.push(`/run/${item.id}`);
+                  }
+                }}
+              />
+              {item.is_active && !item.is_completed && expandedLiveId === item.id && (
+                <LiveCardExpansion runId={item.id} />
+              )}
+            </View>
           )}
           ListEmptyComponent={
             search || isFiltered ? (

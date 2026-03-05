@@ -74,9 +74,9 @@ export default function RunSpectateScreen() {
   });
 
   const { data: pathData } = useQuery<any>({
-    queryKey: ["/api/runs", id, "host-route"],
+    queryKey: ["/api/runs", id, "tracking-path"],
     queryFn: async () => {
-      const res = await apiRequest("GET", `/api/runs/${id}/host-route`);
+      const res = await apiRequest("GET", `/api/runs/${id}/tracking-path`);
       return res.json();
     },
     refetchInterval: 10000,
@@ -86,7 +86,7 @@ export default function RunSpectateScreen() {
   const participants: any[] = liveData?.participants ?? [];
   const presentParticipants = participants.filter((p) => p.is_present && p.latitude && p.longitude);
   const presentCount = liveData?.presentCount ?? 0;
-  const path: { latitude: number; longitude: number }[] = Array.isArray(pathData) ? pathData : [];
+  const path: { latitude: number; longitude: number }[] = Array.isArray(pathData?.path) ? pathData.path : [];
 
   const avgDist = presentParticipants.length > 0
     ? presentParticipants.reduce((sum: number, p: any) => sum + (p.cumulative_distance ?? 0), 0) / presentParticipants.length
@@ -103,7 +103,6 @@ export default function RunSpectateScreen() {
   const isCompleted = liveData?.isCompleted ?? false;
   const isActive = liveData?.isActive ?? false;
   const noData = path.length === 0 && presentCount === 0;
-
   const initialRegion = startCoord
     ? {
         latitude: startCoord.latitude,
@@ -216,21 +215,23 @@ export default function RunSpectateScreen() {
 
       {/* Floating stats panel */}
       {!isCompleted && (
-        <View style={[s.statsPanel, { bottom: botPad + 24 }]}>
-          <View style={s.statItem}>
-            <Ionicons name="people" size={16} color="#00D97E" />
-            <Text style={s.statValue}>{presentCount}</Text>
-            <Text style={s.statLabel}>IN</Text>
-          </View>
-          <View style={s.statDivider} />
-          <View style={s.statItem}>
-            <Text style={s.statValue}>{avgDist.toFixed(2)}</Text>
-            <Text style={s.statLabel}>avg dist mi</Text>
-          </View>
-          <View style={s.statDivider} />
-          <View style={s.statItem}>
-            <Text style={s.statValue}>{leadPace > 0 ? formatPace(leadPace) : "--:--"}</Text>
-            <Text style={s.statLabel}>lead pace</Text>
+        <View style={[s.statsPanelWrap, { bottom: botPad + 20 }]}>
+          <View style={s.statsPanel}>
+            <View style={s.statItem}>
+              <Ionicons name="people" size={16} color="#00D97E" />
+              <Text style={s.statValue}>{presentCount}</Text>
+              <Text style={s.statLabel}>IN</Text>
+            </View>
+            <View style={s.statDivider} />
+            <View style={s.statItem}>
+              <Text style={s.statValue}>{avgDist.toFixed(2)}</Text>
+              <Text style={s.statLabel}>avg dist mi</Text>
+            </View>
+            <View style={s.statDivider} />
+            <View style={s.statItem}>
+              <Text style={s.statValue}>{leadPace > 0 ? formatPace(leadPace) : "--:--"}</Text>
+              <Text style={s.statLabel}>lead pace</Text>
+            </View>
           </View>
         </View>
       )}
@@ -319,10 +320,13 @@ function makeStyles(C: ColorScheme) {
       color: "#fff",
     },
 
-    statsPanel: {
+    statsPanelWrap: {
       position: "absolute",
       left: 16,
       right: 16,
+      gap: 10,
+    },
+    statsPanel: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-around",
