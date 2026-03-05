@@ -208,6 +208,14 @@ function RunMarker({ run, isSelected, isFriend, onPress }: { run: Run; isSelecte
   }, []);
 
   useEffect(() => {
+    if (isLiveNow) return;
+    setTracksViewChanges(true);
+    frozen.current = false;
+    const t = setTimeout(() => { frozen.current = true; setTracksViewChanges(false); }, 400);
+    return () => clearTimeout(t);
+  }, [isSelected]);
+
+  useEffect(() => {
     if (!isLiveNow) return;
     const loop = Animated.loop(
       Animated.sequence([
