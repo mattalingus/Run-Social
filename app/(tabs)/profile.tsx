@@ -36,7 +36,7 @@ import HostProfileSheet from "@/components/HostProfileSheet";
 import SettingsModal from "@/components/SettingsModal";
 const APP_SHARE_URL = process.env.EXPO_PUBLIC_DOMAIN
   ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
-  : "https://paceup.app";
+  : "https://paceupapp.com";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

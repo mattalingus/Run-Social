@@ -294,10 +294,10 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
   function handleChangePassword() {
     Alert.alert(
       "Change Password",
-      "To reset your password, email us at support@paceup.app with your account username and we'll send you a reset link.",
+      "To reset your password, email us at support@paceupapp.com with your account username and we'll send you a reset link.",
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Email Support", onPress: () => Linking.openURL("mailto:support@paceup.app?subject=Password%20Reset%20Request") },
+        { text: "Email Support", onPress: () => Linking.openURL("mailto:support@paceupapp.com?subject=Password%20Reset%20Request") },
       ]
     );
   }
@@ -666,7 +666,7 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
               sublabel="Share PaceUp with your crew"
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                const msg = "Join me on PaceUp — discover group runs & rides! Download it here: https://paceup.app";
+                const msg = "Join me on PaceUp — discover group runs & rides! Download it here: https://paceupapp.com";
                 if (Platform.OS === "web") {
                   (navigator as any).clipboard?.writeText(msg);
                   Alert.alert("Copied!", "Invite link copied to clipboard.");
@@ -733,8 +733,8 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
               iconBg="#1A2A2A"
               icon={<Feather name="mail" size={17} color="#4DA6FF" />}
               label="Contact Support"
-              sublabel="support@paceup.app"
-              onPress={() => Linking.openURL("mailto:support@paceup.app")}
+              sublabel="support@paceupapp.com"
+              onPress={() => Linking.openURL("mailto:support@paceupapp.com")}
             />
           </SectionCard>
 
@@ -759,7 +759,7 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
             {[
               { title: "1. Acceptance of Terms", body: "By creating an account or using PaceUp, you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use the app. We may update these terms from time to time; continued use of the app constitutes acceptance of any revised terms." },
               { title: "2. Eligibility", body: "You must be at least 18 years of age to use PaceUp. By using the app, you represent and warrant that you meet this requirement and that all information you provide is accurate and complete." },
-              { title: "3. Your Account", body: "You are responsible for maintaining the confidentiality of your account credentials and for all activity that occurs under your account. Notify us immediately at support@paceup.app if you suspect unauthorized access to your account." },
+              { title: "3. Your Account", body: "You are responsible for maintaining the confidentiality of your account credentials and for all activity that occurs under your account. Notify us immediately at support@paceupapp.com if you suspect unauthorized access to your account." },
               { title: "4. Acceptable Use", body: "You agree to use PaceUp only for lawful purposes. You may not: harass, threaten, or harm other users; post false, misleading, or offensive content; spam or send unsolicited messages; impersonate another person; attempt to gain unauthorized access to any part of the app; or use the app for any commercial purpose without our written consent." },
               { title: "5. Content", body: "You retain ownership of content you post on PaceUp (photos, routes, messages). By posting content, you grant PaceUp a non-exclusive, royalty-free license to display and distribute that content within the app. We reserve the right to remove any content that violates these terms or our community standards." },
               { title: "6. Physical Activity Disclaimer", body: "PaceUp facilitates connections between people for physical activities. You acknowledge that participating in runs, rides, and other physical activities carries inherent risk. You participate at your own risk and are responsible for your own safety. PaceUp does not supervise events, verify participants' fitness levels, or assume any liability for injuries or incidents that occur during activities organized through the app." },
@@ -768,7 +768,7 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
               { title: "9. Disclaimer of Warranties", body: "PaceUp is provided \"as is\" without warranty of any kind. We do not guarantee that the app will be available at all times, error-free, or that information provided by other users is accurate. To the fullest extent permitted by law, PaceUp disclaims all warranties, express or implied." },
               { title: "10. Limitation of Liability", body: "To the maximum extent permitted by applicable law, PaceUp and its affiliates shall not be liable for any indirect, incidental, special, consequential, or punitive damages arising from your use of the app or participation in any events organized through it." },
               { title: "11. Governing Law", body: "These terms shall be governed by the laws of your jurisdiction. Any disputes shall be resolved through binding arbitration or in the courts of competent jurisdiction." },
-              { title: "12. Contact", body: "If you have questions about these Terms of Service, please contact us at support@paceup.app." },
+              { title: "12. Contact", body: "If you have questions about these Terms of Service, please contact us at support@paceupapp.com." },
             ].map((sec, i) => (
               <View key={i} style={{ marginBottom: 20 }}>
                 <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 15, color: C.text, marginBottom: 6 }}>{sec.title}</Text>
@@ -807,11 +807,11 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
               { title: "4. Information Sharing", body: "We do not sell your personal information to third parties. We may share data with service providers who help us operate the app (e.g., hosting, database, push notifications), subject to confidentiality agreements. We may disclose information if required by law or to protect the safety of users." },
               { title: "5. Public vs. Private Content", body: "Your profile, activity stats, and runs you host may be visible to other PaceUp users depending on your privacy settings. You can control your profile visibility in Settings. Private runs are only visible to invited participants." },
               { title: "6. Data Retention", body: "We retain your account data for as long as your account is active. If you delete your account, we will delete your personal data within 30 days, except where we are required by law to retain it." },
-              { title: "7. Your Rights", body: "You have the right to access, correct, or delete your personal data at any time. You can update your profile information in the app or delete your account in Settings. To request a data export or for any privacy-related inquiries, contact us at support@paceup.app." },
+              { title: "7. Your Rights", body: "You have the right to access, correct, or delete your personal data at any time. You can update your profile information in the app or delete your account in Settings. To request a data export or for any privacy-related inquiries, contact us at support@paceupapp.com." },
               { title: "8. Security", body: "We implement industry-standard security measures to protect your data, including encrypted connections (HTTPS) and secure authentication. No method of transmission over the internet is 100% secure, and we cannot guarantee absolute security." },
               { title: "9. Children's Privacy", body: "PaceUp is not intended for users under the age of 18. We do not knowingly collect personal information from children. If you believe a child has provided us with their information, please contact us and we will delete it promptly." },
               { title: "10. Changes to This Policy", body: "We may update this Privacy Policy from time to time. We will notify you of significant changes via the app or email. Your continued use of PaceUp after changes constitutes acceptance of the revised policy." },
-              { title: "11. Contact Us", body: "If you have any questions, concerns, or requests regarding your privacy, please contact us at support@paceup.app. We are committed to addressing your concerns promptly." },
+              { title: "11. Contact Us", body: "If you have any questions, concerns, or requests regarding your privacy, please contact us at support@paceupapp.com. We are committed to addressing your concerns promptly." },
             ].map((sec, i) => (
               <View key={i} style={{ marginBottom: 20 }}>
                 <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 15, color: C.text, marginBottom: 6 }}>{sec.title}</Text>
