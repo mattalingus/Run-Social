@@ -50,7 +50,13 @@ function resolveImgUrl(url: string | null | undefined): string | null {
 
 const EMOJIS = ["🏃", "🚴", "⚡", "🔥", "💪", "🌿", "🦅", "🐺", "🦁", "🏔", "🌊", "⭐", "🎯", "🚀", "🌙"];
 const CREW_RUN_STYLES = ["Easy Pace", "Chill", "Steady", "Tempo", "Fast", "Recovery", "Long Run", "Progressive", "Intervals", "Race Prep"];
-const CREW_VIBES = ["Talkative", "Quiet", "Motivational", "Training", "Ministry", "Recovery"];
+const CREW_VIBE_GROUPS: { label: string; options: string[] }[] = [
+  { label: "Energy", options: ["High Energy", "Chill Pace", "Competitive", "Recovery", "No Drop", "Motivational"] },
+  { label: "Style", options: ["Social", "Race Training", "Track Workouts", "Trail", "Long Runs", "Speed Work", "Beginners Welcome", "PR Chasers"] },
+  { label: "Personality", options: ["Talkative", "Quiet", "Hype Squad", "Accountability", "Spiritual", "Welcoming", "Strict"] },
+  { label: "Community", options: ["Women Only", "Men Only", "Co-Ed", "LGBTQ+ Friendly", "Ministry"] },
+  { label: "Age Group", options: ["Teens", "20s", "30s", "40s", "50+", "All Ages"] },
+];
 
 interface Crew {
   id: string;
@@ -385,19 +391,24 @@ function CreateCrewSheet({ visible, onClose, onCreated }: { visible: boolean; on
               ))}
             </View>
 
-            <Text style={s.fieldLabel}>Group Vibe <Text style={s.fieldOptional}>(optional)</Text></Text>
-            <Text style={s.fieldHint}>What best describes the energy of your crew?</Text>
-            <View style={s.chipsGrid}>
-              {CREW_VIBES.map((v) => (
-                <TouchableOpacity
-                  key={v}
-                  style={[s.chip, vibes.includes(v) && s.chipVibeActive]}
-                  onPress={() => toggleVibe(v)}
-                >
-                  <Text style={[s.chipTxt, vibes.includes(v) && s.chipVibeActiveTxt]}>{v}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <Text style={s.fieldLabel}>Group Vibe <Text style={s.fieldOptional}>— select all that apply</Text></Text>
+            <Text style={s.fieldHint}>Describe your crew's personality, community, and style.</Text>
+            {CREW_VIBE_GROUPS.map(({ label, options }) => (
+              <View key={label}>
+                <Text style={s.vibeCategoryLabel}>{label}</Text>
+                <View style={s.chipsGrid}>
+                  {options.map((v) => (
+                    <TouchableOpacity
+                      key={v}
+                      style={[s.chip, vibes.includes(v) && s.chipVibeActive]}
+                      onPress={() => toggleVibe(v)}
+                    >
+                      <Text style={[s.chipTxt, vibes.includes(v) && s.chipVibeActiveTxt]}>{v}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            ))}
 
             <TouchableOpacity
               style={[s.primaryBtn, createMutation.isPending && { opacity: 0.6 }]}
@@ -2461,6 +2472,15 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     color: C.textMuted,
     marginTop: -4,
     marginBottom: 10,
+  },
+  vibeCategoryLabel: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 11,
+    color: C.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    marginTop: 14,
+    marginBottom: 6,
   },
   chipsGrid: {
     flexDirection: "row",
