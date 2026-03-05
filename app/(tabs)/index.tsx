@@ -1306,6 +1306,16 @@ export default function DiscoverScreen() {
     return list;
   }, [runs, search, applied, sortOption, distanceMap, userLocation, friendIdSet, activityFilter]);
 
+  const fallbackRuns = useMemo(() =>
+    runs
+      .filter((r) => (r.activity_type ?? "run") === activityFilter)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
+    [runs, activityFilter]
+  );
+
+  const isFallback = sorted.length === 0 && fallbackRuns.length > 0 && !isLoading && !search;
+  const displayList = isFallback ? fallbackRuns : sorted;
+
   // ─── Filter state helpers ──────────────────────────────────────────────────
 
   const isFiltered =
@@ -1438,7 +1448,7 @@ export default function DiscoverScreen() {
         </View>
       ) : (
         <FlatList
-          data={sorted}
+          data={displayList}
           keyExtractor={(r) => r.id}
           contentContainerStyle={[
             s.list,
@@ -1577,7 +1587,13 @@ export default function DiscoverScreen() {
                 )}
               </View>
             )}
-            <Text style={s.nearbyLabel}>{activityFilter === "ride" ? "Upcoming Rides Nearby" : "Upcoming Runs Nearby"}</Text>
+            {isFallback && (
+              <View style={s.fallbackBanner}>
+                <Feather name="info" size={13} color={C.textMuted} />
+                <Text style={s.fallbackBannerTxt}>No exact matches — showing all upcoming {activityFilter === "ride" ? "rides" : "events"}</Text>
+              </View>
+            )}
+            <Text style={s.nearbyLabel}>{isFallback ? (activityFilter === "ride" ? "All Upcoming Rides" : "All Upcoming Events") : (activityFilter === "ride" ? "Upcoming Rides Nearby" : "Upcoming Runs Nearby")}</Text>
             <Pressable
               style={s.viewOnMapBtn}
               onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); goToMap(); }}
@@ -2042,8 +2058,9 @@ export default function DiscoverScreen() {
 
       {/* ── Host Run Modal ───────────────────────────────────────────────────── */}
       <Modal visible={showHostModal} transparent animationType="slide" onRequestClose={() => setShowHostModal(false)}>
-        <KeyboardAvoidingView style={s.modalWrap} behavior="padding">
+        <View style={s.modalWrap}>
         <Pressable style={s.modalOverlay} onPress={() => setShowHostModal(false)} />
+        <KeyboardAvoidingView behavior="padding" style={{ width: "100%" }}>
         <View style={[s.modalSheet, { paddingBottom: insets.bottom + 24 }]}>
 
           {/* Sheet handle */}
@@ -2375,6 +2392,7 @@ export default function DiscoverScreen() {
           )}
         </View>
         </KeyboardAvoidingView>
+        </View>
       </Modal>
 
       {/* ── Community Rules Modal ──────────────────────────────────────────────
@@ -2726,6 +2744,8 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   savedSection: { marginBottom: 16 },
   savedSectionTitle: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.text, marginBottom: 10 },
   nearbyLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary, marginBottom: 10 },
+  fallbackBanner: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10, paddingVertical: 6, paddingHorizontal: 10, backgroundColor: C.surface, borderRadius: 8, borderWidth: 1, borderColor: C.border },
+  fallbackBannerTxt: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, flex: 1 },
   viewOnMapBtn: {
     flexDirection: "row",
     alignItems: "center",
