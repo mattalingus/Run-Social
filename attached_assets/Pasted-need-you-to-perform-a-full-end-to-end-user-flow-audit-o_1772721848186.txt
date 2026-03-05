@@ -1,0 +1,166 @@
+need you to perform a full end-to-end user flow audit of the PaceUp app and fix logic gaps.
+
+While testing before we discovered a major UX bug which you fixed already| 👇 
+
+Example bug
+If a host schedules a run/ride for 2:00 PM and users arrive after 2:00 PM (example 2:10 PM), the Start button disappears, making the event impossible to start.
+
+This should never happen. Users often arrive late.
+
+⸻
+
+I also want a full user journey audit
+
+Go through every major feature front-to-back exactly as a user would and ensure there are no dead ends or broken flows.
+
+Simulate and validate these flows:
+
+⸻
+
+1. Solo Run Flow
+
+User opens app → Solo tab
+
+Check:
+
+• Goal tracking visible
+• Run history visible
+• Saved routes visible
+
+Test full process:
+
+User taps Run Solo
+
+Then verify:
+	1.	GPS tracking starts
+	2.	Live path draws on map
+	3.	Distance + pace update live
+	4.	Pause / resume works
+	5.	Finish run works
+	6.	Run saves correctly
+	7.	Run appears in Run History
+	8.	Run statistics update profile totals
+	9.	User can share run
+
+⸻
+
+2. Event Hosting Flow (Runs & Rides)
+
+Host creates event.
+
+Verify:
+	1.	Event appears in Discover
+	2.	Event appears on Map pins
+	3.	Event can be saved by users
+	4.	Users can tap Plan to Join
+
+Edge cases to test:
+
+• user arrives before event time
+• user arrives after event time
+• host arrives late
+• participants arrive late
+
+Ensure:
+
+• Start button remains accessible
+• Live attendance count updates
+• Host can always start event
+
+⸻
+
+3. Event Live Mode
+
+When host starts event:
+
+Verify:
+
+• GPS tracking starts
+• Path draws live
+• Distance updates
+• Pace updates
+• Attendee count updates
+• Event participants appear
+
+Check that participants see:
+
+• live stats
+• route
+• event progress
+
+⸻
+
+4. Event Completion
+
+When event ends:
+
+Verify:
+
+• Activity saves
+• Stats update
+• Event summary created
+• Participants see results 
+• can share event after the fact in history
+
+⸻
+
+5. Discover Page Flow
+
+User opens Discover.
+
+Verify:
+
+• Nearby events populate
+• Sorting works
+• Filters work
+• Event cards open correctly
+• Map view loads pins
+
+⸻
+
+6. Crew Flow
+
+User joins a crew.
+
+Verify:
+
+• Crew appears in Crew tab
+• Users can leave crew
+. Users in a crew hosted event have the same process as public hosted ones where the events creator is the host and has host abilities 
+. All crew members can host a crew event
+- a cool add could be in hosted events here and public events,  a user on the live screen can select a small line of text that just says tap for leaderboard and a leaderboard drop down appears showing the attending users pfp pace and distance and maybe how far ahead or behind they are from you. 
+
+⸻
+
+7. Friend System
+
+Verify:
+
+• Search by username works
+• Add friend works
+• Friend count updates
+• Private events appear for friends
+
+⸻
+
+8. Edge Case Testing
+
+Specifically test:
+
+• GPS permissions denied
+• no internet connection
+• user leaves event mid-run
+• host disconnects- I should automatically set new host as the person furthest distance ran/or ride so path stays clear and things keep on going. 
+• event with zero participants- scheduled time has came and gone by 1 -2 hours and no host has updated schedule or cancelled it auto deletes. 
+
+⸻
+
+Final Task
+
+After completing this audit:
+	1.	Fix any broken flows
+	2.	Ensure no user journey leads to a dead end
+	3.	Add safeguards for timing issues like the event start bug
+	4.	Improve UX wherever needed
+
+The goal is for every feature to work smoothly from start to finish like a real runner would use it.

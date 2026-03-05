@@ -363,6 +363,7 @@ export default function RunResultsScreen() {
           <ShareActivityModal
             visible={showShare}
             onClose={() => setShowShare(false)}
+            eventPhotos={photos.map((p: any) => resolvePhotoUrl(p.photo_url)).filter(Boolean)}
             runData={{
               distanceMi: myResult?.final_distance ?? run?.min_distance ?? 0,
               paceMinPerMile: myResult?.final_pace ?? null,

@@ -39,6 +39,7 @@ interface Props {
   visible: boolean;
   onClose: () => void;
   runData: ShareRunData;
+  eventPhotos?: string[];
 }
 
 type ActiveAction = "share" | "save" | "copy" | null;
@@ -57,12 +58,13 @@ const GOLD = "#FFB800";
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function ShareActivityModal({ visible, onClose, runData }: Props) {
+export default function ShareActivityModal({ visible, onClose, runData, eventPhotos = [] }: Props) {
   const insets = useSafeAreaInsets();
   const cardRef = useRef<View>(null);
 
   const [caption, setCaption] = useState("");
   const [backgroundPhoto, setBackgroundPhoto] = useState<string | null>(null);
+  const [collageMode, setCollageMode] = useState(false);
   const [activeAction, setActiveAction] = useState<ActiveAction>(null);
   const [captionFont, setCaptionFont] = useState<"Outfit_700Bold" | "PlayfairDisplay_700Bold" | "DancingScript_700Bold">("Outfit_700Bold");
   const [captionSize, setCaptionSize] = useState<20 | 32 | 46>(32);
@@ -224,6 +226,7 @@ export default function ShareActivityModal({ visible, onClose, runData }: Props)
     ...runData,
     caption,
     backgroundPhoto,
+    collagePhotos: collageMode ? eventPhotos : undefined,
     captionFont,
     captionSize,
   };
@@ -257,11 +260,19 @@ export default function ShareActivityModal({ visible, onClose, runData }: Props)
             <ShareCard ref={cardRef} {...cardProps} />
           </View>
 
-          {/* ── Photo background control ──────────────────────────────────── */}
+          {/* ── Photo background controls ─────────────────────────────────── */}
           <View style={st.photoRow}>
             <Pressable
-              style={({ pressed }) => [st.photoBtn, { opacity: pressed ? 0.7 : 1 }]}
-              onPress={backgroundPhoto ? handleRemovePhoto : handlePickPhoto}
+              style={({ pressed }) => [st.photoBtn, backgroundPhoto && st.photoBtnActive, { opacity: pressed ? 0.7 : (collageMode ? 0.4 : 1) }]}
+              onPress={() => {
+                if (collageMode) return;
+                if (backgroundPhoto) {
+                  handleRemovePhoto();
+                } else {
+                  handlePickPhoto();
+                }
+              }}
+              disabled={collageMode}
             >
               <Ionicons
                 name={backgroundPhoto ? "image" : "image-outline"}
@@ -270,7 +281,30 @@ export default function ShareActivityModal({ visible, onClose, runData }: Props)
                 style={{ marginRight: 6 }}
               />
               <Text style={[st.photoBtnTxt, backgroundPhoto && { color: PRIMARY }]}>
-                {backgroundPhoto ? "Remove Background Photo" : "Set Background Photo"}
+                {backgroundPhoto ? "Remove Photo" : "Background Photo"}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={({ pressed }) => [
+                st.photoBtn,
+                collageMode && st.photoBtnActive,
+                { opacity: pressed ? 0.7 : (backgroundPhoto || eventPhotos.length === 0 ? 0.4 : 1) },
+              ]}
+              onPress={() => {
+                if (backgroundPhoto || eventPhotos.length === 0) return;
+                setCollageMode((prev) => !prev);
+              }}
+              disabled={!!backgroundPhoto || eventPhotos.length === 0}
+            >
+              <Ionicons
+                name={collageMode ? "grid" : "grid-outline"}
+                size={15}
+                color={collageMode ? PRIMARY : TEXT_SEC}
+                style={{ marginRight: 6 }}
+              />
+              <Text style={[st.photoBtnTxt, collageMode && { color: PRIMARY }]}>
+                Collage{eventPhotos.length > 0 ? ` (${eventPhotos.length})` : ""}
               </Text>
             </Pressable>
           </View>
@@ -442,6 +476,7 @@ const st = StyleSheet.create({
     width: "100%",
     flexDirection: "row",
     justifyContent: "center",
+    gap: 10,
   },
   photoBtn: {
     flexDirection: "row",
@@ -450,8 +485,12 @@ const st = StyleSheet.create({
     borderWidth: 1,
     borderColor: BORDER,
     borderRadius: 20,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 9,
+  },
+  photoBtnActive: {
+    borderColor: PRIMARY,
+    backgroundColor: PRIMARY + "18",
   },
   photoBtnTxt: {
     fontFamily: "Outfit_600SemiBold",

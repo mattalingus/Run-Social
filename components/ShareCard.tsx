@@ -119,8 +119,111 @@ export interface ShareCardProps {
   eventTitle?: string;
   caption?: string;
   backgroundPhoto?: string | null;
+  collagePhotos?: string[];
   captionFont?: string;
   captionSize?: number;
+}
+
+// ─── Collage background — adapts to photo count ───────────────────────────────
+
+function CollageBackground({ photos }: { photos: string[] }) {
+  const count = Math.min(photos.length, 6);
+  const shown = photos.slice(0, count);
+
+  if (count === 1) {
+    return <Image source={{ uri: shown[0] }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />;
+  }
+
+  if (count === 2) {
+    return (
+      <View style={[StyleSheet.absoluteFillObject, { flexDirection: "row" }]}>
+        {shown.map((uri, i) => (
+          <View key={i} style={{ flex: 1, overflow: "hidden" }}>
+            <Image source={{ uri }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+          </View>
+        ))}
+      </View>
+    );
+  }
+
+  if (count === 3) {
+    return (
+      <View style={[StyleSheet.absoluteFillObject, { flexDirection: "column" }]}>
+        <View style={{ flex: 1, overflow: "hidden" }}>
+          <Image source={{ uri: shown[0] }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+        </View>
+        <View style={{ flex: 1, flexDirection: "row" }}>
+          {shown.slice(1).map((uri, i) => (
+            <View key={i} style={{ flex: 1, overflow: "hidden" }}>
+              <Image source={{ uri }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  }
+
+  if (count === 4) {
+    return (
+      <View style={[StyleSheet.absoluteFillObject, { flexDirection: "column" }]}>
+        <View style={{ flex: 1, flexDirection: "row" }}>
+          {shown.slice(0, 2).map((uri, i) => (
+            <View key={i} style={{ flex: 1, overflow: "hidden" }}>
+              <Image source={{ uri }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+            </View>
+          ))}
+        </View>
+        <View style={{ flex: 1, flexDirection: "row" }}>
+          {shown.slice(2, 4).map((uri, i) => (
+            <View key={i} style={{ flex: 1, overflow: "hidden" }}>
+              <Image source={{ uri }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  }
+
+  if (count === 5) {
+    return (
+      <View style={[StyleSheet.absoluteFillObject, { flexDirection: "row" }]}>
+        <View style={{ flex: 1, flexDirection: "column" }}>
+          {shown.slice(0, 2).map((uri, i) => (
+            <View key={i} style={{ flex: 1, overflow: "hidden" }}>
+              <Image source={{ uri }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+            </View>
+          ))}
+        </View>
+        <View style={{ flex: 1, flexDirection: "column" }}>
+          {shown.slice(2, 5).map((uri, i) => (
+            <View key={i} style={{ flex: 1, overflow: "hidden" }}>
+              <Image source={{ uri }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  }
+
+  // 6+ photos → 3×2 grid
+  return (
+    <View style={[StyleSheet.absoluteFillObject, { flexDirection: "column" }]}>
+      <View style={{ flex: 1, flexDirection: "row" }}>
+        {shown.slice(0, 3).map((uri, i) => (
+          <View key={i} style={{ flex: 1, overflow: "hidden" }}>
+            <Image source={{ uri }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+          </View>
+        ))}
+      </View>
+      <View style={{ flex: 1, flexDirection: "row" }}>
+        {shown.slice(3, 6).map((uri, i) => (
+          <View key={i} style={{ flex: 1, overflow: "hidden" }}>
+            <Image source={{ uri }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+          </View>
+        ))}
+      </View>
+    </View>
+  );
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -144,6 +247,7 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
     eventTitle,
     caption,
     backgroundPhoto,
+    collagePhotos,
     captionFont = "Outfit_700Bold",
     captionSize = 32,
   },
@@ -277,6 +381,72 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
             </View>
           </View>
 
+          {FooterStrip}
+        </View>
+      </View>
+    );
+  }
+
+  // ── COLLAGE MODE ───────────────────────────────────────────────────────────
+  if (collagePhotos && collagePhotos.length > 0) {
+    return (
+      <View ref={ref} style={s.card}>
+        <CollageBackground photos={collagePhotos} />
+
+        {hasRoute && (
+          <Svg width={CARD_W} height={CARD_H} style={StyleSheet.absoluteFillObject}>
+            <Polyline points={svgPointsFull} fill="none" stroke={PRIMARY + "50"} strokeWidth={10} strokeLinecap="round" strokeLinejoin="round" />
+            <Polyline points={svgPointsFull} fill="none" stroke={PRIMARY} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+          </Svg>
+        )}
+
+        <LinearGradient colors={["rgba(0,0,0,0.72)", "transparent"]} style={s.topScrim} />
+        <LinearGradient colors={["transparent", "rgba(0,0,0,0.88)"]} style={s.bottomScrim} />
+
+        <View style={s.photoHeaderRow}>
+          <Text style={s.logo}>PaceUp</Text>
+          <View style={s.actPill}>
+            <Ionicons name={isRide ? "bicycle" : "walk"} size={11} color={PRIMARY} style={{ marginRight: 4 }} />
+            <Text style={s.actPillTxt}>{isRide ? "Ride" : "Run"}</Text>
+          </View>
+        </View>
+
+        <View style={s.photoBottomBlock}>
+          {isGroup && (
+            <View style={[s.groupRow, { paddingHorizontal: 22, paddingBottom: 8 }]}>
+              <View style={s.groupPill}>
+                <Ionicons name="people" size={13} color={GOLD} style={{ marginRight: 5 }} />
+                <Text style={s.groupPillTxt}>{participantCount} {isRide ? "Riders" : "Runners"}</Text>
+              </View>
+              {finishRank != null && (
+                <View style={s.rankPill}>
+                  <Ionicons name="trophy" size={11} color={PRIMARY} style={{ marginRight: 4 }} />
+                  <Text style={s.rankPillTxt}>{ordinal(finishRank)}</Text>
+                </View>
+              )}
+            </View>
+          )}
+          {!!caption && (
+            <Text style={[s.photoCaption, { fontFamily: captionFont, fontSize: captionSize, lineHeight: captionSize * 1.2 }]} numberOfLines={3}>
+              {caption}
+            </Text>
+          )}
+          <View style={s.photoStatsRow}>
+            <View style={[s.statBlock, { flex: 1.4 }]}>
+              <Text style={s.photoStatBig}>{formatDist(distanceMi)}</Text>
+              <Text style={s.photoStatUnit}>miles</Text>
+            </View>
+            <View style={s.photoStatDivider} />
+            <View style={s.statBlock}>
+              <Text style={s.photoStatMid}>{formatPace(paceMinPerMile)}</Text>
+              <Text style={s.photoStatUnit}>min/mi</Text>
+            </View>
+            <View style={s.photoStatDivider} />
+            <View style={s.statBlock}>
+              <Text style={s.photoStatMid}>{formatDuration(durationSeconds)}</Text>
+              <Text style={s.photoStatUnit}>time</Text>
+            </View>
+          </View>
           {FooterStrip}
         </View>
       </View>
