@@ -15,7 +15,16 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.paceup"
+      "bundleIdentifier": "com.paceup",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSCameraUsageDescription": "PaceUp uses your camera to add photos to your runs and rides.",
+        "NSPhotoLibraryUsageDescription": "PaceUp accesses your photo library to add photos to your runs and rides.",
+        "NSPhotoLibraryAddUsageDescription": "PaceUp saves your activity screenshots to your photo library.",
+        "NSMotionUsageDescription": "PaceUp uses motion data to count your steps during runs.",
+        "NSLocationWhenInUseUsageDescription": "PaceUp uses your location to track your route, find nearby events, and show your position on the map.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "PaceUp uses your location to track your route during runs and rides, even when the app is in the background."
+      }
     },
     "android": {
       "package": "com.paceup",
@@ -41,8 +50,32 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow PaceUp to use your location to discover nearby runs.",
-          "locationWhenInUsePermission": "Allow PaceUp to use your location to discover nearby runs."
+          "locationAlwaysAndWhenInUsePermission": "PaceUp uses your location to track your route during runs and rides, even when the app is in the background.",
+          "locationWhenInUsePermission": "PaceUp uses your location to track your route, find nearby events, and show your position on the map."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#00D97E",
+          "sounds": [],
+          "mode": "production"
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "PaceUp accesses your photo library to add photos to your runs and rides.",
+          "savePhotosPermission": "PaceUp saves your activity screenshots to your photo library.",
+          "isAccessMediaLocationEnabled": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "PaceUp accesses your photo library to add photos to your runs and rides.",
+          "cameraPermission": "PaceUp uses your camera to add photos to your runs and rides."
         }
       ]
     ],
