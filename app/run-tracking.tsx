@@ -32,6 +32,7 @@ import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { useActivity } from "@/contexts/ActivityContext";
 import { useAuth } from "@/contexts/AuthContext";
 import C from "@/constants/colors";
+import { useTheme } from "@/contexts/ThemeContext";
 import { formatDistance } from "@/lib/formatDistance";
 import { toDisplayDist, toDisplayPace, unitLabel, type DistanceUnit } from "@/lib/units";
 
@@ -112,8 +113,10 @@ function pickCoachPhrase(
   distance: number,
   paceMinTotal: number,
   totalSeconds: number,
-  prevPace: number | null
+  prevPace: number | null,
+  activityType: "run" | "ride" = "run"
 ): string {
+  const isRide = activityType === "ride";
   const pS = spokenPace(paceMinTotal);
   const tS = spokenTime(totalSeconds);
   const pM = Math.floor(paceMinTotal);
@@ -190,7 +193,7 @@ function pickCoachPhrase(
   // ── Pace line ───────────────────────────────────────────────────────────────
   const secPart = pSec > 0 ? ` ${pSec} second${pSec !== 1 ? "s" : ""}` : "";
   const paceLines = [
-    `Running at ${pS} per mile.`,
+    `${isRide ? "Riding" : "Running"} at ${pS} per mile.`,
     `Current pace, ${pS} a mile.`,
     `${pM} minute${secPart} miles.`,
     `Averaging ${pS} per mile.`,
@@ -207,14 +210,14 @@ function pickCoachPhrase(
     `Moving at ${pS} a mile.`,
     `Pace right now is ${pS}.`,
     `That puts you at ${pS} per mile.`,
-    `You're running ${pS} miles.`,
+    `You're ${isRide ? "riding" : "running"} ${pS} miles.`,
     `Speed check: ${pS} per mile.`,
     `${pS} on the pace.`,
     `Tracking at ${pS} per mile.`,
     `Mile pace: ${pS}.`,
     `You're sitting on ${pS}.`,
     `Pace check: ${pS} a mile.`,
-    `${pS} per mile this run.`,
+    `${pS} per mile this ${isRide ? "ride" : "run"}.`,
     `Effort translates to ${pS} per mile.`,
     `That's ${pS} minute miles.`,
     `${pS} through the mile.`,
@@ -257,20 +260,20 @@ function pickCoachPhrase(
     `${tS} elapsed.`,
     `Time: ${tS}.`,
     `${totalM} minute${totalM !== 1 ? "s" : ""} in.`,
-    `Running for ${tS}.`,
+    `${isRide ? "Riding" : "Running"} for ${tS}.`,
     `${tS} so far.`,
     `That's ${tS} of work.`,
     `${tS} logged.`,
     `Timer reads ${tS}.`,
-    `You're ${tS} into this run.`,
+    `You're ${tS} into this ${isRide ? "ride" : "run"}.`,
     `${totalM} minute${totalM !== 1 ? "s" : ""} on the watch.`,
     `Time at ${tS}.`,
     `${tS} underway.`,
     `Clock says ${tS}.`,
     `${tS} into it.`,
     `Elapsed: ${tS}.`,
-    `You've run for ${tS}.`,
-    `${tS} on the run.`,
+    `You've ${isRide ? "ridden" : "run"} for ${tS}.`,
+    `${tS} on the ${isRide ? "ride" : "run"}.`,
   ];
   const timeLine = pick(timeLines);
 
@@ -296,6 +299,7 @@ export default function RunTrackingScreen() {
   const qc = useQueryClient();
   const { activityFilter } = useActivity();
   const { user } = useAuth();
+  const { C: TC } = useTheme();
   const distUnit: DistanceUnit = ((user as any)?.distance_unit ?? "miles") as DistanceUnit;
   const { pathId } = useLocalSearchParams<{ pathId?: string }>();
 
@@ -386,10 +390,10 @@ export default function RunTrackingScreen() {
   const announcePace = useCallback((distance: number, totalSeconds: number) => {
     if (Platform.OS === "web") return;
     const paceMinTotal = totalSeconds / 60 / distance;
-    const text = pickCoachPhrase(distance, paceMinTotal, totalSeconds, lastAnnouncedPaceRef.current);
+    const text = pickCoachPhrase(distance, paceMinTotal, totalSeconds, lastAnnouncedPaceRef.current, activityFilter);
     lastAnnouncedPaceRef.current = paceMinTotal;
     Speech.speak(text, { rate: 0.95 });
-  }, []);
+  }, [activityFilter]);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const locationSubRef = useRef<Location.LocationSubscription | null>(null);
@@ -441,7 +445,7 @@ export default function RunTrackingScreen() {
             ? `${Math.floor(pace)}:${Math.round((pace - Math.floor(pace)) * 60).toString().padStart(2, "0")}/mi`
             : "";
           Share.share({
-            message: `Just finished a ${dist.toFixed(2)} mile ${activityFilter}${paceStr ? ` at ${paceStr} pace` : ""}! 🏃 Tracked on PaceUp.`,
+            message: `Just finished a ${dist.toFixed(2)} mile ${activityFilter}${paceStr ? ` at ${paceStr} pace` : ""}! ${activityFilter === "ride" ? "🚴" : "🏃"} Tracked on PaceUp.`,
           }).catch(() => {});
         });
       } catch (_) {}
@@ -916,11 +920,12 @@ export default function RunTrackingScreen() {
             );
             const isDistance = (prTiers.distanceTier ?? 99) <= (prTiers.paceTier ?? 99);
             const color = tier === 1 ? "#FFB800" : tier === 2 ? "#C0C0C0" : "#CD7F32";
+            const actLabel = activityFilter === "ride" ? "Ride" : "Run";
             const label = tier === 1
-              ? (isDistance ? "New Distance PR!" : "New Pace PR!")
+              ? (isDistance ? `New Distance PR!` : "New Pace PR!")
               : tier === 2
-              ? (isDistance ? "2nd Longest Run" : "2nd Fastest Pace")
-              : (isDistance ? "3rd Longest Run" : "3rd Fastest Pace");
+              ? (isDistance ? `2nd Longest ${actLabel}` : "2nd Fastest Pace")
+              : (isDistance ? `3rd Longest ${actLabel}` : "3rd Fastest Pace");
             return (
               <View style={[t.prBanner, { borderColor: color + "55", backgroundColor: color + "15" }]}>
                 <Ionicons name="medal" size={18} color={color} />
@@ -962,26 +967,26 @@ export default function RunTrackingScreen() {
               return `${m}:${sec.toString().padStart(2, "0")}`;
             };
             return (
-              <View style={t.statsRow2}>
+              <View style={[t.statsRow2, { backgroundColor: TC.card, borderColor: TC.border }]}>
                 {elev != null && (
                   <View style={t.stat2Block}>
-                    <Feather name="trending-up" size={14} color={C.textMuted} />
-                    <Text style={t.stat2Val}>{elev} ft</Text>
-                    <Text style={t.stat2Label}>elevation</Text>
+                    <Feather name="trending-up" size={14} color={TC.textMuted} />
+                    <Text style={[t.stat2Val, { color: TC.text }]}>{elev} ft</Text>
+                    <Text style={[t.stat2Label, { color: TC.textMuted }]}>elevation</Text>
                   </View>
                 )}
                 {moveSecs > 0 && (
                   <View style={t.stat2Block}>
-                    <Feather name="clock" size={14} color={C.textMuted} />
-                    <Text style={t.stat2Val}>{formatMoveTime(moveSecs)}</Text>
-                    <Text style={t.stat2Label}>move time</Text>
+                    <Feather name="clock" size={14} color={TC.textMuted} />
+                    <Text style={[t.stat2Val, { color: TC.text }]}>{formatMoveTime(moveSecs)}</Text>
+                    <Text style={[t.stat2Label, { color: TC.textMuted }]}>move time</Text>
                   </View>
                 )}
                 {steps > 0 && (
                   <View style={t.stat2Block}>
-                    <Ionicons name="footsteps-outline" size={14} color={C.textMuted} />
-                    <Text style={t.stat2Val}>{steps.toLocaleString()}</Text>
-                    <Text style={t.stat2Label}>steps</Text>
+                    <Ionicons name="footsteps-outline" size={14} color={TC.textMuted} />
+                    <Text style={[t.stat2Val, { color: TC.text }]}>{steps.toLocaleString()}</Text>
+                    <Text style={[t.stat2Label, { color: TC.textMuted }]}>steps</Text>
                   </View>
                 )}
               </View>

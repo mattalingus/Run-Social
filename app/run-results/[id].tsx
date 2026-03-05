@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   View,
   Text,
@@ -19,7 +19,8 @@ import * as ImagePicker from "expo-image-picker";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
-import C from "@/constants/colors";
+import { useTheme } from "@/contexts/ThemeContext";
+import { type ColorScheme } from "@/constants/colors";
 import ShareActivityModal from "@/components/ShareActivityModal";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -55,6 +56,9 @@ export default function RunResultsScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const qc = useQueryClient();
+  const { C } = useTheme();
+  const s = useMemo(() => makeStyles(C), [C]);
+
   const [showShare, setShowShare] = useState(false);
   const autoShownRef = useRef(false);
   const [viewerPhoto, setViewerPhoto] = useState<string | null>(null);
@@ -86,7 +90,7 @@ export default function RunResultsScreen() {
     },
   });
 
-  const { data: photos = [], refetch: refetchPhotos } = useQuery<any[]>({
+  const { data: photos = [] } = useQuery<any[]>({
     queryKey: ["/api/runs", id, "photos"],
     queryFn: async () => {
       const res = await apiRequest("GET", `/api/runs/${id}/photos`);
@@ -132,7 +136,7 @@ export default function RunResultsScreen() {
   const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
   const botPad = insets.bottom + (Platform.OS === "web" ? 34 : 0);
 
-  // Participants still running (present but no final data)
+  const isRide = run?.activity_type === "ride";
   const stillRunning = results.filter((r) => r.is_present && r.final_rank == null);
   const finished = results.filter((r) => r.final_rank != null).sort((a, b) => a.final_rank - b.final_rank);
   const isParticipant = results.some((r: any) => r.user_id === user?.id);
@@ -145,7 +149,7 @@ export default function RunResultsScreen() {
           <Feather name="arrow-left" size={20} color={C.text} />
         </Pressable>
         <View style={s.headerCenter}>
-          <Text style={s.headerTitle}>Run Results</Text>
+          <Text style={s.headerTitle}>{isRide ? "Ride Results" : "Run Results"}</Text>
           {run?.title && <Text style={s.headerSub}>{run.title}</Text>}
         </View>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -183,7 +187,7 @@ export default function RunResultsScreen() {
             <View style={s.summaryItem}>
               <Feather name="users" size={18} color={C.primary} />
               <Text style={s.summaryValue}>{results.length}</Text>
-              <Text style={s.summaryLabel}>{run?.activity_type === "ride" ? "Riders" : "Runners"}</Text>
+              <Text style={s.summaryLabel}>{isRide ? "Riders" : "Runners"}</Text>
             </View>
             <View style={s.summaryDivider} />
             <View style={s.summaryItem}>
@@ -197,7 +201,7 @@ export default function RunResultsScreen() {
               <Text style={[s.summaryValue, { color: stillRunning.length > 0 ? C.primary : C.textSecondary }]}>
                 {stillRunning.length}
               </Text>
-              <Text style={s.summaryLabel}>{run?.activity_type === "ride" ? "Still riding" : "Still running"}</Text>
+              <Text style={s.summaryLabel}>{isRide ? "Still riding" : "Still running"}</Text>
             </View>
           </View>
 
@@ -250,12 +254,12 @@ export default function RunResultsScreen() {
             </View>
           )}
 
-          {/* Still running */}
+          {/* Still going */}
           {stillRunning.length > 0 && (
             <View style={s.section}>
               <View style={s.sectionTitleRow}>
                 <View style={s.liveDot} />
-                <Text style={s.sectionTitle}>Still Running</Text>
+                <Text style={s.sectionTitle}>{isRide ? "Still Riding" : "Still Running"}</Text>
               </View>
               {stillRunning.map((runner) => {
                 const isMe = runner.user_id === user?.id;
@@ -285,7 +289,11 @@ export default function RunResultsScreen() {
             <View style={s.emptyWrap}>
               <Feather name="flag" size={40} color={C.border} />
               <Text style={s.emptyTitle}>No results yet</Text>
-              <Text style={s.emptyText}>Runners haven't finished yet. Results will appear here as they cross the finish line.</Text>
+              <Text style={s.emptyText}>
+                {isRide
+                  ? "Riders haven't finished yet. Results will appear here as they cross the finish line."
+                  : "Runners haven't finished yet. Results will appear here as they cross the finish line."}
+              </Text>
             </View>
           )}
 
@@ -374,86 +382,89 @@ export default function RunResultsScreen() {
 
 // ─── Styles ──────────────────────────────────────────────────────────────────
 
-const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: C.bg },
-  header: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 16, paddingBottom: 14,
-    borderBottomWidth: 1, borderBottomColor: C.border,
-  },
-  backBtn: {
-    width: 38, height: 38, borderRadius: 19,
-    backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
-    alignItems: "center", justifyContent: "center",
-  },
-  headerCenter: { flex: 1, alignItems: "center", gap: 2 },
-  headerTitle: { fontFamily: "Outfit_700Bold", fontSize: 17, color: C.text },
-  headerSub: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary },
-  doneBtn: {
-    backgroundColor: C.surface, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8,
-    borderWidth: 1, borderColor: C.border,
-  },
-  doneBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text },
-  loadingWrap: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
-  loadingText: { fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textSecondary },
-  content: { paddingHorizontal: 16, paddingTop: 16, gap: 20 },
-  summaryCard: {
-    flexDirection: "row", backgroundColor: C.card, borderRadius: 16,
-    padding: 16, borderWidth: 1, borderColor: C.border, alignItems: "center",
-  },
-  summaryItem: { flex: 1, alignItems: "center", gap: 4 },
-  summaryValue: { fontFamily: "Outfit_700Bold", fontSize: 20, color: C.text },
-  summaryLabel: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textSecondary },
-  summaryDivider: { width: 1, height: 40, backgroundColor: C.border },
-  section: { gap: 10 },
-  sectionTitle: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.text },
-  sectionTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.primary },
-  runnerCard: {
-    flexDirection: "row", alignItems: "center", gap: 12,
-    backgroundColor: C.card, borderRadius: 14, padding: 14,
-    borderWidth: 1, borderColor: C.border,
-  },
-  runnerCardMe: { borderColor: C.primary + "66", backgroundColor: C.primaryMuted },
-  rankBadge: {
-    width: 32, height: 32, borderRadius: 8, borderWidth: 1.5,
-    alignItems: "center", justifyContent: "center",
-  },
-  rankNumber: { fontFamily: "Outfit_700Bold", fontSize: 13 },
-  avatar: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: C.surface, alignItems: "center", justifyContent: "center",
-    borderWidth: 1, borderColor: C.border,
-  },
-  avatarMe: { backgroundColor: C.primaryMuted, borderColor: C.primary + "55" },
-  avatarText: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.textSecondary },
-  avatarTextMe: { color: C.primary },
-  runnerInfo: { flex: 1, gap: 3 },
-  runnerName: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text },
-  runnerNameMe: { color: C.primary },
-  runnerStats: { flexDirection: "row", alignItems: "center", gap: 4 },
-  runnerStatText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary },
-  runnerStatDot: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.border },
-  rankLabel: { fontFamily: "Outfit_700Bold", fontSize: 14 },
-  stillRunningIcon: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
-  emptyWrap: { alignItems: "center", paddingVertical: 48, gap: 12 },
-  emptyTitle: { fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text },
-  emptyText: { fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textSecondary, textAlign: "center", lineHeight: 20 },
-  photosSection: { gap: 10 },
-  photosSectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  addPhotoBtn: {
-    flexDirection: "row", alignItems: "center", gap: 4,
-    backgroundColor: C.primaryMuted, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6,
-    borderWidth: 1, borderColor: C.primary + "55",
-  },
-  addPhotoBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.primary },
-  photosEmpty: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary, fontStyle: "italic" },
-  photoThumb: { width: 80, height: 80, borderRadius: 8, margin: 4 },
-  photoViewerOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.95)", justifyContent: "center", alignItems: "center" },
-  photoViewerClose: {
-    position: "absolute", top: 52, right: 20,
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center",
-  },
-  photoViewerImg: { width: "100%", height: "80%" },
-});
+function makeStyles(C: ColorScheme) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: C.bg },
+    header: {
+      flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+      paddingHorizontal: 16, paddingBottom: 14,
+      borderBottomWidth: 1, borderBottomColor: C.border,
+      backgroundColor: C.bg,
+    },
+    backBtn: {
+      width: 38, height: 38, borderRadius: 19,
+      backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
+      alignItems: "center", justifyContent: "center",
+    },
+    headerCenter: { flex: 1, alignItems: "center", gap: 2 },
+    headerTitle: { fontFamily: "Outfit_700Bold", fontSize: 17, color: C.text },
+    headerSub: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary },
+    doneBtn: {
+      backgroundColor: C.surface, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8,
+      borderWidth: 1, borderColor: C.border,
+    },
+    doneBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text },
+    loadingWrap: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
+    loadingText: { fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textSecondary },
+    content: { paddingHorizontal: 16, paddingTop: 16, gap: 20 },
+    summaryCard: {
+      flexDirection: "row", backgroundColor: C.card, borderRadius: 16,
+      padding: 16, borderWidth: 1, borderColor: C.border, alignItems: "center",
+    },
+    summaryItem: { flex: 1, alignItems: "center", gap: 4 },
+    summaryValue: { fontFamily: "Outfit_700Bold", fontSize: 20, color: C.text },
+    summaryLabel: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textSecondary },
+    summaryDivider: { width: 1, height: 40, backgroundColor: C.border },
+    section: { gap: 10 },
+    sectionTitle: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.text },
+    sectionTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+    liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.primary },
+    runnerCard: {
+      flexDirection: "row", alignItems: "center", gap: 12,
+      backgroundColor: C.card, borderRadius: 14, padding: 14,
+      borderWidth: 1, borderColor: C.border,
+    },
+    runnerCardMe: { borderColor: C.primary + "66", backgroundColor: C.primaryMuted },
+    rankBadge: {
+      width: 32, height: 32, borderRadius: 8, borderWidth: 1.5,
+      alignItems: "center", justifyContent: "center",
+    },
+    rankNumber: { fontFamily: "Outfit_700Bold", fontSize: 13 },
+    avatar: {
+      width: 40, height: 40, borderRadius: 20,
+      backgroundColor: C.surface, alignItems: "center", justifyContent: "center",
+      borderWidth: 1, borderColor: C.border,
+    },
+    avatarMe: { backgroundColor: C.primaryMuted, borderColor: C.primary + "55" },
+    avatarText: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.textSecondary },
+    avatarTextMe: { color: C.primary },
+    runnerInfo: { flex: 1, gap: 3 },
+    runnerName: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text },
+    runnerNameMe: { color: C.primary },
+    runnerStats: { flexDirection: "row", alignItems: "center", gap: 4 },
+    runnerStatText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary },
+    runnerStatDot: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.border },
+    rankLabel: { fontFamily: "Outfit_700Bold", fontSize: 14 },
+    stillRunningIcon: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
+    emptyWrap: { alignItems: "center", paddingVertical: 48, gap: 12 },
+    emptyTitle: { fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text },
+    emptyText: { fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textSecondary, textAlign: "center", lineHeight: 20 },
+    photosSection: { gap: 10 },
+    photosSectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+    addPhotoBtn: {
+      flexDirection: "row", alignItems: "center", gap: 4,
+      backgroundColor: C.primaryMuted, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6,
+      borderWidth: 1, borderColor: C.primary + "55",
+    },
+    addPhotoBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.primary },
+    photosEmpty: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary, fontStyle: "italic" },
+    photoThumb: { width: 80, height: 80, borderRadius: 8, margin: 4 },
+    photoViewerOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.95)", justifyContent: "center", alignItems: "center" },
+    photoViewerClose: {
+      position: "absolute", top: 52, right: 20,
+      width: 40, height: 40, borderRadius: 20,
+      backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center",
+    },
+    photoViewerImg: { width: "100%" as any, height: "80%" as any },
+  });
+}
