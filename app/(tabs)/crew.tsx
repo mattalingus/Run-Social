@@ -54,8 +54,8 @@ const CREW_VIBE_GROUPS: { label: string; options: string[] }[] = [
   { label: "Energy", options: ["High Energy", "Chill Pace", "Competitive", "Recovery", "No Drop", "Motivational"] },
   { label: "Style", options: ["Social", "Race Training", "Track Workouts", "Trail", "Long Runs", "Speed Work", "Beginners Welcome", "PR Chasers"] },
   { label: "Personality", options: ["Talkative", "Quiet", "Hype Squad", "Accountability", "Spiritual", "Welcoming", "Strict"] },
-  { label: "Community", options: ["Women Only", "Men Only", "Co-Ed", "LGBTQ+ Friendly", "Ministry"] },
-  { label: "Age Group", options: ["Teens", "20s", "30s", "40s", "50+", "All Ages"] },
+  { label: "Community", options: ["Women Only", "Men Only", "Co-Ed", "Ministry"] },
+  { label: "Age Group", options: ["Young Adults", "Middle Aged", "Seniors"] },
 ];
 
 interface Crew {
