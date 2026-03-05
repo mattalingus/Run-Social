@@ -334,6 +334,10 @@ export default function RunTrackingScreen() {
   // Mile splits state
   const [mileSplits, setMileSplits] = useState<MileSplit[]>([]);
 
+  // Post-run title editing state
+  const [runTitle, setRunTitle] = useState("");
+  const [titleSaved, setTitleSaved] = useState(false);
+
   // Post-run photo state
   const [savedRunId, setSavedRunId] = useState<string | null>(null);
   const [runPhotos, setRunPhotos] = useState<any[]>([]);
@@ -749,6 +753,7 @@ export default function RunTrackingScreen() {
       });
       const saved = await res.json();
       setSavedRunId(saved.id);
+      setRunTitle(saved.title ?? "");
       if (saved.prTiers) setPrTiers(saved.prTiers);
       qc.invalidateQueries({ queryKey: ["/api/solo-runs"] });
       qc.invalidateQueries({ queryKey: ["/api/runs/mine"] });
@@ -758,6 +763,19 @@ export default function RunTrackingScreen() {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function saveTitleIfChanged(newTitle: string) {
+    if (!savedRunId) return;
+    const trimmed = newTitle.trim();
+    if (!trimmed || trimmed === runTitle) return;
+    try {
+      await apiRequest("PUT", `/api/solo-runs/${savedRunId}`, { title: trimmed });
+      setRunTitle(trimmed);
+      setTitleSaved(true);
+      setTimeout(() => setTitleSaved(false), 2000);
+      qc.invalidateQueries({ queryKey: ["/api/solo-runs"] });
+    } catch (_) {}
   }
 
   function finishAndNavigate() {
@@ -911,6 +929,29 @@ export default function RunTrackingScreen() {
             <Feather name="check" size={28} color={C.primary} />
           </View>
           <Text style={t.summaryTitle}>{activityFilter === "ride" ? "Ride Complete" : "Run Complete"}</Text>
+
+          {/* Editable run title */}
+          {savedRunId ? (
+            <View style={t.titleEditRow}>
+              <TextInput
+                style={t.titleInput}
+                value={runTitle}
+                onChangeText={setRunTitle}
+                onBlur={() => saveTitleIfChanged(runTitle)}
+                onSubmitEditing={() => saveTitleIfChanged(runTitle)}
+                returnKeyType="done"
+                placeholder={activityFilter === "ride" ? "Name this ride…" : "Name this run…"}
+                placeholderTextColor={C.textMuted}
+                selectTextOnFocus
+                maxLength={80}
+              />
+              {titleSaved ? (
+                <Feather name="check" size={14} color={C.primary} />
+              ) : (
+                <Feather name="edit-2" size={14} color={C.textMuted} />
+              )}
+            </View>
+          ) : null}
 
           {/* PR Banner */}
           {prTiers && (prTiers.distanceTier != null || prTiers.paceTier != null) && (() => {
@@ -1693,6 +1734,25 @@ const t = StyleSheet.create({
     fontSize: 28,
     color: C.text,
     letterSpacing: -0.5,
+  },
+  titleEditRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+    paddingBottom: 4,
+    paddingHorizontal: 4,
+    maxWidth: 280,
+    alignSelf: "center",
+  },
+  titleInput: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 15,
+    color: C.textSecondary,
+    flexShrink: 1,
+    textAlign: "center",
+    minWidth: 60,
   },
   statsRow: {
     flexDirection: "row",
