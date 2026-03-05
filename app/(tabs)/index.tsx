@@ -1513,7 +1513,11 @@ export default function DiscoverScreen() {
               onBookmark={user ? () => bookmarkMutation.mutate(item.id) : undefined}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.push(`/run/${item.id}`);
+                if (item.is_active && !item.is_completed) {
+                  router.push(`/run-spectate/${item.id}` as any);
+                } else {
+                  router.push(`/run/${item.id}`);
+                }
               }}
             />
           )}
