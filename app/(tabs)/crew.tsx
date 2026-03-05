@@ -1783,6 +1783,217 @@ function SearchResultCard({
   );
 }
 
+// ─── Rankings Modal ───────────────────────────────────────────────────────────
+interface RankedCrew {
+  rank: number;
+  id: string;
+  name: string;
+  emoji: string;
+  image_url?: string;
+  member_count: number;
+  total_miles: number;
+  total_runs: number;
+}
+
+function RankingsModal({ visible, onClose, myCrewIds }: { visible: boolean; onClose: () => void; myCrewIds: string[] }) {
+  const { C } = useTheme();
+  const insets = useSafeAreaInsets();
+  const [activityType, setActivityType] = useState<"run" | "ride">("run");
+  const [period, setPeriod] = useState<"week" | "month" | "all">("all");
+
+  const rankingsUrl = `/api/crews/rankings?activityType=${activityType}&period=${period}`;
+  const { data: rankings = [], isLoading } = useQuery<RankedCrew[]>({
+    queryKey: ["/api/crews/rankings", activityType, period],
+    queryFn: async () => {
+      const res = await fetch(new URL(rankingsUrl, getApiUrl()).toString(), { credentials: "include" });
+      return res.json();
+    },
+    enabled: visible,
+    staleTime: 60_000,
+  });
+
+  const PERIODS: { key: "week" | "month" | "all"; label: string }[] = [
+    { key: "week", label: "This Week" },
+    { key: "month", label: "This Month" },
+    { key: "all", label: "All Time" },
+  ];
+
+  function rankLabel(rank: number) {
+    if (rank === 1) return "🥇";
+    if (rank === 2) return "🥈";
+    if (rank === 3) return "🥉";
+    return `#${rank}`;
+  }
+
+  function formatMiles(m: number) {
+    if (m >= 1000) return `${(m / 1000).toFixed(1)}k mi`;
+    return `${m.toFixed(1)} mi`;
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: C.bg }}>
+        {/* Header */}
+        <View style={[rStyles.rankHeader, { paddingTop: insets.top > 0 ? 16 : 20 }]}>
+          <View>
+            <Text style={[rStyles.rankTitle, { color: C.text, fontFamily: "Outfit_700Bold" }]}>National Rankings</Text>
+            <Text style={[rStyles.rankSub, { color: C.textMuted, fontFamily: "Outfit_400Regular" }]}>Top crews by total miles</Text>
+          </View>
+          <TouchableOpacity onPress={onClose} hitSlop={12}>
+            <Ionicons name="close" size={24} color={C.textMuted} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Activity toggle */}
+        <View style={[rStyles.toggleRow, { backgroundColor: C.surface, borderColor: C.border }]}>
+          {(["run", "ride"] as const).map((t) => (
+            <TouchableOpacity
+              key={t}
+              style={[rStyles.togglePill, activityType === t && { backgroundColor: C.primary }]}
+              onPress={() => setActivityType(t)}
+            >
+              <Ionicons
+                name={t === "run" ? "walk-outline" : "bicycle-outline"}
+                size={14}
+                color={activityType === t ? C.bg : C.textMuted}
+              />
+              <Text style={[rStyles.togglePillTxt, { color: activityType === t ? C.bg : C.textMuted, fontFamily: "Outfit_600SemiBold" }]}>
+                {t === "run" ? "Runs" : "Rides"}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Period pills */}
+        <View style={rStyles.periodRow}>
+          {PERIODS.map((p) => (
+            <TouchableOpacity
+              key={p.key}
+              style={[rStyles.periodPill, { borderColor: period === p.key ? C.primary : C.border, backgroundColor: period === p.key ? C.primary + "18" : "transparent" }]}
+              onPress={() => setPeriod(p.key)}
+            >
+              <Text style={[rStyles.periodPillTxt, { color: period === p.key ? C.primary : C.textMuted, fontFamily: "Outfit_600SemiBold" }]}>
+                {p.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* List */}
+        {isLoading ? (
+          <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+            <ActivityIndicator color={C.primary} size="large" />
+          </View>
+        ) : rankings.length === 0 ? (
+          <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 10, paddingHorizontal: 40 }}>
+            <Ionicons name="trophy-outline" size={48} color={C.textMuted} />
+            <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text, textAlign: "center" }}>No activity logged yet</Text>
+            <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textMuted, textAlign: "center" }}>
+              Complete {activityType === "run" ? "runs" : "rides"} with your crew to appear on the leaderboard.
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={rankings}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 30, paddingTop: 8 }}
+            showsVerticalScrollIndicator={false}
+            renderItem={({ item }) => {
+              const isMyC = myCrewIds.includes(item.id);
+              return (
+                <View style={[rStyles.rankRow, { backgroundColor: C.surface, borderColor: isMyC ? C.primary : C.border, borderLeftWidth: isMyC ? 3 : 1 }]}>
+                  <Text style={[rStyles.rankNum, { fontFamily: item.rank <= 3 ? "Outfit_700Bold" : "Outfit_600SemiBold", color: item.rank <= 3 ? C.text : C.textMuted, fontSize: item.rank <= 3 ? 22 : 14, width: 40, textAlign: "center" }]}>
+                    {rankLabel(item.rank)}
+                  </Text>
+                  <View style={[rStyles.rankAvatar, { backgroundColor: C.card }]}>
+                    {item.image_url ? (
+                      <Image source={{ uri: resolveImgUrl(item.image_url)! }} style={{ width: 40, height: 40, borderRadius: 20 }} />
+                    ) : (
+                      <Text style={{ fontSize: 20 }}>{item.emoji}</Text>
+                    )}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.text }} numberOfLines={1}>{item.name}</Text>
+                    <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted }}>
+                      {item.member_count} member{item.member_count !== 1 ? "s" : ""} · {item.total_runs} {activityType === "run" ? "run" : "ride"}{item.total_runs !== 1 ? "s" : ""}
+                    </Text>
+                    {isMyC && (
+                      <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.primary }}>Your Crew</Text>
+                    )}
+                  </View>
+                  <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 16, color: C.primary }}>{formatMiles(item.total_miles)}</Text>
+                </View>
+              );
+            }}
+          />
+        )}
+      </View>
+    </Modal>
+  );
+}
+
+const rStyles = StyleSheet.create({
+  rankHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+  },
+  rankTitle: { fontSize: 22 },
+  rankSub: { fontSize: 13, marginTop: 2 },
+  toggleRow: {
+    flexDirection: "row",
+    marginHorizontal: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 3,
+    gap: 3,
+    marginBottom: 12,
+  },
+  togglePill: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    paddingVertical: 8,
+    borderRadius: 9,
+  },
+  togglePillTxt: { fontSize: 13 },
+  periodRow: {
+    flexDirection: "row",
+    marginHorizontal: 20,
+    gap: 8,
+    marginBottom: 16,
+  },
+  periodPill: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  periodPillTxt: { fontSize: 12 },
+  rankRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 8,
+  },
+  rankNum: { minWidth: 36 },
+  rankAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function CrewScreen() {
   const insets = useSafeAreaInsets();
@@ -1795,6 +2006,7 @@ export default function CrewScreen() {
   const [searchText, setSearchText] = useState("");
   const [friendsOnly, setFriendsOnly] = useState(false);
   const [searchActive, setSearchActive] = useState(false);
+  const [showRankings, setShowRankings] = useState(false);
   const searchInputRef = useRef<TextInput>(null);
 
   const isSearching = searchText.trim().length > 0 || friendsOnly;
@@ -2037,6 +2249,20 @@ export default function CrewScreen() {
               </View>
             )
           }
+          ListFooterComponent={() => (
+            crews.length > 0 ? (
+              <TouchableOpacity
+                style={[s.rankingsBtn, { borderColor: C.primary + "55" }]}
+                onPress={() => setShowRankings(true)}
+                activeOpacity={0.8}
+                testID="view-rankings-btn"
+              >
+                <Ionicons name="trophy-outline" size={18} color={C.primary} />
+                <Text style={[s.rankingsBtnTxt, { color: C.primary }]}>National Rankings</Text>
+                <Ionicons name="chevron-forward" size={16} color={C.primary + "99"} />
+              </TouchableOpacity>
+            ) : null
+          )}
           scrollEnabled={!!(crews.length > 0 || invites.length > 0)}
           showsVerticalScrollIndicator={false}
         />
@@ -2055,6 +2281,12 @@ export default function CrewScreen() {
         crew={selectedCrew}
         onClose={() => setSelectedCrew(null)}
         currentUserId={currentUser?.id ?? ""}
+      />
+
+      <RankingsModal
+        visible={showRankings}
+        onClose={() => setShowRankings(false)}
+        myCrewIds={(crews as Crew[]).map((c) => c.id)}
       />
     </View>
   );
@@ -3592,5 +3824,23 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     borderColor: C.danger + "60",
     alignItems: "center",
     justifyContent: "center",
+  },
+  rankingsBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    marginTop: 12,
+    marginBottom: 8,
+    backgroundColor: C.surface,
+  },
+  rankingsBtnTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 15,
+    flex: 1,
   },
 }); }

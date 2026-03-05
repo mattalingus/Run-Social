@@ -1335,6 +1335,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
+  app.get("/api/crews/rankings", requireAuth, async (req, res) => {
+    try {
+      const activityType = String(req.query.activityType || "run");
+      const period = String(req.query.period || "all");
+
+      let dateFilter = "";
+      if (period === "week") {
+        dateFilter = `AND r.date >= NOW() - INTERVAL '7 days'`;
+      } else if (period === "month") {
+        dateFilter = `AND r.date >= NOW() - INTERVAL '30 days'`;
+      }
+
+      const result = await pool.query(`
+        SELECT
+          c.id,
+          c.name,
+          c.emoji,
+          c.image_url,
+          COUNT(DISTINCT cm.user_id)::int AS member_count,
+          COALESCE(SUM(rp.final_distance), 0)::real AS total_miles,
+          COUNT(DISTINCT r.id)::int AS total_runs
+        FROM crews c
+        LEFT JOIN crew_members cm ON cm.crew_id = c.id
+        LEFT JOIN runs r ON r.crew_id = c.id
+          AND r.is_completed = true
+          AND r.activity_type = $1
+          AND r.is_deleted IS NOT TRUE
+          ${dateFilter}
+        LEFT JOIN run_participants rp ON rp.run_id = r.id AND rp.final_distance IS NOT NULL
+        GROUP BY c.id, c.name, c.emoji, c.image_url
+        HAVING COALESCE(SUM(rp.final_distance), 0) > 0
+        ORDER BY total_miles DESC
+        LIMIT 100
+      `, [activityType]);
+
+      const ranked = result.rows.map((row: any, idx: number) => ({
+        rank: idx + 1,
+        id: row.id,
+        name: row.name,
+        emoji: row.emoji,
+        image_url: row.image_url,
+        member_count: row.member_count,
+        total_miles: parseFloat(row.total_miles),
+        total_runs: row.total_runs,
+      }));
+
+      res.json(ranked);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
   app.post("/api/crews", requireAuth, async (req, res) => {
     try {
       const { name, description, emoji, runStyle, tags, imageUrl } = req.body;
