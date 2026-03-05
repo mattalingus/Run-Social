@@ -1625,48 +1625,6 @@ export default function DiscoverScreen() {
                 </ScrollView>
               </View>
             )}
-            {/* Onboarding checklist */}
-            {user && !checklistDismissed && (
-              <View style={s.checklistCard}>
-                {checklistAllDone ? (
-                  <View style={{ alignItems: "center", paddingVertical: 12 }}>
-                    <Ionicons name="checkmark-circle" size={28} color={C.primary} />
-                    <Text style={[s.checklistHeader, { color: C.primary, marginTop: 6 }]}>You're all set!</Text>
-                  </View>
-                ) : (
-                  <>
-                    <View style={s.checklistHeaderRow}>
-                      <Text style={s.checklistHeader}>Getting started</Text>
-                      <Text style={s.checklistFraction}>{completedCount} / {checklistItems.length}</Text>
-                      <Pressable onPress={dismissChecklist} hitSlop={12}>
-                        <Feather name="x" size={16} color={C.textMuted} />
-                      </Pressable>
-                    </View>
-                    <View style={s.checklistBar}>
-                      <View style={[s.checklistBarFill, { width: `${(completedCount / checklistItems.length) * 100}%` as any }]} />
-                    </View>
-                    {checklistItems.map((item, idx) => (
-                      <Pressable
-                        key={idx}
-                        style={s.checklistItem}
-                        onPress={item.done ? undefined : item.action}
-                        disabled={item.done}
-                      >
-                        <Ionicons
-                          name={item.done ? "checkmark-circle" : "ellipse-outline"}
-                          size={20}
-                          color={item.done ? C.primary : C.textMuted}
-                        />
-                        <Text style={[s.checklistLabel, item.done && s.checklistLabelDone]}>
-                          {item.label}
-                        </Text>
-                        {!item.done && <Feather name="chevron-right" size={14} color={C.textMuted} style={{ marginLeft: "auto" }} />}
-                      </Pressable>
-                    ))}
-                  </>
-                )}
-              </View>
-            )}
             {isFallback && (
               <View style={s.fallbackBanner}>
                 <Feather name="info" size={13} color={C.textMuted} />
@@ -1739,33 +1697,76 @@ export default function DiscoverScreen() {
             )
           }
           ListFooterComponent={
-            communityRuns.filter((cr: any) => cr.activity_type === activityFilter).length > 0 ? (
-              <View style={s.communitySection}>
-                <Text style={s.communitySectionLabel}>
-                  {activityFilter === "ride" ? "Recent Rides" : "Recent Runs"}
-                </Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ gap: 10, paddingRight: 4 }}
-                >
-                  {communityRuns.filter((cr: any) => cr.activity_type === activityFilter).map((cr: any) => (
-                    <View key={cr.id} style={s.communityCard}>
-                      <Ionicons
-                        name={cr.activity_type === "ride" ? "bicycle" : "walk"}
-                        size={18}
-                        color={C.primary}
-                      />
-                      <Text style={s.communityTitle} numberOfLines={1}>{cr.title}</Text>
-                      <Text style={s.communityMeta}>
-                        {cr.participant_count > 0 ? `${cr.participant_count} ${cr.activity_type === "ride" ? "rode" : "ran"} this` : "Completed"}{cr.location_name ? ` · ${cr.location_name}` : ""}
-                      </Text>
-                      <Text style={s.communityTime}>{cr.completed_at ? formatDaysAgo(cr.completed_at) : ""}</Text>
+            <View>
+              {user && !checklistDismissed && (
+                <View style={[s.checklistCard, { marginTop: 8 }]}>
+                  {checklistAllDone ? (
+                    <View style={{ alignItems: "center", paddingVertical: 12 }}>
+                      <Ionicons name="checkmark-circle" size={28} color={C.primary} />
+                      <Text style={[s.checklistHeader, { color: C.primary, marginTop: 6 }]}>You're all set!</Text>
                     </View>
-                  ))}
-                </ScrollView>
-              </View>
-            ) : null
+                  ) : (
+                    <>
+                      <View style={s.checklistHeaderRow}>
+                        <Text style={s.checklistHeader}>Getting started</Text>
+                        <Text style={s.checklistFraction}>{completedCount} / {checklistItems.length}</Text>
+                        <Pressable onPress={dismissChecklist} hitSlop={12}>
+                          <Feather name="x" size={16} color={C.textMuted} />
+                        </Pressable>
+                      </View>
+                      <View style={s.checklistBar}>
+                        <View style={[s.checklistBarFill, { width: `${(completedCount / checklistItems.length) * 100}%` as any }]} />
+                      </View>
+                      {checklistItems.map((item, idx) => (
+                        <Pressable
+                          key={idx}
+                          style={s.checklistItem}
+                          onPress={item.done ? undefined : item.action}
+                          disabled={item.done}
+                        >
+                          <Ionicons
+                            name={item.done ? "checkmark-circle" : "ellipse-outline"}
+                            size={20}
+                            color={item.done ? C.primary : C.textMuted}
+                          />
+                          <Text style={[s.checklistLabel, item.done && s.checklistLabelDone]}>
+                            {item.label}
+                          </Text>
+                          {!item.done && <Feather name="chevron-right" size={14} color={C.textMuted} style={{ marginLeft: "auto" }} />}
+                        </Pressable>
+                      ))}
+                    </>
+                  )}
+                </View>
+              )}
+              {communityRuns.filter((cr: any) => cr.activity_type === activityFilter).length > 0 && (
+                <View style={s.communitySection}>
+                  <Text style={s.communitySectionLabel}>
+                    {activityFilter === "ride" ? "Recent Rides" : "Recent Runs"}
+                  </Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ gap: 10, paddingRight: 4 }}
+                  >
+                    {communityRuns.filter((cr: any) => cr.activity_type === activityFilter).map((cr: any) => (
+                      <View key={cr.id} style={s.communityCard}>
+                        <Ionicons
+                          name={cr.activity_type === "ride" ? "bicycle" : "walk"}
+                          size={18}
+                          color={C.primary}
+                        />
+                        <Text style={s.communityTitle} numberOfLines={1}>{cr.title}</Text>
+                        <Text style={s.communityMeta}>
+                          {cr.participant_count > 0 ? `${cr.participant_count} ${cr.activity_type === "ride" ? "rode" : "ran"} this` : "Completed"}{cr.location_name ? ` · ${cr.location_name}` : ""}
+                        </Text>
+                        <Text style={s.communityTime}>{cr.completed_at ? formatDaysAgo(cr.completed_at) : ""}</Text>
+                      </View>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+            </View>
           }
         />
       )}
