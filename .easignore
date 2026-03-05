@@ -6,6 +6,5 @@ server_dist/
 .cache/
 .config/
 .upm/
-stubs/
 scripts/
 *.log
