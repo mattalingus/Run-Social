@@ -2203,6 +2203,14 @@ export async function createSavedPath(
   return res.rows[0];
 }
 
+export async function updateSavedPath(id: string, userId: string, name: string) {
+  const res = await pool.query(
+    `UPDATE saved_paths SET name = $3 WHERE id = $1 AND user_id = $2 RETURNING *`,
+    [id, userId, name]
+  );
+  return res.rows[0] || null;
+}
+
 export async function deleteSavedPath(id: string, userId: string) {
   const res = await pool.query(
     `DELETE FROM saved_paths WHERE id = $1 AND user_id = $2 RETURNING id`,

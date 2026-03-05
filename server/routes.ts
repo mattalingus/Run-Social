@@ -1230,6 +1230,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch("/api/saved-paths/:id", requireAuth, async (req, res) => {
+    try {
+      const { name } = req.body;
+      if (!name || typeof name !== "string" || !name.trim()) {
+        return res.status(400).json({ message: "name is required" });
+      }
+      const path = await storage.updateSavedPath(req.params.id, req.session.userId!, name.trim());
+      if (!path) return res.status(404).json({ message: "Path not found" });
+      res.json(path);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.delete("/api/saved-paths/:id", requireAuth, async (req, res) => {
     try {
       const result = await storage.deleteSavedPath(req.params.id, req.session.userId!);

@@ -524,6 +524,10 @@ export default function SoloScreen() {
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const [selectedScheduled, setSelectedScheduled] = useState<SoloRun | null>(null);
   const [selectedSavedPath, setSelectedSavedPath] = useState<SavedPath | null>(null);
+  const [editingScheduledTitle, setEditingScheduledTitle] = useState(false);
+  const [scheduledTitleDraft, setScheduledTitleDraft] = useState("");
+  const [editingPathName, setEditingPathName] = useState(false);
+  const [pathNameDraft, setPathNameDraft] = useState("");
 
   // Goals display period (UI toggle only — not saved separately)
   const [period, setPeriod] = useState<"monthly" | "yearly">("monthly");
@@ -583,6 +587,30 @@ export default function SoloScreen() {
       await apiRequest("DELETE", `/api/saved-paths/${id}`);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/saved-paths"] }),
+  });
+
+  const renameRunMutation = useMutation({
+    mutationFn: async ({ id, title }: { id: string; title: string }) => {
+      const res = await apiRequest("PUT", `/api/solo-runs/${id}`, { title });
+      return res.json();
+    },
+    onSuccess: (updated) => {
+      qc.invalidateQueries({ queryKey: ["/api/solo-runs"] });
+      setSelectedScheduled((prev) => prev ? { ...prev, title: updated.title } : prev);
+      setEditingScheduledTitle(false);
+    },
+  });
+
+  const renamePathMutation = useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const res = await apiRequest("PATCH", `/api/saved-paths/${id}`, { name });
+      return res.json();
+    },
+    onSuccess: (updated) => {
+      qc.invalidateQueries({ queryKey: ["/api/saved-paths"] });
+      setSelectedSavedPath((prev) => prev ? { ...prev, name: updated.name } : prev);
+      setEditingPathName(false);
+    },
   });
 
   const saveMutation = useMutation({
@@ -1314,9 +1342,9 @@ export default function SoloScreen() {
         visible={!!selectedScheduled}
         transparent
         animationType="slide"
-        onRequestClose={() => setSelectedScheduled(null)}
+        onRequestClose={() => { setSelectedScheduled(null); setEditingScheduledTitle(false); }}
       >
-        <Pressable style={s.overlay} onPress={() => setSelectedScheduled(null)} />
+        <Pressable style={s.overlay} onPress={() => { setSelectedScheduled(null); setEditingScheduledTitle(false); }} />
         {selectedScheduled && (
           <View style={[s.sheet, { paddingBottom: insets.bottom + 28 }]}>
             <View style={s.sheetHandle} />
@@ -1326,16 +1354,57 @@ export default function SoloScreen() {
               <View style={s.scheduledModalIcon}>
                 <Feather name="calendar" size={18} color={C.blue} />
               </View>
-              <Pressable onPress={() => setSelectedScheduled(null)} hitSlop={12}>
+              <Pressable onPress={() => { setSelectedScheduled(null); setEditingScheduledTitle(false); }} hitSlop={12}>
                 <Feather name="x" size={22} color={C.textSecondary} />
               </Pressable>
             </View>
 
             {/* Title */}
-            <Text style={s.scheduledModalTitle} numberOfLines={2}>
-              {selectedScheduled.title ||
-                `${toDisplayDist(selectedScheduled.distance_miles, distUnit)} solo ${selectedScheduled.activity_type === "ride" ? "ride" : "run"}`}
-            </Text>
+            {editingScheduledTitle ? (
+              <View style={s.inlineEditRow}>
+                <TextInput
+                  style={s.inlineEditInput}
+                  value={scheduledTitleDraft}
+                  onChangeText={setScheduledTitleDraft}
+                  autoFocus
+                  returnKeyType="done"
+                  onSubmitEditing={() => {
+                    if (scheduledTitleDraft.trim()) renameRunMutation.mutate({ id: selectedScheduled.id, title: scheduledTitleDraft.trim() });
+                    else setEditingScheduledTitle(false);
+                  }}
+                  placeholderTextColor={C.textMuted}
+                />
+                <Pressable
+                  onPress={() => {
+                    if (scheduledTitleDraft.trim()) renameRunMutation.mutate({ id: selectedScheduled.id, title: scheduledTitleDraft.trim() });
+                    else setEditingScheduledTitle(false);
+                  }}
+                  hitSlop={10}
+                  style={s.inlineEditSave}
+                >
+                  <Feather name="check" size={18} color={C.primary} />
+                </Pressable>
+                <Pressable onPress={() => setEditingScheduledTitle(false)} hitSlop={10}>
+                  <Feather name="x" size={16} color={C.textMuted} />
+                </Pressable>
+              </View>
+            ) : (
+              <Pressable
+                style={s.inlineTitleRow}
+                onPress={() => {
+                  const current = selectedScheduled.title ||
+                    `${toDisplayDist(selectedScheduled.distance_miles, distUnit)} solo ${selectedScheduled.activity_type === "ride" ? "ride" : "run"}`;
+                  setScheduledTitleDraft(current);
+                  setEditingScheduledTitle(true);
+                }}
+              >
+                <Text style={s.scheduledModalTitle} numberOfLines={2}>
+                  {selectedScheduled.title ||
+                    `${toDisplayDist(selectedScheduled.distance_miles, distUnit)} solo ${selectedScheduled.activity_type === "ride" ? "ride" : "run"}`}
+                </Text>
+                <Feather name="edit-2" size={14} color={C.textMuted} style={{ marginLeft: 8, marginTop: 3 }} />
+              </Pressable>
+            )}
             <Text style={s.scheduledModalDate}>{formatScheduledDateTime(selectedScheduled.date)}</Text>
 
             {/* Stats row */}
@@ -1388,13 +1457,13 @@ export default function SoloScreen() {
         visible={!!selectedSavedPath}
         transparent
         animationType="slide"
-        onRequestClose={() => setSelectedSavedPath(null)}
+        onRequestClose={() => { setSelectedSavedPath(null); setEditingPathName(false); }}
       >
         {/* flex: 1 + justifyContent: "flex-end" gives the sheet a real height context */}
         <View style={{ flex: 1, justifyContent: "flex-end" }}>
           <Pressable
             style={[StyleSheet.absoluteFillObject, { backgroundColor: "rgba(0,0,0,0.55)" }]}
-            onPress={() => setSelectedSavedPath(null)}
+            onPress={() => { setSelectedSavedPath(null); setEditingPathName(false); }}
           />
         {selectedSavedPath && (
           <View style={[s.sheet, { paddingBottom: insets.bottom + 24, maxHeight: "88%", flex: 1 }]}>
@@ -1405,12 +1474,48 @@ export default function SoloScreen() {
               <View style={s.savedPathIconWrap}>
                 <Feather name="map" size={18} color={C.primary} />
               </View>
-              <Pressable onPress={() => setSelectedSavedPath(null)} hitSlop={12}>
+              <Pressable onPress={() => { setSelectedSavedPath(null); setEditingPathName(false); }} hitSlop={12}>
                 <Feather name="x" size={22} color={C.textSecondary} />
               </Pressable>
             </View>
 
-            <Text style={s.scheduledModalTitle} numberOfLines={2}>{selectedSavedPath.name}</Text>
+            {editingPathName ? (
+              <View style={s.inlineEditRow}>
+                <TextInput
+                  style={s.inlineEditInput}
+                  value={pathNameDraft}
+                  onChangeText={setPathNameDraft}
+                  autoFocus
+                  returnKeyType="done"
+                  onSubmitEditing={() => {
+                    if (pathNameDraft.trim()) renamePathMutation.mutate({ id: selectedSavedPath.id, name: pathNameDraft.trim() });
+                    else setEditingPathName(false);
+                  }}
+                  placeholderTextColor={C.textMuted}
+                />
+                <Pressable
+                  onPress={() => {
+                    if (pathNameDraft.trim()) renamePathMutation.mutate({ id: selectedSavedPath.id, name: pathNameDraft.trim() });
+                    else setEditingPathName(false);
+                  }}
+                  hitSlop={10}
+                  style={s.inlineEditSave}
+                >
+                  <Feather name="check" size={18} color={C.primary} />
+                </Pressable>
+                <Pressable onPress={() => setEditingPathName(false)} hitSlop={10}>
+                  <Feather name="x" size={16} color={C.textMuted} />
+                </Pressable>
+              </View>
+            ) : (
+              <Pressable
+                style={s.inlineTitleRow}
+                onPress={() => { setPathNameDraft(selectedSavedPath.name); setEditingPathName(true); }}
+              >
+                <Text style={s.scheduledModalTitle} numberOfLines={2}>{selectedSavedPath.name}</Text>
+                <Feather name="edit-2" size={14} color={C.textMuted} style={{ marginLeft: 8, marginTop: 3 }} />
+              </Pressable>
+            )}
             {selectedSavedPath.distance_miles != null && (
               <Text style={s.scheduledModalDate}>{toDisplayDist(selectedSavedPath.distance_miles ?? 0, distUnit)} route</Text>
             )}
@@ -1817,6 +1922,13 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  inlineTitleRow: { flexDirection: "row", alignItems: "flex-start", marginBottom: 6 },
+  inlineEditRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
+  inlineEditInput: {
+    flex: 1, fontFamily: "Outfit_700Bold", fontSize: 20, color: C.text,
+    borderBottomWidth: 1.5, borderBottomColor: C.primary, paddingVertical: 4,
+  },
+  inlineEditSave: { padding: 2 },
   scheduledModalTitle: { fontFamily: "Outfit_700Bold", fontSize: 22, color: C.text, marginBottom: 6 },
   scheduledModalDate: { fontFamily: "Outfit_400Regular", fontSize: 14, color: C.blue, marginBottom: 20 },
   scheduledModalStats: {
