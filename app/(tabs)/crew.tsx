@@ -1795,15 +1795,15 @@ interface RankedCrew {
   total_runs: number;
 }
 
-function RankingsModal({ visible, onClose, myCrewIds }: { visible: boolean; onClose: () => void; myCrewIds: string[] }) {
+function RankingsModal({ visible, onClose, myCrewIds, myCrewId }: { visible: boolean; onClose: () => void; myCrewIds: string[]; myCrewId?: string }) {
   const { C } = useTheme();
   const insets = useSafeAreaInsets();
   const [activityType, setActivityType] = useState<"run" | "ride">("run");
   const [period, setPeriod] = useState<"week" | "month" | "all">("all");
 
-  const rankingsUrl = `/api/crews/rankings?activityType=${activityType}&period=${period}`;
-  const { data: rankings = [], isLoading } = useQuery<RankedCrew[]>({
-    queryKey: ["/api/crews/rankings", activityType, period],
+  const rankingsUrl = `/api/crews/rankings?activityType=${activityType}&period=${period}${myCrewId ? `&myCrewId=${myCrewId}` : ""}`;
+  const { data: rankingsData, isLoading } = useQuery<{ top100: RankedCrew[]; myCrew: RankedCrew | null }>({
+    queryKey: ["/api/crews/rankings", activityType, period, myCrewId ?? ""],
     queryFn: async () => {
       const res = await fetch(new URL(rankingsUrl, getApiUrl()).toString(), { credentials: "include" });
       return res.json();
@@ -1811,6 +1811,9 @@ function RankingsModal({ visible, onClose, myCrewIds }: { visible: boolean; onCl
     enabled: visible,
     staleTime: 60_000,
   });
+
+  const rankings = rankingsData?.top100 ?? [];
+  const myOutsideCrew = rankingsData?.myCrew ?? null;
 
   const PERIODS: { key: "week" | "month" | "all"; label: string }[] = [
     { key: "week", label: "This Week" },
@@ -1925,6 +1928,35 @@ function RankingsModal({ visible, onClose, myCrewIds }: { visible: boolean; onCl
                 </View>
               );
             }}
+            ListFooterComponent={myOutsideCrew ? () => (
+              <View style={{ marginTop: 8 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <View style={{ flex: 1, height: 1, backgroundColor: C.border }} />
+                  <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted }}>your crew</Text>
+                  <View style={{ flex: 1, height: 1, backgroundColor: C.border }} />
+                </View>
+                <View style={[rStyles.rankRow, { backgroundColor: C.surface, borderColor: C.primary, borderLeftWidth: 3 }]}>
+                  <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.textMuted, width: 40, textAlign: "center" }}>
+                    #{myOutsideCrew.rank}
+                  </Text>
+                  <View style={[rStyles.rankAvatar, { backgroundColor: C.card }]}>
+                    {myOutsideCrew.image_url ? (
+                      <Image source={{ uri: resolveImgUrl(myOutsideCrew.image_url)! }} style={{ width: 40, height: 40, borderRadius: 20 }} />
+                    ) : (
+                      <Text style={{ fontSize: 20 }}>{myOutsideCrew.emoji}</Text>
+                    )}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.text }} numberOfLines={1}>{myOutsideCrew.name}</Text>
+                    <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted }}>
+                      {myOutsideCrew.member_count} member{myOutsideCrew.member_count !== 1 ? "s" : ""} · {myOutsideCrew.total_runs} {activityType === "run" ? "run" : "ride"}{myOutsideCrew.total_runs !== 1 ? "s" : ""}
+                    </Text>
+                    <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.primary }}>Your Crew</Text>
+                  </View>
+                  <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 16, color: C.primary }}>{formatMiles(myOutsideCrew.total_miles)}</Text>
+                </View>
+              </View>
+            ) : null}
           />
         )}
       </View>
@@ -2287,6 +2319,7 @@ export default function CrewScreen() {
         visible={showRankings}
         onClose={() => setShowRankings(false)}
         myCrewIds={(crews as Crew[]).map((c) => c.id)}
+        myCrewId={(crews as Crew[])[0]?.id}
       />
     </View>
   );

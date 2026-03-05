@@ -1347,7 +1347,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         dateFilter = `AND r.date >= NOW() - INTERVAL '30 days'`;
       }
 
-      const result = await pool.query(`
+      const myCrewId = req.query.myCrewId ? String(req.query.myCrewId) : null;
+
+      const allRankedResult = await pool.query(`
         SELECT
           c.id,
           c.name,
@@ -1367,10 +1369,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         GROUP BY c.id, c.name, c.emoji, c.image_url
         HAVING COALESCE(SUM(rp.final_distance), 0) > 0
         ORDER BY total_miles DESC
-        LIMIT 100
       `, [activityType]);
 
-      const ranked = result.rows.map((row: any, idx: number) => ({
+      const allRanked = allRankedResult.rows.map((row: any, idx: number) => ({
         rank: idx + 1,
         id: row.id,
         name: row.name,
@@ -1381,7 +1382,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         total_runs: row.total_runs,
       }));
 
-      res.json(ranked);
+      const top100 = allRanked.slice(0, 100);
+      const inTop100 = myCrewId ? top100.some((c: any) => c.id === myCrewId) : false;
+      let myCrew = null;
+      if (myCrewId && !inTop100) {
+        myCrew = allRanked.find((c: any) => c.id === myCrewId) ?? null;
+      }
+
+      res.json({ top100, myCrew });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
