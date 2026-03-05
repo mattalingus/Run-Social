@@ -1491,7 +1491,7 @@ export default function DiscoverScreen() {
           showsVerticalScrollIndicator={false}
           scrollEnabled={true}
           refreshControl={
-            <RefreshControl refreshing={isManualRefreshing} onRefresh={() => { setIsManualRefreshing(true); refetch(); }} tintColor={C.primary} />
+            <RefreshControl refreshing={isManualRefreshing && isRefetching} onRefresh={() => { setIsManualRefreshing(true); refetch(); }} tintColor={C.primary} />
           }
           ListHeaderComponent={
             <View>
