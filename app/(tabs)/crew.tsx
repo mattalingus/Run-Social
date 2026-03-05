@@ -694,6 +694,133 @@ function MemberProfileSheet({
   );
 }
 
+// ─── Crew Achievement Definitions ────────────────────────────────────────────
+
+const CREW_MILESTONES = [
+  { key: "miles_50",    category: "miles",   threshold: 50,   label: "50 Miles",    emoji: "🏅" },
+  { key: "miles_100",   category: "miles",   threshold: 100,  label: "100 Miles",   emoji: "🏅" },
+  { key: "miles_250",   category: "miles",   threshold: 250,  label: "250 Miles",   emoji: "🏅" },
+  { key: "miles_500",   category: "miles",   threshold: 500,  label: "500 Miles",   emoji: "🔥" },
+  { key: "miles_1000",  category: "miles",   threshold: 1000, label: "1,000 Miles", emoji: "🏆" },
+  { key: "miles_2500",  category: "miles",   threshold: 2500, label: "2,500 Miles", emoji: "🏆" },
+  { key: "miles_5000",  category: "miles",   threshold: 5000, label: "5,000 Miles", emoji: "🏆" },
+  { key: "events_1",   category: "events",  threshold: 1,    label: "First Run",   emoji: "🎯" },
+  { key: "events_5",   category: "events",  threshold: 5,    label: "5 Events",    emoji: "🎉" },
+  { key: "events_10",  category: "events",  threshold: 10,   label: "10 Events",   emoji: "🎉" },
+  { key: "events_25",  category: "events",  threshold: 25,   label: "25 Events",   emoji: "🎉" },
+  { key: "events_50",  category: "events",  threshold: 50,   label: "50 Events",   emoji: "🏆" },
+  { key: "events_100", category: "events",  threshold: 100,  label: "100 Events",  emoji: "🏆" },
+  { key: "members_5",  category: "members", threshold: 5,    label: "5 Members",   emoji: "👥" },
+  { key: "members_10", category: "members", threshold: 10,   label: "10 Members",  emoji: "👥" },
+  { key: "members_25", category: "members", threshold: 25,   label: "25 Members",  emoji: "👥" },
+  { key: "members_50", category: "members", threshold: 50,   label: "50 Members",  emoji: "👥" },
+];
+
+function formatAchievedDate(dateStr: string): string {
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  } catch { return ""; }
+}
+
+function CrewAchievementsSection({
+  achievementsData,
+  styles: s,
+  C,
+}: {
+  achievementsData?: { achievements: any[]; stats: { totalMiles: number; totalEvents: number; totalMembers: number } };
+  styles: any;
+  C: ColorScheme;
+}) {
+  const earned = achievementsData?.achievements ?? [];
+  const stats = achievementsData?.stats ?? { totalMiles: 0, totalEvents: 0, totalMembers: 0 };
+  const earnedKeys = new Set(earned.map((a: any) => a.achievement_key));
+
+  const getBadgeColor = (key: string) => {
+    if (key.startsWith("miles_500") || key.startsWith("miles_1000") || key.startsWith("miles_2500") || key.startsWith("miles_5000") || key.startsWith("events_50") || key.startsWith("events_100")) return "#FFB800";
+    return C.primary;
+  };
+
+  const nextMilestone = (category: string) => {
+    const catMilestones = CREW_MILESTONES.filter(m => m.category === category);
+    return catMilestones.find(m => !earnedKeys.has(m.key)) ?? null;
+  };
+
+  const currentValue = (category: string) => {
+    if (category === "miles") return stats.totalMiles;
+    if (category === "events") return stats.totalEvents;
+    return stats.totalMembers;
+  };
+
+  const prevMilestone = (category: string) => {
+    const catMilestones = CREW_MILESTONES.filter(m => m.category === category);
+    const idx = catMilestones.findIndex(m => !earnedKeys.has(m.key));
+    return idx > 0 ? catMilestones[idx - 1] : null;
+  };
+
+  const progressBars = ["miles", "events", "members"].map(cat => {
+    const next = nextMilestone(cat);
+    if (!next) return null;
+    const prev = prevMilestone(cat);
+    const val = currentValue(cat);
+    const from = prev?.threshold ?? 0;
+    const to = next.threshold;
+    const progress = Math.min(1, Math.max(0, (val - from) / (to - from)));
+    const label = cat === "miles" ? `${val.toFixed(1)} / ${to} mi` : cat === "events" ? `${val} / ${to} events` : `${val} / ${to} members`;
+    return { key: next.key, label, progress, nextLabel: next.label, nextEmoji: next.emoji };
+  }).filter(Boolean);
+
+  return (
+    <View style={s.detailSection}>
+      <Text style={s.detailSectionTitle}>Achievements</Text>
+      {earned.length === 0 ? (
+        <View style={s.achieveEmpty}>
+          <Text style={s.achieveEmptyText}>Run together to earn your first milestone!</Text>
+        </View>
+      ) : (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4 }}>
+          {earned.map((a: any) => {
+            const def = CREW_MILESTONES.find(m => m.key === a.achievement_key);
+            if (!def) return null;
+            const color = getBadgeColor(a.achievement_key);
+            return (
+              <View key={a.id} style={[s.achieveBadge, { borderColor: color + "55", backgroundColor: color + "18" }]}>
+                <Text style={s.achieveBadgeEmoji}>{def.emoji}</Text>
+                <Text style={[s.achieveBadgeLabel, { color }]}>{def.label}</Text>
+                <Text style={s.achieveBadgeDate}>{formatAchievedDate(a.achieved_at)}</Text>
+              </View>
+            );
+          })}
+          {/* Locked next badges per category */}
+          {["miles", "events", "members"].map(cat => {
+            const next = nextMilestone(cat);
+            if (!next) return null;
+            return (
+              <View key={next.key} style={[s.achieveBadge, { borderColor: C.border, backgroundColor: C.surface, opacity: 0.3 }]}>
+                <Text style={s.achieveBadgeEmoji}>{next.emoji}</Text>
+                <Text style={[s.achieveBadgeLabel, { color: C.textSecondary }]}>{next.label}</Text>
+                <Ionicons name="lock-closed-outline" size={10} color={C.textMuted} />
+              </View>
+            );
+          })}
+        </ScrollView>
+      )}
+      {progressBars.length > 0 && (
+        <View style={s.achieveProgressWrap}>
+          {progressBars.map((pb: any) => (
+            <View key={pb.key} style={s.achieveProgressRow}>
+              <View style={s.achieveProgressBarBg}>
+                <View style={[s.achieveProgressBarFill, { width: `${Math.round(pb.progress * 100)}%` as any }]} />
+              </View>
+              <Text style={s.achieveProgressLabel}>{pb.label}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
 // ─── Crew Detail Sheet ────────────────────────────────────────────────────────
 function CrewDetailSheet({
   crew,
@@ -723,6 +850,11 @@ function CrewDetailSheet({
 
   const { data: crewHistory = [] } = useQuery<CrewHistoryRun[]>({
     queryKey: ["/api/crews", crew?.id, "history"],
+    enabled: !!crew?.id,
+  });
+
+  const { data: crewAchievementsData } = useQuery<{ achievements: any[]; stats: { totalMiles: number; totalEvents: number; totalMembers: number } }>({
+    queryKey: ["/api/crews", crew?.id, "achievements"],
     enabled: !!crew?.id,
   });
 
@@ -843,10 +975,17 @@ function CrewDetailSheet({
   const [gifLoading, setGifLoading] = useState(false);
   const [selectedGif, setSelectedGif] = useState<GifItem | null>(null);
 
+  const prevMsgCountRef = useRef(0);
   useEffect(() => {
     if (crewMessages.length > 0) {
       setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: false }), 80);
     }
+    const newMsgs = crewMessages.slice(prevMsgCountRef.current);
+    const hasMilestone = newMsgs.some((m: any) => m.message_type === "milestone");
+    if (hasMilestone && crew?.id) {
+      qc.invalidateQueries({ queryKey: ["/api/crews", crew.id, "achievements"] });
+    }
+    prevMsgCountRef.current = crewMessages.length;
   }, [crewMessages.length]);
 
   useEffect(() => {
@@ -1301,6 +1440,13 @@ function CrewDetailSheet({
                     </TouchableOpacity>
                   </View>
                 </View>
+
+                {/* ── Achievements ── */}
+                <CrewAchievementsSection
+                  achievementsData={crewAchievementsData}
+                  styles={s}
+                  C={C}
+                />
 
                 {/* ── Members ── */}
                 <View style={s.detailSection}>
@@ -2507,6 +2653,61 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     fontFamily: "Outfit_700Bold",
     fontSize: 17,
     color: C.text,
+  },
+  achieveEmpty: {
+    paddingVertical: 12,
+  },
+  achieveEmptyText: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 13,
+    color: C.textSecondary,
+    fontStyle: "italic",
+  },
+  achieveBadge: {
+    alignItems: "center",
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+    marginHorizontal: 4,
+    minWidth: 80,
+    gap: 3,
+  },
+  achieveBadgeEmoji: {
+    fontSize: 22,
+  },
+  achieveBadgeLabel: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 11,
+    textAlign: "center",
+  },
+  achieveBadgeDate: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 10,
+    color: C.textMuted,
+    textAlign: "center",
+  },
+  achieveProgressWrap: {
+    marginTop: 14,
+    gap: 8,
+  },
+  achieveProgressRow: {
+    gap: 4,
+  },
+  achieveProgressBarBg: {
+    height: 4,
+    backgroundColor: C.border,
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  achieveProgressBarFill: {
+    height: 4,
+    backgroundColor: C.primary,
+    borderRadius: 2,
+  },
+  achieveProgressLabel: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 11,
+    color: C.textSecondary,
   },
   historyRow: {
     flexDirection: "row",

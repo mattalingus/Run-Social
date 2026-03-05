@@ -7,14 +7,18 @@ import {
   Pressable,
   ActivityIndicator,
   Platform,
+  Image,
+  Modal,
+  TouchableOpacity,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { useQuery } from "@tanstack/react-query";
+import * as ImagePicker from "expo-image-picker";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
-import { apiRequest } from "@/lib/query-client";
+import { apiRequest, getApiUrl } from "@/lib/query-client";
 import C from "@/constants/colors";
 import ShareActivityModal from "@/components/ShareActivityModal";
 
@@ -40,12 +44,21 @@ const RANK_COLORS: Record<number, string> = {
 
 // ─── Screen ──────────────────────────────────────────────────────────────────
 
+function resolvePhotoUrl(url: string): string {
+  if (!url) return "";
+  if (url.startsWith("http")) return url;
+  return new URL(url, getApiUrl()).toString();
+}
+
 export default function RunResultsScreen() {
   const { id, autoShare } = useLocalSearchParams<{ id: string; autoShare?: string }>();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const qc = useQueryClient();
   const [showShare, setShowShare] = useState(false);
   const autoShownRef = useRef(false);
+  const [viewerPhoto, setViewerPhoto] = useState<string | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   const { data: results = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/runs", id, "results"],
@@ -73,12 +86,56 @@ export default function RunResultsScreen() {
     },
   });
 
+  const { data: photos = [], refetch: refetchPhotos } = useQuery<any[]>({
+    queryKey: ["/api/runs", id, "photos"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/runs/${id}/photos`);
+      return res.json();
+    },
+    refetchInterval: 10000,
+    staleTime: 0,
+  });
+
+  async function pickAndUploadPhoto() {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) return;
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+      if (result.canceled || !result.assets?.[0]?.uri) return;
+      setUploadingPhoto(true);
+      const asset = result.assets[0];
+      const formData = new FormData();
+      formData.append("photo", {
+        uri: asset.uri,
+        name: `photo_${Date.now()}.jpg`,
+        type: "image/jpeg",
+      } as any);
+      const url = new URL(`/api/runs/${id}/photos`, getApiUrl());
+      await fetch(url.toString(), {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
+      qc.invalidateQueries({ queryKey: ["/api/runs", id, "photos"] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (_) {
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
+
   const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
   const botPad = insets.bottom + (Platform.OS === "web" ? 34 : 0);
 
   // Participants still running (present but no final data)
   const stillRunning = results.filter((r) => r.is_present && r.final_rank == null);
   const finished = results.filter((r) => r.final_rank != null).sort((a, b) => a.final_rank - b.final_rank);
+  const isParticipant = results.some((r: any) => r.user_id === user?.id);
 
   return (
     <View style={s.container}>
@@ -231,8 +288,64 @@ export default function RunResultsScreen() {
               <Text style={s.emptyText}>Runners haven't finished yet. Results will appear here as they cross the finish line.</Text>
             </View>
           )}
+
+          {/* ── Event Photos ─────────────────────────────────────────────────── */}
+          <View style={s.photosSection}>
+            <View style={s.photosSectionHeader}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Ionicons name="camera-outline" size={16} color={C.primary} />
+                <Text style={s.sectionTitle}>
+                  Event Photos{photos.length > 0 ? ` (${photos.length})` : ""}
+                </Text>
+              </View>
+              {isParticipant && (
+                <TouchableOpacity
+                  style={s.addPhotoBtn}
+                  onPress={pickAndUploadPhoto}
+                  disabled={uploadingPhoto}
+                >
+                  {uploadingPhoto ? (
+                    <ActivityIndicator size="small" color={C.primary} />
+                  ) : (
+                    <Feather name="plus" size={14} color={C.primary} />
+                  )}
+                  <Text style={s.addPhotoBtnText}>Add</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            {photos.length === 0 ? (
+              <Text style={s.photosEmpty}>Be the first to add a photo! 📸</Text>
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4 }}>
+                {photos.map((photo: any) => (
+                  <TouchableOpacity
+                    key={photo.id}
+                    onPress={() => setViewerPhoto(resolvePhotoUrl(photo.photo_url))}
+                    activeOpacity={0.85}
+                  >
+                    <Image
+                      source={{ uri: resolvePhotoUrl(photo.photo_url) }}
+                      style={s.photoThumb}
+                    />
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+          </View>
         </ScrollView>
       )}
+
+      {/* ── Photo Viewer Modal ────────────────────────────────────────────────── */}
+      <Modal visible={!!viewerPhoto} transparent animationType="fade" onRequestClose={() => setViewerPhoto(null)}>
+        <View style={s.photoViewerOverlay}>
+          <TouchableOpacity style={s.photoViewerClose} onPress={() => setViewerPhoto(null)}>
+            <Ionicons name="close" size={24} color="#fff" />
+          </TouchableOpacity>
+          {viewerPhoto && (
+            <Image source={{ uri: viewerPhoto }} style={s.photoViewerImg} resizeMode="contain" />
+          )}
+        </View>
+      </Modal>
 
       {/* ── Share Activity Modal ──────────────────────────────────────────────── */}
       {(() => {
@@ -326,4 +439,21 @@ const s = StyleSheet.create({
   emptyWrap: { alignItems: "center", paddingVertical: 48, gap: 12 },
   emptyTitle: { fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text },
   emptyText: { fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textSecondary, textAlign: "center", lineHeight: 20 },
+  photosSection: { gap: 10 },
+  photosSectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  addPhotoBtn: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: C.primaryMuted, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6,
+    borderWidth: 1, borderColor: C.primary + "55",
+  },
+  addPhotoBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.primary },
+  photosEmpty: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary, fontStyle: "italic" },
+  photoThumb: { width: 80, height: 80, borderRadius: 8, margin: 4 },
+  photoViewerOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.95)", justifyContent: "center", alignItems: "center" },
+  photoViewerClose: {
+    position: "absolute", top: 52, right: 20,
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center",
+  },
+  photoViewerImg: { width: "100%", height: "80%" },
 });

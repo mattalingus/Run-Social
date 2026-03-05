@@ -1167,6 +1167,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         safeDist, safePace
       );
       res.json(result);
+      // Fire-and-forget crew achievement check
+      storage.getRunById(req.params.id).then((run: any) => {
+        if (run?.crew_id) {
+          storage.checkAndAwardCrewAchievements(run.crew_id).catch(() => {});
+        }
+      }).catch(() => {});
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
@@ -1466,6 +1472,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const history = await storage.getCrewRunHistory(req.params.id);
       res.json(history);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/crews/:id/achievements", requireAuth, async (req, res) => {
+    try {
+      const data = await storage.getCrewAchievements(req.params.id);
+      res.json(data);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 

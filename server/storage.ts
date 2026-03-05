@@ -325,6 +325,16 @@ export async function initDb() {
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS garmin_activity_id TEXT UNIQUE;
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS step_count INTEGER;
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS move_time_seconds INTEGER;
+    ALTER TABLE crew_messages ALTER COLUMN user_id DROP NOT NULL;
+
+    CREATE TABLE IF NOT EXISTS crew_achievements (
+      id SERIAL PRIMARY KEY,
+      crew_id VARCHAR NOT NULL REFERENCES crews(id) ON DELETE CASCADE,
+      achievement_key TEXT NOT NULL,
+      achieved_at TIMESTAMP DEFAULT NOW(),
+      achieved_value NUMERIC,
+      UNIQUE(crew_id, achievement_key)
+    );
   `);
 }
 
@@ -2781,6 +2791,99 @@ export async function getCrewRunHistory(crewId: string) {
     [crewId]
   );
   return res.rows;
+}
+
+// ─── Crew Achievements ────────────────────────────────────────────────────────
+
+export async function getCrewStats(crewId: string) {
+  const res = await pool.query(
+    `SELECT
+       COALESCE(SUM(rp.final_distance), 0) AS total_miles,
+       COUNT(DISTINCT r.id) FILTER (WHERE EXISTS (
+         SELECT 1 FROM run_participants rp2
+         WHERE rp2.run_id = r.id AND rp2.is_present = true
+       )) AS total_events,
+       (SELECT COUNT(*) FROM crew_members WHERE crew_id = $1 AND status = 'member') AS total_members
+     FROM runs r
+     LEFT JOIN run_participants rp ON rp.run_id = r.id AND rp.final_distance IS NOT NULL
+     WHERE r.crew_id = $1 AND r.date < NOW()`,
+    [crewId]
+  );
+  return {
+    totalMiles: parseFloat(res.rows[0]?.total_miles ?? "0"),
+    totalEvents: parseInt(res.rows[0]?.total_events ?? "0", 10),
+    totalMembers: parseInt(res.rows[0]?.total_members ?? "0", 10),
+  };
+}
+
+export async function getCrewAchievements(crewId: string) {
+  const [achievements, stats] = await Promise.all([
+    pool.query(
+      `SELECT * FROM crew_achievements WHERE crew_id = $1 ORDER BY achieved_at ASC`,
+      [crewId]
+    ),
+    getCrewStats(crewId),
+  ]);
+  return { achievements: achievements.rows, stats };
+}
+
+export async function checkAndAwardCrewAchievements(crewId: string): Promise<string[]> {
+  try {
+    const stats = await getCrewStats(crewId);
+    const newKeys: string[] = [];
+
+    const MILESTONES = [
+      { key: "miles_50", category: "miles", threshold: 50, label: "50 Miles", msg: "🏅 The crew just hit 50 miles together! Keep running!" },
+      { key: "miles_100", category: "miles", threshold: 100, label: "100 Miles", msg: "🏅 100 miles together — incredible!" },
+      { key: "miles_250", category: "miles", threshold: 250, label: "250 Miles", msg: "🏅 250 miles as a crew. Unstoppable!" },
+      { key: "miles_500", category: "miles", threshold: 500, label: "500 Miles", msg: "🔥 500 miles! The crew is on fire!" },
+      { key: "miles_1000", category: "miles", threshold: 1000, label: "1,000 Miles", msg: "🏆 1,000 crew miles! Legendary!" },
+      { key: "miles_2500", category: "miles", threshold: 2500, label: "2,500 Miles", msg: "🏆 2,500 crew miles. Elite status!" },
+      { key: "miles_5000", category: "miles", threshold: 5000, label: "5,000 Miles", msg: "🏆 5,000 miles together — you're history!" },
+      { key: "events_1", category: "events", threshold: 1, label: "First Run", msg: "🎯 First crew event complete! The journey begins." },
+      { key: "events_5", category: "events", threshold: 5, label: "5 Events", msg: "🎉 5 events completed as a crew!" },
+      { key: "events_10", category: "events", threshold: 10, label: "10 Events", msg: "🎉 10 crew events! You're building something special." },
+      { key: "events_25", category: "events", threshold: 25, label: "25 Events", msg: "🎉 25 crew events — keep the streak alive!" },
+      { key: "events_50", category: "events", threshold: 50, label: "50 Events", msg: "🏆 50 events as a crew. Legendary dedication!" },
+      { key: "events_100", category: "events", threshold: 100, label: "100 Events", msg: "🏆 100 crew events! Hall of fame crew!" },
+      { key: "members_5", category: "members", threshold: 5, label: "5 Members", msg: "👥 5 members strong! The squad is growing." },
+      { key: "members_10", category: "members", threshold: 10, label: "10 Members", msg: "👥 10 crew members! Squad goals achieved." },
+      { key: "members_25", category: "members", threshold: 25, label: "25 Members", msg: "👥 25 members! You're building a real community." },
+      { key: "members_50", category: "members", threshold: 50, label: "50 Members", msg: "👥 50 crew members — that's a movement!" },
+    ];
+
+    for (const m of MILESTONES) {
+      const value =
+        m.category === "miles" ? stats.totalMiles :
+        m.category === "events" ? stats.totalEvents :
+        stats.totalMembers;
+
+      if (value < m.threshold) continue;
+
+      const existing = await pool.query(
+        `SELECT id FROM crew_achievements WHERE crew_id = $1 AND achievement_key = $2`,
+        [crewId, m.key]
+      );
+      if (existing.rows.length > 0) continue;
+
+      await pool.query(
+        `INSERT INTO crew_achievements (crew_id, achievement_key, achieved_value) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+        [crewId, m.key, value]
+      );
+
+      await pool.query(
+        `INSERT INTO crew_messages (crew_id, sender_name, message, message_type)
+         VALUES ($1, 'PaceUp', $2, 'milestone')`,
+        [crewId, m.msg]
+      );
+
+      newKeys.push(m.key);
+    }
+
+    return newKeys;
+  } catch (_) {
+    return [];
+  }
 }
 
 export async function searchCrews(userId: string, query: string, friendsOnly: boolean) {

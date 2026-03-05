@@ -86,6 +86,8 @@ shared/
 17. **Crew Chat** - Per-crew persistent group chat (crew_messages table); separate screen app/crew-chat/[id].tsx; inverted FlatList bubbles; 5s polling; accessible via chat icon on each crew card.
 18. **Notifications** - Bell icon in discover header; panel shows pending friend requests, crew invites, and join requests to hosted runs; aggregated from existing tables (no new table); 30s polling badge count.
 19. **Run Photos** - After completing a solo run (save → optionally add photo before navigating away), or anytime on a past group run detail page. Group run photos are visible to all; solo run photos accessible by tapping any completed run in history. Photos stored in object storage (GCS).
+20. **Crew Achievements** - Collective milestones tracked per crew (not on personal profile): miles (50/100/250/500/1k/2.5k/5k), events (1/5/10/25/50/100), members (5/10/25/50). Shown in the crew detail panel above Members — earned badges in colored tiles, locked next milestone at 0.3 opacity, progress bars per category. New achievements auto-post a milestone message to crew chat. Triggered when any participant finishes a crew run. `crew_achievements` table stores earned keys with achieved values.
+21. **Event Photos (Results Screen)** - On the run-results leaderboard screen, any confirmed participant can add photos (expo-image-picker → POST /api/runs/:id/photos). Photos pool into the event's permanent gallery (same run_photos table, visible on run detail page). Horizontal thumbnail row with full-screen viewer modal. Polls every 10s alongside the leaderboard so photos appear in real-time. Empty state shows friendly prompt; Add button only visible to participants.
 
 ## Database Tables
 - `users` - Auth, profile, goals, stats
@@ -104,8 +106,9 @@ shared/
 - `achievements` - Milestone badges (25/100/250/500/1000 miles)
 - `friends` - Bidirectional friendship graph
 - `live_pings` - GPS coords during live group run
-- `run_photos` - Photos attached to group runs (user uploaded, multiple per run)
+- `run_photos` - Photos attached to group runs (user uploaded, multiple per run); also surfaced on run-results screen
 - `solo_run_photos` - Photos attached to solo runs
+- `crew_achievements` - Crew-level collective milestones (crew_id, achievement_key, achieved_at, achieved_value); unique per (crew_id, achievement_key)
 
 ## Live Run DB Schema
 - `runs.is_active` — run has been started by host
