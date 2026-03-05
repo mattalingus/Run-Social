@@ -547,6 +547,153 @@ function InviteUserSheet({
   );
 }
 
+// ─── Member Mini-Profile Sheet ────────────────────────────────────────────────
+function MemberProfileSheet({
+  userId,
+  visible,
+  onClose,
+  currentUserId,
+}: {
+  userId: string | null;
+  visible: boolean;
+  onClose: () => void;
+  currentUserId: string;
+}) {
+  const { C } = useTheme();
+  const s = useMemo(() => makeStyles(C), [C]);
+  const qc = useQueryClient();
+
+  const { data: profile, isLoading: profileLoading } = useQuery<{
+    id: string; name: string; photo_url?: string; avg_pace?: number;
+    total_miles?: number; completed_runs?: number; hosted_runs?: number; friends_count?: number;
+  }>({
+    queryKey: ["/api/users", userId, "profile"],
+    queryFn: async () => {
+      const res = await fetch(new URL(`/api/users/${userId}/profile`, getApiUrl()).toString(), { credentials: "include" });
+      return res.json();
+    },
+    enabled: !!userId && visible,
+    staleTime: 30000,
+  });
+
+  const { data: friendship, isLoading: friendLoading } = useQuery<{ status: string; friendshipId: string | null }>({
+    queryKey: ["/api/users", userId, "friendship"],
+    queryFn: async () => {
+      const res = await fetch(new URL(`/api/users/${userId}/friendship`, getApiUrl()).toString(), { credentials: "include" });
+      return res.json();
+    },
+    enabled: !!userId && visible && userId !== currentUserId,
+    staleTime: 10000,
+  });
+
+  const friendMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/friends/request", { userId });
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/users", userId, "friendship"] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    onError: () => Alert.alert("Error", "Could not send friend request"),
+  });
+
+  const isMe = userId === currentUserId;
+  const fStatus = friendship?.status;
+
+  function friendBtnLabel() {
+    if (fStatus === "accepted") return "Friends";
+    if (fStatus === "pending") return "Request Sent";
+    return "Add Friend";
+  }
+  function friendBtnIcon(): any {
+    if (fStatus === "accepted") return "people-outline";
+    if (fStatus === "pending") return "time-outline";
+    return "person-add-outline";
+  }
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={s.miniOverlay}>
+        <View style={[s.miniSheet, { paddingBottom: 32 }]}>
+          <View style={s.miniHandle} />
+
+          {/* Close */}
+          <Pressable style={s.miniClose} onPress={onClose} hitSlop={12}>
+            <Ionicons name="close" size={22} color={C.textMuted} />
+          </Pressable>
+
+          {profileLoading ? (
+            <ActivityIndicator color={C.primary} style={{ marginTop: 40, marginBottom: 40 }} />
+          ) : profile ? (
+            <>
+              {/* Avatar + name */}
+              <View style={s.miniAvatarWrap}>
+                {resolveImgUrl(profile.photo_url) ? (
+                  <Image source={{ uri: resolveImgUrl(profile.photo_url)! }} style={s.miniAvatar} />
+                ) : (
+                  <View style={[s.miniAvatar, s.miniAvatarFallback]}>
+                    <Text style={s.miniAvatarLetter}>{profile.name?.[0]?.toUpperCase()}</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={s.miniName}>{profile.name}</Text>
+
+              {/* Stats row */}
+              <View style={s.miniStatsRow}>
+                {[
+                  { label: "Miles", value: (profile.total_miles ?? 0).toFixed(1) },
+                  { label: "Runs", value: String(profile.completed_runs ?? 0) },
+                  { label: "Hosted", value: String(profile.hosted_runs ?? 0) },
+                  { label: "Friends", value: String(profile.friends_count ?? 0) },
+                ].map((stat) => (
+                  <View key={stat.label} style={s.miniStat}>
+                    <Text style={s.miniStatVal}>{stat.value}</Text>
+                    <Text style={s.miniStatLbl}>{stat.label}</Text>
+                  </View>
+                ))}
+              </View>
+
+              {profile.avg_pace && profile.avg_pace > 0 ? (
+                <Text style={s.miniPace}>{formatPace(profile.avg_pace)} avg pace</Text>
+              ) : null}
+
+              {/* Action buttons */}
+              {!isMe && (
+                <View style={s.miniActions}>
+                  {/* Add Friend */}
+                  <Pressable
+                    style={[
+                      s.miniActionBtn,
+                      fStatus === "accepted" && { backgroundColor: C.primaryMuted },
+                    ]}
+                    disabled={fStatus === "accepted" || fStatus === "pending" || friendLoading || friendMutation.isPending}
+                    onPress={() => friendMutation.mutate()}
+                  >
+                    <Ionicons name={friendBtnIcon()} size={16} color={fStatus === "accepted" ? C.primary : C.bg} />
+                    <Text style={[s.miniActionBtnTxt, fStatus === "accepted" && { color: C.primary }]}>
+                      {friendMutation.isPending ? "Sending…" : friendBtnLabel()}
+                    </Text>
+                  </Pressable>
+
+                  {/* Message */}
+                  <Pressable
+                    style={s.miniActionSecondary}
+                    onPress={() => { onClose(); router.push(`/(tabs)/messages?userId=${userId}`); }}
+                  >
+                    <Ionicons name="chatbubble-outline" size={16} color={C.primary} />
+                    <Text style={s.miniActionSecondaryTxt}>Message</Text>
+                  </Pressable>
+                </View>
+              )}
+            </>
+          ) : null}
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 // ─── Crew Detail Sheet ────────────────────────────────────────────────────────
 function CrewDetailSheet({
   crew,
@@ -561,6 +708,7 @@ function CrewDetailSheet({
   const s = useMemo(() => makeStyles(C), [C]);
   const { activityFilter, setActivityFilter } = useActivity();
   const [showInvite, setShowInvite] = useState(false);
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const qc = useQueryClient();
 
   const { data: detail, isLoading: detailLoading } = useQuery<CrewDetail>({
@@ -1172,7 +1320,12 @@ function CrewDetailSheet({
                     <ActivityIndicator color={C.primary} style={{ marginTop: 16 }} />
                   ) : (
                     members.map((m) => (
-                      <View key={m.user_id} style={s.memberRow}>
+                      <TouchableOpacity
+                        key={m.user_id}
+                        style={s.memberRow}
+                        activeOpacity={0.7}
+                        onPress={() => setSelectedMemberId(m.user_id)}
+                      >
                         {resolveImgUrl(m.photo_url) ? (
                           <Image
                             source={{ uri: resolveImgUrl(m.photo_url)! }}
@@ -1196,14 +1349,14 @@ function CrewDetailSheet({
                         </View>
                         {isCreator && m.user_id !== currentUserId && (
                           <Pressable
-                            onPress={() => handleRemoveMember(m.user_id, m.name)}
+                            onPress={(e) => { e.stopPropagation?.(); handleRemoveMember(m.user_id, m.name); }}
                             hitSlop={10}
                             style={s.removeMemberBtn}
                           >
                             <Feather name="user-minus" size={15} color={C.orange} />
                           </Pressable>
                         )}
-                      </View>
+                      </TouchableOpacity>
                     ))
                   )}
                 </View>
@@ -1302,6 +1455,13 @@ function CrewDetailSheet({
 
             </>
           )}
+
+          <MemberProfileSheet
+            userId={selectedMemberId}
+            visible={!!selectedMemberId}
+            onClose={() => setSelectedMemberId(null)}
+            currentUserId={currentUserId}
+          />
 
           {showInvite && crew && (
             <InviteUserSheet
@@ -2463,6 +2623,133 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     fontSize: 12,
     color: C.textMuted,
     marginTop: 2,
+  },
+
+  // ── Member Mini-Profile Sheet styles ──────────────────────────────────────
+  miniOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "flex-end",
+  },
+  miniSheet: {
+    backgroundColor: C.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    alignItems: "center",
+  },
+  miniHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: C.border,
+    marginBottom: 16,
+  },
+  miniClose: {
+    position: "absolute",
+    top: 16,
+    right: 20,
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  miniAvatarWrap: {
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  miniAvatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+  },
+  miniAvatarFallback: {
+    backgroundColor: C.card,
+    borderWidth: 2,
+    borderColor: C.primary + "55",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  miniAvatarLetter: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 32,
+    color: C.primary,
+  },
+  miniName: {
+    fontFamily: "Nunito_800ExtraBold",
+    fontSize: 22,
+    color: C.text,
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  miniStatsRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 10,
+  },
+  miniStat: {
+    alignItems: "center",
+    minWidth: 60,
+    backgroundColor: C.card,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  miniStatVal: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 18,
+    color: C.primary,
+  },
+  miniStatLbl: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 11,
+    color: C.textMuted,
+    marginTop: 2,
+  },
+  miniPace: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 13,
+    color: C.textMuted,
+    marginBottom: 20,
+  },
+  miniActions: {
+    flexDirection: "row",
+    gap: 10,
+    width: "100%",
+    marginTop: 4,
+  },
+  miniActionBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: C.primary,
+  },
+  miniActionBtnTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 14,
+    color: C.bg,
+  },
+  miniActionSecondary: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: C.primary + "66",
+    backgroundColor: C.primaryMuted,
+  },
+  miniActionSecondaryTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 14,
+    color: C.primary,
   },
 
   // Runs
