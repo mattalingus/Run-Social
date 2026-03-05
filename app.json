@@ -24,7 +24,11 @@
         "NSMotionUsageDescription": "PaceUp uses motion data to count your steps during runs.",
         "NSLocationWhenInUseUsageDescription": "PaceUp uses your location to track your route, find nearby events, and show your position on the map.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "PaceUp uses your location to track your route during runs and rides, even when the app is in the background.",
-        "UIBackgroundModes": ["location"]
+        "UIBackgroundModes": [
+          "location",
+          "location"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -34,7 +38,18 @@
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
-      }
+      },
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/images/favicon.png"
@@ -85,6 +100,14 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {
+        "origin": "https://paceupapp.com"
+      },
+      "eas": {
+        "projectId": "650ed19c-3588-4b86-a01e-ae0ec83096c4"
+      }
     }
   }
 }

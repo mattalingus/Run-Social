@@ -1,0 +1,11 @@
+bun.lock
+.local/
+attached_assets/
+server_dist/
+.agents/
+.cache/
+.config/
+.upm/
+stubs/
+scripts/
+*.log
