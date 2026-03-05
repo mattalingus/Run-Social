@@ -1461,7 +1461,7 @@ export default function DiscoverScreen() {
           }
           ListHeaderComponent={
             <View>
-            {user && sortedBookmarkedRuns.length > 0 && (
+            {user && (
               <View style={s.savedSection}>
                 <Text style={s.savedSectionTitle}>{activityFilter === "ride" ? "Saved Rides" : "Saved Runs"}</Text>
                 <ScrollView
@@ -1469,7 +1469,7 @@ export default function DiscoverScreen() {
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={s.savedScroll}
                 >
-                  {sortedBookmarkedRuns.map((r) => (
+                  {sortedBookmarkedRuns.length > 0 ? sortedBookmarkedRuns.map((r) => (
                     <Pressable
                       key={r.id}
                       style={s.savedCard}
@@ -1496,11 +1496,30 @@ export default function DiscoverScreen() {
                         <Text style={s.savedCardMetaTxt} numberOfLines={1}>{r.location_name}</Text>
                       </View>
                     </Pressable>
-                  ))}
+                  )) : (
+                    <View style={s.ghostSavedCard}>
+                      <View style={s.savedCardTop}>
+                        <Text style={s.ghostSavedCardTitle} numberOfLines={2}>Save to Explore Later</Text>
+                        <Ionicons name="bookmark-outline" size={15} color={C.primary + "70"} />
+                      </View>
+                      <View style={s.savedCardMeta}>
+                        <Feather name="calendar" size={11} color={C.textMuted} />
+                        <Text style={s.ghostMetaTxt}>Sat, Mar 14 · 7:00 AM</Text>
+                      </View>
+                      <View style={s.savedCardMeta}>
+                        <Feather name="map-pin" size={11} color={C.textMuted} />
+                        <Text style={s.ghostMetaTxt}>Central Park North</Text>
+                      </View>
+                      <View style={s.ghostTipRow}>
+                        <Feather name="info" size={10} color={C.textMuted} />
+                        <Text style={s.ghostTipTxt}>Tap 🔖 on any event if you're thinking of going</Text>
+                      </View>
+                    </View>
+                  )}
                 </ScrollView>
               </View>
             )}
-            {user && plannedRuns.filter((r) => (r.activity_type ?? "run") === activityFilter).length > 0 && (
+            {user && (
               <View style={s.savedSection}>
                 <Text style={s.savedSectionTitle}>{activityFilter === "ride" ? "Planning to Ride" : "Planning to Run"}</Text>
                 <ScrollView
@@ -1508,7 +1527,8 @@ export default function DiscoverScreen() {
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={s.savedScroll}
                 >
-                  {plannedRuns.filter((r) => (r.activity_type ?? "run") === activityFilter).map((r) => (
+                  {plannedRuns.filter((r) => (r.activity_type ?? "run") === activityFilter).length > 0
+                    ? plannedRuns.filter((r) => (r.activity_type ?? "run") === activityFilter).map((r) => (
                     <Pressable
                       key={r.id}
                       style={({ pressed }) => [s.plannedCard, { opacity: pressed ? 0.85 : 1 }]}
@@ -1541,7 +1561,33 @@ export default function DiscoverScreen() {
                         <Text style={s.plannedPaceTxt}>{r.min_pace === r.max_pace ? toDisplayPace(r.min_pace, (user as any)?.distance_unit ?? "miles") : `${toDisplayPace(r.min_pace, (user as any)?.distance_unit ?? "miles")}–${toDisplayPace(r.max_pace, (user as any)?.distance_unit ?? "miles")}`}</Text>
                       </View>
                     </Pressable>
-                  ))}
+                  ))
+                  : (
+                    <View style={s.ghostPlannedCard}>
+                      <View style={s.plannedCardHeader}>
+                        <View style={[s.plannedDot, { backgroundColor: C.textMuted }]} />
+                        <Text style={s.ghostPlannedLabel}>{activityFilter === "ride" ? "Planning to ride" : "Planning to run"}</Text>
+                        <Ionicons name="calendar-outline" size={16} color={C.textMuted} />
+                      </View>
+                      <Text style={s.ghostPlannedTitle} numberOfLines={2}>{activityFilter === "ride" ? "Sunday Morning Group Ride" : "Morning Group Run — Central Park"}</Text>
+                      <View style={s.savedCardMeta}>
+                        <Feather name="calendar" size={12} color={C.textMuted} />
+                        <Text style={s.ghostMetaTxt}>Sun, Mar 15 · 8:00 AM</Text>
+                      </View>
+                      <View style={s.savedCardMeta}>
+                        <Feather name="map-pin" size={12} color={C.textMuted} />
+                        <Text style={s.ghostMetaTxt}>Columbus Circle</Text>
+                      </View>
+                      <View style={s.savedCardMeta}>
+                        <Ionicons name={activityFilter === "ride" ? "bicycle-outline" : "walk-outline"} size={12} color={C.textMuted} />
+                        <Text style={s.ghostMetaTxt}>{activityFilter === "ride" ? "16–20 mph" : "9:00–11:00 /mi"}</Text>
+                      </View>
+                      <View style={s.ghostTipRow}>
+                        <Feather name="info" size={10} color={C.textMuted} />
+                        <Text style={s.ghostTipTxt}>Tap 🗓 on any event you plan on going to</Text>
+                      </View>
+                    </View>
+                  )}
                 </ScrollView>
               </View>
             )}
@@ -2774,6 +2820,34 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   savedCardTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.text, flex: 1, lineHeight: 18 },
   savedCardMeta: { flexDirection: "row", alignItems: "center", gap: 5 },
   savedCardMetaTxt: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textSecondary, flex: 1 },
+  ghostSavedCard: {
+    width: 160,
+    backgroundColor: C.card,
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderStyle: "dashed",
+    opacity: 0.65,
+    gap: 6,
+  },
+  ghostSavedCardTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textMuted, flex: 1, lineHeight: 18 },
+  ghostPlannedCard: {
+    width: 210,
+    backgroundColor: C.card,
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderStyle: "dashed",
+    opacity: 0.65,
+    gap: 8,
+  },
+  ghostPlannedLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.textMuted, flex: 1 },
+  ghostPlannedTitle: { fontFamily: "Outfit_700Bold", fontSize: 14, color: C.textMuted, lineHeight: 19 },
+  ghostMetaTxt: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted, flex: 1 },
+  ghostTipRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
+  ghostTipTxt: { fontFamily: "Outfit_400Regular", fontSize: 10, color: C.textMuted, flex: 1 },
   plannedCard: {
     width: 210,
     backgroundColor: C.card,

@@ -1970,11 +1970,32 @@ export default function CrewScreen() {
               </View>
             ) : (
               <View style={s.emptyState}>
-                <Ionicons name="people-outline" size={52} color={C.textMuted} />
-                <Text style={s.emptyTitle}>No crews yet</Text>
-                <Text style={s.emptyBody}>
-                  Create a crew and invite your friends — or accept an invite when one arrives.
-                </Text>
+                {/* Ghost crew card */}
+                <View style={s.ghostCrewCard}>
+                  <View style={s.crewCardLeft}>
+                    <View style={s.ghostCrewEmoji}>
+                      <Text style={{ fontSize: 28 }}>🏃</Text>
+                    </View>
+                    <View style={{ flex: 1, gap: 4 }}>
+                      <Text style={s.ghostCrewName}>The Morning Milers</Text>
+                      <Text style={s.ghostCrewDesc} numberOfLines={1}>Early risers crushing miles together</Text>
+                      <View style={s.ghostCrewMeta}>
+                        <Ionicons name="people-outline" size={13} color={C.textMuted} />
+                        <Text style={s.ghostCrewMetaTxt}> 6 members</Text>
+                      </View>
+                      <View style={s.ghostCrewChips}>
+                        <View style={s.ghostChip}><Text style={s.ghostChipTxt}>Social</Text></View>
+                        <View style={s.ghostChip}><Text style={s.ghostChipTxt}>Casual</Text></View>
+                      </View>
+                    </View>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={C.textMuted} />
+                </View>
+                {/* Tip */}
+                <View style={s.ghostCrewTipRow}>
+                  <Feather name="info" size={11} color={C.textMuted} />
+                  <Text style={s.ghostCrewTipTxt}>Join a crew to train, achieve, and grow together</Text>
+                </View>
                 <TouchableOpacity style={[s.createCrewBtn, { marginHorizontal: 0, marginBottom: 12, alignSelf: "stretch" }]} onPress={() => setShowCreate(true)} testID="create-first-crew" activeOpacity={0.88}>
                   <Ionicons name="people" size={20} color={C.bg} />
                   <Text style={s.createCrewBtnTxt}>Create a Crew</Text>
@@ -2261,6 +2282,44 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   crewEmojiText: {
     fontSize: 26,
   },
+  ghostCrewCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: C.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderStyle: "dashed",
+    padding: 16,
+    marginBottom: 12,
+    opacity: 0.65,
+    alignSelf: "stretch",
+  },
+  ghostCrewEmoji: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: C.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 14,
+  },
+  ghostCrewName: { fontFamily: "Outfit_700Bold", fontSize: 17, color: C.textMuted },
+  ghostCrewDesc: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textMuted },
+  ghostCrewMeta: { flexDirection: "row", alignItems: "center", marginTop: 2 },
+  ghostCrewMetaTxt: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted },
+  ghostCrewChips: { flexDirection: "row", gap: 6, marginTop: 4 },
+  ghostChip: {
+    backgroundColor: C.surface,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  ghostChipTxt: { fontFamily: "Outfit_500Medium", fontSize: 11, color: C.textMuted },
+  ghostCrewTipRow: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 16, alignSelf: "stretch" },
+  ghostCrewTipTxt: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, flex: 1 },
   crewCardInfo: {
     flex: 1,
   },
