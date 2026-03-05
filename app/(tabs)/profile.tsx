@@ -105,6 +105,9 @@ interface UnifiedHistoryItem {
   my_final_pace?: number | null;
   duration_seconds?: number | null;
   elevation_gain_ft?: number | null;
+  step_count?: number | null;
+  move_time_seconds?: number | null;
+  distance_tier?: 1 | 2 | 3 | null;
   route_path?: Array<{ latitude: number; longitude: number }> | null;
   activity_type: string;
   is_starred?: boolean;
@@ -210,12 +213,15 @@ interface SoloRunItem {
   pace_min_per_mile: number | null;
   duration_seconds: number | null;
   elevation_gain_ft: number | null;
+  step_count?: number | null;
+  move_time_seconds?: number | null;
   completed: boolean;
   planned: boolean;
   date: string;
   activity_type: string;
   is_starred: boolean;
   route_path: Array<{ latitude: number; longitude: number }> | null;
+  mile_splits?: Array<{ label: string; paceMinPerMile: number; isPartial: boolean }> | null;
 }
 
 export default function ProfileScreen() {
@@ -443,8 +449,16 @@ export default function ProfileScreen() {
 
   const combinedHistory = React.useMemo((): UnifiedHistoryItem[] => {
     const now = new Date();
-    const soloPart: UnifiedHistoryItem[] = soloRuns
+    // Compute distance ranks for solo runs of the filtered activity type
+    const completedSolo = soloRuns
       .filter((r) => r.completed && (r.activity_type ?? "run") === historyActivityFilter)
+      .sort((a, b) => b.distance_miles - a.distance_miles);
+    const distRankMap = new Map<string, 1 | 2 | 3 | null>();
+    completedSolo.forEach((r, i) => {
+      distRankMap.set(r.id, i < 3 ? ((i + 1) as 1 | 2 | 3) : null);
+    });
+
+    const soloPart: UnifiedHistoryItem[] = completedSolo
       .map((r) => ({
         id: r.id,
         type: "solo" as const,
@@ -454,6 +468,9 @@ export default function ProfileScreen() {
         pace_min_per_mile: r.pace_min_per_mile,
         duration_seconds: r.duration_seconds,
         elevation_gain_ft: r.elevation_gain_ft,
+        step_count: (r as any).step_count ?? null,
+        move_time_seconds: (r as any).move_time_seconds ?? null,
+        distance_tier: distRankMap.get(r.id) ?? null,
         route_path: r.route_path,
         activity_type: r.activity_type ?? "run",
         is_starred: r.is_starred,
@@ -1573,12 +1590,24 @@ export default function ProfileScreen() {
                               <View style={[styles.histEventBadge, { backgroundColor: typeColor + "22" }]}>
                                 <Text style={[styles.histEventBadgeTxt, { color: typeColor }]}>{run.type}</Text>
                               </View>
+                              {/* PR badge for top 3 solo distance runs */}
+                              {isSolo && run.distance_tier != null && (() => {
+                                const prColor = run.distance_tier === 1 ? "#FFB800" : run.distance_tier === 2 ? "#C0C0C0" : "#CD7F32";
+                                const prLabel = run.distance_tier === 1 ? "PR" : run.distance_tier === 2 ? "2nd" : "3rd";
+                                return (
+                                  <View style={[styles.histEventBadge, { backgroundColor: prColor + "25", flexDirection: "row", alignItems: "center", gap: 3 }]}>
+                                    <Ionicons name="medal" size={10} color={prColor} />
+                                    <Text style={[styles.histEventBadgeTxt, { color: prColor }]}>{prLabel}</Text>
+                                  </View>
+                                );
+                              })()}
                             </View>
                             <Text style={styles.soloHistMeta}>
                               {formatDisplayDate(run.date)}
                               {run.pace_min_per_mile ? ` · ${formatPaceSolo(run.pace_min_per_mile)}/mi` : ""}
                               {run.duration_seconds ? ` · ${formatDurationSolo(run.duration_seconds)}` : ""}
                               {!isSolo && run.host_name ? ` · ${run.is_host ? "You hosted" : `by ${run.host_name}`}` : ""}
+                              {isSolo && run.elevation_gain_ft ? ` · ${Math.round(run.elevation_gain_ft)}ft elev` : ""}
                             </Text>
                           </View>
                         </View>
@@ -1719,6 +1748,20 @@ export default function ProfileScreen() {
                                 <Feather name="trending-up" size={13} color={C.primary} />
                                 <Text style={styles.soloStatLabel}>Elevation</Text>
                                 <Text style={styles.soloStatValue}>{Math.round(run.elevation_gain_ft)} ft</Text>
+                              </View>
+                            )}
+                            {(run as any).move_time_seconds != null && (
+                              <View style={styles.soloStatItem}>
+                                <Feather name="clock" size={13} color={C.primary} />
+                                <Text style={styles.soloStatLabel}>Move Time</Text>
+                                <Text style={styles.soloStatValue}>{formatDurationSolo((run as any).move_time_seconds)}</Text>
+                              </View>
+                            )}
+                            {(run as any).step_count != null && run.activity_type !== "ride" && (
+                              <View style={styles.soloStatItem}>
+                                <Ionicons name="footsteps-outline" size={13} color={C.primary} />
+                                <Text style={styles.soloStatLabel}>Steps</Text>
+                                <Text style={styles.soloStatValue}>{((run as any).step_count as number).toLocaleString()}</Text>
                               </View>
                             )}
                           </View>

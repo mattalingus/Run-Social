@@ -989,7 +989,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/solo-runs", requireAuth, async (req, res) => {
     try {
-      const { title, date, distanceMiles, paceMinPerMile, durationSeconds, completed, planned, notes, routePath, activityType, savedPathId, mileSplits } = req.body;
+      const { title, date, distanceMiles, paceMinPerMile, durationSeconds, completed, planned, notes, routePath, activityType, savedPathId, mileSplits, elevationGainFt, stepCount, moveTimeSeconds } = req.body;
       if (!date || !distanceMiles) return res.status(400).json({ message: "date and distanceMiles required" });
       const parsedDist = parseFloat(distanceMiles);
       const parsedPace = paceMinPerMile ? parseFloat(paceMinPerMile) : null;
@@ -1007,12 +1007,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         activityType: activityType === "ride" ? "ride" : "run",
         savedPathId: savedPathId || null,
         mileSplits: Array.isArray(mileSplits) && mileSplits.length > 0 ? mileSplits : null,
+        elevationGainFt: elevationGainFt != null ? parseFloat(elevationGainFt) : null,
+        stepCount: stepCount != null ? parseInt(stepCount) : null,
+        moveTimeSeconds: moveTimeSeconds != null ? parseInt(moveTimeSeconds) : null,
       });
-      res.status(201).json(run);
-      // Fire-and-forget: recompute avg pace + PR check on completion
+      // Compute PR tiers for completed runs
+      let prTiers: { distanceTier: number | null; paceTier: number | null } = { distanceTier: null, paceTier: null };
       if (completed) {
+        try { prTiers = await storage.getSoloRunPrTiers(req.session.userId!, run.id); } catch (_) {}
         storage.recomputeUserAvgPace(req.session.userId!).catch(() => {});
       }
+      res.status(201).json({ ...run, prTiers });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/solo-runs/:id/pr-tiers", requireAuth, async (req, res) => {
+    try {
+      const tiers = await storage.getSoloRunPrTiers(req.session.userId!, req.params.id);
+      res.json(tiers);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }

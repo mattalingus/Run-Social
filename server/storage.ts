@@ -323,6 +323,8 @@ export async function initDb() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS garmin_access_token TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS garmin_token_secret TEXT;
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS garmin_activity_id TEXT UNIQUE;
+    ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS step_count INTEGER;
+    ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS move_time_seconds INTEGER;
   `);
 }
 
@@ -930,10 +932,13 @@ export async function createSoloRun(data: {
   activityType?: string;
   savedPathId?: string | null;
   mileSplits?: Array<{ label: string; paceMinPerMile: number; isPartial: boolean }> | null;
+  elevationGainFt?: number | null;
+  stepCount?: number | null;
+  moveTimeSeconds?: number | null;
 }) {
   const result = await pool.query(
-    `INSERT INTO solo_runs (user_id, title, date, distance_miles, pace_min_per_mile, duration_seconds, completed, planned, notes, route_path, activity_type, saved_path_id, mile_splits)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+    `INSERT INTO solo_runs (user_id, title, date, distance_miles, pace_min_per_mile, duration_seconds, completed, planned, notes, route_path, activity_type, saved_path_id, mile_splits, elevation_gain_ft, step_count, move_time_seconds)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
     [
       data.userId,
       data.title ?? null,
@@ -948,9 +953,51 @@ export async function createSoloRun(data: {
       data.activityType ?? "run",
       data.savedPathId ?? null,
       data.mileSplits ? JSON.stringify(data.mileSplits) : null,
+      data.elevationGainFt ?? null,
+      data.stepCount ?? null,
+      data.moveTimeSeconds ?? null,
     ]
   );
   return result.rows[0];
+}
+
+export async function getSoloRunPrTiers(userId: string, runId: string): Promise<{
+  distanceTier: 1 | 2 | 3 | null;
+  paceTier: 1 | 2 | 3 | null;
+}> {
+  const runRes = await pool.query(
+    `SELECT distance_miles, pace_min_per_mile FROM solo_runs WHERE id = $1 AND user_id = $2 AND completed = true`,
+    [runId, userId]
+  );
+  if (!runRes.rows[0]) return { distanceTier: null, paceTier: null };
+  const { distance_miles, pace_min_per_mile } = runRes.rows[0];
+
+  // Distance tier: count how many prior runs have greater distance
+  const distCountRes = await pool.query(
+    `SELECT COUNT(*) AS cnt FROM solo_runs
+     WHERE user_id = $1 AND completed = true AND is_deleted IS NOT TRUE AND id != $2
+       AND distance_miles > $3`,
+    [userId, runId, distance_miles]
+  );
+  const distRank = parseInt(distCountRes.rows[0]?.cnt ?? "0") + 1;
+  const distanceTier = distRank <= 3 ? (distRank as 1 | 2 | 3) : null;
+
+  // Pace tier: rank among runs within ±25% of this distance (lower pace = faster = better)
+  let paceTier: 1 | 2 | 3 | null = null;
+  if (pace_min_per_mile && pace_min_per_mile > 0) {
+    const paceCountRes = await pool.query(
+      `SELECT COUNT(*) AS cnt FROM solo_runs
+       WHERE user_id = $1 AND completed = true AND is_deleted IS NOT TRUE AND id != $2
+         AND pace_min_per_mile IS NOT NULL AND pace_min_per_mile > 0
+         AND distance_miles BETWEEN $3 * 0.75 AND $3 * 1.25
+         AND pace_min_per_mile < $4`,
+      [userId, runId, distance_miles, pace_min_per_mile]
+    );
+    const paceRank = parseInt(paceCountRes.rows[0]?.cnt ?? "0") + 1;
+    paceTier = paceRank <= 3 ? (paceRank as 1 | 2 | 3) : null;
+  }
+
+  return { distanceTier, paceTier };
 }
 
 export async function getSoloRunsByPathId(userId: string, pathId: string) {

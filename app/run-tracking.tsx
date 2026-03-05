@@ -12,7 +12,9 @@ import {
   TextInput,
   ScrollView,
   Image,
+  Share,
 } from "react-native";
+import * as MediaLibrary from "expo-media-library";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Speech from "expo-speech";
 import ShareActivityModal from "@/components/ShareActivityModal";
@@ -23,6 +25,7 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
+import { Pedometer } from "expo-sensors";
 import { router, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
@@ -332,6 +335,7 @@ export default function RunTrackingScreen() {
   const [runPhotos, setRunPhotos] = useState<any[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [prTiers, setPrTiers] = useState<{ distanceTier: number | null; paceTier: number | null } | null>(null);
 
   const { data: savedPaths = [] } = useQuery<any[]>({
     queryKey: ["/api/saved-paths"],
@@ -397,6 +401,13 @@ export default function RunTrackingScreen() {
   const elapsedRef = useRef(0);
   const mileSplitsRef = useRef<MileSplit[]>([]);
   const lastSplitMileRef = useRef(0);
+  // New stat tracking refs
+  const elevationGainRef = useRef(0);
+  const lastAltitudeRef = useRef<number | null>(null);
+  const moveTimeRef = useRef(0);
+  const lastMoveTimestampRef = useRef<number | null>(null);
+  const stepCountRef = useRef(0);
+  const pedometerSubRef = useRef<{ remove: () => void } | null>(null);
   const prevMileElapsedRef = useRef(0);
 
   // ─── Timer ─────────────────────────────────────────────────────────────────
@@ -412,6 +423,32 @@ export default function RunTrackingScreen() {
 
   useEffect(() => { elapsedRef.current = elapsed; }, [elapsed]);
 
+  // ─── Screenshot detection on done screen ──────────────────────────────────
+  useEffect(() => {
+    if (phase !== "done" || Platform.OS === "web") return;
+    let sub: MediaLibrary.Subscription | null = null;
+    const doneAt = Date.now();
+    (async () => {
+      try {
+        const { status } = await MediaLibrary.requestPermissionsAsync(false);
+        if (status !== "granted") return;
+        sub = MediaLibrary.addListener(() => {
+          // Ignore triggers in first 3s (avoids false positive on screen load)
+          if (Date.now() - doneAt < 3000) return;
+          const dist = totalDistRef.current;
+          const pace = dist > 0.01 ? (elapsedRef.current / 60) / dist : null;
+          const paceStr = pace
+            ? `${Math.floor(pace)}:${Math.round((pace - Math.floor(pace)) * 60).toString().padStart(2, "0")}/mi`
+            : "";
+          Share.share({
+            message: `Just finished a ${dist.toFixed(2)} mile ${activityFilter}${paceStr ? ` at ${paceStr} pace` : ""}! 🏃 Tracked on PaceUp.`,
+          }).catch(() => {});
+        });
+      } catch (_) {}
+    })();
+    return () => { sub?.remove(); };
+  }, [phase]);
+
   // ─── GPS ───────────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -423,7 +460,7 @@ export default function RunTrackingScreen() {
     return () => { stopWatching(); };
   }, [phase]);
 
-  const handleCoord = useCallback((latitude: number, longitude: number, accuracy?: number, speed?: number | null) => {
+  const handleCoord = useCallback((latitude: number, longitude: number, accuracy?: number, speed?: number | null, altitude?: number | null) => {
     // Skip poor-accuracy fixes that occur during GPS warm-up (first few seconds)
     // Native threshold: 40m, web threshold: 100m (web GPS is inherently less accurate)
     const maxAccuracy = Platform.OS === "web" ? 100 : 40;
@@ -436,6 +473,25 @@ export default function RunTrackingScreen() {
       return;
     }
     setIsDriving(false);
+
+    // Elevation gain: accumulate positive altitude deltas (filter noise < 0.3 m ≈ 1 ft)
+    if (altitude != null && Platform.OS !== "web") {
+      if (lastAltitudeRef.current != null) {
+        const deltaM = altitude - lastAltitudeRef.current;
+        if (deltaM > 0.3) {
+          elevationGainRef.current += deltaM * 3.28084; // convert meters to feet
+        }
+      }
+      lastAltitudeRef.current = altitude;
+    }
+
+    // Move time: accumulate when actively moving (speed > 0.5 m/s ≈ 1.1 mph)
+    const now = Date.now();
+    if (lastMoveTimestampRef.current != null && speed != null && speed > 0.5) {
+      const deltaSec = (now - lastMoveTimestampRef.current) / 1000;
+      if (deltaSec < 30) moveTimeRef.current += deltaSec; // cap to avoid jumps after pauses
+    }
+    lastMoveTimestampRef.current = now;
 
     const coord: Coord = { latitude, longitude };
     routePathRef.current.push(coord);
@@ -490,7 +546,7 @@ export default function RunTrackingScreen() {
     if (Platform.OS === "web") {
       if (typeof navigator !== "undefined" && navigator.geolocation) {
         webWatchIdRef.current = navigator.geolocation.watchPosition(
-          (pos) => handleCoord(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy ?? undefined, pos.coords.speed),
+          (pos) => handleCoord(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy ?? undefined, pos.coords.speed, pos.coords.altitude),
           () => {},
           { enableHighAccuracy: true, maximumAge: 3000 }
         );
@@ -504,7 +560,7 @@ export default function RunTrackingScreen() {
           distanceInterval: 5,
           timeInterval: 3000,
         },
-        (loc) => handleCoord(loc.coords.latitude, loc.coords.longitude, loc.coords.accuracy ?? undefined, loc.coords.speed)
+        (loc) => handleCoord(loc.coords.latitude, loc.coords.longitude, loc.coords.accuracy ?? undefined, loc.coords.speed, loc.coords.altitude)
       );
       locationSubRef.current = sub;
     } catch (_) {}
@@ -550,8 +606,32 @@ export default function RunTrackingScreen() {
     lastSplitMileRef.current = 0;
     prevMileElapsedRef.current = 0;
     setMileSplits([]);
+    // Reset new stat refs
+    elevationGainRef.current = 0;
+    lastAltitudeRef.current = null;
+    moveTimeRef.current = 0;
+    lastMoveTimestampRef.current = null;
+    stepCountRef.current = 0;
+    // Start pedometer for runs only (native only)
+    if (activityFilter === "run" && Platform.OS !== "web") {
+      try {
+        const available = await Pedometer.isAvailableAsync();
+        if (available) {
+          pedometerSubRef.current = Pedometer.watchStepCount((result) => {
+            stepCountRef.current = result.steps;
+          });
+        }
+      } catch (_) {}
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setPhase("active");
+  }
+
+  function stopPedometer() {
+    if (pedometerSubRef.current) {
+      pedometerSubRef.current.remove();
+      pedometerSubRef.current = null;
+    }
   }
 
   async function handleSavePath() {
@@ -601,6 +681,7 @@ export default function RunTrackingScreen() {
   function handleFinish() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     if (Platform.OS !== "web") Speech.stop();
+    stopPedometer();
     // Compute final partial-mile split before transitioning to done screen
     const finalSplits = [...mileSplitsRef.current];
     const remainingDist = totalDistRef.current - lastSplitMileRef.current;
@@ -631,6 +712,7 @@ export default function RunTrackingScreen() {
         onPress: () => {
           if (Platform.OS !== "web") Speech.stop();
           stopWatching();
+          stopPedometer();
           router.back();
         },
       },
@@ -642,6 +724,9 @@ export default function RunTrackingScreen() {
     const pace = distance > 0.01 ? (elapsed / 60) / distance : null;
     setSaving(true);
     try {
+      const elevFt = elevationGainRef.current > 0 ? Math.round(elevationGainRef.current) : null;
+      const moveSecs = moveTimeRef.current > 0 ? Math.round(moveTimeRef.current) : null;
+      const steps = activityFilter === "run" && stepCountRef.current > 0 ? stepCountRef.current : null;
       const res = await apiRequest("POST", "/api/solo-runs", {
         title: `${toDisplayDist(distance, distUnit)} solo ${activityFilter === "ride" ? "ride" : "run"}`,
         date: new Date().toISOString(),
@@ -654,9 +739,13 @@ export default function RunTrackingScreen() {
         activityType: activityFilter,
         savedPathId: selectedPath?.id ?? null,
         mileSplits: mileSplits.length > 0 ? mileSplits : null,
+        elevationGainFt: elevFt,
+        stepCount: steps,
+        moveTimeSeconds: moveSecs,
       });
       const saved = await res.json();
       setSavedRunId(saved.id);
+      if (saved.prTiers) setPrTiers(saved.prTiers);
       qc.invalidateQueries({ queryKey: ["/api/solo-runs"] });
       qc.invalidateQueries({ queryKey: ["/api/runs/mine"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -819,6 +908,27 @@ export default function RunTrackingScreen() {
           </View>
           <Text style={t.summaryTitle}>{activityFilter === "ride" ? "Ride Complete" : "Run Complete"}</Text>
 
+          {/* PR Banner */}
+          {prTiers && (prTiers.distanceTier != null || prTiers.paceTier != null) && (() => {
+            const tier = Math.min(
+              prTiers.distanceTier ?? 99,
+              prTiers.paceTier ?? 99
+            );
+            const isDistance = (prTiers.distanceTier ?? 99) <= (prTiers.paceTier ?? 99);
+            const color = tier === 1 ? "#FFB800" : tier === 2 ? "#C0C0C0" : "#CD7F32";
+            const label = tier === 1
+              ? (isDistance ? "New Distance PR!" : "New Pace PR!")
+              : tier === 2
+              ? (isDistance ? "2nd Longest Run" : "2nd Fastest Pace")
+              : (isDistance ? "3rd Longest Run" : "3rd Fastest Pace");
+            return (
+              <View style={[t.prBanner, { borderColor: color + "55", backgroundColor: color + "15" }]}>
+                <Ionicons name="medal" size={18} color={color} />
+                <Text style={[t.prBannerText, { color }]}>{label}</Text>
+              </View>
+            );
+          })()}
+
           <View style={t.statsRow}>
             <View style={t.statBlock}>
               <Text style={t.statBig}>{toDisplayDist(distance, distUnit)}</Text>
@@ -837,6 +947,46 @@ export default function RunTrackingScreen() {
               <Text style={t.statUnit}>min/mi</Text>
             </View>
           </View>
+
+          {/* Secondary stats row: elevation, move time, steps */}
+          {(() => {
+            const elev = elevationGainRef.current > 0 ? Math.round(elevationGainRef.current) : null;
+            const moveSecs = Math.round(moveTimeRef.current);
+            const steps = activityFilter === "run" ? stepCountRef.current : 0;
+            if (!elev && !moveSecs && !steps) return null;
+            const formatMoveTime = (s: number) => {
+              const h = Math.floor(s / 3600);
+              const m = Math.floor((s % 3600) / 60);
+              const sec = s % 60;
+              if (h > 0) return `${h}:${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
+              return `${m}:${sec.toString().padStart(2, "0")}`;
+            };
+            return (
+              <View style={t.statsRow2}>
+                {elev != null && (
+                  <View style={t.stat2Block}>
+                    <Feather name="trending-up" size={14} color={C.textMuted} />
+                    <Text style={t.stat2Val}>{elev} ft</Text>
+                    <Text style={t.stat2Label}>elevation</Text>
+                  </View>
+                )}
+                {moveSecs > 0 && (
+                  <View style={t.stat2Block}>
+                    <Feather name="clock" size={14} color={C.textMuted} />
+                    <Text style={t.stat2Val}>{formatMoveTime(moveSecs)}</Text>
+                    <Text style={t.stat2Label}>move time</Text>
+                  </View>
+                )}
+                {steps > 0 && (
+                  <View style={t.stat2Block}>
+                    <Ionicons name="footsteps-outline" size={14} color={C.textMuted} />
+                    <Text style={t.stat2Val}>{steps.toLocaleString()}</Text>
+                    <Text style={t.stat2Label}>steps</Text>
+                  </View>
+                )}
+              </View>
+            );
+          })()}
 
           {mileSplits.length > 0 && (
             <MileSplitsChart splits={mileSplits} activityType={activityFilter} />
@@ -1555,6 +1705,34 @@ const t = StyleSheet.create({
   statBig: { fontFamily: "Outfit_700Bold", fontSize: 26, color: C.text },
   statUnit: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textSecondary },
   statDivider: { width: 1, height: 36, backgroundColor: C.border },
+  prBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    alignSelf: "stretch",
+    marginHorizontal: 4,
+  },
+  prBannerText: { fontFamily: "Outfit_700Bold", fontSize: 15 },
+  statsRow2: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-around",
+    backgroundColor: C.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignSelf: "stretch",
+    marginHorizontal: 4,
+  },
+  stat2Block: { alignItems: "center", gap: 4 },
+  stat2Val: { fontFamily: "Outfit_600SemiBold", fontSize: 16, color: C.text },
+  stat2Label: { fontFamily: "Outfit_400Regular", fontSize: 10, color: C.textMuted },
 
   saveBtn: {
     backgroundColor: C.primary,
