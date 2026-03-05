@@ -1088,7 +1088,18 @@ export async function getUserRuns(userId: string) {
     `SELECT r.*, u.name as host_name,
       (SELECT rp2.status FROM run_participants rp2 WHERE rp2.run_id = r.id AND rp2.user_id = $1 LIMIT 1) as my_status,
       CASE WHEN r.host_id = $1 THEN true ELSE false END as is_host,
-      COALESCE((SELECT rp3.is_present FROM run_participants rp3 WHERE rp3.run_id = r.id AND rp3.user_id = $1 LIMIT 1), false) as my_is_present
+      COALESCE((SELECT rp3.is_present FROM run_participants rp3 WHERE rp3.run_id = r.id AND rp3.user_id = $1 LIMIT 1), false) as my_is_present,
+      (SELECT rp5.final_distance FROM run_participants rp5 WHERE rp5.run_id = r.id AND rp5.user_id = $1 LIMIT 1) as my_final_distance,
+      (SELECT rp6.final_pace FROM run_participants rp6 WHERE rp6.run_id = r.id AND rp6.user_id = $1 LIMIT 1) as my_final_pace,
+      (SELECT json_agg(pt ORDER BY pt.recorded_at)
+         FROM (
+           SELECT latitude, longitude, recorded_at
+           FROM run_tracking_points
+           WHERE run_id = r.id AND user_id = $1
+           ORDER BY recorded_at
+           LIMIT 200
+         ) pt
+      ) as my_route_path
      FROM runs r
      JOIN users u ON u.id = r.host_id
      WHERE (r.host_id = $1 OR r.id IN (SELECT run_id FROM run_participants WHERE user_id = $1 AND status != 'cancelled'))

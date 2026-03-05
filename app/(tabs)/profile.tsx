@@ -101,6 +101,8 @@ interface UnifiedHistoryItem {
   min_distance?: number;
   max_distance?: number;
   pace_min_per_mile?: number | null;
+  my_final_distance?: number | null;
+  my_final_pace?: number | null;
   duration_seconds?: number | null;
   elevation_gain_ft?: number | null;
   route_path?: Array<{ latitude: number; longitude: number }> | null;
@@ -460,25 +462,30 @@ export default function ProfileScreen() {
     const groupPart: UnifiedHistoryItem[] = runs
       .filter((r) => {
         const isPast = new Date(r.date) < now;
-        const wasInvolved = r.is_host || r.my_is_present || r.my_status === "joined";
+        const wasInvolved = r.is_host || r.my_is_present || r.my_final_distance != null;
         return isPast && wasInvolved && (r.activity_type ?? "run") === historyActivityFilter;
       })
       .map((r) => {
         let type: HistoryEventType = "public";
         if (r.crew_id) type = "crew";
         else if (r.privacy === "friends") type = "friends";
+        const actualDist: number = r.my_final_distance ?? (r.min_distance + r.max_distance) / 2;
+        const actualPace: number | null = r.my_final_pace ?? (r.min_pace != null ? (r.min_pace + r.max_pace) / 2 : null);
+        const routePath = r.my_route_path ?? null;
         return {
           id: r.id,
           type,
           title: r.title,
           date: r.date,
-          distance_miles: (r.min_distance + r.max_distance) / 2,
+          distance_miles: actualDist,
           min_distance: r.min_distance,
           max_distance: r.max_distance,
-          pace_min_per_mile: r.min_pace != null ? (r.min_pace + r.max_pace) / 2 : null,
+          pace_min_per_mile: actualPace,
+          my_final_distance: r.my_final_distance ?? null,
+          my_final_pace: r.my_final_pace ?? null,
           duration_seconds: null,
           elevation_gain_ft: null,
-          route_path: null,
+          route_path: routePath,
           activity_type: r.activity_type ?? "run",
           is_starred: false,
           host_name: r.host_name,
@@ -1569,24 +1576,15 @@ export default function ProfileScreen() {
                             </View>
                             <Text style={styles.soloHistMeta}>
                               {formatDisplayDate(run.date)}
-                              {isSolo && run.pace_min_per_mile ? ` · ${formatPaceSolo(run.pace_min_per_mile)}/mi` : ""}
-                              {isSolo && run.duration_seconds ? ` · ${formatDurationSolo(run.duration_seconds)}` : ""}
+                              {run.pace_min_per_mile ? ` · ${formatPaceSolo(run.pace_min_per_mile)}/mi` : ""}
+                              {run.duration_seconds ? ` · ${formatDurationSolo(run.duration_seconds)}` : ""}
                               {!isSolo && run.host_name ? ` · ${run.is_host ? "You hosted" : `by ${run.host_name}`}` : ""}
                             </Text>
                           </View>
                         </View>
                         <View style={styles.soloHistRight}>
-                          {isSolo ? (
-                            <>
-                              <Text style={styles.soloHistDist}>{formatDistance(run.distance_miles)}</Text>
-                              <Text style={styles.soloHistDistUnit}>mi</Text>
-                            </>
-                          ) : (
-                            <>
-                              <Text style={styles.soloHistDist}>{formatDistance(run.min_distance ?? run.distance_miles)}</Text>
-                              <Text style={styles.soloHistDistUnit}>mi</Text>
-                            </>
-                          )}
+                          <Text style={styles.soloHistDist}>{formatDistance(run.distance_miles)}</Text>
+                          <Text style={styles.soloHistDistUnit}>mi</Text>
                           {run.is_starred && <Ionicons name="star" size={12} color={C.gold} style={{ marginLeft: 2 }} />}
                         </View>
                       </View>
