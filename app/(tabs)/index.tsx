@@ -1625,7 +1625,7 @@ export default function DiscoverScreen() {
                 </View>
                 <Text style={s.onboardTitle}>Welcome to PaceUp</Text>
                 <Text style={s.onboardBody}>
-                  Discover group runs and rides near you. Track your progress. Build your crew.
+                  Find runs and rides near you, track your progress, and build your crew.
                 </Text>
               </ScrollView>
 
@@ -1635,40 +1635,40 @@ export default function DiscoverScreen() {
                   <Ionicons name="stopwatch-outline" size={52} color={C.primary} />
                 </View>
                 <Text style={s.onboardTitle}>Solo Runs & Rides</Text>
-                {[
-                  { icon: "play-circle" as const, label: "Start a run or ride anytime from Discover" },
-                  { icon: "map-pin" as const, label: "GPS tracks your live pace & distance" },
-                  { icon: "trending-up" as const, label: "Auto-saved to your profile & pace averages" },
-                  { icon: "share-2" as const, label: "Share your activity with friends" },
-                ].map((step, i) => (
-                  <View key={i} style={s.onboardStep}>
-                    <View style={s.onboardStepIcon}>
-                      <Feather name={step.icon} size={18} color={C.primary} />
+                <View style={s.onboardCardGrid}>
+                  {[
+                    { title: "Start anytime", desc: "Launch a solo run or ride right from Discover" },
+                    { title: "Live GPS tracking", desc: "See your pace and distance in real time" },
+                    { title: "Automatically saved", desc: "Every activity is saved to your profile and stats" },
+                    { title: "Share the effort", desc: "Post your activity and keep friends in the loop" },
+                  ].map((card, i) => (
+                    <View key={i} style={s.onboardMiniCard}>
+                      <Text style={s.onboardMiniCardTitle}>{card.title}</Text>
+                      <Text style={s.onboardMiniCardDesc}>{card.desc}</Text>
                     </View>
-                    <Text style={s.onboardStepLabel}>{step.label}</Text>
-                  </View>
-                ))}
+                  ))}
+                </View>
               </ScrollView>
 
-              {/* Slide 2 — Joining a Group Run */}
+              {/* Slide 2 — Join Hosted Runs and Rides */}
               <ScrollView style={{ width: screenWidth - 48 }} contentContainerStyle={s.onboardContent} showsVerticalScrollIndicator={false} bounces={false}>
                 <View style={s.onboardIconWrap}>
                   <Ionicons name="people-outline" size={52} color={C.primary} />
                 </View>
-                <Text style={s.onboardTitle}>Joining a Group Run</Text>
-                {[
-                  { icon: "search" as const, label: "Browse & join upcoming runs or rides near you" },
-                  { icon: "calendar" as const, label: "Schedule your spot or just show up" },
-                  { icon: "user-check" as const, label: "Run with the host or start independently" },
-                  { icon: "award" as const, label: "Every finisher's pace, time & distance is logged on the board" },
-                ].map((step, i) => (
-                  <View key={i} style={s.onboardStep}>
-                    <View style={s.onboardStepIcon}>
-                      <Feather name={step.icon} size={18} color={C.primary} />
+                <Text style={s.onboardTitle}>Join Hosted Runs and Rides</Text>
+                <View style={s.onboardCardGrid}>
+                  {[
+                    { title: "Discover nearby", desc: "Find upcoming runs and rides happening around you" },
+                    { title: "Reserve your spot", desc: "Plan ahead or simply show up to be added to the live count" },
+                    { title: "Run together", desc: "Follow the host or go at your own pace" },
+                    { title: "See the results", desc: "Every finisher's time, pace, and distance are logged" },
+                  ].map((card, i) => (
+                    <View key={i} style={s.onboardMiniCard}>
+                      <Text style={s.onboardMiniCardTitle}>{card.title}</Text>
+                      <Text style={s.onboardMiniCardDesc}>{card.desc}</Text>
                     </View>
-                    <Text style={s.onboardStepLabel}>{step.label}</Text>
-                  </View>
-                ))}
+                  ))}
+                </View>
               </ScrollView>
 
               {/* Slide 3 — Your Crew */}
@@ -1677,19 +1677,19 @@ export default function DiscoverScreen() {
                   <Ionicons name="shield-outline" size={52} color={C.primary} />
                 </View>
                 <Text style={s.onboardTitle}>Your Crew</Text>
-                {[
-                  { icon: "users" as const, label: "Create or join a crew" },
-                  { icon: "message-circle" as const, label: "Crew chat to plan and coordinate" },
-                  { icon: "calendar" as const, label: "Schedule group runs or rides together" },
-                  { icon: "clock" as const, label: "Crew history tracks every activity you've done together" },
-                ].map((step, i) => (
-                  <View key={i} style={s.onboardStep}>
-                    <View style={s.onboardStepIcon}>
-                      <Feather name={step.icon} size={18} color={C.primary} />
+                <View style={s.onboardCardGrid}>
+                  {[
+                    { title: "Start or join a crew", desc: "Build your community" },
+                    { title: "Crew chat", desc: "Plan runs and rides and stay connected" },
+                    { title: "Group events", desc: "Schedule runs and rides together" },
+                    { title: "Shared history", desc: "See everything your crew has done together" },
+                  ].map((card, i) => (
+                    <View key={i} style={s.onboardMiniCard}>
+                      <Text style={s.onboardMiniCardTitle}>{card.title}</Text>
+                      <Text style={s.onboardMiniCardDesc}>{card.desc}</Text>
                     </View>
-                    <Text style={s.onboardStepLabel}>{step.label}</Text>
-                  </View>
-                ))}
+                  ))}
+                </View>
               </ScrollView>
 
               {/* Slide 4 — Ready */}
@@ -1728,7 +1728,7 @@ export default function DiscoverScreen() {
                     <View style={s.onboardCountBadge}>
                       <Text style={s.onboardCountTxt}>{slideCountdown}</Text>
                     </View>
-                    <Text style={s.onboardBtnTxt}>Read to continue</Text>
+                    <Text style={s.onboardBtnTxt}>Please read</Text>
                   </>
                 ) : (
                   <>
@@ -1748,7 +1748,7 @@ export default function DiscoverScreen() {
                     <View style={s.onboardCountBadge}>
                       <Text style={s.onboardCountTxt}>{slideCountdown}</Text>
                     </View>
-                    <Text style={s.onboardBtnTxt}>Read to continue</Text>
+                    <Text style={s.onboardBtnTxt}>Please read</Text>
                   </>
                 ) : (
                   <>
@@ -2931,29 +2931,32 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     lineHeight: 22,
     paddingHorizontal: 8,
   },
-  onboardStep: {
+  onboardCardGrid: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
+    flexWrap: "wrap",
+    gap: 10,
     width: "100%",
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    backgroundColor: C.card,
-    borderRadius: 12,
+    marginTop: 4,
   },
-  onboardStepIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#00D97E18",
-    alignItems: "center",
-    justifyContent: "center",
+  onboardMiniCard: {
+    width: "47.5%",
+    backgroundColor: "#00D97E14",
+    borderRadius: 14,
+    padding: 14,
+    gap: 5,
+    borderWidth: 1,
+    borderColor: "#00D97E22",
   },
-  onboardStepLabel: {
+  onboardMiniCardTitle: {
     fontFamily: "Outfit_600SemiBold",
-    fontSize: 15,
+    fontSize: 13,
     color: C.text,
-    flex: 1,
+  },
+  onboardMiniCardDesc: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 12,
+    color: C.textMuted,
+    lineHeight: 17,
   },
   onboardDots: {
     flexDirection: "row",
