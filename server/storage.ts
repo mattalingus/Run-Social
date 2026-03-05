@@ -112,6 +112,7 @@ export async function initDb() {
     ALTER TABLE runs ADD COLUMN IF NOT EXISTS run_style TEXT DEFAULT NULL;
     ALTER TABLE runs ADD COLUMN IF NOT EXISTS activity_type TEXT DEFAULT 'run';
     ALTER TABLE runs ADD COLUMN IF NOT EXISTS notif_late_start_sent BOOLEAN DEFAULT false;
+    ALTER TABLE runs ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT false;
     ALTER TABLE users ALTER COLUMN avg_pace SET DEFAULT NULL;
     ALTER TABLE users ALTER COLUMN avg_distance SET DEFAULT NULL;
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT false;
@@ -1099,7 +1100,7 @@ export async function getPublicRuns(filters?: {
     (1 + (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled')) as participant_count,
     (SELECT COUNT(*) FROM planned_runs pr WHERE pr.run_id = r.id) as plan_count
     FROM runs r JOIN users u ON u.id = r.host_id
-    WHERE r.privacy = 'public' AND (r.is_active = true OR r.date > NOW() - INTERVAL '90 minutes') AND r.is_completed = false AND r.crew_id IS NULL`;
+    WHERE r.privacy = 'public' AND (r.is_active = true OR r.date > NOW() - INTERVAL '90 minutes') AND r.is_completed = false AND r.crew_id IS NULL AND r.is_deleted IS NOT TRUE`;
   const params: any[] = [];
   let idx = 1;
   if (filters?.minPace !== undefined) { query += ` AND r.max_pace >= $${idx++}`; params.push(filters.minPace); }
@@ -1160,6 +1161,7 @@ export async function getUserRuns(userId: string) {
      FROM runs r
      JOIN users u ON u.id = r.host_id
      WHERE (r.host_id = $1 OR r.id IN (SELECT run_id FROM run_participants WHERE user_id = $1 AND status != 'cancelled'))
+       AND r.is_deleted IS NOT TRUE
        AND (
          r.date > NOW()
          OR r.host_id = $1
@@ -1451,6 +1453,7 @@ export async function getLiveRunState(runId: string) {
     isActive: run.is_active,
     isCompleted: run.is_completed,
     startedAt: run.started_at,
+    hostId: run.host_id,
     presentCount,
     participants: participantsRes.rows,
   };

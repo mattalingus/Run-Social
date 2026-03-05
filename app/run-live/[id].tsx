@@ -8,6 +8,7 @@ import {
   Alert,
   Platform,
   FlatList,
+  ScrollView,
   TextInput,
 } from "react-native";
 import MapView, { Marker, Polyline, Circle } from "react-native-maps";
@@ -85,6 +86,9 @@ export default function RunLiveScreen() {
   const [messages, setMessages] = useState<any[]>([]);
   const [messageInput, setMessageInput] = useState("");
   const [lastSeenMessageCount, setLastSeenMessageCount] = useState(0);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [promotedToHost, setPromotedToHost] = useState(false);
+  const wasHostRef = useRef(false);
 
   // Restore minimized state when screen mounts
   useEffect(() => {
@@ -131,8 +135,23 @@ export default function RunLiveScreen() {
     },
   });
 
-  const isHost = run?.host_id === user?.id;
+  // Use liveState.hostId so host detection updates every 5s (auto-promotion)
+  const isHost = (liveState?.hostId ?? run?.host_id) === user?.id;
   const { setActivityFilter } = useActivity();
+
+  // Detect host promotion and show banner
+  useEffect(() => {
+    if (!user?.id) return;
+    const nowHost = (liveState?.hostId ?? run?.host_id) === user.id;
+    if (nowHost && !wasHostRef.current && liveState?.isActive) {
+      setPromotedToHost(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      const t = setTimeout(() => setPromotedToHost(false), 5000);
+      wasHostRef.current = true;
+      return () => clearTimeout(t);
+    }
+    wasHostRef.current = nowHost;
+  }, [liveState?.hostId, liveState?.isActive]);
 
   // ── Start Solo (leave group → go solo) ───────────────────────────────────
 
@@ -278,6 +297,20 @@ export default function RunLiveScreen() {
   const paceNum = calcPaceNum(displayDist, elapsed);
   const otherRunners = presentParticipants.filter((p: any) => p.user_id !== user?.id);
 
+  // ── Leaderboard: merge server distances with user's live distance ─────────
+  const leaderboardRows = presentParticipants
+    .map((p: any) => {
+      const isSelf = p.user_id === user?.id;
+      const distMi = isSelf
+        ? displayDist
+        : parseFloat(p.cumulative_distance ?? p.final_distance ?? 0);
+      const pace = isSelf ? paceNum : parseFloat(p.current_pace ?? p.final_pace ?? 0);
+      return { user_id: p.user_id, name: p.name || "Runner", distMi, pace };
+    })
+    .sort((a, b) => b.distMi - a.distMi);
+
+  const myDistMi = leaderboardRows.find((r) => r.user_id === user?.id)?.distMi ?? displayDist;
+
   const initialRegion = runPin
     ? { latitude: runPin.latitude, longitude: runPin.longitude, latitudeDelta: 0.015, longitudeDelta: 0.015 }
     : undefined;
@@ -405,6 +438,12 @@ export default function RunLiveScreen() {
                 <Text style={s.toastText}>Marked as present</Text>
               </View>
             )}
+            {promotedToHost && (
+              <View style={[s.toast, s.promotionToast]}>
+                <Feather name="star" size={14} color="#FFB800" />
+                <Text style={[s.toastText, { color: "#FFB800" }]}>You're now the host!</Text>
+              </View>
+            )}
           </View>
 
           {/* Stats strip */}
@@ -425,20 +464,62 @@ export default function RunLiveScreen() {
             </View>
           </View>
 
-          {/* Legend */}
-          <View style={s.legendContainer}>
-            <View style={s.legend}>
-              {otherRunners.slice(0, 4).map((runner: any, i: number) => (
-                <View key={runner.user_id} style={s.legendItem}>
-                  <View style={[s.legendDot, { backgroundColor: DOT_COLORS[i % DOT_COLORS.length] }]} />
-                  <Text style={s.legendName} numberOfLines={1}>{runner.name?.split(" ")[0]}</Text>
-                </View>
-              ))}
-              {otherRunners.length > 4 && (
-                <Text style={s.legendMore}>+{otherRunners.length - 4} more</Text>
+          {/* Leaderboard toggle + inline panel */}
+          <Pressable
+            style={s.leaderboardToggle}
+            onPress={() => setShowLeaderboard((v) => !v)}
+            hitSlop={8}
+          >
+            <Text style={s.leaderboardToggleText}>
+              {showLeaderboard ? "Hide leaderboard" : "Tap for leaderboard"}
+            </Text>
+            <Feather
+              name={showLeaderboard ? "chevron-down" : "chevron-up"}
+              size={12}
+              color={C.textMuted}
+            />
+          </Pressable>
+
+          {showLeaderboard && (
+            <View style={s.leaderboardPanel}>
+              {leaderboardRows.length === 0 ? (
+                <Text style={s.leaderboardEmpty}>No runners tracked yet</Text>
+              ) : (
+              <ScrollView style={{ maxHeight: 200 }} scrollEnabled={leaderboardRows.length > 3}>
+                {leaderboardRows.map((runner, i) => {
+                  const isSelf = runner.user_id === user?.id;
+                  const delta = runner.distMi - myDistMi;
+                  return (
+                    <View key={runner.user_id} style={[s.leaderboardRow, isSelf && s.leaderboardSelfRow]}>
+                      <Text style={s.leaderboardRank}>#{i + 1}</Text>
+                      <View style={[s.leaderboardAvatar, { backgroundColor: isSelf ? C.primary : DOT_COLORS[i % DOT_COLORS.length] }]}>
+                        <Text style={s.leaderboardAvatarText}>{runner.name[0]?.toUpperCase()}</Text>
+                      </View>
+                      <View style={s.leaderboardInfo}>
+                        <Text style={[s.leaderboardName, isSelf && { color: C.primary }]} numberOfLines={1}>
+                          {isSelf ? "You" : runner.name.split(" ")[0]}
+                        </Text>
+                        <Text style={s.leaderboardPaceTxt}>{formatPaceStr(runner.pace)} /mi</Text>
+                      </View>
+                      <View style={s.leaderboardRight}>
+                        <Text style={s.leaderboardDist}>{runner.distMi.toFixed(2)} mi</Text>
+                        {!isSelf && (
+                          <Text style={[s.leaderboardDelta, { color: delta > 0 ? "#FF6B6B" : C.primary }]}>
+                            {Math.abs(delta) < 0.01
+                              ? "neck & neck"
+                              : delta > 0
+                              ? `${Math.abs(delta).toFixed(2)} mi ahead`
+                              : `${Math.abs(delta).toFixed(2)} mi behind`}
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                  );
+                })}
+              </ScrollView>
               )}
             </View>
-          </View>
+          )}
 
           {/* Bottom action */}
           <View style={[s.bottomBar, { paddingBottom: botPad + 16 }]}>
@@ -657,16 +738,42 @@ const s = StyleSheet.create({
   },
   startSoloBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary },
 
-  legendContainer: { marginHorizontal: 10, marginTop: 10 },
-  legend: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  legendItem: {
-    flexDirection: "row", alignItems: "center", gap: 5,
-    backgroundColor: C.card + "EE", borderRadius: 10,
-    paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: C.border,
+  promotionToast: { borderColor: "#FFB80055", top: 54 },
+
+  leaderboardToggle: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5,
+    marginHorizontal: 10, marginTop: 8, paddingVertical: 6,
   },
-  legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendName: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.text, maxWidth: 70 },
-  legendMore: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary, alignSelf: "center" },
+  leaderboardToggleText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted },
+  leaderboardPanel: {
+    marginHorizontal: 10, marginTop: 4, marginBottom: 2,
+    backgroundColor: C.card, borderRadius: 14, borderWidth: 1, borderColor: C.border,
+    overflow: "hidden",
+  },
+  leaderboardEmpty: {
+    fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textMuted,
+    textAlign: "center", padding: 16,
+  },
+  leaderboardRow: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    paddingHorizontal: 14, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: C.border,
+  },
+  leaderboardSelfRow: { backgroundColor: C.primary + "0A" },
+  leaderboardRank: {
+    fontFamily: "Outfit_700Bold", fontSize: 12, color: C.textMuted, width: 24, textAlign: "center",
+  },
+  leaderboardAvatar: {
+    width: 28, height: 28, borderRadius: 14,
+    alignItems: "center", justifyContent: "center",
+  },
+  leaderboardAvatarText: { fontFamily: "Outfit_700Bold", fontSize: 12, color: "#fff" },
+  leaderboardInfo: { flex: 1, gap: 1 },
+  leaderboardName: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.text },
+  leaderboardPaceTxt: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted },
+  leaderboardRight: { alignItems: "flex-end", gap: 2 },
+  leaderboardDist: { fontFamily: "Outfit_700Bold", fontSize: 13, color: C.text },
+  leaderboardDelta: { fontFamily: "Outfit_400Regular", fontSize: 10 },
 
   chatContainer: { flex: 1, backgroundColor: C.bg },
   chatListContent: { padding: 16, paddingBottom: 20 },
