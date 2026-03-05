@@ -420,8 +420,8 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
               C={C}
               iconBg="#1A1A2E"
               icon={<Feather name="clock" size={17} color="#9B7FFF" />}
-              label="Run Reminders"
-              sublabel="Upcoming scheduled runs"
+              label="Reminders"
+              sublabel="Upcoming scheduled workouts"
               right={
                 <Toggle
                   value={notifEnabled && notifRunReminders}
@@ -451,7 +451,7 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
               iconBg="#2A1A1A"
               icon={<Ionicons name="people" size={17} color="#FFB800" />}
               label="Crew Activity"
-              sublabel="New runs and events from your crews"
+              sublabel="New events from your crews"
               right={
                 <Toggle
                   value={notifEnabled && notifCrewActivity}
@@ -493,7 +493,7 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
               C={C}
               iconBg="#1A1A1A"
               icon={<Feather name="map-pin" size={17} color={C.textMuted} />}
-              label="Show Run Routes"
+              label="Show Routes"
               sublabel={showRunRoutes ? "Friends can see your GPS route maps" : "Route maps hidden from others"}
               right={
                 <Toggle
