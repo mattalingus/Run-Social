@@ -24,6 +24,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
+import {
+  SOLO_LOCATION_TASK,
+  addSoloLocationListener,
+  requestBackgroundPermission,
+  safeStartLocationUpdates,
+  safeStopLocationUpdates,
+} from "@/lib/locationTasks";
 import * as ImagePicker from "expo-image-picker";
 import { Pedometer } from "expo-sensors";
 import { router, useLocalSearchParams } from "expo-router";
@@ -303,7 +310,6 @@ export default function RunTrackingScreen() {
   const distUnit: DistanceUnit = ((user as any)?.distance_unit ?? "miles") as DistanceUnit;
   const { pathId } = useLocalSearchParams<{ pathId?: string }>();
 
-  const [permission, requestPermission] = Location.useForegroundPermissions();
   const [phase, setPhase] = useState<Phase>("idle");
   const [elapsed, setElapsed] = useState(0);
   const [displayDist, setDisplayDist] = useState(0);
@@ -562,15 +568,20 @@ export default function RunTrackingScreen() {
       return;
     }
     try {
-      const sub = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.BestForNavigation,
-          distanceInterval: 5,
-          timeInterval: 3000,
+      await safeStartLocationUpdates(SOLO_LOCATION_TASK, {
+        accuracy: Location.Accuracy.BestForNavigation,
+        distanceInterval: 5,
+        showsBackgroundLocationIndicator: true,
+        foregroundService: {
+          notificationTitle: "PaceUp is tracking your run",
+          notificationBody: "Your route is being recorded",
+          notificationColor: "#00D97E",
         },
-        (loc) => handleCoord(loc.coords.latitude, loc.coords.longitude, loc.coords.accuracy ?? undefined, loc.coords.speed, loc.coords.altitude)
-      );
-      locationSubRef.current = sub;
+      });
+      const unsub = addSoloLocationListener((lat, lng, speed, altitude, accuracy) => {
+        handleCoord(lat, lng, accuracy ?? undefined, speed, altitude);
+      });
+      locationSubRef.current = { remove: unsub } as any;
     } catch (_) {}
   }
 
@@ -581,8 +592,11 @@ export default function RunTrackingScreen() {
         webWatchIdRef.current = null;
       }
     } else {
-      locationSubRef.current?.remove();
-      locationSubRef.current = null;
+      if (locationSubRef.current) {
+        locationSubRef.current.remove();
+        locationSubRef.current = null;
+      }
+      safeStopLocationUpdates(SOLO_LOCATION_TASK);
     }
   }
 
@@ -590,15 +604,13 @@ export default function RunTrackingScreen() {
 
   async function handleStart() {
     if (Platform.OS !== "web") {
-      if (!permission?.granted) {
-        const res = await requestPermission();
-        if (!res.granted) {
-          Alert.alert(
-            "Location Required",
-            "Enable location access so PaceUp can measure your run distance."
-          );
-          return;
-        }
+      const granted = await requestBackgroundPermission();
+      if (!granted) {
+        Alert.alert(
+          "Location Required",
+          "Enable location access so PaceUp can measure your run distance."
+        );
+        return;
       }
     }
     lastCoordRef.current = null;

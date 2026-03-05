@@ -23,7 +23,8 @@
         "NSPhotoLibraryAddUsageDescription": "PaceUp saves your activity screenshots to your photo library.",
         "NSMotionUsageDescription": "PaceUp uses motion data to count your steps during runs.",
         "NSLocationWhenInUseUsageDescription": "PaceUp uses your location to track your route, find nearby events, and show your position on the map.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "PaceUp uses your location to track your route during runs and rides, even when the app is in the background."
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "PaceUp uses your location to track your route during runs and rides, even when the app is in the background.",
+        "UIBackgroundModes": ["location"]
       }
     },
     "android": {
@@ -51,7 +52,9 @@
         "expo-location",
         {
           "locationAlwaysAndWhenInUsePermission": "PaceUp uses your location to track your route during runs and rides, even when the app is in the background.",
-          "locationWhenInUsePermission": "PaceUp uses your location to track your route, find nearby events, and show your position on the map."
+          "locationWhenInUsePermission": "PaceUp uses your location to track your route, find nearby events, and show your position on the map.",
+          "isBackgroundLocationEnabled": true,
+          "isHighAccuracyEnabled": true
         }
       ],
       [

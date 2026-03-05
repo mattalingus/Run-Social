@@ -1,6 +1,13 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 import * as Location from "expo-location";
+import {
+  GROUP_LOCATION_TASK,
+  addGroupLocationListener,
+  requestBackgroundPermission,
+  safeStartLocationUpdates,
+  safeStopLocationUpdates,
+} from "@/lib/locationTasks";
 import { apiRequest } from "@/lib/query-client";
 
 type Phase = "idle" | "active" | "finishing";
@@ -130,11 +137,20 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
       return;
     }
     try {
-      const sub = await Location.watchPositionAsync(
-        { accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 5, timeInterval: 5000 },
-        (loc) => handleCoord(loc.coords.latitude, loc.coords.longitude)
-      );
-      locationSubRef.current = sub;
+      await safeStartLocationUpdates(GROUP_LOCATION_TASK, {
+        accuracy: Location.Accuracy.BestForNavigation,
+        distanceInterval: 5,
+        showsBackgroundLocationIndicator: true,
+        foregroundService: {
+          notificationTitle: "PaceUp is tracking your group run",
+          notificationBody: "Your route is being recorded",
+          notificationColor: "#00D97E",
+        },
+      });
+      const unsub = addGroupLocationListener((lat, lng) => {
+        handleCoord(lat, lng);
+      });
+      locationSubRef.current = { remove: unsub } as any;
     } catch {}
   }
 
@@ -145,8 +161,11 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
         webWatchIdRef.current = null;
       }
     } else {
-      locationSubRef.current?.remove();
-      locationSubRef.current = null;
+      if (locationSubRef.current) {
+        locationSubRef.current.remove();
+        locationSubRef.current = null;
+      }
+      safeStopLocationUpdates(GROUP_LOCATION_TASK);
     }
     if (pingIntervalRef.current) {
       clearInterval(pingIntervalRef.current);
@@ -168,6 +187,10 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
     setActivityType(type);
     setIsMinimized(false);
     setPhase("active");
+
+    if (Platform.OS !== "web") {
+      await requestBackgroundPermission();
+    }
 
     await watchLocation();
 
