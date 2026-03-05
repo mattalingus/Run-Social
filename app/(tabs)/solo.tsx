@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useRef } from "react";
+import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -19,6 +19,7 @@ import * as Haptics from "expo-haptics";
 import * as Notifications from "@/lib/safeNotifications";
 import * as ImagePicker from "expo-image-picker";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActivity } from "@/contexts/ActivityContext";
@@ -457,6 +458,66 @@ export default function SoloScreen() {
   const { C } = useTheme();
   const s = useMemo(() => makeStyles(C), [C]);
   const qc = useQueryClient();
+
+  // T002: Check for unsaved draft run on mount and offer recovery
+  useEffect(() => {
+    if (!user) return;
+    const key = `paceup_draft_run_${user.id}`;
+    AsyncStorage.getItem(key).then((raw) => {
+      if (!raw) return;
+      try {
+        const draft = JSON.parse(raw);
+        const age = Date.now() - new Date(draft.timestamp).getTime();
+        if (age > 24 * 60 * 60 * 1000) {
+          AsyncStorage.removeItem(key).catch(() => {});
+          return;
+        }
+        const mins = Math.round(age / 60000);
+        const agoStr = mins < 60 ? `${mins}m ago` : `${Math.round(mins / 60)}h ago`;
+        const distStr = draft.distanceMi > 0 ? `${draft.distanceMi.toFixed(2)} mi` : "a";
+        Alert.alert(
+          "Unsaved Activity",
+          `You have an unsaved ${draft.activityType ?? "run"} (${distStr}, ${agoStr}). Save it?`,
+          [
+            {
+              text: "Discard",
+              style: "destructive",
+              onPress: () => AsyncStorage.removeItem(key).catch(() => {}),
+            },
+            {
+              text: "Save",
+              onPress: async () => {
+                try {
+                  const pace = draft.durationSeconds > 0 && draft.distanceMi > 0.01
+                    ? (draft.durationSeconds / 60) / draft.distanceMi
+                    : null;
+                  await apiRequest("POST", "/api/solo-runs", {
+                    title: `${draft.distanceMi.toFixed(2)} mi solo ${draft.activityType ?? "run"}`,
+                    date: draft.timestamp,
+                    distanceMiles: Math.max(draft.distanceMi, 0.001),
+                    paceMinPerMile: pace,
+                    durationSeconds: draft.durationSeconds,
+                    completed: true,
+                    planned: false,
+                    routePath: draft.routePath && draft.routePath.length > 1 ? draft.routePath : null,
+                    activityType: draft.activityType ?? "run",
+                    mileSplits: draft.splits && draft.splits.length > 0 ? draft.splits : null,
+                    elevationGainFt: draft.elevationGainFt > 0 ? Math.round(draft.elevationGainFt) : null,
+                  });
+                  await AsyncStorage.removeItem(key);
+                  qc.invalidateQueries({ queryKey: ["/api/solo-runs"] });
+                  qc.invalidateQueries({ queryKey: ["/api/runs/mine"] });
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                } catch (e: any) {
+                  Alert.alert("Save Failed", e?.message ?? "Could not save the run");
+                }
+              },
+            },
+          ]
+        );
+      } catch { AsyncStorage.removeItem(key).catch(() => {}); }
+    }).catch(() => {});
+  }, [user?.id]);
 
   const [showGoals, setShowGoals] = useState(false);
   const [showPlan, setShowPlan] = useState(false);
@@ -936,6 +997,12 @@ export default function SoloScreen() {
               <Ionicons name={activityFilter === "ride" ? "bicycle-outline" : "walk-outline"} size={44} color={C.textMuted} />
               <Text style={s.emptyTitle}>{activityFilter === "ride" ? "No solo rides yet" : "No solo runs yet"}</Text>
               <Text style={s.emptyBody}>{activityFilter === "ride" ? "Plan your first ride and start tracking your progress" : "Plan your first run and start tracking your progress"}</Text>
+              <Pressable
+                style={s.emptyCtaBtn}
+                onPress={() => router.push("/run-tracking")}
+              >
+                <Text style={s.emptyCtaBtnText}>{activityFilter === "ride" ? "Track New Ride" : "Track New Run"}</Text>
+              </Pressable>
             </View>
           ) : (
             historyRuns.map((run) => {
@@ -1613,6 +1680,8 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   },
   emptyTitle: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.text, marginTop: 12 },
   emptyBody: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary, textAlign: "center", marginTop: 6 },
+  emptyCtaBtn: { backgroundColor: C.primary, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 28, marginTop: 18 },
+  emptyCtaBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 15, color: "#050C09" },
   emptyText: { fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textSecondary, marginTop: 12, marginBottom: 20 },
   loginBtn: { backgroundColor: C.primary, paddingHorizontal: 28, paddingVertical: 12, borderRadius: 14 },
   loginBtnTxt: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.bg },

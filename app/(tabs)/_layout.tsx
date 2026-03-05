@@ -35,6 +35,21 @@ export default function TabLayout() {
   const [hasCrewUnread, setHasCrewUnread] = useState(false);
   const [crewSince, setCrewSince] = useState<string | null>(null);
   const onCrewTab = pathname === "/crew" || pathname.startsWith("/crew/");
+  const onDiscoverTab = pathname === "/" || pathname === "/index";
+
+  const { data: notifData } = useQuery<any[]>({
+    queryKey: ["/api/notifications"],
+    queryFn: async () => {
+      const res = await fetch(new URL("/api/notifications", getApiUrl()).toString(), { credentials: "include" });
+      return res.json();
+    },
+    enabled: !!user,
+    refetchInterval: 30000,
+    staleTime: 15000,
+  });
+  const unreadNotifCount = (notifData ?? []).filter(
+    (n: any) => n.type === "friend_request" || n.type === "crew_invite" || n.type === "join_request"
+  ).length;
 
   // Load persisted timestamp on mount — defaults to now if never visited (no false positives)
   useEffect(() => {
@@ -108,6 +123,8 @@ export default function TabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? "search" : "search-outline"} size={22} color={color} />
           ),
+          tabBarBadge: !onDiscoverTab && unreadNotifCount > 0 ? unreadNotifCount : undefined,
+          tabBarBadgeStyle: { backgroundColor: "#FF3B30", fontSize: 10 },
         }}
       />
       <Tabs.Screen

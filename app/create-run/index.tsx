@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -73,6 +73,29 @@ export default function CreateRunScreen() {
   );
   const [isGeocodingPin, setIsGeocodingPin] = useState(false);
   const [amPm, setAmPm] = useState<"AM" | "PM">("AM");
+
+  // Split date/time fields (T003)
+  const [dateM, setDateM] = useState("");
+  const [dateD, setDateD] = useState("");
+  const [dateY, setDateY] = useState("");
+  const [timeH, setTimeH] = useState("");
+  const [timeMin, setTimeMin] = useState("");
+  const dateDRef = useRef<TextInput>(null);
+  const dateYRef = useRef<TextInput>(null);
+  const timeMinRef = useRef<TextInput>(null);
+
+  // Sync split fields → combined date/time strings used by parsers
+  useEffect(() => {
+    const m = dateM.padStart(2, "0");
+    const d = dateD.padStart(2, "0");
+    const y = dateY;
+    if (m && d && y) setDate(`${m}/${d}/${y}`);
+  }, [dateM, dateD, dateY]);
+
+  useEffect(() => {
+    if (timeH && timeMin) setTime(`${timeH}:${timeMin.padStart(2, "0")}`);
+    else if (timeH) setTime(timeH);
+  }, [timeH, timeMin]);
   const [plannedDistance, setPlannedDistance] = useState(params.pathDistance ?? "3");
   const [plannedPace, setPlannedPace] = useState("9");
   const [locationPickerOpen, setLocationPickerOpen] = useState(false);
@@ -371,42 +394,114 @@ export default function CreateRunScreen() {
 
         <View style={styles.field}>
           <Text style={styles.label}>Date & Time *</Text>
-          <View style={{ flexDirection: "row", gap: 10 }}>
-            <TextInput
-              style={[styles.input, { flex: 1 }]}
-              value={date}
-              onChangeText={handleDateChange}
-              placeholder="MM/DD/YY"
-              placeholderTextColor={C.textMuted}
-              keyboardType="number-pad"
-              maxLength={8}
-            />
-            <View style={{ flex: 1, flexDirection: "row", gap: 6 }}>
+          {/* Date row: MM / DD / YY */}
+          <View style={{ flexDirection: "row", gap: 8, marginBottom: 8 }}>
+            <View style={{ flex: 1, alignItems: "center" }}>
+              <Text style={styles.splitLabel}>MM</Text>
               <TextInput
-                style={[styles.input, { flex: 1 }]}
-                value={time}
-                onChangeText={handleTimeChange}
-                placeholder="7:30"
+                style={styles.splitInput}
+                value={dateM}
+                onChangeText={(t) => {
+                  const digits = t.replace(/\D/g, "").slice(0, 2);
+                  setDateM(digits);
+                  if (digits.length === 2) dateDRef.current?.focus();
+                }}
+                placeholder="03"
                 placeholderTextColor={C.textMuted}
                 keyboardType="number-pad"
-                maxLength={5}
+                maxLength={2}
+                returnKeyType="next"
+                onSubmitEditing={() => dateDRef.current?.focus()}
               />
-              <View style={{ flexDirection: "column", gap: 4 }}>
-                {(["AM", "PM"] as const).map((period) => (
-                  <Pressable
-                    key={period}
-                    onPress={() => { setAmPm(period); Haptics.selectionAsync(); }}
-                    style={{
-                      flex: 1, paddingHorizontal: 10, borderRadius: 9, borderWidth: 1,
-                      alignItems: "center", justifyContent: "center",
-                      backgroundColor: amPm === period ? C.primary + "33" : C.surface,
-                      borderColor: amPm === period ? C.primary : C.border,
-                    }}
-                  >
-                    <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: amPm === period ? C.primary : C.textMuted }}>{period}</Text>
-                  </Pressable>
-                ))}
-              </View>
+            </View>
+            <View style={{ flex: 1, alignItems: "center" }}>
+              <Text style={styles.splitLabel}>DD</Text>
+              <TextInput
+                ref={dateDRef}
+                style={styles.splitInput}
+                value={dateD}
+                onChangeText={(t) => {
+                  const digits = t.replace(/\D/g, "").slice(0, 2);
+                  setDateD(digits);
+                  if (digits.length === 2) dateYRef.current?.focus();
+                }}
+                placeholder="15"
+                placeholderTextColor={C.textMuted}
+                keyboardType="number-pad"
+                maxLength={2}
+                returnKeyType="next"
+                onSubmitEditing={() => dateYRef.current?.focus()}
+              />
+            </View>
+            <View style={{ flex: 1, alignItems: "center" }}>
+              <Text style={styles.splitLabel}>YY</Text>
+              <TextInput
+                ref={dateYRef}
+                style={styles.splitInput}
+                value={dateY}
+                onChangeText={(t) => {
+                  const digits = t.replace(/\D/g, "").slice(0, 2);
+                  setDateY(digits);
+                }}
+                placeholder="26"
+                placeholderTextColor={C.textMuted}
+                keyboardType="number-pad"
+                maxLength={2}
+                returnKeyType="next"
+              />
+            </View>
+          </View>
+          {/* Time row: HH : MM + AM/PM */}
+          <View style={{ flexDirection: "row", gap: 8, alignItems: "flex-end" }}>
+            <View style={{ flex: 1, alignItems: "center" }}>
+              <Text style={styles.splitLabel}>Hour</Text>
+              <TextInput
+                style={styles.splitInput}
+                value={timeH}
+                onChangeText={(t) => {
+                  const digits = t.replace(/\D/g, "").slice(0, 2);
+                  setTimeH(digits);
+                  if (digits.length === 2) timeMinRef.current?.focus();
+                }}
+                placeholder="7"
+                placeholderTextColor={C.textMuted}
+                keyboardType="number-pad"
+                maxLength={2}
+                returnKeyType="next"
+                onSubmitEditing={() => timeMinRef.current?.focus()}
+              />
+            </View>
+            <View style={{ flex: 1, alignItems: "center" }}>
+              <Text style={styles.splitLabel}>Min</Text>
+              <TextInput
+                ref={timeMinRef}
+                style={styles.splitInput}
+                value={timeMin}
+                onChangeText={(t) => {
+                  const digits = t.replace(/\D/g, "").slice(0, 2);
+                  setTimeMin(digits);
+                }}
+                placeholder="30"
+                placeholderTextColor={C.textMuted}
+                keyboardType="number-pad"
+                maxLength={2}
+              />
+            </View>
+            <View style={{ flexDirection: "column", gap: 4, flex: 1 }}>
+              {(["AM", "PM"] as const).map((period) => (
+                <Pressable
+                  key={period}
+                  onPress={() => { setAmPm(period); Haptics.selectionAsync(); }}
+                  style={{
+                    paddingVertical: 8, borderRadius: 9, borderWidth: 1,
+                    alignItems: "center", justifyContent: "center",
+                    backgroundColor: amPm === period ? C.primary + "33" : C.surface,
+                    borderColor: amPm === period ? C.primary : C.border,
+                  }}
+                >
+                  <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: amPm === period ? C.primary : C.textMuted }}>{period}</Text>
+                </Pressable>
+              ))}
             </View>
           </View>
         </View>
@@ -784,6 +879,12 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   form: { padding: 20, gap: 16 },
   field: { gap: 6 },
   label: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary },
+  splitLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.textMuted, marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 },
+  splitInput: {
+    backgroundColor: C.surface, borderRadius: 12, borderWidth: 1, borderColor: C.border,
+    paddingHorizontal: 10, paddingVertical: 12, fontFamily: "Outfit_400Regular", fontSize: 16,
+    color: C.text, textAlign: "center", width: "100%",
+  },
   input: {
     backgroundColor: C.surface,
     borderRadius: 12,

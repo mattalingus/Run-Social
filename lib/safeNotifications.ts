@@ -42,6 +42,12 @@ export const scheduleNotificationAsync = async (
   }
 };
 
+export const dismissNotificationAsync = async (notificationId: string): Promise<void> => {
+  try {
+    await Notifs?.dismissNotificationAsync(notificationId);
+  } catch (_) {}
+};
+
 export const addNotificationResponseReceivedListener = (
   ...args: Parameters<typeof import("expo-notifications").addNotificationResponseReceivedListener>
 ): { remove: () => void } => {

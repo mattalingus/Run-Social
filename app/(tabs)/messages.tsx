@@ -392,7 +392,7 @@ export default function MessagesScreen() {
             ListEmptyComponent={
               <View style={s.friendsEmpty}>
                 <Text style={s.friendsEmptyTxt}>
-                  No friends yet. Add friends from the Discover tab to message them.
+                  No friends yet. Add friends from your Profile tab to message them.
                 </Text>
               </View>
             }

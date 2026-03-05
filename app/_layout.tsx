@@ -4,7 +4,8 @@ import { Stack, router } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import * as Notifications from "@/lib/safeNotifications";
 import React, { useEffect, useRef } from "react";
-import { Platform } from "react-native";
+import { Platform, Alert } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -37,28 +38,47 @@ try {
   });
 } catch (_) {}
 
-async function registerPushToken(userId: string) {
-  try {
-    const { status: existing } = await Notifications.getPermissionsAsync();
-    let finalStatus = existing;
-    if (existing !== "granted") {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-    if (finalStatus !== "granted") return;
+const NOTIF_PROMPT_KEY = "@paceup_notif_prompt_shown";
 
+async function requestAndRegisterPush(userId: string) {
+  try {
+    const { status } = await Notifications.requestPermissionsAsync();
+    if (status !== "granted") return;
     const tokenData = await Notifications.getExpoPushTokenAsync();
     const token = tokenData.data;
-
     await fetch(new URL("/api/users/me/push-token", getApiUrl()).toString(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify({ token }),
     });
-  } catch (e) {
-    // Non-critical — silently ignore
-  }
+  } catch (_) {}
+}
+
+async function registerPushToken(userId: string) {
+  try {
+    const { status: existing } = await Notifications.getPermissionsAsync();
+    if (existing === "granted") {
+      // Already granted — register silently
+      await requestAndRegisterPush(userId);
+      return;
+    }
+    if (existing !== "undetermined") return; // denied — don't pester
+
+    // T008: show branded in-app prompt before iOS system dialog
+    const alreadyShown = await AsyncStorage.getItem(NOTIF_PROMPT_KEY);
+    if (alreadyShown) return;
+    await AsyncStorage.setItem(NOTIF_PROMPT_KEY, "1");
+
+    Alert.alert(
+      "Stay in the loop",
+      "Know the moment your run starts, when friends message you, and when your crew is active.\n\nEnable notifications to get the most out of PaceUp.",
+      [
+        { text: "Maybe Later", style: "cancel" },
+        { text: "Enable", onPress: () => requestAndRegisterPush(userId) },
+      ]
+    );
+  } catch (_) {}
 }
 
 function RootLayoutNav() {

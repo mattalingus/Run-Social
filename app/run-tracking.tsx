@@ -14,6 +14,7 @@ import {
   Image,
   Share,
 } from "react-native";
+import * as Notifications from "@/lib/safeNotifications";
 import * as MediaLibrary from "expo-media-library";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Speech from "expo-speech";
@@ -316,6 +317,31 @@ export default function RunTrackingScreen() {
   const [saving, setSaving] = useState(false);
   const [routeState, setRouteState] = useState<Coord[]>([]);
   const [isDriving, setIsDriving] = useState(false);
+  const isDrivingRef = useRef(false);
+  const vehicleNotifIdRef = useRef<string | null>(null);
+
+  // T007: Fire haptic + local notification when vehicle detection triggers
+  useEffect(() => {
+    if (isDriving && !isDrivingRef.current) {
+      isDrivingRef.current = true;
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        Notifications.scheduleNotificationAsync({
+          content: {
+            title: "PaceUp paused",
+            body: "Vehicle speed detected — open the app to resume.",
+          },
+          trigger: null,
+        }).then((id: string) => { vehicleNotifIdRef.current = id; }).catch(() => {});
+      }
+    } else if (!isDriving && isDrivingRef.current) {
+      isDrivingRef.current = false;
+      if (vehicleNotifIdRef.current && Platform.OS !== "web") {
+        Notifications.dismissNotificationAsync(vehicleNotifIdRef.current).catch(() => {});
+        vehicleNotifIdRef.current = null;
+      }
+    }
+  }, [isDriving]);
 
   // Audio Coach state
   const [coachEnabled, setCoachEnabled] = useState(true);
@@ -698,7 +724,7 @@ export default function RunTrackingScreen() {
     setPhase("active");
   }
 
-  function handleFinish() {
+  function doFinish() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     if (Platform.OS !== "web") Speech.stop();
     stopPedometer();
@@ -715,7 +741,32 @@ export default function RunTrackingScreen() {
       });
     }
     setMileSplits(finalSplits);
+    // T002: persist draft so data survives app crash on done screen
+    if (user) {
+      const draft = {
+        distanceMi: totalDistRef.current,
+        durationSeconds: elapsedRef.current,
+        routePath: routePathRef.current,
+        splits: finalSplits,
+        activityType: activityFilter,
+        elevationGainFt: elevationGainRef.current,
+        timestamp: new Date().toISOString(),
+      };
+      AsyncStorage.setItem(`paceup_draft_run_${user.id}`, JSON.stringify(draft)).catch(() => {});
+    }
     setPhase("done");
+  }
+
+  function handleFinish() {
+    const type = activityFilter === "ride" ? "Ride" : "Run";
+    Alert.alert(
+      `Finish ${type}?`,
+      `Ready to wrap up this ${type.toLowerCase()}?`,
+      [
+        { text: "Keep Going", style: "cancel" },
+        { text: `Finish ${type}`, onPress: doFinish },
+      ]
+    );
   }
 
   function handleCancel() {
@@ -770,6 +821,8 @@ export default function RunTrackingScreen() {
       qc.invalidateQueries({ queryKey: ["/api/solo-runs"] });
       qc.invalidateQueries({ queryKey: ["/api/runs/mine"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // T002: clear draft after successful save
+      if (user) AsyncStorage.removeItem(`paceup_draft_run_${user.id}`).catch(() => {});
     } catch (e: any) {
       Alert.alert("Save Failed", e.message);
     } finally {
@@ -1184,7 +1237,12 @@ export default function RunTrackingScreen() {
 
               <Pressable
                 style={t.discardBtn}
-                onPress={() => { stopWatching(); router.back(); }}
+                onPress={() => {
+                  // T002: clear draft on explicit discard
+                  if (user) AsyncStorage.removeItem(`paceup_draft_run_${user.id}`).catch(() => {});
+                  stopWatching();
+                  router.back();
+                }}
               >
                 <Text style={t.discardTxt}>Discard</Text>
               </Pressable>

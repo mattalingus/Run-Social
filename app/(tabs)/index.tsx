@@ -1166,7 +1166,7 @@ export default function DiscoverScreen() {
   const checklistItems = useMemo(() => [
     {
       label: "Set your pace",
-      done: (user as any)?.avg_pace != null,
+      done: (user as any)?.avg_pace != null && ((user as any)?.avg_pace !== 10 || (user as any)?.avg_distance !== 3),
       action: () => router.push("/(tabs)/profile" as any),
     },
     {
@@ -1182,7 +1182,7 @@ export default function DiscoverScreen() {
     {
       label: "Add a friend",
       done: friends.length > 0,
-      action: () => router.push("/(tabs)/crew" as any),
+      action: () => router.push("/(tabs)/profile" as any),
     },
   ], [user, friends]);
 
