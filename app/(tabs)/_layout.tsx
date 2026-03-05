@@ -107,10 +107,11 @@ export default function TabLayout() {
           shadowOffset:    { width: 0, height: 6 },
         },
         tabBarBackground: () => <PillBackground bg={C.tabBar} border={C.borderLight} />,
+        tabBarShowLabel: true,
         tabBarLabelStyle: {
-          fontFamily:   "Outfit_600SemiBold",
+          ...(Platform.OS !== "android" && { fontFamily: "Outfit_600SemiBold" }),
           fontSize:     11,
-          marginBottom: 4,
+          marginBottom: Platform.OS === "android" ? 2 : 4,
         },
         tabBarIconStyle: { marginTop: 4 },
         tabBarItemStyle: { paddingTop: 0, paddingBottom: 0 },
