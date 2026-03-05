@@ -1,0 +1,35 @@
+❗ Major version mismatches
+package                           expected  found    
+expo-clipboard                    ~8.0.8    55.0.8   
+expo-media-library                ~18.2.1   55.0.9   
+expo-notifications                ~0.32.16  55.0.10  
+expo-sensors                      ~15.0.8   55.0.8   
+expo-sharing                      ~14.0.8   55.0.11  
+expo-speech                       ~14.0.8   55.0.8   
+expo-task-manager                 ~14.0.9   55.0.9   
+⚠️ Minor version mismatches
+package                           expected  found    
+react-native-keyboard-controller  1.18.5    1.20.6   
+react-native-maps                 1.20.1    1.18.0   
+🔧 Patch version mismatches
+package                           expected  found    
+expo                              ~54.0.33  54.0.32  
+expo-glass-effect                 ~0.1.9    0.1.8    
+expo-router                       ~6.0.23   6.0.22   
+Changelogs:
+- expo-clipboard → https://github.com/expo/expo/blob/sdk-54/packages/expo-clipboard/CHANGELOG.md
+- expo-glass-effect → https://github.com/expo/expo/blob/sdk-54/packages/expo-glass-effect/CHANGELOG.md
+- expo-media-library → https://github.com/expo/expo/blob/sdk-54/packages/expo-media-library/CHANGELOG.md
+- expo-notifications → https://github.com/expo/expo/blob/sdk-54/packages/expo-notifications/CHANGELOG.md
+- expo-router → https://github.com/expo/expo/blob/sdk-54/packages/expo-router/CHANGELOG.md
+- expo-sensors → https://github.com/expo/expo/blob/sdk-54/packages/expo-sensors/CHANGELOG.md
+- expo-sharing → https://github.com/expo/expo/blob/sdk-54/packages/expo-sharing/CHANGELOG.md
+- expo-speech → https://github.com/expo/expo/blob/sdk-54/packages/expo-speech/CHANGELOG.md
+- expo-task-manager → https://github.com/expo/expo/blob/sdk-54/packages/expo-task-manager/CHANGELOG.md
+12 packages out of date.
+Advice:
+Use 'npx expo install --check' to review and upgrade your dependencies.
+To ignore specific packages, add them to "expo.install.exclude" in package.json. Learn more: https://expo.fyi/dependency-validation
+2 checks failed, indicating possible issues with the project.
+Command "expo doctor" failed.
+npx -y expo-doctor exited with non-zero code: 1

@@ -1,0 +1,20 @@
+› Compiling expo-system-ui Pods/ExpoSystemUI » ExpoSystemUI-dummy.m
+
+❌  (node_modules/expo-sharing/ios/SharingModule.swift:17:33)
+
+  15 | 
+  16 |     AsyncFunction("shareAsync") { (url: URL, options: SharingOptions, promise: Promise) in
+> 17 |       guard FileSystemUtilities.isReadableFile(appContext, url) else {
+     |                                 ^ type 'FileSystemUtilities' has no member 'isReadableFile'
+  18 |         throw FilePermissionException()
+  19 |       }
+  20 | 
+› Compiling expo-splash-screen Pods/ExpoSplashScreen » ExpoSplashScreen-dummy.m
+    Run script build phase '[CP-User] [Hermes] Replace Hermes for the right configuration, if needed' will be run during every build because it does not specify any outputs. To address this issue, either add output dependencies to the script phase, or configure it to run in every build by unchecking "Based on dependency analysis" in the script phase. (in target 'hermes-engine' from project 'Pods')
+▸ ** ARCHIVE FAILED **
+▸ The following build commands failed:
+▸ 	SwiftCompile normal arm64 Compiling\ Constants.swift,\ ResolveUrlContentDetails.swift,\ ShareProtocol.swift,\ SharingExceptions.swift,\ SharingModule.swift,\ SharingOptions.swift,\ SharingRecords.swift /Users/expo/workingdir/build/node_modules/expo-sharing/ios/shared/Constants.swift /Users/expo/workingdir/build/node_modules/expo-sharing/ios/ResolveUrlContentDetails.swift /Users/expo/workingdir/build/node_modules/expo-sharing/ios/shared/ShareProtocol.swift /Users/expo/workingdir/build/node_modules/expo-sharing/ios/SharingExceptions.swift /Users/expo/workingdir/build/node_modules/expo-sharing/ios/SharingModule.swift /Users/expo/workingdir/build/node_modules/expo-sharing/ios/SharingOptions.swift /Users/expo/workingdir/build/node_modules/expo-sharing/ios/SharingRecords.swift (in target 'ExpoSharing' from project 'Pods')
+▸ 	CompileSwift normal arm64 (in target 'ExpoSharing' from project 'Pods')
+▸ 	Archiving workspace PaceUp with scheme PaceUp
+▸ (3 failures)
+Exit status: 65
