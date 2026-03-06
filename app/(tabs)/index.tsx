@@ -1636,9 +1636,9 @@ export default function DiscoverScreen() {
               style={s.viewOnMapBtn}
               onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); goToMap(); }}
             >
-              <Feather name="map" size={15} color={C.primary} />
+              <Feather name="map" size={15} color={C.bg} />
               <Text style={s.viewOnMapBtnTxt}>View On Map</Text>
-              <Feather name="chevron-right" size={15} color={C.primary} />
+              <Feather name="chevron-right" size={15} color={C.bg} />
             </Pressable>
             </View>
           }
@@ -2832,15 +2832,15 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: C.surface,
+    backgroundColor: C.primary,
     borderRadius: 12,
     paddingVertical: 13,
     paddingHorizontal: 16,
     borderWidth: 1,
-    borderColor: C.border,
+    borderColor: C.primary,
     marginBottom: 7,
   },
-  viewOnMapBtnTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.primary, flex: 1, textAlign: "center" },
+  viewOnMapBtnTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.bg, flex: 1, textAlign: "center" },
   savedScroll: { gap: 10, paddingRight: 4 },
   savedCard: {
     width: 160,
