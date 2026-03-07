@@ -323,6 +323,8 @@ export default function RunDetailScreen() {
     if (!user || !id || !run || isHost || !isParticipant) return;
     if (Platform.OS === "web") return;
     if (liveTracking.phase !== "idle" || liveTracking.runId === id) return;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    Alert.alert(run.activity_type === "ride" ? "Ride started — let's go!" : "Run started — let's go!");
     liveTracking.startTracking(id, (run.activity_type ?? "run") as "run" | "ride");
     liveTracking.minimize();
   }, [isLive]);
