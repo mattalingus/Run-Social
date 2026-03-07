@@ -778,7 +778,7 @@ function CrewAchievementsSection({
     const from = prev?.threshold ?? 0;
     const to = next.threshold;
     const progress = Math.min(1, Math.max(0, (val - from) / (to - from)));
-    const label = cat === "miles" ? `${val.toFixed(1)} / ${to} mi` : cat === "events" ? `${val} / ${to} events` : `${val} / ${to} members`;
+    const label = cat === "miles" ? `${(val ?? 0).toFixed(1)} / ${to} mi` : cat === "events" ? `${val ?? 0} / ${to} events` : `${val ?? 0} / ${to} members`;
     return { key: next.key, label, progress, nextLabel: next.label, nextEmoji: next.emoji };
   }).filter(Boolean);
 
@@ -1828,9 +1828,10 @@ function RankingsModal({ visible, onClose, myCrewIds, myCrewId }: { visible: boo
     return `#${rank}`;
   }
 
-  function formatMiles(m: number) {
-    if (m >= 1000) return `${(m / 1000).toFixed(1)}k mi`;
-    return `${m.toFixed(1)} mi`;
+  function formatMiles(m: number | null | undefined) {
+    const n = m ?? 0;
+    if (n >= 1000) return `${(n / 1000).toFixed(1)}k mi`;
+    return `${n.toFixed(1)} mi`;
   }
 
   return (
