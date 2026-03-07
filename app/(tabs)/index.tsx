@@ -1711,9 +1711,9 @@ export default function DiscoverScreen() {
                           <View style={s.ghostTipRow}>
                             <Feather name="info" size={10} color={C.textMuted} />
                             <View style={{ flexDirection: "row", alignItems: "center", gap: 3, flex: 1 }}>
-                              <Text style={s.ghostTipTxt}>Tap</Text>
+                              <Text style={[s.ghostTipTxt, { flex: 0 }]}>Tap</Text>
                               <Ionicons name="bookmark-outline" size={11} color={C.textMuted} />
-                              <Text style={s.ghostTipTxt}>on any event</Text>
+                              <Text style={[s.ghostTipTxt, { flex: 0 }]}>on any event</Text>
                             </View>
                           </View>
                         </View>
