@@ -823,6 +823,8 @@ function MiniRunCard({
   onPress: () => void;
   onRemove: () => void;
 }) {
+  const { C } = useTheme();
+  const s = useMemo(() => makeStyles(C), [C]);
   const isLive = !!run.is_active && !run.is_completed;
   const pulseAnim = useRef(new Animated.Value(0.3)).current;
 
