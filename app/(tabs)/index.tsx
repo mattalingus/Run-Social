@@ -90,7 +90,7 @@ const DEFAULT_FILTERS: FilterState = {
   paceMax: 15.0,
   distMin: 1,
   distMax: 999,
-  maxDistFromMe: 10,
+  maxDistFromMe: null,
   styles: [],
   visibility: "all",
   days: [],
