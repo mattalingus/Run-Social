@@ -761,17 +761,17 @@ function RunCard({
           <View style={s.cardStats}>
             <View style={s.stat}>
               <Ionicons name={run.activity_type === "ride" ? "bicycle" : "walk"} size={12} color={getPaceColor(run.min_pace, run.max_pace, C)} />
-              <Text style={[s.statLabel, { color: getPaceColor(run.min_pace, run.max_pace, C) }]}>{run.min_pace === run.max_pace ? toDisplayPace(run.min_pace, distUnit) : `${toDisplayPace(run.min_pace, distUnit)}–${toDisplayPace(run.max_pace, distUnit)}`}</Text>
+              <Text numberOfLines={1} style={[s.statLabel, { color: getPaceColor(run.min_pace, run.max_pace, C) }]}>{run.min_pace === run.max_pace ? toDisplayPace(run.min_pace, distUnit) : `${toDisplayPace(run.min_pace, distUnit)}–${toDisplayPace(run.max_pace, distUnit)}`}</Text>
             </View>
             <View style={s.statDiv} />
             <View style={s.stat}>
               <Feather name="target" size={12} color={C.blue} />
-              <Text style={s.statLabel}>{run.min_distance === run.max_distance ? toDisplayDist(run.min_distance, distUnit) : `${toDisplayDist(run.min_distance, distUnit)}–${toDisplayDist(run.max_distance, distUnit)}`}</Text>
+              <Text numberOfLines={1} style={s.statLabel}>{run.min_distance === run.max_distance ? toDisplayDist(run.min_distance, distUnit) : `${toDisplayDist(run.min_distance, distUnit)}–${toDisplayDist(run.max_distance, distUnit)}`}</Text>
             </View>
             <View style={s.statDiv} />
             <View style={s.stat}>
               <Ionicons name="people" size={12} color={run.is_active ? C.primary : C.textMuted} />
-              <Text style={[s.statLabel, run.is_active && { color: C.primary }]}>
+              <Text numberOfLines={1} style={[s.statLabel, run.is_active && { color: C.primary }]}>
                 {run.is_active
                   ? `${run.participant_count} arrived`
                   : run.crew_id
@@ -3046,9 +3046,9 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   metaItem: { flexDirection: "row", alignItems: "center", gap: 6 },
   metaText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary, flex: 1 },
 
-  cardStats: { flexDirection: "row", alignItems: "center", gap: 10 },
-  stat: { flexDirection: "row", alignItems: "center", gap: 4 },
-  statLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.text },
+  cardStats: { flexDirection: "row", alignItems: "center", gap: 6, overflow: "hidden" },
+  stat: { flexDirection: "row", alignItems: "center", gap: 3, flex: 1, minWidth: 0 },
+  statLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.text, flexShrink: 1 },
   statUnit: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted },
   statDiv: { width: 1, height: 12, backgroundColor: C.border },
 
