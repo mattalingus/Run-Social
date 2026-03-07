@@ -1,5 +1,6 @@
 import { Pool } from "pg";
 import bcrypt from "bcryptjs";
+import { randomBytes, createHash } from "crypto";
 
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -337,6 +338,15 @@ export async function initDb() {
       UNIQUE(crew_id, achievement_key)
     );
     ALTER TABLE runs ADD COLUMN IF NOT EXISTS saved_path_id VARCHAR REFERENCES saved_paths(id) ON DELETE SET NULL;
+
+    CREATE TABLE IF NOT EXISTS remember_tokens (
+      id SERIAL PRIMARY KEY,
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at TIMESTAMP NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_remember_tokens_user ON remember_tokens(user_id);
   `);
 
   const dummyCheck = await pool.query(`SELECT COUNT(*) FROM users WHERE email LIKE 'dummy-%@paceup.dev'`);
@@ -816,6 +826,35 @@ export async function areFriends(userA: string, userB: string): Promise<boolean>
     [userA, userB]
   );
   return res.rows.length > 0;
+}
+
+export async function createRememberToken(userId: string): Promise<string> {
+  const raw = randomBytes(32).toString("hex");
+  const hash = createHash("sha256").update(raw).digest("hex");
+  const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
+  await pool.query(
+    `INSERT INTO remember_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)`,
+    [userId, hash, expiresAt]
+  );
+  return raw;
+}
+
+export async function validateRememberToken(raw: string): Promise<string | null> {
+  const hash = createHash("sha256").update(raw).digest("hex");
+  const res = await pool.query(
+    `SELECT user_id FROM remember_tokens WHERE token_hash = $1 AND expires_at > NOW()`,
+    [hash]
+  );
+  return res.rows[0]?.user_id ?? null;
+}
+
+export async function deleteRememberToken(raw: string): Promise<void> {
+  const hash = createHash("sha256").update(raw).digest("hex");
+  await pool.query(`DELETE FROM remember_tokens WHERE token_hash = $1`, [hash]);
+}
+
+export async function deleteUserRememberTokens(userId: string): Promise<void> {
+  await pool.query(`DELETE FROM remember_tokens WHERE user_id = $1`, [userId]);
 }
 
 export async function getFriendPrivateRuns(userId: string, bounds?: { swLat: number; neLat: number; swLng: number; neLng: number }) {

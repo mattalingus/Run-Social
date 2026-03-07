@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo } from "react";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { fetch } from "expo/fetch";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+const REMEMBER_TOKEN_KEY = "paceup_remember_token";
 
 interface User {
   id: string;
@@ -47,6 +50,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     fetchMe();
   }, []);
 
+  async function storeToken(token: string) {
+    try {
+      await AsyncStorage.setItem(REMEMBER_TOKEN_KEY, token);
+    } catch {}
+  }
+
+  async function clearToken() {
+    try {
+      await AsyncStorage.removeItem(REMEMBER_TOKEN_KEY);
+    } catch {}
+  }
+
+  async function tryRestoreSession(): Promise<User | null> {
+    try {
+      const token = await AsyncStorage.getItem(REMEMBER_TOKEN_KEY);
+      if (!token) return null;
+      const baseUrl = getApiUrl();
+      const res = await fetch(new URL("/api/auth/restore-session", baseUrl).toString(), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        await clearToken();
+        return null;
+      }
+      const data = await res.json();
+      if (data.rememberToken) await storeToken(data.rememberToken);
+      const { rememberToken: _t, ...userOnly } = data;
+      return userOnly as User;
+    } catch {
+      return null;
+    }
+  }
+
   async function fetchMe() {
     try {
       const baseUrl = getApiUrl();
@@ -55,10 +94,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const data = await res.json();
         setUser(data);
       } else {
-        setUser(null);
+        const restored = await tryRestoreSession();
+        setUser(restored);
       }
     } catch {
-      setUser(null);
+      const restored = await tryRestoreSession();
+      setUser(restored);
     } finally {
       setIsLoading(false);
     }
@@ -67,17 +108,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function login(identifier: string, password: string) {
     const res = await apiRequest("POST", "/api/auth/login", { identifier, password });
     const data = await res.json();
-    setUser(data);
+    if (data.rememberToken) await storeToken(data.rememberToken);
+    const { rememberToken: _t, ...userOnly } = data;
+    setUser(userOnly);
   }
 
   async function register(email: string, password: string, firstName: string, lastName: string, username: string) {
     const res = await apiRequest("POST", "/api/auth/register", { email, password, firstName, lastName, username });
     const data = await res.json();
-    setUser(data);
+    if (data.rememberToken) await storeToken(data.rememberToken);
+    const { rememberToken: _t, ...userOnly } = data;
+    setUser(userOnly);
   }
 
   async function logout() {
-    await apiRequest("POST", "/api/auth/logout", {});
+    try {
+      const token = await AsyncStorage.getItem(REMEMBER_TOKEN_KEY);
+      await apiRequest("POST", "/api/auth/logout", { rememberToken: token ?? undefined });
+    } catch {}
+    await clearToken();
     setUser(null);
   }
 

@@ -94,8 +94,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const name = `${firstName.trim()} ${lastName.trim()}`;
       const user = await storage.createUser({ email, password, name, username });
       req.session.userId = user.id;
+      const rememberToken = await storage.createRememberToken(user.id);
       const { password: _, ...safeUser } = user;
-      res.json(safeUser);
+      res.json({ ...safeUser, rememberToken });
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
@@ -110,15 +111,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const valid = await storage.verifyPassword(password, user.password);
       if (!valid) return res.status(401).json({ message: "Invalid credentials" });
       req.session.userId = user.id;
+      const rememberToken = await storage.createRememberToken(user.id);
       const { password: _, ...safeUser } = user;
-      res.json(safeUser);
+      res.json({ ...safeUser, rememberToken });
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
   });
 
-  app.post("/api/auth/logout", (req, res) => {
+  app.post("/api/auth/logout", async (req, res) => {
+    try {
+      const { rememberToken } = req.body ?? {};
+      if (rememberToken) await storage.deleteRememberToken(rememberToken).catch(() => {});
+      if (req.session.userId) await storage.deleteUserRememberTokens(req.session.userId).catch(() => {});
+    } catch {}
     req.session.destroy(() => res.json({ success: true }));
+  });
+
+  app.post("/api/auth/restore-session", async (req, res) => {
+    try {
+      const { token } = req.body ?? {};
+      if (!token) return res.status(400).json({ message: "Token required" });
+      const userId = await storage.validateRememberToken(token);
+      if (!userId) return res.status(401).json({ message: "Invalid or expired token" });
+      const user = await storage.getUserById(userId);
+      if (!user) return res.status(401).json({ message: "User not found" });
+      req.session.userId = userId;
+      const newToken = await storage.createRememberToken(userId);
+      const { password: _, ...safeUser } = user;
+      res.json({ ...safeUser, rememberToken: newToken });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
   });
 
   app.get("/api/auth/me", async (req, res) => {
