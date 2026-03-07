@@ -338,9 +338,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const friendship = await storage.acceptFriendRequest(req.params.id, req.session.userId!);
       if (!friendship) return res.status(404).json({ message: "Request not found" });
-      storage.checkFriendAchievements(req.session.userId!).catch(() => {});
+      storage.checkFriendAchievements(req.session.userId!).catch((err: any) => console.error("[bg]", err?.message ?? err));
       if (friendship.requester_id) {
-        storage.checkFriendAchievements(friendship.requester_id).catch(() => {});
+        storage.checkFriendAchievements(friendship.requester_id).catch((err: any) => console.error("[bg]", err?.message ?? err));
       }
       res.json(friendship);
     } catch (e: any) {
@@ -442,8 +442,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             } else {
               sendPushNotification(requester.push_token, `Request declined`, `Your request to join "${run.title}" was not accepted`, { runId });
             }
-          }).catch(() => {});
-        }).catch(() => {});
+          }).catch((err: any) => console.error("[bg]", err?.message ?? err));
+        }).catch((err: any) => console.error("[bg]", err?.message ?? err));
       }
     } catch (e: any) {
       res.status(500).json({ message: e.message });
@@ -499,7 +499,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             promptMsg,
             'prompt',
             { runId: run.id, quickReplies: ["I'm in! 💪", "Maybe 🤔", "Can't make it 😔"] }
-          ).catch(() => {});
+          ).catch((err: any) => console.error("[bg]", err?.message ?? err));
         })();
 
         storage.getCrewMemberPushTokensFiltered(run.crew_id, 'notif_crew_activity').then((tokens) => {
@@ -512,7 +512,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               { runId: run.id }
             );
           }
-        }).catch(() => {});
+        }).catch((err: any) => console.error("[bg]", err?.message ?? err));
       } else {
         storage.getFriendsWithPushTokensFiltered(req.session.userId!, 'notif_run_reminders').then((tokens) => {
           if (tokens.length) {
@@ -524,7 +524,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               { runId: run.id }
             );
           }
-        }).catch(() => {});
+        }).catch((err: any) => console.error("[bg]", err?.message ?? err));
       }
     } catch (e: any) {
       res.status(500).json({ message: e.message });
@@ -783,7 +783,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               { runId: run.id }
             );
           }
-        }).catch(() => {});
+        }).catch((err: any) => console.error("[bg]", err?.message ?? err));
       }
     } catch (e: any) {
       res.status(500).json({ message: e.message });
@@ -809,6 +809,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (run.host_id !== req.session.userId) {
           const member = await storage.isCrewMember(run.crew_id, req.session.userId);
           if (!member) return res.status(403).json({ message: "Crew run — members only", isCrewRun: true });
+        }
+      } else if (run.privacy === "friends") {
+        if (!req.session.userId) return res.status(403).json({ message: "Friends only run", isFriendsOnly: true });
+        if (run.host_id !== req.session.userId) {
+          const friends = await storage.areFriends(req.session.userId, run.host_id);
+          if (!friends) return res.status(403).json({ message: "Friends only run", isFriendsOnly: true });
         }
       } else if (run.privacy === "private") {
         if (!req.session.userId) return res.status(403).json({ message: "Private run", isPrivate: true });
@@ -885,7 +891,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             { runId: run.id }
           );
         }
-      }).catch(() => {});
+      }).catch((err: any) => console.error("[bg]", err?.message ?? err));
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
@@ -919,8 +925,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               { runId: run.id }
             );
           }
-        }).catch(() => {});
-      }).catch(() => {});
+        }).catch((err: any) => console.error("[bg]", err?.message ?? err));
+      }).catch((err: any) => console.error("[bg]", err?.message ?? err));
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
@@ -973,7 +979,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             {}
           );
         }
-      }).catch(() => {});
+      }).catch((err: any) => console.error("[bg]", err?.message ?? err));
       res.json({ success: true });
     } catch (e: any) {
       res.status(e.message.includes("Only the host") ? 403 : 500).json({ message: e.message });
@@ -1080,7 +1086,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let prTiers: { distanceTier: number | null; paceTier: number | null } = { distanceTier: null, paceTier: null };
       if (completed) {
         try { prTiers = await storage.getSoloRunPrTiers(req.session.userId!, run.id); } catch (_) {}
-        storage.recomputeUserAvgPace(req.session.userId!).catch(() => {});
+        storage.recomputeUserAvgPace(req.session.userId!).catch((err: any) => console.error("[bg]", err?.message ?? err));
       }
       res.status(201).json({ ...run, prTiers });
     } catch (e: any) {
@@ -1177,7 +1183,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           run.title,
           { screen: "run-live", runId: req.params.id }
         );
-      }).catch(() => {});
+      }).catch((err: any) => console.error("[bg]", err?.message ?? err));
     } catch (e: any) {
       const status = e.message === "Only the host can start the run" ? 403
         : e.message === "Run already started" ? 409 : 500;
@@ -1244,9 +1250,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Fire-and-forget crew achievement check
       storage.getRunById(req.params.id).then((run: any) => {
         if (run?.crew_id) {
-          storage.checkAndAwardCrewAchievements(run.crew_id).catch(() => {});
+          storage.checkAndAwardCrewAchievements(run.crew_id).catch((err: any) => console.error("[bg]", err?.message ?? err));
         }
-      }).catch(() => {});
+      }).catch((err: any) => console.error("[bg]", err?.message ?? err));
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
@@ -1465,6 +1471,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { name, description, emoji, runStyle, tags, imageUrl } = req.body;
       if (!name?.trim()) return res.status(400).json({ message: "Name is required" });
+      if (name.trim().length > 20) return res.status(400).json({ message: "Crew name must be 20 characters or less" });
       const crew = await storage.createCrew({ name: name.trim(), description, emoji: emoji || "🏃", createdBy: req.session.userId!, runStyle, tags: Array.isArray(tags) ? tags : [], imageUrl });
       res.json(crew);
     } catch (e: any) {
@@ -1703,7 +1710,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             { screen: "dm", friendId: req.session.userId! }
           );
         }
-      }).catch(() => {});
+      }).catch((err: any) => console.error("[bg]", err?.message ?? err));
     } catch (e: any) {
       if (e.message === "Not friends") return res.status(403).json({ message: "Not friends" });
       res.status(500).json({ message: e.message });

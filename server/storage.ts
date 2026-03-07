@@ -810,6 +810,14 @@ export async function getFriendIds(userId: string): Promise<string[]> {
   return result.rows.map((r: any) => r.friend_id);
 }
 
+export async function areFriends(userA: string, userB: string): Promise<boolean> {
+  const res = await pool.query(
+    `SELECT 1 FROM friends WHERE ((requester_id = $1 AND addressee_id = $2) OR (requester_id = $2 AND addressee_id = $1)) AND status = 'accepted'`,
+    [userA, userB]
+  );
+  return res.rows.length > 0;
+}
+
 export async function getFriendPrivateRuns(userId: string, bounds?: { swLat: number; neLat: number; swLng: number; neLng: number }) {
   let query = `SELECT r.id, r.title, r.date, r.location_lat, r.location_lng, r.location_name,
     r.min_pace, r.max_pace, r.min_distance, r.max_distance, r.max_participants, r.privacy,

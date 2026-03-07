@@ -360,7 +360,7 @@ function CreateCrewSheet({ visible, onClose, onCreated }: { visible: boolean; on
               onChangeText={setName}
               placeholder="e.g. Dawn Patrol, Weekend Warriors"
               placeholderTextColor={C.textMuted}
-              maxLength={40}
+              maxLength={20}
               testID="crew-name-input"
             />
 
