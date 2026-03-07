@@ -2941,7 +2941,6 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   sideBySideRow: {
     flexDirection: "row",
     gap: 10,
-    paddingHorizontal: 16,
     marginBottom: 12,
     alignItems: "flex-start",
   },
