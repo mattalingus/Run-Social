@@ -3,6 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
+  ScrollView,
   Pressable,
   TextInput,
   ActivityIndicator,
