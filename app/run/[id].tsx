@@ -265,6 +265,7 @@ export default function RunDetailScreen() {
   const isParticipant = !!myParticipation && myParticipation.status !== "pending" && myParticipation.status !== "cancelled";
   const hasPendingRequest = !!myParticipation && myParticipation.status === "pending";
   const isPastRun = run ? new Date(run.date) < new Date() : false;
+  const isRunStartingSoon = run ? (new Date(run.date).getTime() - Date.now() < 2 * 60 * 60 * 1000) : false;
   const canRate = !!run?.is_completed && isParticipant && !isHost && !myRating;
   const hasConfirmed = myParticipation?.status === "confirmed";
   const isLive = !!run?.is_active && !run?.is_completed;
@@ -1084,10 +1085,21 @@ export default function RunDetailScreen() {
             <Text style={styles.liveBtnText}>{run?.activity_type === "ride" ? "Join Live Ride" : "Join Live Run"}</Text>
           </Pressable>
         )}
-        {!isHost && !isLive && isParticipant && !run.is_completed && (
+        {!isHost && !isLive && isParticipant && !run.is_completed && (isRunStartingSoon || proximityTriggered) && (
           <View style={styles.waitingBanner}>
             <Feather name="clock" size={15} color={C.gold} />
             <Text style={styles.waitingText}>Waiting on host to start</Text>
+          </View>
+        )}
+        {!isHost && !isLive && isParticipant && !run.is_completed && !isRunStartingSoon && !proximityTriggered && (
+          <View style={styles.youreGoingBanner}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
+              <Feather name="check-circle" size={15} color={C.primary} />
+              <Text style={styles.youreGoingText}>You're going{run?.activity_type === "ride" ? " for a ride" : " for a run"}</Text>
+            </View>
+            <Pressable onPress={handleLeave} hitSlop={10}>
+              <Text style={styles.youreGoingLeave}>Leave</Text>
+            </Pressable>
           </View>
         )}
         {isPastRun && isParticipant && !hasConfirmed && (
@@ -1567,6 +1579,9 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   joinedHint: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary, marginTop: 2 },
   waitingBanner: { flexDirection: "row", alignItems: "center", gap: 8, justifyContent: "center", padding: 12, backgroundColor: C.gold + "18", borderRadius: 12, borderWidth: 1, borderColor: C.gold + "44" },
   waitingText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.gold },
+  youreGoingBanner: { flexDirection: "row", alignItems: "center", gap: 8, padding: 14, backgroundColor: C.primary + "18", borderRadius: 12, borderWidth: 1, borderColor: C.primary + "44" },
+  youreGoingText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.primary },
+  youreGoingLeave: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textMuted },
   pendingRequestBanner: { flexDirection: "row", alignItems: "center", gap: 8, justifyContent: "center", padding: 12, backgroundColor: C.gold + "18", borderRadius: 12, borderWidth: 1, borderColor: C.gold + "44" },
   pendingRequestText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.gold, flex: 1 },
   joinRequestRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.border },
