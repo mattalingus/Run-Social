@@ -1495,136 +1495,163 @@ export default function DiscoverScreen() {
           }
           ListHeaderComponent={
             <View>
-            {user && (!ghostBookmarkDone || sortedBookmarkedRuns.length > 0) && (
-              <View style={s.savedSection}>
-                <Text style={s.savedSectionTitle}>{activityFilter === "ride" ? "Saved Rides" : "Saved Runs"}</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={s.savedScroll}
-                >
-                  {sortedBookmarkedRuns.length > 0 ? sortedBookmarkedRuns.map((r) => (
-                    <Pressable
-                      key={r.id}
-                      style={s.savedCard}
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        router.push(`/run/${r.id}`);
-                      }}
-                    >
-                      <View style={s.savedCardTop}>
-                        <Text style={s.savedCardTitle} numberOfLines={2}>{r.title}</Text>
-                        <Pressable
-                          hitSlop={8}
-                          onPress={() => bookmarkMutation.mutate(r.id)}
-                        >
-                          <Ionicons name="bookmark" size={15} color={C.primary} />
-                        </Pressable>
-                      </View>
-                      <View style={s.savedCardMeta}>
-                        <Feather name="calendar" size={11} color={C.textMuted} />
-                        <Text style={s.savedCardMetaTxt}>{formatDate(r.date)} · {formatTime(r.date)}</Text>
-                      </View>
-                      <View style={s.savedCardMeta}>
-                        <Feather name="map-pin" size={11} color={C.textMuted} />
-                        <Text style={s.savedCardMetaTxt} numberOfLines={1}>{r.location_name}</Text>
-                      </View>
-                    </Pressable>
-                  )) : (
-                    <View style={s.ghostSavedCard}>
-                      <View style={s.savedCardTop}>
-                        <Text style={s.ghostSavedCardTitle} numberOfLines={2}>Save to Explore Later</Text>
-                        <Ionicons name="bookmark-outline" size={15} color={C.primary + "70"} />
-                      </View>
-                      <View style={s.savedCardMeta}>
-                        <Feather name="calendar" size={11} color={C.textMuted} />
-                        <Text style={s.ghostMetaTxt}>Sat, Mar 14 · 7:00 AM</Text>
-                      </View>
-                      <View style={s.savedCardMeta}>
-                        <Feather name="map-pin" size={11} color={C.textMuted} />
-                        <Text style={s.ghostMetaTxt}>Central Park North</Text>
-                      </View>
-                      <View style={s.ghostTipRow}>
-                        <Feather name="info" size={10} color={C.textMuted} />
-                        <Text style={s.ghostTipTxt}>Tap 🔖 on any event if you're thinking of going</Text>
-                      </View>
+            {user && ((!ghostBookmarkDone || sortedBookmarkedRuns.length > 0) || (!ghostPlannedDone || plannedRuns.filter((r) => (r.activity_type ?? "run") === activityFilter).length > 0)) && (() => {
+              const filteredPlanned = plannedRuns.filter((r) => (r.activity_type ?? "run") === activityFilter);
+              const SCROLL_CARD_W = 140;
+              return (
+                <View style={s.sideBySideRow}>
+                  {/* ── Left: Planning to ── */}
+                  {(!ghostPlannedDone || filteredPlanned.length > 0) && (
+                    <View style={s.sideCol}>
+                      <Text style={s.savedSectionTitle}>{activityFilter === "ride" ? "Planning to Ride" : "Planning to Run"}</Text>
+                      {filteredPlanned.length === 0 ? (
+                        <View style={s.ghostPlannedCard}>
+                          <View style={s.plannedCardHeader}>
+                            <View style={[s.plannedDot, { backgroundColor: C.textMuted }]} />
+                            <Text style={s.ghostPlannedLabel}>{activityFilter === "ride" ? "Planning to ride" : "Planning to run"}</Text>
+                            <Ionicons name="calendar-outline" size={14} color={C.textMuted} />
+                          </View>
+                          <Text style={s.ghostPlannedTitle} numberOfLines={2}>
+                            {activityFilter === "ride" ? "Tap 🗓 on any ride" : "Tap 🗓 on any event"}
+                          </Text>
+                          <View style={s.savedCardMeta}>
+                            <Feather name="map-pin" size={11} color={C.textMuted} />
+                            <Text style={s.ghostMetaTxt} numberOfLines={1}>Columbus Circle</Text>
+                          </View>
+                        </View>
+                      ) : filteredPlanned.length <= 2 ? (
+                        <View style={{ gap: 8 }}>
+                          {filteredPlanned.map((r) => (
+                            <Pressable
+                              key={r.id}
+                              style={({ pressed }) => [s.plannedCard, { opacity: pressed ? 0.85 : 1, width: "100%" }]}
+                              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push(`/run/${r.id}`); }}
+                            >
+                              <View style={s.plannedCardHeader}>
+                                <View style={s.plannedDot} />
+                                <Text style={s.plannedLabel} numberOfLines={1}>{activityFilter === "ride" ? "Riding" : "Running"}</Text>
+                                <Pressable hitSlop={10} onPress={(e) => { e.stopPropagation?.(); removePlanMutation.mutate(r.id); }}>
+                                  <Ionicons name="calendar" size={14} color={C.primary} />
+                                </Pressable>
+                              </View>
+                              <Text style={s.plannedCardTitle} numberOfLines={2}>{r.title}</Text>
+                              <View style={s.savedCardMeta}>
+                                <Feather name="calendar" size={11} color={C.textMuted} />
+                                <Text style={s.savedCardMetaTxt} numberOfLines={1}>{formatDate(r.date)}</Text>
+                              </View>
+                              <View style={s.savedCardMeta}>
+                                <Feather name="map-pin" size={11} color={C.textMuted} />
+                                <Text style={s.savedCardMetaTxt} numberOfLines={1}>{r.location_name}</Text>
+                              </View>
+                            </Pressable>
+                          ))}
+                        </View>
+                      ) : (
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 4 }}>
+                          {filteredPlanned.map((r) => (
+                            <Pressable
+                              key={r.id}
+                              style={({ pressed }) => [s.plannedCard, { opacity: pressed ? 0.85 : 1, width: SCROLL_CARD_W }]}
+                              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push(`/run/${r.id}`); }}
+                            >
+                              <View style={s.plannedCardHeader}>
+                                <View style={s.plannedDot} />
+                                <Text style={s.plannedLabel} numberOfLines={1}>{activityFilter === "ride" ? "Riding" : "Running"}</Text>
+                                <Pressable hitSlop={10} onPress={(e) => { e.stopPropagation?.(); removePlanMutation.mutate(r.id); }}>
+                                  <Ionicons name="calendar" size={14} color={C.primary} />
+                                </Pressable>
+                              </View>
+                              <Text style={s.plannedCardTitle} numberOfLines={2}>{r.title}</Text>
+                              <View style={s.savedCardMeta}>
+                                <Feather name="calendar" size={11} color={C.textMuted} />
+                                <Text style={s.savedCardMetaTxt} numberOfLines={1}>{formatDate(r.date)}</Text>
+                              </View>
+                              <View style={s.savedCardMeta}>
+                                <Feather name="map-pin" size={11} color={C.textMuted} />
+                                <Text style={s.savedCardMetaTxt} numberOfLines={1}>{r.location_name}</Text>
+                              </View>
+                            </Pressable>
+                          ))}
+                        </ScrollView>
+                      )}
                     </View>
                   )}
-                </ScrollView>
-              </View>
-            )}
-            {user && (!ghostPlannedDone || plannedRuns.filter((r) => (r.activity_type ?? "run") === activityFilter).length > 0) && (
-              <View style={s.savedSection}>
-                <Text style={s.savedSectionTitle}>{activityFilter === "ride" ? "Planning to Ride" : "Planning to Run"}</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={s.savedScroll}
-                >
-                  {plannedRuns.filter((r) => (r.activity_type ?? "run") === activityFilter).length > 0
-                    ? plannedRuns.filter((r) => (r.activity_type ?? "run") === activityFilter).map((r) => (
-                    <Pressable
-                      key={r.id}
-                      style={({ pressed }) => [s.plannedCard, { opacity: pressed ? 0.85 : 1 }]}
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        router.push(`/run/${r.id}`);
-                      }}
-                    >
-                      <View style={s.plannedCardHeader}>
-                        <View style={s.plannedDot} />
-                        <Text style={s.plannedLabel}>{activityFilter === "ride" ? "Planning to ride" : "Planning to run"}</Text>
-                        <Pressable
-                          hitSlop={10}
-                          onPress={(e) => { e.stopPropagation?.(); removePlanMutation.mutate(r.id); }}
-                        >
-                          <Ionicons name="calendar" size={16} color={C.primary} />
-                        </Pressable>
-                      </View>
-                      <Text style={s.plannedCardTitle} numberOfLines={2}>{r.title}</Text>
-                      <View style={s.savedCardMeta}>
-                        <Feather name="calendar" size={12} color={C.textMuted} />
-                        <Text style={s.savedCardMetaTxt}>{formatDate(r.date)} · {formatTime(r.date)}</Text>
-                      </View>
-                      <View style={s.savedCardMeta}>
-                        <Feather name="map-pin" size={12} color={C.textMuted} />
-                        <Text style={s.savedCardMetaTxt} numberOfLines={1}>{r.location_name}</Text>
-                      </View>
-                      <View style={s.plannedPace}>
-                        <Ionicons name="walk" size={12} color={C.orange} />
-                        <Text style={s.plannedPaceTxt}>{r.min_pace === r.max_pace ? toDisplayPace(r.min_pace, (user as any)?.distance_unit ?? "miles") : `${toDisplayPace(r.min_pace, (user as any)?.distance_unit ?? "miles")}–${toDisplayPace(r.max_pace, (user as any)?.distance_unit ?? "miles")}`}</Text>
-                      </View>
-                    </Pressable>
-                  ))
-                  : (
-                    <View style={s.ghostPlannedCard}>
-                      <View style={s.plannedCardHeader}>
-                        <View style={[s.plannedDot, { backgroundColor: C.textMuted }]} />
-                        <Text style={s.ghostPlannedLabel}>{activityFilter === "ride" ? "Planning to ride" : "Planning to run"}</Text>
-                        <Ionicons name="calendar-outline" size={16} color={C.textMuted} />
-                      </View>
-                      <Text style={s.ghostPlannedTitle}>
-                        {activityFilter === "ride"
-                          ? "Tap 🗓 on any event\nyou plan on riding"
-                          : "Tap 🗓 on any event\nyou plan on running"}
-                      </Text>
-                      <View style={s.savedCardMeta}>
-                        <Feather name="calendar" size={12} color={C.textMuted} />
-                        <Text style={s.ghostMetaTxt}>Sun, Mar 15 · 8:00 AM</Text>
-                      </View>
-                      <View style={s.savedCardMeta}>
-                        <Feather name="map-pin" size={12} color={C.textMuted} />
-                        <Text style={s.ghostMetaTxt}>Columbus Circle</Text>
-                      </View>
-                      <View style={s.savedCardMeta}>
-                        <Ionicons name={activityFilter === "ride" ? "bicycle-outline" : "walk-outline"} size={12} color={C.textMuted} />
-                        <Text style={s.ghostMetaTxt}>{activityFilter === "ride" ? "16–20 mph" : "9:00–11:00 /mi"}</Text>
-                      </View>
+
+                  {/* ── Right: Saved ── */}
+                  {(!ghostBookmarkDone || sortedBookmarkedRuns.length > 0) && (
+                    <View style={s.sideCol}>
+                      <Text style={s.savedSectionTitle}>{activityFilter === "ride" ? "Saved Rides" : "Saved Runs"}</Text>
+                      {sortedBookmarkedRuns.length === 0 ? (
+                        <View style={s.ghostSavedCard}>
+                          <View style={s.savedCardTop}>
+                            <Text style={s.ghostSavedCardTitle} numberOfLines={2}>Save to Explore Later</Text>
+                            <Ionicons name="bookmark-outline" size={14} color={C.primary + "70"} />
+                          </View>
+                          <View style={s.savedCardMeta}>
+                            <Feather name="calendar" size={11} color={C.textMuted} />
+                            <Text style={s.ghostMetaTxt} numberOfLines={1}>Sat, Mar 14 · 7 AM</Text>
+                          </View>
+                          <View style={s.ghostTipRow}>
+                            <Feather name="info" size={10} color={C.textMuted} />
+                            <Text style={s.ghostTipTxt} numberOfLines={2}>Tap 🔖 on any event</Text>
+                          </View>
+                        </View>
+                      ) : sortedBookmarkedRuns.length <= 2 ? (
+                        <View style={{ gap: 8 }}>
+                          {sortedBookmarkedRuns.map((r) => (
+                            <Pressable
+                              key={r.id}
+                              style={[s.savedCard, { width: "100%" }]}
+                              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push(`/run/${r.id}`); }}
+                            >
+                              <View style={s.savedCardTop}>
+                                <Text style={s.savedCardTitle} numberOfLines={2}>{r.title}</Text>
+                                <Pressable hitSlop={8} onPress={() => bookmarkMutation.mutate(r.id)}>
+                                  <Ionicons name="bookmark" size={14} color={C.primary} />
+                                </Pressable>
+                              </View>
+                              <View style={s.savedCardMeta}>
+                                <Feather name="calendar" size={11} color={C.textMuted} />
+                                <Text style={s.savedCardMetaTxt} numberOfLines={1}>{formatDate(r.date)}</Text>
+                              </View>
+                              <View style={s.savedCardMeta}>
+                                <Feather name="map-pin" size={11} color={C.textMuted} />
+                                <Text style={s.savedCardMetaTxt} numberOfLines={1}>{r.location_name}</Text>
+                              </View>
+                            </Pressable>
+                          ))}
+                        </View>
+                      ) : (
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 4 }}>
+                          {sortedBookmarkedRuns.map((r) => (
+                            <Pressable
+                              key={r.id}
+                              style={[s.savedCard, { width: SCROLL_CARD_W }]}
+                              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push(`/run/${r.id}`); }}
+                            >
+                              <View style={s.savedCardTop}>
+                                <Text style={s.savedCardTitle} numberOfLines={2}>{r.title}</Text>
+                                <Pressable hitSlop={8} onPress={() => bookmarkMutation.mutate(r.id)}>
+                                  <Ionicons name="bookmark" size={14} color={C.primary} />
+                                </Pressable>
+                              </View>
+                              <View style={s.savedCardMeta}>
+                                <Feather name="calendar" size={11} color={C.textMuted} />
+                                <Text style={s.savedCardMetaTxt} numberOfLines={1}>{formatDate(r.date)}</Text>
+                              </View>
+                              <View style={s.savedCardMeta}>
+                                <Feather name="map-pin" size={11} color={C.textMuted} />
+                                <Text style={s.savedCardMetaTxt} numberOfLines={1}>{r.location_name}</Text>
+                              </View>
+                            </Pressable>
+                          ))}
+                        </ScrollView>
+                      )}
                     </View>
                   )}
-                </ScrollView>
-              </View>
-            )}
+                </View>
+              );
+            })()}
             {isFallback && (
               <View style={s.fallbackBanner}>
                 <Feather name="info" size={13} color={C.textMuted} />
@@ -2841,9 +2868,20 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     marginBottom: 7,
   },
   viewOnMapBtnTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.bg, flex: 1, textAlign: "center" },
+  sideBySideRow: {
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    alignItems: "flex-start",
+  },
+  sideCol: {
+    flex: 1,
+    overflow: "hidden",
+    gap: 6,
+  },
   savedScroll: { gap: 10, paddingRight: 4 },
   savedCard: {
-    width: 160,
     backgroundColor: C.card,
     borderRadius: 14,
     padding: 12,
@@ -2856,7 +2894,6 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   savedCardMeta: { flexDirection: "row", alignItems: "center", gap: 5 },
   savedCardMetaTxt: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textSecondary, flex: 1 },
   ghostSavedCard: {
-    width: 160,
     backgroundColor: C.card,
     borderRadius: 14,
     padding: 12,
@@ -2868,15 +2905,14 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   },
   ghostSavedCardTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textMuted, flex: 1, lineHeight: 18 },
   ghostPlannedCard: {
-    width: 210,
     backgroundColor: C.card,
     borderRadius: 16,
-    padding: 14,
+    padding: 12,
     borderWidth: 1,
     borderColor: C.border,
     borderStyle: "dashed",
     opacity: 0.95,
-    gap: 8,
+    gap: 6,
   },
   ghostPlannedLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.textMuted, flex: 1 },
   ghostPlannedTitle: { fontFamily: "Outfit_700Bold", fontSize: 14, color: C.textMuted, lineHeight: 19 },
@@ -2884,13 +2920,12 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   ghostTipRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
   ghostTipTxt: { fontFamily: "Outfit_400Regular", fontSize: 10, color: C.textMuted, flex: 1 },
   plannedCard: {
-    width: 210,
     backgroundColor: C.card,
     borderRadius: 16,
-    padding: 14,
+    padding: 12,
     borderWidth: 1,
     borderColor: C.primary + "44",
-    gap: 8,
+    gap: 6,
   },
   plannedCardHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
   plannedDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: C.primary },
