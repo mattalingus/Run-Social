@@ -2248,9 +2248,8 @@ export default function DiscoverScreen() {
 
       {/* ── Host Run Modal ───────────────────────────────────────────────────── */}
       <Modal visible={showHostModal} transparent animationType="slide" onRequestClose={() => setShowHostModal(false)}>
-        <View style={s.modalWrap}>
         <Pressable style={s.modalOverlay} onPress={() => setShowHostModal(false)} />
-        <View style={[s.modalSheet, { position: "absolute", bottom: 0, width: "100%", height: "88%", paddingBottom: insets.bottom + 24 }]}>
+        <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "88%", backgroundColor: C.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, borderTopWidth: 1, borderTopColor: C.border, paddingBottom: insets.bottom + 24 }}>
 
           {/* Sheet handle */}
           <View style={s.sheetHandle} />
@@ -2579,7 +2578,6 @@ export default function DiscoverScreen() {
             </View>
           </ScrollView>
           )}
-        </View>
         </View>
       </Modal>
 
