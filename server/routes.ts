@@ -57,10 +57,12 @@ function requireAuth(req: Request, res: Response, next: Function) {
 export async function registerRoutes(app: Express): Promise<Server> {
   await storage.initDb();
 
-  const runCount = await getRunCount();
-  if (runCount === 0) {
-    await generateDummyRuns(15);
-    console.log("[seed] Inserted 15 dummy runs for Houston");
+  if (process.env.NODE_ENV !== "production") {
+    const runCount = await getRunCount();
+    if (runCount === 0) {
+      await generateDummyRuns(15);
+      console.log("[seed] Inserted 15 dummy runs for Houston");
+    }
   }
 
   app.use(

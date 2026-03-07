@@ -338,6 +338,16 @@ export async function initDb() {
     );
     ALTER TABLE runs ADD COLUMN IF NOT EXISTS saved_path_id VARCHAR REFERENCES saved_paths(id) ON DELETE SET NULL;
   `);
+
+  const dummyCheck = await pool.query(`SELECT COUNT(*) FROM users WHERE email LIKE 'dummy-%@paceup.dev'`);
+  if (parseInt(dummyCheck.rows[0].count) > 0) {
+    await pool.query(`DELETE FROM run_participants WHERE run_id IN (SELECT id FROM runs WHERE host_id IN (SELECT id FROM users WHERE email LIKE 'dummy-%@paceup.dev'))`);
+    await pool.query(`DELETE FROM bookmarked_runs WHERE run_id IN (SELECT id FROM runs WHERE host_id IN (SELECT id FROM users WHERE email LIKE 'dummy-%@paceup.dev'))`);
+    await pool.query(`DELETE FROM planned_runs WHERE run_id IN (SELECT id FROM runs WHERE host_id IN (SELECT id FROM users WHERE email LIKE 'dummy-%@paceup.dev'))`);
+    await pool.query(`DELETE FROM runs WHERE host_id IN (SELECT id FROM users WHERE email LIKE 'dummy-%@paceup.dev')`);
+    await pool.query(`DELETE FROM users WHERE email LIKE 'dummy-%@paceup.dev'`);
+    console.log("[cleanup] Removed dummy seed accounts and their runs");
+  }
 }
 
 export async function getNotifications(userId: string) {
