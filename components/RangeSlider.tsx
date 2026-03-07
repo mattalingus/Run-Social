@@ -123,10 +123,5 @@ const rs = StyleSheet.create({
     borderRadius: THUMB / 2,
     backgroundColor: "#F0FFF4",
     borderWidth: 3,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.35,
-    shadowRadius: 4,
-    elevation: 5,
   },
 });
