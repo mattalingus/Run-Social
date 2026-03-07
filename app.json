@@ -8,6 +8,15 @@
     "scheme": "paceup",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
+    "updates": {
+      "enabled": true,
+      "url": "https://u.expo.dev/650ed19c-3588-4b86-a01e-ae0ec83096c4",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
@@ -25,7 +34,6 @@
         "NSLocationWhenInUseUsageDescription": "PaceUp uses your location to track your route, find nearby events, and show your position on the map.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "PaceUp uses your location to track your route during runs and rides, even when the app is in the background.",
         "UIBackgroundModes": [
-          "location",
           "location"
         ],
         "ITSAppUsesNonExemptEncryption": false
@@ -61,6 +69,7 @@
           "origin": "https://paceupapp.com"
         }
       ],
+      "expo-updates",
       "expo-font",
       "expo-web-browser",
       [
