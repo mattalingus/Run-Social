@@ -1650,11 +1650,13 @@ export default function DiscoverScreen() {
                           <View style={s.plannedCardHeader}>
                             <View style={[s.plannedDot, { backgroundColor: C.textMuted }]} />
                             <Text style={s.ghostPlannedLabel}>{activityFilter === "ride" ? "Planning to ride" : "Planning to run"}</Text>
-                            <Ionicons name="calendar" size={14} color={C.primary} />
+                            <Ionicons name="calendar-outline" size={14} color={C.textMuted} />
                           </View>
-                          <Text style={s.ghostPlannedTitle} numberOfLines={2}>
-                            {activityFilter === "ride" ? "Tap 🗓 on any ride" : "Tap 🗓 on any event"}
-                          </Text>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+                            <Text style={s.ghostPlannedTitle}>Tap</Text>
+                            <Ionicons name="calendar-outline" size={14} color={C.textMuted} />
+                            <Text style={s.ghostPlannedTitle}>{activityFilter === "ride" ? "on any ride" : "on any event"}</Text>
+                          </View>
                           <View style={s.savedCardMeta}>
                             <Feather name="map-pin" size={11} color={C.textMuted} />
                             <Text style={s.ghostMetaTxt} numberOfLines={1}>Columbus Circle</Text>
@@ -1700,7 +1702,7 @@ export default function DiscoverScreen() {
                         <View style={s.ghostSavedCard}>
                           <View style={s.savedCardTop}>
                             <Text style={s.ghostSavedCardTitle} numberOfLines={2}>Save to Explore Later</Text>
-                            <Ionicons name="bookmark" size={14} color={C.primary} />
+                            <Ionicons name="bookmark-outline" size={14} color={C.primary + "70"} />
                           </View>
                           <View style={s.savedCardMeta}>
                             <Feather name="calendar" size={11} color={C.textMuted} />
@@ -1708,7 +1710,11 @@ export default function DiscoverScreen() {
                           </View>
                           <View style={s.ghostTipRow}>
                             <Feather name="info" size={10} color={C.textMuted} />
-                            <Text style={s.ghostTipTxt} numberOfLines={2}>Tap 🔖 on any event</Text>
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 3, flex: 1 }}>
+                              <Text style={s.ghostTipTxt}>Tap</Text>
+                              <Ionicons name="bookmark-outline" size={11} color={C.textMuted} />
+                              <Text style={s.ghostTipTxt}>on any event</Text>
+                            </View>
                           </View>
                         </View>
                       ) : sortedBookmarkedRuns.length <= 2 ? (
