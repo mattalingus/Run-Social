@@ -1650,7 +1650,7 @@ export default function DiscoverScreen() {
                           <View style={s.plannedCardHeader}>
                             <View style={[s.plannedDot, { backgroundColor: C.textMuted }]} />
                             <Text style={s.ghostPlannedLabel}>{activityFilter === "ride" ? "Planning to ride" : "Planning to run"}</Text>
-                            <Ionicons name="calendar-outline" size={14} color={C.textMuted} />
+                            <Ionicons name="calendar" size={14} color={C.primary} />
                           </View>
                           <Text style={s.ghostPlannedTitle} numberOfLines={2}>
                             {activityFilter === "ride" ? "Tap 🗓 on any ride" : "Tap 🗓 on any event"}
@@ -1700,7 +1700,7 @@ export default function DiscoverScreen() {
                         <View style={s.ghostSavedCard}>
                           <View style={s.savedCardTop}>
                             <Text style={s.ghostSavedCardTitle} numberOfLines={2}>Save to Explore Later</Text>
-                            <Ionicons name="bookmark-outline" size={14} color={C.primary + "70"} />
+                            <Ionicons name="bookmark" size={14} color={C.primary} />
                           </View>
                           <View style={s.savedCardMeta}>
                             <Feather name="calendar" size={11} color={C.textMuted} />
