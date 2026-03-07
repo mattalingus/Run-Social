@@ -1197,22 +1197,18 @@ export default function RunDetailScreen() {
                   {[
                     {
                       icon: "calendar" as const,
-                      title: "Reserve your spot",
-                      body: run?.activity_type === "ride"
-                        ? "Planning locks you into the ride lineup. The host can see you're coming."
-                        : "Planning locks you into the run lineup. The host can see you're coming.",
+                      title: "Let the host know you're coming",
+                      body: "Tapping lets the host see you plan on joining. No commitment — you can cancel any time.",
                     },
                     {
                       icon: "map-pin" as const,
                       title: "Head to the start",
-                      body: "On the day, head to the host's pin location shown on the map.",
+                      body: "On the day, make your way to the start pin shown on the map.",
                     },
                     {
                       icon: "clock" as const,
                       title: "Arrive within the window",
-                      body: run?.activity_type === "ride"
-                        ? "Check-in opens 1 hour before start. You're not officially in the ride until you're close to the start pin."
-                        : "Check-in opens 1 hour before start. You're not officially in the run until you're close to the start pin.",
+                      body: "Check-in opens 1 hour before start. Show up close to the pin and you'll be added automatically.",
                     },
                     {
                       icon: "users" as const,
@@ -1270,13 +1266,13 @@ export default function RunDetailScreen() {
                       icon: "check-circle" as const,
                       title: "Auto check-in",
                       body: run?.activity_type === "ride"
-                        ? "When you're within ~1 km of the host's pin during the window, you're automatically added to the live rider count."
-                        : "When you're within ~1 km of the host's pin during the window, you're automatically added to the live runner count.",
+                        ? "When you're within ~500 ft (150 m) of the start pin during the window, you're automatically added to the live rider count."
+                        : "When you're within ~500 ft (150 m) of the start pin during the window, you're automatically added to the live runner count.",
                     },
                     {
                       icon: "alert-circle" as const,
                       title: "No-shows are removed",
-                      body: "If you planned but don't check in, your spot is released for others.",
+                      body: "If you planned but didn't show up, your spot is released for others.",
                     },
                   ].map((item) => (
                     <View key={item.title} style={styles.frRuleRow}>
@@ -1340,7 +1336,7 @@ export default function RunDetailScreen() {
               </View>
               <Text style={styles.frIntro}>
                 {proximityTriggered
-                  ? `You're within 1 km of this ${run?.activity_type === "ride" ? "ride" : "run"} — want to join the group?`
+                  ? `You're near the start — want to join the group?`
                   : `A quick reminder before you join the group.`}
               </Text>
               {[
