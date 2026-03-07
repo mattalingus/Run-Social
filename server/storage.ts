@@ -946,6 +946,13 @@ export async function getSoloRuns(userId: string) {
   return result.rows;
 }
 
+export async function getSoloRunById(id: string) {
+  const result = await pool.query(`SELECT * FROM solo_runs WHERE id = $1`, [id]);
+  if (!result.rows.length) return null;
+  const row = result.rows[0];
+  return { ...row, userId: row.user_id };
+}
+
 export async function createSoloRun(data: {
   userId: string;
   title?: string;

@@ -1797,6 +1797,11 @@ export default function DiscoverScreen() {
                 <Ionicons name={activityFilter === "ride" ? "bicycle-outline" : "walk-outline"} size={44} color={C.textMuted} />
                 <Text style={s.emptyTitle}>{activityFilter === "ride" ? "No rides found" : "No runs found"}</Text>
                 <Text style={s.emptySub}>Try adjusting your filters</Text>
+                {isFiltered && (
+                  <Pressable style={s.clearFiltersBtn} onPress={resetFilters}>
+                    <Text style={s.clearFiltersTxt}>Clear Filters</Text>
+                  </Pressable>
+                )}
               </View>
             ) : (
               <View style={s.richEmpty}>
@@ -3065,6 +3070,15 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     textAlign: "center",
     paddingHorizontal: 40,
   },
+  clearFiltersBtn: {
+    marginTop: 4,
+    paddingHorizontal: 20,
+    paddingVertical: 9,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: C.primary,
+  },
+  clearFiltersTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.primary },
 
   // ─── Rich Empty State ─────────────────────────────────────────────────────
   richEmpty: { paddingTop: 24 },

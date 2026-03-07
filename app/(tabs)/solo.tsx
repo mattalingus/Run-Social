@@ -66,6 +66,7 @@ interface SavedPath {
 type RoutePoint = { latitude: number; longitude: number };
 
 function MiniRouteMap({ path, height = 200 }: { path: RoutePoint[]; height?: number }) {
+  if (!path || path.length < 2) return null;
   const lats = path.map((p) => p.latitude);
   const lngs = path.map((p) => p.longitude);
   const minLat = Math.min(...lats);

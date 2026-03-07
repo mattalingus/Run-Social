@@ -187,7 +187,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/users/me/goals", requireAuth, async (req, res) => {
     try {
       const { monthlyGoal, yearlyGoal, paceGoal } = req.body;
-      await storage.updateGoals(req.session.userId!, monthlyGoal, yearlyGoal, paceGoal !== undefined ? (paceGoal != null ? parseFloat(paceGoal) : null) : undefined);
+      let parsedPace: number | null | undefined = undefined;
+      if (paceGoal !== undefined) {
+        if (paceGoal == null) parsedPace = null;
+        else {
+          const v = parseFloat(paceGoal);
+          if (isNaN(v) || v <= 0) return res.status(400).json({ message: "Invalid pace goal value" });
+          parsedPace = v;
+        }
+      }
+      await storage.updateGoals(req.session.userId!, monthlyGoal, yearlyGoal, parsedPace);
       const user = await storage.getUserById(req.session.userId!);
       const { password: _, ...safeUser } = user;
       res.json(safeUser);
@@ -467,6 +476,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           message: "Your host rating is below the minimum required to host new runs. Attend runs as a participant — your rating may recover over time.",
         });
       }
+      const minDist = parseFloat(req.body.minDistance ?? req.body.min_distance ?? 0);
+      const maxDist = parseFloat(req.body.maxDistance ?? req.body.max_distance ?? 0);
+      if (minDist < 0 || maxDist < 0) return res.status(400).json({ message: "Distance values must be positive" });
+      if (maxDist > 0 && minDist > maxDist) return res.status(400).json({ message: "Minimum distance cannot exceed maximum distance" });
       const run = await storage.createRun({ ...req.body, hostId: req.session.userId!, savedPathId: req.body.savedPathId || null });
       res.status(201).json(run);
       // Notify — crew runs notify crew members; regular runs notify friends (fire-and-forget)
@@ -1359,6 +1372,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/solo-runs/:id/photos", requireAuth, upload.single("photo"), async (req: any, res) => {
     try {
       if (!req.file) return res.status(400).json({ message: "No photo provided" });
+      const soloRun = await storage.getSoloRunById(req.params.id);
+      if (!soloRun) return res.status(404).json({ message: "Solo run not found" });
+      if (soloRun.userId !== req.session.userId) return res.status(403).json({ message: "Not authorized" });
       const ext = (req.file.originalname.split(".").pop() || "jpg").toLowerCase();
       const filename = `solo-${req.params.id}-${Date.now()}.${ext}`;
       const url = await uploadPhotoBuffer(req.file.buffer, filename, req.file.mimetype);
@@ -1721,7 +1737,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const oauthInst = makeGarminOAuth();
       if (!oauthInst) return res.status(503).json({ message: "Garmin integration is not configured. Add GARMIN_CONSUMER_KEY and GARMIN_CONSUMER_SECRET." });
-      const callbackUrl = `${req.protocol}://${req.get("host")}/api/garmin/callback?userId=${req.session.userId}`;
+      const callbackUrl = `${req.protocol}://${req.get("host")}/api/garmin/callback`;
       const reqResp = await garminFetch(GARMIN_REQUEST_TOKEN_URL + `?oauth_callback=${encodeURIComponent(callbackUrl)}`, "POST", oauthInst);
       const body = await reqResp.text();
       const params = new URLSearchParams(body);
@@ -1734,11 +1750,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
-  app.get("/api/garmin/callback", async (req, res) => {
+  app.get("/api/garmin/callback", async (req: any, res) => {
     try {
-      const { userId, oauth_token, oauth_verifier } = req.query as Record<string, string>;
+      const { oauth_token, oauth_verifier } = req.query as Record<string, string>;
+      const userId = req.session?.userId as string | undefined;
       if (!userId || !oauth_token || !oauth_verifier) {
-        return res.status(400).send("Missing OAuth parameters.");
+        return res.status(400).send("Missing OAuth parameters or session expired. Please try connecting Garmin again.");
       }
       const oauthInst = makeGarminOAuth();
       if (!oauthInst) return res.status(503).send("Garmin integration is not configured.");
@@ -1807,7 +1824,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
-  app.post("/api/admin/seed-runs", async (req, res) => {
+  app.post("/api/admin/seed-runs", requireAuth, async (req: any, res) => {
+    if (process.env.NODE_ENV === "production") {
+      return res.status(403).json({ message: "Not available in production" });
+    }
     try {
       const { count = 20 } = req.body;
       await clearAndReseedRuns(count);

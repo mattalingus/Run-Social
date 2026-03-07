@@ -531,6 +531,12 @@ export default function RunLiveScreen() {
             )}
             {phase === "idle" && !!run && !isHost && (
               <View style={s.waitingColumn}>
+                {!liveState?.isActive && run?.date && (Date.now() - new Date(run.date).getTime()) > 30 * 60 * 1000 && (
+                  <View style={s.lateHostBanner}>
+                    <Feather name="alert-circle" size={14} color="#F59E0B" />
+                    <Text style={s.lateHostTxt}>Host hasn't started yet — no pressure to wait</Text>
+                  </View>
+                )}
                 <View style={s.waitingRow}>
                   <ActivityIndicator size="small" color={C.primary} />
                   <Text style={s.waitingText}>
@@ -726,6 +732,8 @@ const s = StyleSheet.create({
   waitingColumn: { alignItems: "center", gap: 10 },
   waitingRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, height: 52 },
   waitingText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.textSecondary },
+  lateHostBanner: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: "#F59E0B18", borderRadius: 10, borderWidth: 1, borderColor: "#F59E0B40", marginBottom: 2 },
+  lateHostTxt: { fontFamily: "Outfit_400Regular", fontSize: 12, color: "#F59E0B", flex: 1 },
   startSoloBtn: {
     flexDirection: "row",
     alignItems: "center",

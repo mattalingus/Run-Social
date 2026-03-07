@@ -279,9 +279,9 @@ export default function CreateRunScreen() {
         </Pressable>
         <Text style={styles.headerTitle}>{activityType === "ride" ? "Create Ride" : "Create Run"}</Text>
         <Pressable
-          style={({ pressed }) => [styles.createBtn, { opacity: pressed || createMutation.isPending ? 0.8 : 1 }]}
+          style={({ pressed }) => [styles.createBtn, { opacity: (pressed || createMutation.isPending || (privacy === "crew" && !selectedCrewId && !params.crewId)) ? 0.5 : 1 }]}
           onPress={() => createMutation.mutate()}
-          disabled={createMutation.isPending}
+          disabled={createMutation.isPending || (privacy === "crew" && !selectedCrewId && !params.crewId)}
         >
           {createMutation.isPending ? (
             <ActivityIndicator size="small" color={C.bg} />
