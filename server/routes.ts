@@ -415,10 +415,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/runs/requests/respond", requireAuth, async (req, res) => {
     try {
-      const { participantId, action } = req.body;
+      const { participantId, action, runId } = req.body;
       if (!participantId || !action) return res.status(400).json({ message: "participantId and action required" });
       await storage.respondToJoinRequest(participantId, req.session.userId!, action);
       res.json({ success: true });
+      if (runId) {
+        Promise.all([storage.getRunById(runId), storage.getParticipantById(participantId)]).then(([run, participant]) => {
+          if (!run || !participant) return;
+          storage.getUserById(participant.user_id).then((requester) => {
+            if (!requester?.push_token) return;
+            const actLabel = run.activity_type === "ride" ? "ride" : "run";
+            if (action === "approve") {
+              sendPushNotification(requester.push_token, `You're in! 🎉`, `Your request to join "${run.title}" was approved`, { runId });
+            } else {
+              sendPushNotification(requester.push_token, `Request declined`, `Your request to join "${run.title}" was not accepted`, { runId });
+            }
+          }).catch(() => {});
+        }).catch(() => {});
+      }
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
@@ -450,7 +464,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           message: "Your host rating is below the minimum required to host new runs. Attend runs as a participant — your rating may recover over time.",
         });
       }
-      const run = await storage.createRun({ ...req.body, hostId: req.session.userId! });
+      const run = await storage.createRun({ ...req.body, hostId: req.session.userId!, savedPathId: req.body.savedPathId || null });
       res.status(201).json(run);
       // Notify — crew runs notify crew members; regular runs notify friends (fire-and-forget)
       if (run.crew_id) {
@@ -855,6 +869,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
             { runId: run.id }
           );
         }
+      }).catch(() => {});
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/runs/:id/request-join", requireAuth, async (req, res) => {
+    try {
+      const run = await storage.getRunById(req.params.id);
+      if (!run) return res.status(404).json({ message: "Run not found" });
+      if (run.host_id === req.session.userId) return res.status(400).json({ message: "You are the host" });
+      const runDate = new Date(run.date);
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+      if (runDate < twoHoursAgo) return res.status(400).json({ message: "This event has already taken place" });
+      const participantCount = await storage.getRunParticipantCount(req.params.id);
+      if (participantCount < run.max_participants) {
+        return res.status(400).json({ message: "This event is not full — you can join directly" });
+      }
+      const result = await storage.requestJoinRun(req.params.id, req.session.userId!);
+      if (result.alreadyExists && result.row.status !== "cancelled") {
+        return res.status(400).json({ message: result.row.status === "pending" ? "already_requested" : "already_joined" });
+      }
+      res.json({ success: true, participantId: result.row.id });
+      storage.getUserById(req.session.userId!).then((user) => {
+        if (!user) return;
+        storage.getUserById(run.host_id).then((host) => {
+          if (host && userWantsNotif(host, 'run_reminders')) {
+            sendPushNotification(
+              host.push_token,
+              `Join request for your full ${run.activity_type === "ride" ? "ride" : "run"}`,
+              `${user.name} wants to join "${run.title}"`,
+              { runId: run.id }
+            );
+          }
+        }).catch(() => {});
       }).catch(() => {});
     } catch (e: any) {
       res.status(500).json({ message: e.message });

@@ -586,6 +586,53 @@ function LiveCardExpansion({ runId }: { runId: string }) {
   );
 }
 
+// ─── Weather helpers ──────────────────────────────────────────────────────────
+
+function wmoToEmoji(code: number): string {
+  if (code === 0) return "☀️";
+  if (code <= 3) return "⛅";
+  if (code === 45 || code === 48) return "🌫️";
+  if (code >= 51 && code <= 57) return "🌦️";
+  if (code >= 61 && code <= 67) return "🌧️";
+  if (code >= 71 && code <= 77) return "🌨️";
+  if (code >= 80 && code <= 82) return "🌦️";
+  if (code === 85 || code === 86) return "🌨️";
+  if (code >= 95) return "⛈️";
+  return "🌡️";
+}
+
+function toDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function useEventWeather(lat: number, lng: number, eventDateStr: string) {
+  const eventDate = new Date(eventDateStr);
+  const now = new Date();
+  const diffDays = (eventDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+  const dateStr = toDateStr(eventDate);
+  const eventHour = eventDate.getHours();
+
+  return useQuery<{ emoji: string; tempF: number } | null>({
+    queryKey: ["weather", Math.round(lat * 100) / 100, Math.round(lng * 100) / 100, dateStr],
+    queryFn: async () => {
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&hourly=temperature_2m,weathercode&temperature_unit=fahrenheit&timezone=auto&start_date=${dateStr}&end_date=${dateStr}`;
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const data = await res.json();
+      const times: string[] = data?.hourly?.time ?? [];
+      const temps: number[] = data?.hourly?.temperature_2m ?? [];
+      const codes: number[] = data?.hourly?.weathercode ?? [];
+      const idx = times.findIndex((t: string) => new Date(t).getHours() === eventHour);
+      const i = idx >= 0 ? idx : 0;
+      if (temps.length === 0) return null;
+      return { emoji: wmoToEmoji(codes[i] ?? 0), tempF: Math.round(temps[i] ?? temps[0]) };
+    },
+    enabled: diffDays >= 0 && diffDays <= 16,
+    staleTime: 1000 * 60 * 60,
+    retry: false,
+  });
+}
+
 // ─── RunCard ──────────────────────────────────────────────────────────────────
 
 function RunCard({
@@ -613,6 +660,7 @@ function RunCard({
   const badge = getHostBadge(run.host_hosted_runs);
   const isLiveNow = !!run.is_active && !run.is_completed;
   const pulseAnim = useRef(new Animated.Value(0.3)).current;
+  const { data: weather } = useEventWeather(run.location_lat, run.location_lng, run.date);
 
   useEffect(() => {
     if (!isLiveNow) return;
@@ -659,6 +707,9 @@ function RunCard({
             return null;
           })()}
           <Text style={s.hostColumnDist}>{toDisplayDist(run.min_distance, distUnit)}</Text>
+          {weather && (
+            <Text style={s.hostColumnWeather}>{weather.emoji} {weather.tempF}°</Text>
+          )}
         </View>
 
         <View style={s.cardDivider} />
@@ -2958,6 +3009,7 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   hostColumnRating: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.gold, textAlign: "center" },
   hostColumnBadge: { fontFamily: "Outfit_600SemiBold", fontSize: 10, textAlign: "center" },
   hostColumnDist: { fontFamily: "Outfit_700Bold", fontSize: 13, color: C.text, textAlign: "center", marginTop: 2 },
+  hostColumnWeather: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted, textAlign: "center", marginTop: 3 },
 
   cardMeta: { gap: 3 },
   metaItem: { flexDirection: "row", alignItems: "center", gap: 6 },

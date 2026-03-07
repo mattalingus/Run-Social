@@ -14,6 +14,7 @@ import {
   Linking,
   Animated,
 } from "react-native";
+import MapView, { Polyline } from "react-native-maps";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -86,6 +87,8 @@ export default function RunDetailScreen() {
   const pillPulse = useRef(new Animated.Value(1)).current;
   const wasLiveRef = useRef(false);
   const [joining, setJoining] = useState(false);
+  const [requestingJoin, setRequestingJoin] = useState(false);
+  const [joinRequestSent, setJoinRequestSent] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [proximityTriggered, setProximityTriggered] = useState(false);
@@ -258,8 +261,9 @@ export default function RunDetailScreen() {
   }
 
   const isHost = run?.host_id === user?.id;
-  const isParticipant = participants.some((p) => p.id === user?.id);
   const myParticipation = participants.find((p) => p.id === user?.id);
+  const isParticipant = !!myParticipation && myParticipation.status !== "pending" && myParticipation.status !== "cancelled";
+  const hasPendingRequest = !!myParticipation && myParticipation.status === "pending";
   const isPastRun = run ? new Date(run.date) < new Date() : false;
   const canRate = !!run?.is_completed && isParticipant && !isHost && !myRating;
   const hasConfirmed = myParticipation?.status === "confirmed";
@@ -432,16 +436,54 @@ export default function RunDetailScreen() {
   async function doJoin() {
     setJoining(true);
     try {
-      await apiRequest("POST", `/api/runs/${id}/join`);
+      const res = await apiRequest("POST", `/api/runs/${id}/join`);
+      if (!res.ok) {
+        const body = await res.json();
+        if (body.message === "This event is full") {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          Alert.alert(
+            "This one's full",
+            `Request to be added? The host will be notified and can approve you.`,
+            [
+              { text: "Maybe Later", style: "cancel" },
+              { text: "Request to Join", onPress: () => doRequestJoin() },
+            ]
+          );
+          return;
+        }
+        throw new Error(body.message || "Unable to join");
+      }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       qc.invalidateQueries({ queryKey: ["/api/runs", id, "participants"] });
       qc.invalidateQueries({ queryKey: ["/api/runs"] });
-      Alert.alert("You're in! 🎉", `You've been added to the live count.\n\nNow tap "Join Live Run" to check in with your host and let them know you're ready.`);
+      Alert.alert("You're in! 🎉", `You've been added to the live count.\n\nNow tap "Join Live ${run?.activity_type === "ride" ? "Ride" : "Run"}" to check in with your host and let them know you're ready.`);
     } catch (e: any) {
       Alert.alert("Can't Join", e.message || `Unable to join ${run?.activity_type === "ride" ? "ride" : "run"}`);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setJoining(false);
+    }
+  }
+
+  async function doRequestJoin() {
+    setRequestingJoin(true);
+    try {
+      const res = await apiRequest("POST", `/api/runs/${id}/request-join`);
+      const body = await res.json();
+      if (!res.ok) {
+        if (body.message === "already_requested") {
+          setJoinRequestSent(true);
+          return;
+        }
+        throw new Error(body.message || "Unable to send request");
+      }
+      setJoinRequestSent(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e: any) {
+      Alert.alert("Request Failed", e.message || "Could not send join request");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setRequestingJoin(false);
     }
   }
 
@@ -759,6 +801,60 @@ export default function RunDetailScreen() {
           })()}
         </View>
 
+        {run.saved_path_route && Array.isArray(run.saved_path_route) && run.saved_path_route.length > 1 && (() => {
+          const coords = run.saved_path_route.map((pt: any) => ({ latitude: pt.lat ?? pt.latitude, longitude: pt.lng ?? pt.longitude }));
+          const lats = coords.map((c: any) => c.latitude);
+          const lngs = coords.map((c: any) => c.longitude);
+          const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+          const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+          const midLat = (minLat + maxLat) / 2;
+          const midLng = (minLng + maxLng) / 2;
+          const latDelta = Math.max(maxLat - minLat, 0.005) * 1.3;
+          const lngDelta = Math.max(maxLng - minLng, 0.005) * 1.3;
+          return (
+            <Pressable
+              style={styles.routeCard}
+              onPress={() => {
+                const lat = run.location_lat;
+                const lng = run.location_lng;
+                const label = encodeURIComponent(run.saved_path_name || run.location_name);
+                const url = Platform.select({
+                  ios: `maps://maps.apple.com/?ll=${lat},${lng}&q=${label}`,
+                  android: `geo:${lat},${lng}?q=${label}`,
+                  default: `https://www.google.com/maps?q=${lat},${lng}`,
+                });
+                if (url) Linking.openURL(url);
+              }}
+            >
+              <View style={styles.routeCardHeader}>
+                <Feather name="map" size={14} color={C.primary} />
+                <Text style={styles.routeCardName} numberOfLines={1}>
+                  {run.saved_path_name || "Saved Route"}
+                </Text>
+                <Feather name="external-link" size={12} color={C.textMuted} />
+              </View>
+              {Platform.OS !== "web" ? (
+                <MapView
+                  style={styles.routeMap}
+                  initialRegion={{ latitude: midLat, longitude: midLng, latitudeDelta: latDelta, longitudeDelta: lngDelta }}
+                  scrollEnabled={false}
+                  zoomEnabled={false}
+                  rotateEnabled={false}
+                  pitchEnabled={false}
+                  pointerEvents="none"
+                >
+                  <Polyline coordinates={coords} strokeColor={C.primary} strokeWidth={3} />
+                </MapView>
+              ) : (
+                <View style={[styles.routeMap, { backgroundColor: C.card, alignItems: "center", justifyContent: "center" }]}>
+                  <Feather name="map" size={24} color={C.textMuted} />
+                  <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, marginTop: 4 }}>View on map</Text>
+                </View>
+              )}
+            </Pressable>
+          );
+        })()}
+
         {run.description ? (
           <View style={styles.descCard}>
             <Text style={styles.descTitle}>{run.activity_type === "ride" ? "About this ride" : "About this run"}</Text>
@@ -792,44 +888,93 @@ export default function RunDetailScreen() {
           </View>
         )}
 
-        {participants.length > 0 && (
-          <View style={styles.participantsSection}>
-            <Text style={styles.sectionTitle}>Participants ({run.participant_count ?? 1})</Text>
-            <View style={styles.participantsList}>
-              {participants.slice(0, 8).map((p: any) => (
-                <Pressable
-                  key={p.id}
-                  style={({ pressed }) => [styles.participantItem, { opacity: pressed ? 0.8 : 1 }]}
-                  onPress={() => setHostProfileId(p.id)}
-                >
-                  {p.photo_url ? (
-                    <Image source={{ uri: p.photo_url }} style={styles.participantAvatarImg} />
-                  ) : (
-                    <View style={styles.participantAvatar}>
-                      <Text style={styles.participantAvatarText}>{p.name?.charAt(0).toUpperCase()}</Text>
-                    </View>
-                  )}
-                  <View style={styles.participantInfo}>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                      <Text style={styles.participantName}>{p.name}</Text>
-                      {p.reliability_slug === "reliable_90" && <Text style={{ fontSize: 13 }}>⭐</Text>}
-                      {p.reliability_slug === "reliable_80" && <Text style={{ fontSize: 13 }}>🟢</Text>}
-                      {p.reliability_slug === "reliable_65" && <Text style={{ fontSize: 13 }}>🔵</Text>}
-                      {p.reliability_slug === "reliable_50" && <Text style={{ fontSize: 13 }}>🟡</Text>}
-                    </View>
-                    <Text style={styles.participantPace}>{toDisplayPace(p.avg_pace, distUnit)} · {toDisplayDist(p.avg_distance, distUnit)} avg</Text>
+        {(() => {
+          const joinedParticipants = participants.filter((p: any) => p.status !== "pending" && p.status !== "cancelled");
+          const pendingParticipants = participants.filter((p: any) => p.status === "pending");
+          return (
+            <>
+              {joinedParticipants.length > 0 && (
+                <View style={styles.participantsSection}>
+                  <Text style={styles.sectionTitle}>Participants ({run.participant_count ?? 1})</Text>
+                  <View style={styles.participantsList}>
+                    {joinedParticipants.slice(0, 8).map((p: any) => (
+                      <Pressable
+                        key={p.id}
+                        style={({ pressed }) => [styles.participantItem, { opacity: pressed ? 0.8 : 1 }]}
+                        onPress={() => setHostProfileId(p.id)}
+                      >
+                        {p.photo_url ? (
+                          <Image source={{ uri: p.photo_url }} style={styles.participantAvatarImg} />
+                        ) : (
+                          <View style={styles.participantAvatar}>
+                            <Text style={styles.participantAvatarText}>{p.name?.charAt(0).toUpperCase()}</Text>
+                          </View>
+                        )}
+                        <View style={styles.participantInfo}>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                            <Text style={styles.participantName}>{p.name}</Text>
+                            {p.reliability_slug === "reliable_90" && <Text style={{ fontSize: 13 }}>⭐</Text>}
+                            {p.reliability_slug === "reliable_80" && <Text style={{ fontSize: 13 }}>🟢</Text>}
+                            {p.reliability_slug === "reliable_65" && <Text style={{ fontSize: 13 }}>🔵</Text>}
+                            {p.reliability_slug === "reliable_50" && <Text style={{ fontSize: 13 }}>🟡</Text>}
+                          </View>
+                          <Text style={styles.participantPace}>{toDisplayPace(p.avg_pace, distUnit)} · {toDisplayDist(p.avg_distance, distUnit)} avg</Text>
+                        </View>
+                        <View style={[styles.participantStatus, { backgroundColor: p.status === "confirmed" ? C.primary + "22" : C.border }]}>
+                          <Text style={[styles.participantStatusText, { color: p.status === "confirmed" ? C.primary : C.textMuted }]}>
+                            {p.status === "confirmed" ? "Done" : "Joined"}
+                          </Text>
+                        </View>
+                        <Feather name="chevron-right" size={14} color={C.textMuted} />
+                      </Pressable>
+                    ))}
                   </View>
-                  <View style={[styles.participantStatus, { backgroundColor: p.status === "confirmed" ? C.primary + "22" : C.border }]}>
-                    <Text style={[styles.participantStatusText, { color: p.status === "confirmed" ? C.primary : C.textMuted }]}>
-                      {p.status === "confirmed" ? "Done" : "Joined"}
-                    </Text>
+                </View>
+              )}
+              {isHost && pendingParticipants.length > 0 && (
+                <View style={styles.participantsSection}>
+                  <Text style={styles.sectionTitle}>Join Requests ({pendingParticipants.length})</Text>
+                  <View style={styles.participantsList}>
+                    {pendingParticipants.map((p: any) => (
+                      <View key={p.id} style={styles.joinRequestRow}>
+                        {p.photo_url ? (
+                          <Image source={{ uri: p.photo_url }} style={styles.participantAvatarImg} />
+                        ) : (
+                          <View style={styles.participantAvatar}>
+                            <Text style={styles.participantAvatarText}>{p.name?.charAt(0).toUpperCase()}</Text>
+                          </View>
+                        )}
+                        <View style={styles.participantInfo}>
+                          <Text style={styles.participantName}>{p.name}</Text>
+                          <Text style={styles.participantPace}>{toDisplayPace(p.avg_pace, distUnit)} avg</Text>
+                        </View>
+                        <Pressable
+                          style={styles.joinRequestDeny}
+                          onPress={async () => {
+                            await apiRequest("POST", "/api/runs/requests/respond", { participantId: p.participation_id ?? p.participant_id ?? p.rp_id, action: "deny", runId: id });
+                            qc.invalidateQueries({ queryKey: ["/api/runs", id, "participants"] });
+                          }}
+                        >
+                          <Text style={styles.joinRequestDenyTxt}>Deny</Text>
+                        </Pressable>
+                        <Pressable
+                          style={styles.joinRequestApprove}
+                          onPress={async () => {
+                            await apiRequest("POST", "/api/runs/requests/respond", { participantId: p.participation_id ?? p.participant_id ?? p.rp_id, action: "approve", runId: id });
+                            qc.invalidateQueries({ queryKey: ["/api/runs", id, "participants"] });
+                            qc.invalidateQueries({ queryKey: ["/api/runs", id] });
+                          }}
+                        >
+                          <Text style={styles.joinRequestApproveTxt}>Approve</Text>
+                        </Pressable>
+                      </View>
+                    ))}
                   </View>
-                  <Feather name="chevron-right" size={14} color={C.textMuted} />
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        )}
+                </View>
+              )}
+            </>
+          );
+        })()}
 
         {/* ─── Run Photos ──────────────────────────────────────────────────── */}
         {isPastRun && (
@@ -1016,6 +1161,12 @@ export default function RunDetailScreen() {
                 Tap {run?.activity_type === "ride" ? "Join Live Ride" : "Join Live Run"} above to check in with your host
               </Text>
             </View>
+          </View>
+        )}
+        {(hasPendingRequest || joinRequestSent) && !run.is_completed && (
+          <View style={styles.pendingRequestBanner}>
+            <Feather name="clock" size={14} color={C.gold} />
+            <Text style={styles.pendingRequestText}>Request pending — the host will be notified</Text>
           </View>
         )}
       </View>
@@ -1380,6 +1531,10 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   reqLabel: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textSecondary, textAlign: "center" },
   eligibilityRow: { flexDirection: "row", alignItems: "center", gap: 8, borderRadius: 10, padding: 10, borderWidth: 1 },
   eligibilityText: { fontFamily: "Outfit_600SemiBold", fontSize: 12, flex: 1 },
+  routeCard: { backgroundColor: C.card, borderRadius: 14, borderWidth: 1, borderColor: C.border, marginBottom: 16, overflow: "hidden" },
+  routeCardHeader: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, paddingBottom: 10 },
+  routeCardName: { flex: 1, fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text },
+  routeMap: { width: "100%", height: 160 },
   descCard: { backgroundColor: C.card, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: C.border, marginBottom: 16, gap: 8 },
   descTitle: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.text },
   descText: { fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textSecondary, lineHeight: 20 },
@@ -1416,6 +1571,13 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   joinedHint: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary, marginTop: 2 },
   waitingBanner: { flexDirection: "row", alignItems: "center", gap: 8, justifyContent: "center", padding: 12, backgroundColor: C.gold + "18", borderRadius: 12, borderWidth: 1, borderColor: C.gold + "44" },
   waitingText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.gold },
+  pendingRequestBanner: { flexDirection: "row", alignItems: "center", gap: 8, justifyContent: "center", padding: 12, backgroundColor: C.gold + "18", borderRadius: 12, borderWidth: 1, borderColor: C.gold + "44" },
+  pendingRequestText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.gold, flex: 1 },
+  joinRequestRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.border },
+  joinRequestApprove: { backgroundColor: C.primary, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7 },
+  joinRequestApproveTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.bg },
+  joinRequestDeny: { backgroundColor: C.card, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1, borderColor: C.border },
+  joinRequestDenyTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.textSecondary },
   liveBtn: { backgroundColor: "#0A3A1F", borderRadius: 14, height: 52, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, borderWidth: 1.5, borderColor: C.primary },
   liveBtnText: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.primary },
   liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.primary },

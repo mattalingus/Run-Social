@@ -105,8 +105,16 @@ export default function CreateRunScreen() {
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [selectedCrewId, setSelectedCrewId] = useState<string | null>(params.crewId ?? null);
 
+  const [selectedSavedPathId, setSelectedSavedPathId] = useState<string | null>(null);
+
   const { data: myCrews = [] } = useQuery<{ id: string; name: string; emoji?: string }[]>({
     queryKey: ["/api/crews"],
+    staleTime: 60_000,
+    enabled: !!user,
+  });
+
+  const { data: mySavedPaths = [] } = useQuery<{ id: string; name: string; distance_miles: number; activity_type: string }[]>({
+    queryKey: ["/api/saved-paths"],
     staleTime: 60_000,
     enabled: !!user,
   });
@@ -225,6 +233,7 @@ export default function CreateRunScreen() {
         activityType,
         crewId: effectiveCrewId || undefined,
         isStrict: false,
+        savedPathId: selectedSavedPathId || undefined,
       });
       return res.json();
     },
@@ -530,6 +539,39 @@ export default function CreateRunScreen() {
             <Feather name="chevron-right" size={14} color={C.textMuted} />
           </Pressable>
         </View>
+
+        {/* Saved Route picker */}
+        {mySavedPaths.filter((p) => p.activity_type === activityType).length > 0 && (
+          <View style={styles.field}>
+            <Text style={styles.label}>Route (optional)</Text>
+            {selectedSavedPathId ? (
+              <Pressable
+                style={styles.selectedPathRow}
+                onPress={() => { setSelectedSavedPathId(null); Haptics.selectionAsync(); }}
+              >
+                <Feather name="map" size={14} color={C.primary} />
+                <Text style={styles.selectedPathTxt} numberOfLines={1}>
+                  {mySavedPaths.find((p) => p.id === selectedSavedPathId)?.name ?? "Selected route"}
+                </Text>
+                <Feather name="x" size={14} color={C.textMuted} />
+              </Pressable>
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4 }}>
+                {mySavedPaths.filter((p) => p.activity_type === activityType).map((p) => (
+                  <Pressable
+                    key={p.id}
+                    style={styles.pathPill}
+                    onPress={() => { setSelectedSavedPathId(p.id); Haptics.selectionAsync(); }}
+                  >
+                    <Feather name="map" size={12} color={C.textSecondary} />
+                    <Text style={styles.pathPillName} numberOfLines={1}>{p.name}</Text>
+                    <Text style={styles.pathPillDist}>{p.distance_miles.toFixed(1)}mi</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        )}
 
         {/* Pace & Distance — simplified for crew, ranges for public runs */}
         {isCrew ? (
@@ -986,6 +1028,19 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 13,
   },
   locationBtnTxt: { flex: 1, fontFamily: "Outfit_400Regular", fontSize: 15, color: C.textMuted },
+  pathPill: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    backgroundColor: C.card, borderRadius: 20, borderWidth: 1, borderColor: C.border,
+    paddingHorizontal: 12, paddingVertical: 8,
+  },
+  pathPillName: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.text, maxWidth: 120 },
+  pathPillDist: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted },
+  selectedPathRow: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: C.primaryMuted, borderRadius: 12, borderWidth: 1, borderColor: C.primary + "44",
+    paddingHorizontal: 14, paddingVertical: 12,
+  },
+  selectedPathTxt: { flex: 1, fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.primary },
   pickerSheet: { flex: 1, backgroundColor: C.bg },
   pickerHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: C.border, alignSelf: "center", marginTop: 8, marginBottom: 4 },
   pickerHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.border },

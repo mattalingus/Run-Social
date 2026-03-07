@@ -336,6 +336,7 @@ export async function initDb() {
       achieved_value NUMERIC,
       UNIQUE(crew_id, achievement_key)
     );
+    ALTER TABLE runs ADD COLUMN IF NOT EXISTS saved_path_id VARCHAR REFERENCES saved_paths(id) ON DELETE SET NULL;
   `);
 }
 
@@ -558,6 +559,11 @@ export async function respondToCrewInvite(crewId: string, userId: string, action
   }
 }
 
+export async function getParticipantById(participantId: string) {
+  const res = await pool.query(`SELECT * FROM run_participants WHERE id = $1`, [participantId]);
+  return res.rows[0] || null;
+}
+
 export async function respondToJoinRequest(participantId: string, hostId: string, action: 'approve' | 'deny') {
   if (action === 'approve') {
     return pool.query(
@@ -682,15 +688,16 @@ export async function createRun(data: {
   runStyle?: string;
   activityType?: string;
   crewId?: string;
+  savedPathId?: string | null;
 }) {
   const inviteToken = data.privacy === "private"
     ? Math.random().toString(36).substring(2, 10).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase()
     : null;
   const activityType = data.activityType === "ride" ? "ride" : "run";
   const result = await pool.query(
-    `INSERT INTO runs (host_id, title, description, privacy, date, location_lat, location_lng, location_name, min_distance, max_distance, min_pace, max_pace, tags, max_participants, invite_token, invite_password, is_strict, run_style, activity_type, crew_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING *`,
-    [data.hostId, data.title, data.description || null, data.privacy, data.date, data.locationLat, data.locationLng, data.locationName, data.minDistance, data.maxDistance, data.minPace, data.maxPace, data.tags, data.maxParticipants, inviteToken, data.invitePassword || null, data.isStrict ?? false, data.runStyle || null, activityType, data.crewId || null]
+    `INSERT INTO runs (host_id, title, description, privacy, date, location_lat, location_lng, location_name, min_distance, max_distance, min_pace, max_pace, tags, max_participants, invite_token, invite_password, is_strict, run_style, activity_type, crew_id, saved_path_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING *`,
+    [data.hostId, data.title, data.description || null, data.privacy, data.date, data.locationLat, data.locationLng, data.locationName, data.minDistance, data.maxDistance, data.minPace, data.maxPace, data.tags, data.maxParticipants, inviteToken, data.invitePassword || null, data.isStrict ?? false, data.runStyle || null, activityType, data.crewId || null, data.savedPathId || null]
   );
   return result.rows[0];
 }
@@ -1130,11 +1137,14 @@ export async function getRunById(id: string) {
     `SELECT r.*, u.name as host_name, u.avg_rating as host_rating, u.rating_count as host_rating_count,
       u.photo_url as host_photo, u.avg_pace as host_avg_pace, u.hosted_runs as host_hosted_runs,
       c.name as crew_name,
+      sp.name as saved_path_name,
+      sp.route_path as saved_path_route,
       (1 + (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled')) as participant_count,
       (SELECT COUNT(*) FROM planned_runs pr WHERE pr.run_id = r.id) as plan_count
      FROM runs r
      JOIN users u ON u.id = r.host_id
      LEFT JOIN crews c ON c.id = r.crew_id
+     LEFT JOIN saved_paths sp ON sp.id = r.saved_path_id
      WHERE r.id = $1`,
     [id]
   );
@@ -1190,6 +1200,21 @@ export async function joinRun(runId: string, userId: string) {
     [runId, userId]
   );
   return result.rows[0];
+}
+
+export async function requestJoinRun(runId: string, userId: string) {
+  const existing = await pool.query(
+    `SELECT * FROM run_participants WHERE run_id = $1 AND user_id = $2`,
+    [runId, userId]
+  );
+  if (existing.rows.length > 0) {
+    return { alreadyExists: true, row: existing.rows[0] };
+  }
+  const result = await pool.query(
+    `INSERT INTO run_participants (run_id, user_id, status) VALUES ($1, $2, 'pending') RETURNING *`,
+    [runId, userId]
+  );
+  return { alreadyExists: false, row: result.rows[0] };
 }
 
 export async function leaveRun(runId: string, userId: string) {
@@ -1296,7 +1321,7 @@ export async function cancelRun(runId: string, userId: string) {
 
 export async function getRunParticipants(runId: string) {
   const result = await pool.query(
-    `SELECT u.id, u.name, u.photo_url, u.avg_pace, u.avg_distance, rp.status, rp.joined_at,
+    `SELECT u.id, u.name, u.photo_url, u.avg_pace, u.avg_distance, rp.status, rp.joined_at, rp.id as participation_id,
        (SELECT a.slug FROM achievements a
         WHERE a.user_id = u.id AND a.slug IN ('reliable_90','reliable_80','reliable_65','reliable_50')
         ORDER BY CASE a.slug
