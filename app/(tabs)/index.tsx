@@ -806,6 +806,111 @@ function RunCard({
   );
 }
 
+// ─── Mini Run Card (Saved / Planned header cards) ─────────────────────────────
+
+function MiniRunCard({
+  run,
+  variant,
+  width,
+  activityFilter,
+  onPress,
+  onRemove,
+}: {
+  run: any;
+  variant: "planned" | "saved";
+  width: "100%" | number;
+  activityFilter: "run" | "ride";
+  onPress: () => void;
+  onRemove: () => void;
+}) {
+  const isLive = !!run.is_active && !run.is_completed;
+  const pulseAnim = useRef(new Animated.Value(0.3)).current;
+
+  useEffect(() => {
+    if (!isLive) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1, duration: 750, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 0.15, duration: 750, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [isLive]);
+
+  const cardStyle = variant === "planned" ? s.plannedCard : s.savedCard;
+
+  return (
+    <View style={{ position: "relative", width }}>
+      {isLive && (
+        <Animated.View
+          style={{
+            position: "absolute",
+            inset: -2,
+            borderRadius: 12,
+            borderWidth: 2,
+            borderColor: C.primary,
+            opacity: pulseAnim,
+            shadowColor: C.primary,
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 1,
+            shadowRadius: 8,
+          }}
+          pointerEvents="none"
+        />
+      )}
+      <Pressable
+        style={({ pressed }) => [cardStyle, { opacity: pressed ? 0.85 : 1, width: "100%" }]}
+        onPress={onPress}
+      >
+        {isLive && (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 4 }}>
+            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.primary }} />
+            <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 10, color: C.primary, letterSpacing: 0.5 }}>LIVE</Text>
+          </View>
+        )}
+        {variant === "planned" ? (
+          <>
+            <View style={s.plannedCardHeader}>
+              <View style={s.plannedDot} />
+              <Text style={s.plannedLabel} numberOfLines={1}>{activityFilter === "ride" ? "Riding" : "Running"}</Text>
+              <Pressable hitSlop={10} onPress={(e) => { e.stopPropagation?.(); onRemove(); }}>
+                <Ionicons name="calendar" size={14} color={C.primary} />
+              </Pressable>
+            </View>
+            <Text style={s.plannedCardTitle} numberOfLines={2}>{run.title}</Text>
+            <View style={s.savedCardMeta}>
+              <Feather name="calendar" size={11} color={C.textMuted} />
+              <Text style={s.savedCardMetaTxt} numberOfLines={1}>{formatDate(run.date)}</Text>
+            </View>
+            <View style={s.savedCardMeta}>
+              <Feather name="map-pin" size={11} color={C.textMuted} />
+              <Text style={s.savedCardMetaTxt} numberOfLines={1}>{run.location_name}</Text>
+            </View>
+          </>
+        ) : (
+          <>
+            <View style={s.savedCardTop}>
+              <Text style={s.savedCardTitle} numberOfLines={2}>{run.title}</Text>
+              <Pressable hitSlop={8} onPress={(e) => { e.stopPropagation?.(); onRemove(); }}>
+                <Ionicons name="bookmark" size={14} color={C.primary} />
+              </Pressable>
+            </View>
+            <View style={s.savedCardMeta}>
+              <Feather name="calendar" size={11} color={C.textMuted} />
+              <Text style={s.savedCardMetaTxt} numberOfLines={1}>{formatDate(run.date)}</Text>
+            </View>
+            <View style={s.savedCardMeta}>
+              <Feather name="map-pin" size={11} color={C.textMuted} />
+              <Text style={s.savedCardMetaTxt} numberOfLines={1}>{run.location_name}</Text>
+            </View>
+          </>
+        )}
+      </Pressable>
+    </View>
+  );
+}
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 const PARTICIPANT_STEPS = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 40, 50, 75, 100, 0]; // 0 = unlimited
@@ -1573,55 +1678,29 @@ export default function DiscoverScreen() {
                       ) : filteredPlanned.length <= 2 ? (
                         <View style={{ gap: 8 }}>
                           {filteredPlanned.map((r) => (
-                            <Pressable
+                            <MiniRunCard
                               key={r.id}
-                              style={({ pressed }) => [s.plannedCard, { opacity: pressed ? 0.85 : 1, width: "100%" }]}
+                              run={r}
+                              variant="planned"
+                              width="100%"
+                              activityFilter={activityFilter}
                               onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push(`/run/${r.id}`); }}
-                            >
-                              <View style={s.plannedCardHeader}>
-                                <View style={s.plannedDot} />
-                                <Text style={s.plannedLabel} numberOfLines={1}>{activityFilter === "ride" ? "Riding" : "Running"}</Text>
-                                <Pressable hitSlop={10} onPress={(e) => { e.stopPropagation?.(); removePlanMutation.mutate(r.id); }}>
-                                  <Ionicons name="calendar" size={14} color={C.primary} />
-                                </Pressable>
-                              </View>
-                              <Text style={s.plannedCardTitle} numberOfLines={2}>{r.title}</Text>
-                              <View style={s.savedCardMeta}>
-                                <Feather name="calendar" size={11} color={C.textMuted} />
-                                <Text style={s.savedCardMetaTxt} numberOfLines={1}>{formatDate(r.date)}</Text>
-                              </View>
-                              <View style={s.savedCardMeta}>
-                                <Feather name="map-pin" size={11} color={C.textMuted} />
-                                <Text style={s.savedCardMetaTxt} numberOfLines={1}>{r.location_name}</Text>
-                              </View>
-                            </Pressable>
+                              onRemove={() => removePlanMutation.mutate(r.id)}
+                            />
                           ))}
                         </View>
                       ) : (
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 4 }}>
                           {filteredPlanned.map((r) => (
-                            <Pressable
+                            <MiniRunCard
                               key={r.id}
-                              style={({ pressed }) => [s.plannedCard, { opacity: pressed ? 0.85 : 1, width: SCROLL_CARD_W }]}
+                              run={r}
+                              variant="planned"
+                              width={SCROLL_CARD_W}
+                              activityFilter={activityFilter}
                               onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push(`/run/${r.id}`); }}
-                            >
-                              <View style={s.plannedCardHeader}>
-                                <View style={s.plannedDot} />
-                                <Text style={s.plannedLabel} numberOfLines={1}>{activityFilter === "ride" ? "Riding" : "Running"}</Text>
-                                <Pressable hitSlop={10} onPress={(e) => { e.stopPropagation?.(); removePlanMutation.mutate(r.id); }}>
-                                  <Ionicons name="calendar" size={14} color={C.primary} />
-                                </Pressable>
-                              </View>
-                              <Text style={s.plannedCardTitle} numberOfLines={2}>{r.title}</Text>
-                              <View style={s.savedCardMeta}>
-                                <Feather name="calendar" size={11} color={C.textMuted} />
-                                <Text style={s.savedCardMetaTxt} numberOfLines={1}>{formatDate(r.date)}</Text>
-                              </View>
-                              <View style={s.savedCardMeta}>
-                                <Feather name="map-pin" size={11} color={C.textMuted} />
-                                <Text style={s.savedCardMetaTxt} numberOfLines={1}>{r.location_name}</Text>
-                              </View>
-                            </Pressable>
+                              onRemove={() => removePlanMutation.mutate(r.id)}
+                            />
                           ))}
                         </ScrollView>
                       )}
@@ -1650,51 +1729,29 @@ export default function DiscoverScreen() {
                       ) : sortedBookmarkedRuns.length <= 2 ? (
                         <View style={{ gap: 8 }}>
                           {sortedBookmarkedRuns.map((r) => (
-                            <Pressable
+                            <MiniRunCard
                               key={r.id}
-                              style={[s.savedCard, { width: "100%" }]}
+                              run={r}
+                              variant="saved"
+                              width="100%"
+                              activityFilter={activityFilter}
                               onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push(`/run/${r.id}`); }}
-                            >
-                              <View style={s.savedCardTop}>
-                                <Text style={s.savedCardTitle} numberOfLines={2}>{r.title}</Text>
-                                <Pressable hitSlop={8} onPress={() => bookmarkMutation.mutate(r.id)}>
-                                  <Ionicons name="bookmark" size={14} color={C.primary} />
-                                </Pressable>
-                              </View>
-                              <View style={s.savedCardMeta}>
-                                <Feather name="calendar" size={11} color={C.textMuted} />
-                                <Text style={s.savedCardMetaTxt} numberOfLines={1}>{formatDate(r.date)}</Text>
-                              </View>
-                              <View style={s.savedCardMeta}>
-                                <Feather name="map-pin" size={11} color={C.textMuted} />
-                                <Text style={s.savedCardMetaTxt} numberOfLines={1}>{r.location_name}</Text>
-                              </View>
-                            </Pressable>
+                              onRemove={() => bookmarkMutation.mutate(r.id)}
+                            />
                           ))}
                         </View>
                       ) : (
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 4 }}>
                           {sortedBookmarkedRuns.map((r) => (
-                            <Pressable
+                            <MiniRunCard
                               key={r.id}
-                              style={[s.savedCard, { width: SCROLL_CARD_W }]}
+                              run={r}
+                              variant="saved"
+                              width={SCROLL_CARD_W}
+                              activityFilter={activityFilter}
                               onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push(`/run/${r.id}`); }}
-                            >
-                              <View style={s.savedCardTop}>
-                                <Text style={s.savedCardTitle} numberOfLines={2}>{r.title}</Text>
-                                <Pressable hitSlop={8} onPress={() => bookmarkMutation.mutate(r.id)}>
-                                  <Ionicons name="bookmark" size={14} color={C.primary} />
-                                </Pressable>
-                              </View>
-                              <View style={s.savedCardMeta}>
-                                <Feather name="calendar" size={11} color={C.textMuted} />
-                                <Text style={s.savedCardMetaTxt} numberOfLines={1}>{formatDate(r.date)}</Text>
-                              </View>
-                              <View style={s.savedCardMeta}>
-                                <Feather name="map-pin" size={11} color={C.textMuted} />
-                                <Text style={s.savedCardMetaTxt} numberOfLines={1}>{r.location_name}</Text>
-                              </View>
-                            </Pressable>
+                              onRemove={() => bookmarkMutation.mutate(r.id)}
+                            />
                           ))}
                         </ScrollView>
                       )}

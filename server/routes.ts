@@ -69,6 +69,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       secret: process.env.SESSION_SECRET || "paceup-secret-key",
       resave: false,
       saveUninitialized: false,
+      proxy: true,
       cookie: {
         secure: process.env.NODE_ENV === "production",
         httpOnly: true,
