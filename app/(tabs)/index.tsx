@@ -17,7 +17,6 @@ import {
   Animated,
   useWindowDimensions,
 } from "react-native";
-import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { router, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons } from "@expo/vector-icons";
@@ -2251,7 +2250,6 @@ export default function DiscoverScreen() {
       <Modal visible={showHostModal} transparent animationType="slide" onRequestClose={() => setShowHostModal(false)}>
         <View style={s.modalWrap}>
         <Pressable style={s.modalOverlay} onPress={() => setShowHostModal(false)} />
-        <KeyboardAvoidingView behavior="padding" style={{ width: "100%" }}>
         <View style={[s.modalSheet, { paddingBottom: insets.bottom + 24 }]}>
 
           {/* Sheet handle */}
@@ -2582,7 +2580,6 @@ export default function DiscoverScreen() {
           </ScrollView>
           )}
         </View>
-        </KeyboardAvoidingView>
         </View>
       </Modal>
 
