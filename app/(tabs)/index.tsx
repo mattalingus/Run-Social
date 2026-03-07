@@ -929,10 +929,8 @@ export default function DiscoverScreen() {
   const [showNotifs, setShowNotifs] = useState(false);
   const [expandedLiveId, setExpandedLiveId] = useState<string | null>(null);
   const { width: screenWidth } = useWindowDimensions();
-  const SLIDE_TIMERS = [3, 4, 5, 4, 3];
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardSlide, setOnboardSlide] = useState(0);
-  const [slideCountdown, setSlideCountdown] = useState(SLIDE_TIMERS[0]);
   const onboardScrollRef = useRef<ScrollView>(null);
   const [checklistDismissed, setChecklistDismissed] = useState(true);
   const [checklistAllDone, setChecklistAllDone] = useState(false);
@@ -1249,20 +1247,7 @@ export default function DiscoverScreen() {
     if (user?.id) AsyncStorage.setItem(`paceup_has_onboarded_${user.id}`, "true");
     setShowOnboarding(false);
     setOnboardSlide(0);
-    setSlideCountdown(SLIDE_TIMERS[0]);
   };
-
-  useEffect(() => {
-    if (!showOnboarding) return;
-    setSlideCountdown(SLIDE_TIMERS[onboardSlide]);
-    const interval = setInterval(() => {
-      setSlideCountdown((prev) => {
-        if (prev <= 1) { clearInterval(interval); return 0; }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [onboardSlide, showOnboarding]);
 
   const dismissChecklist = () => {
     if (user?.id) AsyncStorage.setItem(`paceup_checklist_dismissed_${user.id}`, "true");
@@ -1935,7 +1920,7 @@ export default function DiscoverScreen() {
               ref={onboardScrollRef}
               horizontal
               pagingEnabled
-              scrollEnabled={slideCountdown === 0}
+              scrollEnabled={true}
               showsHorizontalScrollIndicator={false}
               style={s.onboardPager}
               onMomentumScrollEnd={(e) => {
@@ -2040,48 +2025,25 @@ export default function DiscoverScreen() {
             {/* CTA button */}
             {onboardSlide < 4 ? (
               <Pressable
-                style={[s.onboardBtn, slideCountdown > 0 && s.onboardBtnDisabled]}
+                style={s.onboardBtn}
                 onPress={() => {
-                  if (slideCountdown > 0) return;
                   const next = onboardSlide + 1;
                   onboardScrollRef.current?.scrollTo({ x: next * (screenWidth - 48), animated: true });
                   setOnboardSlide(next);
                 }}
                 testID="onboarding-next"
               >
-                {slideCountdown > 0 ? (
-                  <>
-                    <View style={s.onboardCountBadge}>
-                      <Text style={s.onboardCountTxt}>{slideCountdown}</Text>
-                    </View>
-                    <Text style={s.onboardBtnTxt}>Please read</Text>
-                  </>
-                ) : (
-                  <>
-                    <Text style={s.onboardBtnTxt}>Next</Text>
-                    <Feather name="arrow-right" size={16} color={C.bg} />
-                  </>
-                )}
+                <Text style={s.onboardBtnTxt}>Next</Text>
+                <Feather name="arrow-right" size={16} color={C.bg} />
               </Pressable>
             ) : (
               <Pressable
-                style={[s.onboardBtn, slideCountdown > 0 && s.onboardBtnDisabled]}
-                onPress={() => { if (slideCountdown > 0) return; finishOnboarding(); }}
+                style={s.onboardBtn}
+                onPress={finishOnboarding}
                 testID="onboarding-letsgo"
               >
-                {slideCountdown > 0 ? (
-                  <>
-                    <View style={s.onboardCountBadge}>
-                      <Text style={s.onboardCountTxt}>{slideCountdown}</Text>
-                    </View>
-                    <Text style={s.onboardBtnTxt}>Please read</Text>
-                  </>
-                ) : (
-                  <>
-                    <Text style={s.onboardBtnTxt}>Let's Go</Text>
-                    <Feather name="arrow-right" size={16} color={C.bg} />
-                  </>
-                )}
+                <Text style={s.onboardBtnTxt}>Let's Go</Text>
+                <Feather name="arrow-right" size={16} color={C.bg} />
               </Pressable>
             )}
           </View>
@@ -3355,23 +3317,6 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     fontSize: 16,
     color: C.bg,
   },
-  onboardBtnDisabled: {
-    backgroundColor: C.textMuted,
-  },
-  onboardCountBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.25)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  onboardCountTxt: {
-    fontFamily: "Outfit_700Bold",
-    fontSize: 13,
-    color: C.bg,
-  },
-
   // ─── FAB ──────────────────────────────────────────────────────────────────
   fabLayer: {
     position: "absolute",
