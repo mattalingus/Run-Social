@@ -929,7 +929,7 @@ export default function DiscoverScreen() {
   const [showFilter, setShowFilter] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
   const [expandedLiveId, setExpandedLiveId] = useState<string | null>(null);
-  const { width: screenWidth } = useWindowDimensions();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardSlide, setOnboardSlide] = useState(0);
   const onboardScrollRef = useRef<ScrollView>(null);
@@ -2250,7 +2250,7 @@ export default function DiscoverScreen() {
       <Modal visible={showHostModal} transparent animationType="slide" onRequestClose={() => setShowHostModal(false)}>
         <View style={s.modalWrap}>
         <Pressable style={s.modalOverlay} onPress={() => setShowHostModal(false)} />
-        <View style={[s.modalSheet, { paddingBottom: insets.bottom + 24 }]}>
+        <View style={[s.modalSheet, { paddingBottom: insets.bottom + 24, height: Math.round(screenHeight * 0.88), maxHeight: undefined, flex: undefined }]}>
 
           {/* Sheet handle */}
           <View style={s.sheetHandle} />
