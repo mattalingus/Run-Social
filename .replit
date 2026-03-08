@@ -81,4 +81,4 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "CI=1 npm run expo:dev"
+args = "npm run expo:dev"
