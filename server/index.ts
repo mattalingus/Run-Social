@@ -172,6 +172,18 @@ function configureExpoAndLanding(app: express.Application) {
   const landingPageTemplate = fs.readFileSync(templatePath, "utf-8");
   const appName = getAppName();
 
+  const deleteAccountPath = path.resolve(
+    process.cwd(),
+    "server",
+    "templates",
+    "delete-account.html",
+  );
+  const deleteAccountHtml = fs.readFileSync(deleteAccountPath, "utf-8");
+  app.get("/delete-account", (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.status(200).send(deleteAccountHtml);
+  });
+
   log("Serving static Expo files with dynamic manifest routing");
 
   app.use((req: Request, res: Response, next: NextFunction) => {
