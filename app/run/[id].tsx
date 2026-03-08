@@ -102,6 +102,8 @@ export default function RunDetailScreen() {
   const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
   const [hostProfileId, setHostProfileId] = useState<string | null>(null);
   const [showEditSheet, setShowEditSheet] = useState(false);
+  const [showPaceGroupSheet, setShowPaceGroupSheet] = useState(false);
+  const [pendingJoinPaceGroup, setPendingJoinPaceGroup] = useState<string | null>(null);
   const [editDate, setEditDate] = useState("");
   const [editTime, setEditTime] = useState("");
   const [editAmPm, setEditAmPm] = useState<"AM" | "PM">("AM");
@@ -436,10 +438,17 @@ export default function RunDetailScreen() {
     );
   }
 
-  async function doJoin() {
+  async function doJoin(paceGroupLabel?: string) {
+    // If this is a crew run with pace groups and no group selected yet, show the picker first
+    if (!paceGroupLabel && run?.crew_id && run?.pace_groups && (run.pace_groups as any[]).length > 0) {
+      setShowPaceGroupSheet(true);
+      return;
+    }
     setJoining(true);
     try {
-      const res = await apiRequest("POST", `/api/runs/${id}/join`);
+      const body_payload: Record<string, any> = {};
+      if (paceGroupLabel) body_payload.paceGroupLabel = paceGroupLabel;
+      const res = await apiRequest("POST", `/api/runs/${id}/join`, body_payload);
       if (!res.ok) {
         const body = await res.json();
         if (body.message === "This event is full") {
@@ -896,44 +905,105 @@ export default function RunDetailScreen() {
           const pendingParticipants = participants.filter((p: any) => p.status === "pending");
           return (
             <>
-              {joinedParticipants.length > 0 && (
-                <View style={styles.participantsSection}>
-                  <Text style={styles.sectionTitle}>Participants ({run.participant_count ?? 1})</Text>
-                  <View style={styles.participantsList}>
-                    {joinedParticipants.slice(0, 8).map((p: any) => (
-                      <Pressable
-                        key={p.id}
-                        style={({ pressed }) => [styles.participantItem, { opacity: pressed ? 0.8 : 1 }]}
-                        onPress={() => setHostProfileId(p.id)}
-                      >
-                        {p.photo_url ? (
-                          <Image source={{ uri: p.photo_url }} style={styles.participantAvatarImg} />
-                        ) : (
-                          <View style={styles.participantAvatar}>
-                            <Text style={styles.participantAvatarText}>{p.name?.charAt(0).toUpperCase()}</Text>
+              {joinedParticipants.length > 0 && (() => {
+                const hasPaceGroups = run?.pace_groups && (run.pace_groups as any[]).length > 0;
+                const hasAnyGroupLabel = joinedParticipants.some((p: any) => p.pace_group_label);
+
+                const renderParticipant = (p: any) => (
+                  <Pressable
+                    key={p.id}
+                    style={({ pressed }) => [styles.participantItem, { opacity: pressed ? 0.8 : 1 }]}
+                    onPress={() => setHostProfileId(p.id)}
+                  >
+                    {p.photo_url ? (
+                      <Image source={{ uri: p.photo_url }} style={styles.participantAvatarImg} />
+                    ) : (
+                      <View style={styles.participantAvatar}>
+                        <Text style={styles.participantAvatarText}>{p.name?.charAt(0).toUpperCase()}</Text>
+                      </View>
+                    )}
+                    <View style={styles.participantInfo}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                        <Text style={styles.participantName}>{p.name}</Text>
+                        {p.reliability_slug === "reliable_90" && <Text style={{ fontSize: 13 }}>⭐</Text>}
+                        {p.reliability_slug === "reliable_80" && <Text style={{ fontSize: 13 }}>🟢</Text>}
+                        {p.reliability_slug === "reliable_65" && <Text style={{ fontSize: 13 }}>🔵</Text>}
+                        {p.reliability_slug === "reliable_50" && <Text style={{ fontSize: 13 }}>🟡</Text>}
+                      </View>
+                      <Text style={styles.participantPace}>{toDisplayPace(p.avg_pace, distUnit)} · {toDisplayDist(p.avg_distance, distUnit)} avg</Text>
+                    </View>
+                    <View style={[styles.participantStatus, { backgroundColor: p.status === "confirmed" ? C.primary + "22" : C.border }]}>
+                      <Text style={[styles.participantStatusText, { color: p.status === "confirmed" ? C.primary : C.textMuted }]}>
+                        {p.status === "confirmed" ? "Done" : "Joined"}
+                      </Text>
+                    </View>
+                    <Feather name="chevron-right" size={14} color={C.textMuted} />
+                  </Pressable>
+                );
+
+                if (hasPaceGroups && hasAnyGroupLabel) {
+                  // Group participants by their pace_group_label
+                  const groups: Record<string, any[]> = {};
+                  const ungrouped: any[] = [];
+                  for (const p of joinedParticipants.slice(0, 24)) {
+                    if (p.pace_group_label) {
+                      if (!groups[p.pace_group_label]) groups[p.pace_group_label] = [];
+                      groups[p.pace_group_label].push(p);
+                    } else {
+                      ungrouped.push(p);
+                    }
+                  }
+                  const paceGroupDefs = run.pace_groups as any[];
+                  const orderedLabels = [
+                    ...paceGroupDefs.map((g: any) => g.label).filter((l: string) => groups[l]),
+                    ...Object.keys(groups).filter((l) => !paceGroupDefs.find((g: any) => g.label === l)),
+                  ];
+
+                  return (
+                    <View style={styles.participantsSection}>
+                      <Text style={styles.sectionTitle}>Participants ({run.participant_count ?? 1})</Text>
+                      {orderedLabels.map((label) => {
+                        const groupDef = paceGroupDefs.find((g: any) => g.label === label);
+                        return (
+                          <View key={label} style={{ marginBottom: 12 }}>
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                              <View style={{ backgroundColor: C.primaryMuted, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: C.primary + "44" }}>
+                                <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 13, color: C.primary }}>{label}</Text>
+                              </View>
+                              {groupDef && (
+                                <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted }}>
+                                  {groupDef.minPace}–{groupDef.maxPace} min/mi
+                                </Text>
+                              )}
+                              <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted }}>
+                                · {groups[label].length} runner{groups[label].length !== 1 ? "s" : ""}
+                              </Text>
+                            </View>
+                            <View style={styles.participantsList}>
+                              {groups[label].map(renderParticipant)}
+                            </View>
                           </View>
-                        )}
-                        <View style={styles.participantInfo}>
-                          <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                            <Text style={styles.participantName}>{p.name}</Text>
-                            {p.reliability_slug === "reliable_90" && <Text style={{ fontSize: 13 }}>⭐</Text>}
-                            {p.reliability_slug === "reliable_80" && <Text style={{ fontSize: 13 }}>🟢</Text>}
-                            {p.reliability_slug === "reliable_65" && <Text style={{ fontSize: 13 }}>🔵</Text>}
-                            {p.reliability_slug === "reliable_50" && <Text style={{ fontSize: 13 }}>🟡</Text>}
-                          </View>
-                          <Text style={styles.participantPace}>{toDisplayPace(p.avg_pace, distUnit)} · {toDisplayDist(p.avg_distance, distUnit)} avg</Text>
+                        );
+                      })}
+                      {ungrouped.length > 0 && (
+                        <View style={{ marginBottom: 12 }}>
+                          <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textMuted, marginBottom: 6 }}>No group assigned</Text>
+                          <View style={styles.participantsList}>{ungrouped.map(renderParticipant)}</View>
                         </View>
-                        <View style={[styles.participantStatus, { backgroundColor: p.status === "confirmed" ? C.primary + "22" : C.border }]}>
-                          <Text style={[styles.participantStatusText, { color: p.status === "confirmed" ? C.primary : C.textMuted }]}>
-                            {p.status === "confirmed" ? "Done" : "Joined"}
-                          </Text>
-                        </View>
-                        <Feather name="chevron-right" size={14} color={C.textMuted} />
-                      </Pressable>
-                    ))}
+                      )}
+                    </View>
+                  );
+                }
+
+                return (
+                  <View style={styles.participantsSection}>
+                    <Text style={styles.sectionTitle}>Participants ({run.participant_count ?? 1})</Text>
+                    <View style={styles.participantsList}>
+                      {joinedParticipants.slice(0, 8).map(renderParticipant)}
+                    </View>
                   </View>
-                </View>
-              )}
+                );
+              })()}
               {isHost && pendingParticipants.length > 0 && (
                 <View style={styles.participantsSection}>
                   <Text style={styles.sectionTitle}>Join Requests ({pendingParticipants.length})</Text>
@@ -1467,6 +1537,68 @@ export default function RunDetailScreen() {
                 </Pressable>
               </View>
             </KeyboardAvoidingView>
+          </View>
+        </Modal>
+      )}
+
+      {/* ── Pace Group Selection Sheet ── */}
+      {showPaceGroupSheet && run?.pace_groups && (
+        <Modal transparent animationType="slide" onRequestClose={() => setShowPaceGroupSheet(false)}>
+          <View style={styles.frModalWrap}>
+            <Pressable style={styles.frOverlay} onPress={() => setShowPaceGroupSheet(false)} />
+            <View style={[styles.editSheet, { paddingBottom: insets.bottom + 24, maxHeight: "75%" }]}>
+              <View style={styles.frHandle} />
+              <View style={styles.editSheetHeader}>
+                <Text style={styles.editSheetTitle}>Pick Your Pace Group</Text>
+                <Pressable onPress={() => setShowPaceGroupSheet(false)} hitSlop={12}>
+                  <Feather name="x" size={18} color={C.textSecondary} />
+                </Pressable>
+              </View>
+              <Text style={[styles.editSheetSub, { marginBottom: 16 }]}>
+                Choose the group that best matches your pace. This helps the host organize the run.
+              </Text>
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {(run.pace_groups as any[]).map((group: any, idx: number) => {
+                  const isSelected = pendingJoinPaceGroup === group.label;
+                  return (
+                    <Pressable
+                      key={idx}
+                      onPress={() => setPendingJoinPaceGroup(group.label)}
+                      style={{
+                        flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+                        backgroundColor: isSelected ? C.primaryMuted : C.surface,
+                        borderRadius: 14, borderWidth: 1.5,
+                        borderColor: isSelected ? C.primary : C.border,
+                        padding: 14, marginBottom: 10,
+                      }}
+                    >
+                      <View>
+                        <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 16, color: C.text }}>{group.label}</Text>
+                        <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary, marginTop: 2 }}>
+                          {group.minPace} – {group.maxPace} min/mi
+                        </Text>
+                      </View>
+                      <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: isSelected ? C.primary : C.border, backgroundColor: isSelected ? C.primary : "transparent", alignItems: "center", justifyContent: "center" }}>
+                        {isSelected && <Feather name="check" size={12} color="#fff" />}
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+              <Pressable
+                style={{ marginTop: 16, backgroundColor: pendingJoinPaceGroup ? C.primary : C.surface, borderRadius: 14, paddingVertical: 15, alignItems: "center", opacity: pendingJoinPaceGroup ? 1 : 0.5 }}
+                onPress={() => {
+                  if (!pendingJoinPaceGroup) return;
+                  setShowPaceGroupSheet(false);
+                  doJoin(pendingJoinPaceGroup);
+                }}
+                disabled={!pendingJoinPaceGroup}
+              >
+                <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 16, color: pendingJoinPaceGroup ? "#000" : C.textMuted }}>
+                  {pendingJoinPaceGroup ? `Join as ${pendingJoinPaceGroup}` : "Select a group to continue"}
+                </Text>
+              </Pressable>
+            </View>
           </View>
         </Modal>
       )}

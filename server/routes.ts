@@ -903,7 +903,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      const participant = await storage.joinRun(req.params.id, req.session.userId!);
+      const paceGroupLabel = req.body.paceGroupLabel ?? null;
+      const participant = await storage.joinRun(req.params.id, req.session.userId!, paceGroupLabel);
       res.json(participant);
       // Notify host (fire-and-forget)
       storage.getUserById(run.host_id).then((host) => {
@@ -916,6 +917,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           );
         }
       }).catch((err: any) => console.error("[bg]", err?.message ?? err));
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  // Update pace group for an existing participant (used after proximity auto-join)
+  app.patch("/api/runs/:id/pace-group", requireAuth, async (req, res) => {
+    try {
+      const { paceGroupLabel } = req.body;
+      if (!paceGroupLabel) return res.status(400).json({ message: "paceGroupLabel required" });
+      await storage.joinRun(req.params.id, req.session.userId!, paceGroupLabel);
+      res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }

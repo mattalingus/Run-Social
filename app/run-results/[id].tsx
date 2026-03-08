@@ -140,6 +140,8 @@ export default function RunResultsScreen() {
   const stillRunning = results.filter((r) => r.is_present && r.final_rank == null);
   const finished = results.filter((r) => r.final_rank != null).sort((a, b) => a.final_rank - b.final_rank);
   const isParticipant = results.some((r: any) => r.user_id === user?.id);
+  const hasPaceGroups = run?.pace_groups && (run.pace_groups as any[]).length > 0;
+  const hasAnyGroupLabel = finished.some((r: any) => r.pace_group_label);
 
   return (
     <View style={s.container}>
@@ -206,53 +208,98 @@ export default function RunResultsScreen() {
           </View>
 
           {/* Leaderboard */}
-          {finished.length > 0 && (
-            <View style={s.section}>
-              <Text style={s.sectionTitle}>Leaderboard</Text>
-              {finished.map((runner, idx) => {
-                const isMe = runner.user_id === user?.id;
-                const rankColor = RANK_COLORS[runner.final_rank] ?? C.textSecondary;
-                return (
-                  <View
-                    key={runner.user_id}
-                    style={[s.runnerCard, isMe && s.runnerCardMe]}
-                  >
-                    {/* Rank badge */}
-                    <View style={[s.rankBadge, { borderColor: rankColor + "66" }]}>
-                      {runner.final_rank <= 3 ? (
-                        <Ionicons name="trophy" size={14} color={rankColor} />
-                      ) : (
-                        <Text style={[s.rankNumber, { color: rankColor }]}>#{runner.final_rank}</Text>
-                      )}
-                    </View>
-                    {/* Avatar */}
-                    <View style={[s.avatar, isMe && s.avatarMe]}>
-                      <Text style={[s.avatarText, isMe && s.avatarTextMe]}>
-                        {runner.name?.[0]?.toUpperCase() ?? "?"}
-                      </Text>
-                    </View>
-                    {/* Info */}
-                    <View style={s.runnerInfo}>
-                      <Text style={[s.runnerName, isMe && s.runnerNameMe]}>
-                        {runner.name}{isMe ? " (you)" : ""}
-                      </Text>
-                      <View style={s.runnerStats}>
-                        <Text style={s.runnerStatText}>{formatDist(runner.final_distance)} mi</Text>
-                        <Text style={s.runnerStatDot}>·</Text>
-                        <Text style={s.runnerStatText}>{formatPace(runner.final_pace)} /mi</Text>
-                      </View>
-                    </View>
-                    {/* Rank label */}
-                    {runner.final_rank <= 3 && (
-                      <Text style={[s.rankLabel, { color: rankColor }]}>
-                        {runner.final_rank === 1 ? "1st" : runner.final_rank === 2 ? "2nd" : "3rd"}
-                      </Text>
+          {finished.length > 0 && (() => {
+            const renderRunner = (runner: any) => {
+              const isMe = runner.user_id === user?.id;
+              const rankColor = RANK_COLORS[runner.final_rank] ?? C.textSecondary;
+              return (
+                <View key={runner.user_id} style={[s.runnerCard, isMe && s.runnerCardMe]}>
+                  <View style={[s.rankBadge, { borderColor: rankColor + "66" }]}>
+                    {runner.final_rank <= 3 ? (
+                      <Ionicons name="trophy" size={14} color={rankColor} />
+                    ) : (
+                      <Text style={[s.rankNumber, { color: rankColor }]}>#{runner.final_rank}</Text>
                     )}
                   </View>
-                );
-              })}
-            </View>
-          )}
+                  <View style={[s.avatar, isMe && s.avatarMe]}>
+                    <Text style={[s.avatarText, isMe && s.avatarTextMe]}>
+                      {runner.name?.[0]?.toUpperCase() ?? "?"}
+                    </Text>
+                  </View>
+                  <View style={s.runnerInfo}>
+                    <Text style={[s.runnerName, isMe && s.runnerNameMe]}>
+                      {runner.name}{isMe ? " (you)" : ""}
+                    </Text>
+                    <View style={s.runnerStats}>
+                      <Text style={s.runnerStatText}>{formatDist(runner.final_distance)} mi</Text>
+                      <Text style={s.runnerStatDot}>·</Text>
+                      <Text style={s.runnerStatText}>{formatPace(runner.final_pace)} /mi</Text>
+                    </View>
+                  </View>
+                  {runner.final_rank <= 3 && (
+                    <Text style={[s.rankLabel, { color: rankColor }]}>
+                      {runner.final_rank === 1 ? "1st" : runner.final_rank === 2 ? "2nd" : "3rd"}
+                    </Text>
+                  )}
+                </View>
+              );
+            };
+
+            if (hasPaceGroups && hasAnyGroupLabel) {
+              const paceGroupDefs = run.pace_groups as any[];
+              const groups: Record<string, any[]> = {};
+              const ungrouped: any[] = [];
+              for (const r of finished) {
+                if (r.pace_group_label) {
+                  if (!groups[r.pace_group_label]) groups[r.pace_group_label] = [];
+                  groups[r.pace_group_label].push(r);
+                } else {
+                  ungrouped.push(r);
+                }
+              }
+              const orderedLabels = [
+                ...paceGroupDefs.map((g: any) => g.label).filter((l: string) => groups[l]),
+                ...Object.keys(groups).filter((l) => !paceGroupDefs.find((g: any) => g.label === l)),
+              ];
+
+              return (
+                <View style={s.section}>
+                  <Text style={s.sectionTitle}>Leaderboard by Pace Group</Text>
+                  {orderedLabels.map((label) => {
+                    const groupDef = paceGroupDefs.find((g: any) => g.label === label);
+                    return (
+                      <View key={label} style={{ marginBottom: 20 }}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                          <View style={{ backgroundColor: C.primaryMuted, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: C.primary + "44" }}>
+                            <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 14, color: C.primary }}>{label}</Text>
+                          </View>
+                          {groupDef && (
+                            <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted }}>
+                              {groupDef.minPace}–{groupDef.maxPace} min/mi
+                            </Text>
+                          )}
+                        </View>
+                        {groups[label].map(renderRunner)}
+                      </View>
+                    );
+                  })}
+                  {ungrouped.length > 0 && (
+                    <View>
+                      <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textMuted, marginBottom: 6 }}>No Group</Text>
+                      {ungrouped.map(renderRunner)}
+                    </View>
+                  )}
+                </View>
+              );
+            }
+
+            return (
+              <View style={s.section}>
+                <Text style={s.sectionTitle}>Leaderboard</Text>
+                {finished.map(renderRunner)}
+              </View>
+            );
+          })()}
 
           {/* Still going */}
           {stillRunning.length > 0 && (

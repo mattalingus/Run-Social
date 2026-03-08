@@ -99,6 +99,10 @@ export default function CreateRunScreen() {
   }, [timeH, timeMin]);
   const [plannedDistance, setPlannedDistance] = useState(params.pathDistance ?? "3");
   const [plannedPace, setPlannedPace] = useState("9");
+  const [paceGroups, setPaceGroups] = useState<{ label: string; minPace: string; maxPace: string }[]>([
+    { label: "Group A", minPace: "7", maxPace: "9" },
+    { label: "Group B", minPace: "9", maxPace: "11" },
+  ]);
   const [locationPickerOpen, setLocationPickerOpen] = useState(false);
   const [pickerLat, setPickerLat] = useState(parseFloat(locationLat) || 0);
   const [pickerLng, setPickerLng] = useState(parseFloat(locationLng) || 0);
@@ -212,8 +216,17 @@ export default function CreateRunScreen() {
 
       const dist = isCrew ? parseFloat(plannedDistance) || 3 : parseFloat(minDistance);
       const distMax = isCrew ? dist : parseFloat(maxDistance);
-      const pace = isCrew ? parseFloat(plannedPace) || 9 : parseFloat(minPace);
-      const paceMax = isCrew ? pace : parseFloat(maxPace);
+      // For crew runs with pace groups, use the range across all groups
+      let pace: number, paceMax: number;
+      if (isCrew && paceGroups.length > 0) {
+        const allMin = paceGroups.map((g) => parseFloat(g.minPace)).filter((n) => !isNaN(n));
+        const allMax = paceGroups.map((g) => parseFloat(g.maxPace)).filter((n) => !isNaN(n));
+        pace = allMin.length > 0 ? Math.min(...allMin) : parseFloat(plannedPace) || 9;
+        paceMax = allMax.length > 0 ? Math.max(...allMax) : pace;
+      } else {
+        pace = isCrew ? parseFloat(plannedPace) || 9 : parseFloat(minPace);
+        paceMax = isCrew ? pace : parseFloat(maxPace);
+      }
 
       if (privacy === "crew" && !selectedCrewId && !params.crewId) throw new Error("Please select a crew for this run");
       const res = await apiRequest("POST", "/api/runs", {
@@ -235,6 +248,13 @@ export default function CreateRunScreen() {
         crewId: effectiveCrewId || undefined,
         isStrict: false,
         savedPathId: selectedSavedPathId || undefined,
+        paceGroups: isCrew && paceGroups.length > 0
+          ? paceGroups.map((g) => ({
+              label: g.label.trim() || `Group ${paceGroups.indexOf(g) + 1}`,
+              minPace: parseFloat(g.minPace) || 0,
+              maxPace: parseFloat(g.maxPace) || 0,
+            }))
+          : undefined,
       });
       return res.json();
     },
@@ -574,10 +594,10 @@ export default function CreateRunScreen() {
           </View>
         )}
 
-        {/* Pace & Distance — simplified for crew, ranges for public runs */}
+        {/* Pace & Distance — pace groups for crew, ranges for public runs */}
         {isCrew ? (
-          <View style={styles.row}>
-            <View style={[styles.field, { flex: 1 }]}>
+          <>
+            <View style={styles.field}>
               <Text style={styles.label}>Planned Distance (mi)</Text>
               <TextInput
                 style={styles.input}
@@ -588,18 +608,89 @@ export default function CreateRunScreen() {
                 placeholderTextColor={C.textMuted}
               />
             </View>
-            <View style={[styles.field, { flex: 1 }]}>
-              <Text style={styles.label}>Planned Pace (min/mi)</Text>
-              <TextInput
-                style={styles.input}
-                value={plannedPace}
-                onChangeText={setPlannedPace}
-                keyboardType="decimal-pad"
-                placeholder="9"
-                placeholderTextColor={C.textMuted}
-              />
+
+            {/* Pace Groups builder */}
+            <View style={styles.field}>
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <View>
+                  <Text style={styles.label}>Pace Groups</Text>
+                  <Text style={styles.fieldHint}>Members will pick their group when they join</Text>
+                </View>
+                {paceGroups.length < 8 && (
+                  <Pressable
+                    style={{ flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: C.primaryMuted, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: C.primary + "55" }}
+                    onPress={() => {
+                      const letters = "ABCDEFGH";
+                      const next = letters[paceGroups.length] ?? String(paceGroups.length + 1);
+                      setPaceGroups([...paceGroups, { label: `Group ${next}`, minPace: "", maxPace: "" }]);
+                      Haptics.selectionAsync();
+                    }}
+                  >
+                    <Feather name="plus" size={13} color={C.primary} />
+                    <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.primary }}>Add Group</Text>
+                  </Pressable>
+                )}
+              </View>
+              {paceGroups.map((group, idx) => (
+                <View key={idx} style={{ backgroundColor: C.surface, borderRadius: 12, borderWidth: 1, borderColor: C.border, padding: 12, marginBottom: 8 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                    <TextInput
+                      style={[styles.input, { flex: 1, marginRight: 8, marginBottom: 0 }]}
+                      value={group.label}
+                      onChangeText={(t) => {
+                        const updated = [...paceGroups];
+                        updated[idx] = { ...updated[idx], label: t };
+                        setPaceGroups(updated);
+                      }}
+                      placeholder="Group name"
+                      placeholderTextColor={C.textMuted}
+                      maxLength={20}
+                    />
+                    {paceGroups.length > 1 && (
+                      <Pressable
+                        onPress={() => { setPaceGroups(paceGroups.filter((_, i) => i !== idx)); Haptics.selectionAsync(); }}
+                        style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: C.danger + "22", alignItems: "center", justifyContent: "center" }}
+                      >
+                        <Feather name="trash-2" size={13} color={C.danger} />
+                      </Pressable>
+                    )}
+                  </View>
+                  <View style={{ flexDirection: "row", gap: 8 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.splitLabel, { textAlign: "left" }]}>Min Pace (min/mi)</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={group.minPace}
+                        onChangeText={(t) => {
+                          const updated = [...paceGroups];
+                          updated[idx] = { ...updated[idx], minPace: t };
+                          setPaceGroups(updated);
+                        }}
+                        keyboardType="decimal-pad"
+                        placeholder="7.0"
+                        placeholderTextColor={C.textMuted}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.splitLabel, { textAlign: "left" }]}>Max Pace (min/mi)</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={group.maxPace}
+                        onChangeText={(t) => {
+                          const updated = [...paceGroups];
+                          updated[idx] = { ...updated[idx], maxPace: t };
+                          setPaceGroups(updated);
+                        }}
+                        keyboardType="decimal-pad"
+                        placeholder="9.0"
+                        placeholderTextColor={C.textMuted}
+                      />
+                    </View>
+                  </View>
+                </View>
+              ))}
             </View>
-          </View>
+          </>
         ) : (
           <>
             <View style={styles.sectionDivider}>

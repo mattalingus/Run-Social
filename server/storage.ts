@@ -338,6 +338,8 @@ export async function initDb() {
       UNIQUE(crew_id, achievement_key)
     );
     ALTER TABLE runs ADD COLUMN IF NOT EXISTS saved_path_id VARCHAR REFERENCES saved_paths(id) ON DELETE SET NULL;
+    ALTER TABLE runs ADD COLUMN IF NOT EXISTS pace_groups JSONB DEFAULT NULL;
+    ALTER TABLE run_participants ADD COLUMN IF NOT EXISTS pace_group_label VARCHAR DEFAULT NULL;
 
     CREATE TABLE IF NOT EXISTS remember_tokens (
       id SERIAL PRIMARY KEY,
@@ -709,15 +711,17 @@ export async function createRun(data: {
   activityType?: string;
   crewId?: string;
   savedPathId?: string | null;
+  paceGroups?: { label: string; minPace: number; maxPace: number }[] | null;
 }) {
   const inviteToken = data.privacy === "private"
     ? Math.random().toString(36).substring(2, 10).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase()
     : null;
   const activityType = data.activityType === "ride" ? "ride" : "run";
+  const paceGroupsJson = data.paceGroups && data.paceGroups.length > 0 ? JSON.stringify(data.paceGroups) : null;
   const result = await pool.query(
-    `INSERT INTO runs (host_id, title, description, privacy, date, location_lat, location_lng, location_name, min_distance, max_distance, min_pace, max_pace, tags, max_participants, invite_token, invite_password, is_strict, run_style, activity_type, crew_id, saved_path_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING *`,
-    [data.hostId, data.title, data.description || null, data.privacy, data.date, data.locationLat, data.locationLng, data.locationName, data.minDistance, data.maxDistance, data.minPace, data.maxPace, data.tags, data.maxParticipants, inviteToken, data.invitePassword || null, data.isStrict ?? false, data.runStyle || null, activityType, data.crewId || null, data.savedPathId || null]
+    `INSERT INTO runs (host_id, title, description, privacy, date, location_lat, location_lng, location_name, min_distance, max_distance, min_pace, max_pace, tags, max_participants, invite_token, invite_password, is_strict, run_style, activity_type, crew_id, saved_path_id, pace_groups)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) RETURNING *`,
+    [data.hostId, data.title, data.description || null, data.privacy, data.date, data.locationLat, data.locationLng, data.locationName, data.minDistance, data.maxDistance, data.minPace, data.maxPace, data.tags, data.maxParticipants, inviteToken, data.invitePassword || null, data.isStrict ?? false, data.runStyle || null, activityType, data.crewId || null, data.savedPathId || null, paceGroupsJson]
   );
   return result.rows[0];
 }
@@ -1248,20 +1252,28 @@ export async function getUserRuns(userId: string) {
 }
 
 
-export async function joinRun(runId: string, userId: string) {
+export async function joinRun(runId: string, userId: string, paceGroupLabel?: string | null) {
   const existing = await pool.query(
     `SELECT * FROM run_participants WHERE run_id = $1 AND user_id = $2`,
     [runId, userId]
   );
   if (existing.rows.length > 0) {
     if (existing.rows[0].status === "cancelled") {
-      await pool.query(`UPDATE run_participants SET status = 'joined' WHERE run_id = $1 AND user_id = $2`, [runId, userId]);
+      await pool.query(
+        `UPDATE run_participants SET status = 'joined', pace_group_label = $3 WHERE run_id = $1 AND user_id = $2`,
+        [runId, userId, paceGroupLabel || null]
+      );
+    } else if (paceGroupLabel) {
+      await pool.query(
+        `UPDATE run_participants SET pace_group_label = $3 WHERE run_id = $1 AND user_id = $2`,
+        [runId, userId, paceGroupLabel]
+      );
     }
     return existing.rows[0];
   }
   const result = await pool.query(
-    `INSERT INTO run_participants (run_id, user_id) VALUES ($1, $2) RETURNING *`,
-    [runId, userId]
+    `INSERT INTO run_participants (run_id, user_id, pace_group_label) VALUES ($1, $2, $3) RETURNING *`,
+    [runId, userId, paceGroupLabel || null]
   );
   return result.rows[0];
 }
@@ -1385,7 +1397,7 @@ export async function cancelRun(runId: string, userId: string) {
 
 export async function getRunParticipants(runId: string) {
   const result = await pool.query(
-    `SELECT u.id, u.name, u.photo_url, u.avg_pace, u.avg_distance, rp.status, rp.joined_at, rp.id as participation_id,
+    `SELECT u.id, u.name, u.photo_url, u.avg_pace, u.avg_distance, rp.status, rp.joined_at, rp.id as participation_id, rp.pace_group_label,
        (SELECT a.slug FROM achievements a
         WHERE a.user_id = u.id AND a.slug IN ('reliable_90','reliable_80','reliable_65','reliable_50')
         ORDER BY CASE a.slug
@@ -1395,7 +1407,7 @@ export async function getRunParticipants(runId: string) {
           WHEN 'reliable_50' THEN 4
         END LIMIT 1) AS reliability_slug
      FROM run_participants rp JOIN users u ON u.id = rp.user_id
-     WHERE rp.run_id = $1 AND rp.status != 'cancelled' ORDER BY rp.joined_at ASC`,
+     WHERE rp.run_id = $1 AND rp.status != 'cancelled' ORDER BY rp.pace_group_label ASC NULLS LAST, rp.joined_at ASC`,
     [runId]
   );
   return result.rows;
@@ -1563,17 +1575,46 @@ export async function finishRunnerRun(runId: string, userId: string, finalDistan
   );
 
   // Recompute leaderboard ranks for everyone who has finished with a valid pace (> 0)
+  // For crew runs with pace groups, rank within each pace group separately
   // 0-pace finishers (GPS failure / 0 distance) are excluded from ranking but still count as done
-  const finishedRes = await pool.query(
-    `SELECT user_id, final_pace FROM run_participants
-     WHERE run_id = $1 AND final_pace IS NOT NULL AND final_pace > 0 ORDER BY final_pace ASC`,
-    [runId]
-  );
-  for (let i = 0; i < finishedRes.rows.length; i++) {
-    await pool.query(
-      `UPDATE run_participants SET final_rank = $3 WHERE run_id = $1 AND user_id = $2`,
-      [runId, finishedRes.rows[i].user_id, i + 1]
+  const runInfoRes = await pool.query(`SELECT crew_id FROM runs WHERE id = $1`, [runId]);
+  const isCrewRun = runInfoRes.rows.length > 0 && !!runInfoRes.rows[0].crew_id;
+
+  if (isCrewRun) {
+    // Rank within each pace group
+    const groupsRes = await pool.query(
+      `SELECT DISTINCT pace_group_label FROM run_participants
+       WHERE run_id = $1 AND final_pace IS NOT NULL AND final_pace > 0`,
+      [runId]
     );
+    for (const groupRow of groupsRes.rows) {
+      const label = groupRow.pace_group_label;
+      const finishedRes = await pool.query(
+        `SELECT user_id, final_pace FROM run_participants
+         WHERE run_id = $1 AND final_pace IS NOT NULL AND final_pace > 0
+           AND (pace_group_label = $2 OR ($2::text IS NULL AND pace_group_label IS NULL))
+         ORDER BY final_pace ASC`,
+        [runId, label]
+      );
+      for (let i = 0; i < finishedRes.rows.length; i++) {
+        await pool.query(
+          `UPDATE run_participants SET final_rank = $3 WHERE run_id = $1 AND user_id = $2`,
+          [runId, finishedRes.rows[i].user_id, i + 1]
+        );
+      }
+    }
+  } else {
+    const finishedRes = await pool.query(
+      `SELECT user_id, final_pace FROM run_participants
+       WHERE run_id = $1 AND final_pace IS NOT NULL AND final_pace > 0 ORDER BY final_pace ASC`,
+      [runId]
+    );
+    for (let i = 0; i < finishedRes.rows.length; i++) {
+      await pool.query(
+        `UPDATE run_participants SET final_rank = $3 WHERE run_id = $1 AND user_id = $2`,
+        [runId, finishedRes.rows[i].user_id, i + 1]
+      );
+    }
   }
 
   // Auto-complete the run:
@@ -1614,13 +1655,13 @@ export async function finishRunnerRun(runId: string, userId: string, finalDistan
 
 export async function getRunResults(runId: string) {
   const result = await pool.query(
-    `SELECT rp.user_id, u.name, u.photo_url, rp.final_distance, rp.final_pace, rp.final_rank, rp.is_present
+    `SELECT rp.user_id, u.name, u.photo_url, rp.final_distance, rp.final_pace, rp.final_rank, rp.is_present, rp.pace_group_label
      FROM run_participants rp
      JOIN users u ON u.id = rp.user_id
      WHERE rp.run_id = $1
        AND rp.status != 'cancelled'
        AND (rp.is_present = true OR rp.final_distance IS NOT NULL)
-     ORDER BY rp.final_rank ASC NULLS LAST, rp.joined_at ASC`,
+     ORDER BY rp.pace_group_label ASC NULLS LAST, rp.final_rank ASC NULLS LAST, rp.joined_at ASC`,
     [runId]
   );
   return result.rows;
