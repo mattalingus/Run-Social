@@ -44,6 +44,14 @@ const PRIVACY_OPTIONS = [
 
 type RoutePoint = { latitude: number; longitude: number };
 
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 function normalizeRouteThumb(pts: RoutePoint[], w: number, h: number): string {
   if (pts.length < 2) return "";
   const lats = pts.map(p => p.latitude);
@@ -872,6 +880,16 @@ export default function CreateRunScreen() {
                     setLocationLng(String(pickerLng));
                     setLocationName(pickerName.trim());
                     setLocationPickerOpen(false);
+                    if (!selectedSavedPathId) {
+                      const match = mySavedPaths.find(p =>
+                        p.route_path && p.route_path.length > 0 &&
+                        haversineKm(pickerLat, pickerLng, p.route_path[0].latitude, p.route_path[0].longitude) < 0.3
+                      );
+                      if (match) {
+                        setSelectedSavedPathId(match.id);
+                        if (match.distance_miles) setPlannedDistance(match.distance_miles.toFixed(2));
+                      }
+                    }
                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                   }}
                 >

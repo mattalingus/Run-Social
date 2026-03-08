@@ -1069,7 +1069,7 @@ export default function DiscoverScreen() {
   const [hMaxPace, setHMaxPace] = useState(20);
   const [hLocationLat, setHLocationLat] = useState<number | null>(null);
   const [hLocationLng, setHLocationLng] = useState<number | null>(null);
-  const [hostPage, setHostPage] = useState<"form" | "location">("form");
+  const [hostPage, setHostPage] = useState<"form" | "location" | "routePicker">("form");
   const [pinCoord, setPinCoord] = useState<{ latitude: number; longitude: number } | null>(null);
   const [isGeocodingPin, setIsGeocodingPin] = useState(false);
   const [hAmPm, setHAmPm] = useState<"AM" | "PM">("AM");
@@ -1078,7 +1078,6 @@ export default function DiscoverScreen() {
   const [hCrewId, setHCrewId] = useState<string | null>(null);
   const [hSavedPathId, setHSavedPathId] = useState<string | null>(null);
   const [hSavedPathName, setHSavedPathName] = useState<string | null>(null);
-  const [showHRoutePicker, setShowHRoutePicker] = useState(false);
   const [hRouteSearch, setHRouteSearch] = useState("");
   const [hRouteFilter, setHRouteFilter] = useState<"recent" | "az">("recent");
 
@@ -2314,7 +2313,7 @@ export default function DiscoverScreen() {
 
           {/* Header */}
           <View style={s.sheetHeader}>
-            {hostPage === "location" ? (
+            {(hostPage === "location" || hostPage === "routePicker") ? (
               <Pressable style={s.sheetHeaderBtn} onPress={() => setHostPage("form")}>
                 <Feather name="arrow-left" size={20} color={C.textSecondary} />
               </Pressable>
@@ -2324,7 +2323,7 @@ export default function DiscoverScreen() {
               </Pressable>
             )}
             <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 17, color: C.text }}>
-              {hostPage === "location" ? "Drop a Pin" : hActivityType === "ride" ? "Host a Ride" : "Host a Run"}
+              {hostPage === "location" ? "Drop a Pin" : hostPage === "routePicker" ? "Saved Paths" : hActivityType === "ride" ? "Host a Ride" : "Host a Run"}
             </Text>
             {hostPage === "location" ? (
               <Pressable
@@ -2333,6 +2332,15 @@ export default function DiscoverScreen() {
                   if (pinCoord) {
                     setHLocationLat(pinCoord.latitude);
                     setHLocationLng(pinCoord.longitude);
+                    const match = hSavedPaths.find(p =>
+                      p.route_path && p.route_path.length > 0 && !hSavedPathId &&
+                      haversine(pinCoord.latitude, pinCoord.longitude, p.route_path[0].latitude, p.route_path[0].longitude) < 0.3
+                    );
+                    if (match) {
+                      setHSavedPathId(match.id);
+                      setHSavedPathName(match.name);
+                      if (match.distance_miles) setHDist(match.distance_miles.toFixed(2));
+                    }
                   }
                   setHostPage("form");
                   Haptics.selectionAsync();
@@ -2340,6 +2348,8 @@ export default function DiscoverScreen() {
               >
                 <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 14, color: C.bg }}>Done</Text>
               </Pressable>
+            ) : hostPage === "routePicker" ? (
+              <View style={s.sheetHeaderBtn} />
             ) : (
               <Pressable
                 style={[s.sheetHeaderBtn, s.sheetPostBtn, createRunMutation.isPending && { opacity: 0.6 }]}
@@ -2392,6 +2402,83 @@ export default function DiscoverScreen() {
               />
             </View>
           )}
+          {hostPage === "routePicker" && (
+            <View style={{ flex: 1 }}>
+              {/* Search */}
+              <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: C.surface, borderRadius: 12, borderWidth: 1, borderColor: C.border, marginHorizontal: 16, marginTop: 8, paddingHorizontal: 12, paddingVertical: 8, gap: 8, marginBottom: 12 }}>
+                <Feather name="search" size={14} color={C.textMuted} />
+                <TextInput
+                  style={{ flex: 1, fontFamily: "Outfit_400Regular", fontSize: 14, color: C.text }}
+                  placeholder="Search paths…"
+                  placeholderTextColor={C.textMuted}
+                  value={hRouteSearch}
+                  onChangeText={setHRouteSearch}
+                  autoCorrect={false}
+                />
+                {hRouteSearch.length > 0 && (
+                  <Pressable onPress={() => setHRouteSearch("")} hitSlop={8}>
+                    <Feather name="x-circle" size={14} color={C.textMuted} />
+                  </Pressable>
+                )}
+              </View>
+              {/* Toggle */}
+              <View style={{ flexDirection: "row", gap: 8, paddingHorizontal: 16, marginBottom: 14 }}>
+                {(["recent", "az"] as const).map((f) => (
+                  <Pressable
+                    key={f}
+                    onPress={() => { setHRouteFilter(f); Haptics.selectionAsync(); }}
+                    style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: hRouteFilter === f ? C.primary : C.border, backgroundColor: hRouteFilter === f ? C.primaryMuted : C.surface }}
+                  >
+                    <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: hRouteFilter === f ? C.primary : C.textMuted }}>
+                      {f === "recent" ? "Recent" : "A–Z"}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              {/* List */}
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 10, paddingBottom: 8 }}>
+                {(() => {
+                  let paths = hSavedPaths.filter(p => p.activity_type === hActivityType);
+                  if (hRouteSearch.trim()) paths = paths.filter(p => p.name.toLowerCase().includes(hRouteSearch.toLowerCase()));
+                  if (hRouteFilter === "az") paths = [...paths].sort((a, b) => a.name.localeCompare(b.name));
+                  if (paths.length === 0) return (
+                    <View style={{ alignItems: "center", paddingVertical: 32, gap: 8 }}>
+                      <Feather name="map" size={32} color={C.border} />
+                      <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textMuted }}>
+                        {hRouteSearch ? "No paths match your search" : `No saved ${hActivityType} paths yet`}
+                      </Text>
+                    </View>
+                  );
+                  return paths.map((p) => (
+                    <Pressable
+                      key={p.id}
+                      style={{ flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: C.surface, borderRadius: 14, borderWidth: 1, borderColor: p.id === hSavedPathId ? C.primary : C.border, padding: 10 }}
+                      onPress={() => {
+                        setHSavedPathId(p.id);
+                        setHSavedPathName(p.name);
+                        if (p.distance_miles) setHDist(p.distance_miles.toFixed(2));
+                        setHostPage("form");
+                        Haptics.selectionAsync();
+                      }}
+                    >
+                      <RouteThumb path={p.route_path} primary={C.primary} size={60} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.text }} numberOfLines={1}>{p.name}</Text>
+                        {p.distance_miles != null && (
+                          <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, marginTop: 2 }}>{p.distance_miles.toFixed(1)} mi</Text>
+                        )}
+                      </View>
+                      {p.id === hSavedPathId
+                        ? <Feather name="check-circle" size={18} color={C.primary} />
+                        : <Feather name="chevron-right" size={16} color={C.textMuted} />
+                      }
+                    </Pressable>
+                  ));
+                })()}
+              </ScrollView>
+            </View>
+          )}
+
           {hostPage === "form" && (
           <ScrollView
             style={{ flex: 1 }}
@@ -2587,7 +2674,7 @@ export default function DiscoverScreen() {
                 ) : (
                   <Pressable
                     style={{ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: C.surface, borderRadius: 12, borderWidth: 1, borderColor: C.border, paddingHorizontal: 12, paddingVertical: 10 }}
-                    onPress={() => { setShowHRoutePicker(true); Haptics.selectionAsync(); }}
+                    onPress={() => { setHostPage("routePicker"); Haptics.selectionAsync(); }}
                   >
                     <Feather name="map" size={13} color={C.textMuted} />
                     <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textMuted }}>Saved Paths</Text>
@@ -2663,93 +2750,6 @@ export default function DiscoverScreen() {
           )}
         </View>
       </Modal>
-
-      {/* ── Saved Paths Picker (for host modal) ─────────────────────────────── */}
-      {showHRoutePicker && (
-        <Modal visible transparent animationType="slide" onRequestClose={() => setShowHRoutePicker(false)}>
-          <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "#00000088" }}>
-            <Pressable style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} onPress={() => setShowHRoutePicker(false)} />
-            <View style={{ backgroundColor: C.bg, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 12, paddingBottom: insets.bottom + 16, maxHeight: "85%" }}>
-              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: C.border, alignSelf: "center", marginBottom: 14 }} />
-              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, marginBottom: 14 }}>
-                <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text }}>Saved Paths</Text>
-                <Pressable onPress={() => setShowHRoutePicker(false)} hitSlop={12}>
-                  <Feather name="x" size={20} color={C.textSecondary} />
-                </Pressable>
-              </View>
-              {/* Search */}
-              <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: C.surface, borderRadius: 12, borderWidth: 1, borderColor: C.border, marginHorizontal: 20, paddingHorizontal: 12, paddingVertical: 8, gap: 8, marginBottom: 12 }}>
-                <Feather name="search" size={14} color={C.textMuted} />
-                <TextInput
-                  style={{ flex: 1, fontFamily: "Outfit_400Regular", fontSize: 14, color: C.text }}
-                  placeholder="Search paths…"
-                  placeholderTextColor={C.textMuted}
-                  value={hRouteSearch}
-                  onChangeText={setHRouteSearch}
-                  autoCorrect={false}
-                />
-                {hRouteSearch.length > 0 && (
-                  <Pressable onPress={() => setHRouteSearch("")} hitSlop={8}>
-                    <Feather name="x-circle" size={14} color={C.textMuted} />
-                  </Pressable>
-                )}
-              </View>
-              {/* Toggle */}
-              <View style={{ flexDirection: "row", gap: 8, paddingHorizontal: 20, marginBottom: 14 }}>
-                {(["recent", "az"] as const).map((f) => (
-                  <Pressable
-                    key={f}
-                    onPress={() => { setHRouteFilter(f); Haptics.selectionAsync(); }}
-                    style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: hRouteFilter === f ? C.primary : C.border, backgroundColor: hRouteFilter === f ? C.primaryMuted : C.surface }}
-                  >
-                    <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: hRouteFilter === f ? C.primary : C.textMuted }}>
-                      {f === "recent" ? "Recent" : "A–Z"}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-              {/* List */}
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 10, paddingBottom: 8 }}>
-                {(() => {
-                  let paths = hSavedPaths.filter(p => p.activity_type === hActivityType);
-                  if (hRouteSearch.trim()) paths = paths.filter(p => p.name.toLowerCase().includes(hRouteSearch.toLowerCase()));
-                  if (hRouteFilter === "az") paths = [...paths].sort((a, b) => a.name.localeCompare(b.name));
-                  if (paths.length === 0) return (
-                    <View style={{ alignItems: "center", paddingVertical: 32, gap: 8 }}>
-                      <Feather name="map" size={32} color={C.border} />
-                      <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textMuted }}>
-                        {hRouteSearch ? "No paths match your search" : `No saved ${hActivityType} paths yet`}
-                      </Text>
-                    </View>
-                  );
-                  return paths.map((p) => (
-                    <Pressable
-                      key={p.id}
-                      style={{ flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: C.surface, borderRadius: 14, borderWidth: 1, borderColor: C.border, padding: 10 }}
-                      onPress={() => {
-                        setHSavedPathId(p.id);
-                        setHSavedPathName(p.name);
-                        if (p.distance_miles) setHDist(p.distance_miles.toFixed(2));
-                        setShowHRoutePicker(false);
-                        Haptics.selectionAsync();
-                      }}
-                    >
-                      <RouteThumb path={p.route_path} primary={C.primary} size={60} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.text }} numberOfLines={1}>{p.name}</Text>
-                        {p.distance_miles != null && (
-                          <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, marginTop: 2 }}>{p.distance_miles.toFixed(1)} mi</Text>
-                        )}
-                      </View>
-                      <Feather name="chevron-right" size={16} color={C.textMuted} />
-                    </Pressable>
-                  ));
-                })()}
-              </ScrollView>
-            </View>
-          </View>
-        </Modal>
-      )}
 
       {/* ── Community Rules Modal ──────────────────────────────────────────────
            NOTE: The closing )} above closes {hostPage === "form" && (        */}
