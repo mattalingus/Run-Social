@@ -184,6 +184,18 @@ function configureExpoAndLanding(app: express.Application) {
     res.status(200).send(deleteAccountHtml);
   });
 
+  const privacyPolicyPath = path.resolve(
+    process.cwd(),
+    "server",
+    "templates",
+    "privacy-policy.html",
+  );
+  const privacyPolicyHtml = fs.readFileSync(privacyPolicyPath, "utf-8");
+  app.get("/privacy-policy", (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.status(200).send(privacyPolicyHtml);
+  });
+
   log("Serving static Expo files with dynamic manifest routing");
 
   app.use((req: Request, res: Response, next: NextFunction) => {
