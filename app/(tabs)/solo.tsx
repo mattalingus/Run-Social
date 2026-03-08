@@ -524,6 +524,8 @@ export default function SoloScreen() {
   const [showGoals, setShowGoals] = useState(false);
   const [showPlan, setShowPlan] = useState(false);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(true);
+  const [historyFilter, setHistoryFilter] = useState<"all" | "favorites" | "longest" | "fastest">("all");
   const [selectedScheduled, setSelectedScheduled] = useState<SoloRun | null>(null);
   const [selectedSavedPath, setSelectedSavedPath] = useState<SavedPath | null>(null);
   const [editingScheduledTitle, setEditingScheduledTitle] = useState(false);
@@ -668,6 +670,13 @@ export default function SoloScreen() {
     () => filteredSoloRuns.filter((r) => r.completed),
     [filteredSoloRuns]
   );
+
+  const displayedRuns = useMemo(() => {
+    if (historyFilter === "favorites") return historyRuns.filter((r) => r.is_starred);
+    if (historyFilter === "longest") return [...historyRuns].sort((a, b) => b.distance_miles - a.distance_miles);
+    if (historyFilter === "fastest") return [...historyRuns].filter((r) => r.pace_min_per_mile != null).sort((a, b) => (a.pace_min_per_mile ?? 99) - (b.pace_min_per_mile ?? 99));
+    return historyRuns;
+  }, [historyRuns, historyFilter]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -921,33 +930,6 @@ export default function SoloScreen() {
           </View>
         </View>
 
-        {/* ─── Rankings ────────────────────────────────────────────────── */}
-        {rankings.length > 0 && (
-          <View style={s.section}>
-            <Text style={s.sectionTitle}>Performance Rankings</Text>
-            {rankings.map((cat) => (
-              <View key={cat.label} style={s.rankCard}>
-                <View style={s.rankHeader}>
-                  <Text style={s.rankCategory}>{cat.label}</Text>
-                  <Text style={s.rankBest}>
-                    Best: {cat.runs[0].pace_min_per_mile ? toDisplayPace(cat.runs[0].pace_min_per_mile, distUnit) : "—"}
-                  </Text>
-                </View>
-                {cat.runs.slice(0, 3).map((run, i) => (
-                  <View key={run.id} style={s.rankRow}>
-                    <Text style={s.rankEmoji}>{RANK_EMOJI[i]}</Text>
-                    <Text style={s.rankDate}>{formatDisplayDate(run.date)}</Text>
-                    <Text style={s.rankDist}>{toDisplayDist(run.distance_miles, distUnit)}</Text>
-                    <Text style={s.rankPace}>
-                      {run.pace_min_per_mile ? toDisplayPace(run.pace_min_per_mile, distUnit) : "—"}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            ))}
-          </View>
-        )}
-
         {/* ─── Run Solo CTA ────────────────────────────────────────────── */}
         <Pressable
           style={({ pressed }) => [s.runSoloBtn, { opacity: pressed ? 0.88 : 1 }]}
@@ -1031,13 +1013,53 @@ export default function SoloScreen() {
           </View>
         )}
 
+        {/* ─── Rankings ────────────────────────────────────────────────── */}
+        {rankings.length > 0 && (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Performance Rankings</Text>
+            {rankings.map((cat) => (
+              <View key={cat.label} style={s.rankCard}>
+                <View style={s.rankHeader}>
+                  <Text style={s.rankCategory}>{cat.label}</Text>
+                  <Text style={s.rankBest}>
+                    Best: {cat.runs[0].pace_min_per_mile ? toDisplayPace(cat.runs[0].pace_min_per_mile, distUnit) : "—"}
+                  </Text>
+                </View>
+                {cat.runs.slice(0, 3).map((run, i) => (
+                  <View key={run.id} style={s.rankRow}>
+                    <Text style={s.rankEmoji}>{RANK_EMOJI[i]}</Text>
+                    <Text style={s.rankDate}>{formatDisplayDate(run.date)}</Text>
+                    <Text style={s.rankDist}>{toDisplayDist(run.distance_miles, distUnit)}</Text>
+                    <Text style={s.rankPace}>
+                      {run.pace_min_per_mile ? toDisplayPace(run.pace_min_per_mile, distUnit) : "—"}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ))}
+          </View>
+        )}
+
         {/* ─── Run / Ride History ──────────────────────────────────────── */}
         <View style={[s.section, { marginTop: 5 }]}>
-          <Text style={s.sectionTitle}>{activityFilter === "ride" ? "Ride History" : "Run History"}</Text>
+          <Pressable
+            style={s.historyHeaderRow}
+            onPress={() => { setShowHistory((v) => !v); Haptics.selectionAsync(); }}
+          >
+            <Text style={[s.sectionTitle, { marginBottom: 0 }]}>{activityFilter === "ride" ? "Ride History" : "Run History"}</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              {historyRuns.length > 0 && (
+                <View style={s.historyCountBadge}>
+                  <Text style={s.historyCountTxt}>{historyRuns.length}</Text>
+                </View>
+              )}
+              <Feather name={showHistory ? "chevron-up" : "chevron-down"} size={16} color={C.textMuted} />
+            </View>
+          </Pressable>
 
-          {isLoading ? (
+          {showHistory && isLoading ? (
             <ActivityIndicator color={C.primary} style={{ marginTop: 20 }} />
-          ) : historyRuns.length === 0 ? (
+          ) : showHistory && historyRuns.length === 0 ? (
             <View style={s.emptyCard}>
               {!ghostSoloDone && (
                 <View style={s.ghostHistoryCard}>
@@ -1090,12 +1112,35 @@ export default function SoloScreen() {
                 <Text style={s.emptyCtaBtnText}>{activityFilter === "ride" ? "Track New Ride" : "Track New Run"}</Text>
               </Pressable>
             </View>
-          ) : (
-            historyRuns.map((run) => {
-              const badge = runBadges[run.id];
-              const label = run.title || `${formatDistance(run.distance_miles)} mi ${run.activity_type === "ride" ? "ride" : "run"}`;
-              const isExpanded = expandedRunId === run.id;
-              return (
+          ) : showHistory ? (
+            <>
+              {/* Filter chips */}
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4, paddingHorizontal: 2 }} style={{ marginBottom: 10 }}>
+                {(["all", "favorites", "longest", "fastest"] as const).map((f) => {
+                  const labels = { all: "All", favorites: "Favorites", longest: "Longest", fastest: "Fastest" };
+                  const active = historyFilter === f;
+                  return (
+                    <Pressable
+                      key={f}
+                      style={[s.historyFilterChip, active && s.historyFilterChipActive]}
+                      onPress={() => { setHistoryFilter(f); Haptics.selectionAsync(); }}
+                    >
+                      <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: active ? C.primary : C.textSecondary }}>{labels[f]}</Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+              {displayedRuns.length === 0 ? (
+                <View style={{ padding: 16, alignItems: "center" }}>
+                  <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textMuted, textAlign: "center" }}>
+                    {historyFilter === "favorites" ? "No starred runs yet — tap ★ to save a favourite" : "No runs to show"}
+                  </Text>
+                </View>
+              ) : displayedRuns.map((run) => {
+                const badge = runBadges[run.id];
+                const label = run.title || `${formatDistance(run.distance_miles)} mi ${run.activity_type === "ride" ? "ride" : "run"}`;
+                const isExpanded = expandedRunId === run.id;
+                return (
                 <View key={run.id} style={s.historyCard}>
                   <View style={s.historyRow}>
                     {/* Left: tappable expand/delete area */}
@@ -1204,8 +1249,9 @@ export default function SoloScreen() {
                   )}
                 </View>
               );
-            })
-          )}
+            })}
+            </>
+          ) : null}
         </View>
       </ScrollView>
 
@@ -1765,6 +1811,14 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
 
   section: { marginBottom: 24 },
   sectionTitle: { fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text, marginBottom: 12 },
+  historyHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
+  historyCountBadge: { backgroundColor: C.primaryMuted, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
+  historyCountTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.primary },
+  historyFilterChip: {
+    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
+    backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
+  },
+  historyFilterChipActive: { backgroundColor: C.primaryMuted, borderColor: C.primary },
 
   rankCard: {
     backgroundColor: C.surface,
