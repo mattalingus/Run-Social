@@ -14,6 +14,7 @@ import {
   KeyboardAvoidingView,
 } from "react-native";
 import MapView, { Marker } from "react-native-maps";
+import Svg, { Polyline as SvgPolyline } from "react-native-svg";
 import * as Location from "expo-location";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { router, useLocalSearchParams } from "expo-router";
@@ -40,6 +41,40 @@ const PRIVACY_OPTIONS = [
   { value: "friends", label: "Friends Only",  icon: "users",   desc: "Your friends see this" },
   { value: "crew",    label: "Crew",          icon: "shield",  desc: "Crew members only" },
 ];
+
+type RoutePoint = { latitude: number; longitude: number };
+
+function normalizeRouteThumb(pts: RoutePoint[], w: number, h: number): string {
+  if (pts.length < 2) return "";
+  const lats = pts.map(p => p.latitude);
+  const lngs = pts.map(p => p.longitude);
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+  const pad = 8;
+  const rngLat = maxLat - minLat || 0.001;
+  const rngLng = maxLng - minLng || 0.001;
+  return pts.map(p => {
+    const x = pad + ((p.longitude - minLng) / rngLng) * (w - pad * 2);
+    const y = (h - pad) - ((p.latitude - minLat) / rngLat) * (h - pad * 2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+}
+
+function RouteThumb({ path, primary, size = 60 }: { path: RoutePoint[] | null; primary: string; size?: number }) {
+  const pts = normalizeRouteThumb(path || [], size, size);
+  return (
+    <View style={{ width: size, height: size, borderRadius: 10, backgroundColor: "#0D1510", overflow: "hidden", borderWidth: 1, borderColor: primary + "33", alignItems: "center", justifyContent: "center" }}>
+      {pts ? (
+        <Svg width={size} height={size}>
+          <SvgPolyline points={pts} fill="none" stroke={primary + "50"} strokeWidth={7} strokeLinecap="round" strokeLinejoin="round" />
+          <SvgPolyline points={pts} fill="none" stroke={primary} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+        </Svg>
+      ) : (
+        <Ionicons name="map-outline" size={22} color={primary + "40"} />
+      )}
+    </View>
+  );
+}
 
 export default function CreateRunScreen() {
   const { C } = useTheme();
@@ -114,6 +149,9 @@ export default function CreateRunScreen() {
   const [selectedCrewId, setSelectedCrewId] = useState<string | null>(params.crewId ?? null);
 
   const [selectedSavedPathId, setSelectedSavedPathId] = useState<string | null>(null);
+  const [showPathPicker, setShowPathPicker] = useState(false);
+  const [pathSearch, setPathSearch] = useState("");
+  const [pathFilter, setPathFilter] = useState<"recent" | "az">("recent");
 
   const { data: myCrews = [] } = useQuery<{ id: string; name: string; emoji?: string }[]>({
     queryKey: ["/api/crews"],
@@ -121,7 +159,7 @@ export default function CreateRunScreen() {
     enabled: !!user,
   });
 
-  const { data: mySavedPaths = [] } = useQuery<{ id: string; name: string; distance_miles: number; activity_type: string }[]>({
+  const { data: mySavedPaths = [] } = useQuery<{ id: string; name: string; distance_miles: number; activity_type: string; route_path: RoutePoint[] | null }[]>({
     queryKey: ["/api/saved-paths"],
     staleTime: 60_000,
     enabled: !!user,
@@ -487,43 +525,35 @@ export default function CreateRunScreen() {
           </Pressable>
         </View>
 
-        {/* Saved Route picker */}
-        {mySavedPaths.filter((p) => p.activity_type === activityType).length > 0 && (
-          <View style={styles.field}>
-            <Text style={styles.label}>Route (optional)</Text>
-            {selectedSavedPathId ? (
-              <Pressable
-                style={styles.selectedPathRow}
-                onPress={() => { setSelectedSavedPathId(null); Haptics.selectionAsync(); }}
-              >
-                <Feather name="map" size={14} color={C.primary} />
-                <Text style={styles.selectedPathTxt} numberOfLines={1}>
-                  {mySavedPaths.find((p) => p.id === selectedSavedPathId)?.name ?? "Selected route"}
-                </Text>
-                <Feather name="x" size={14} color={C.textMuted} />
-              </Pressable>
-            ) : (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4 }}>
-                {mySavedPaths.filter((p) => p.activity_type === activityType).map((p) => (
-                  <Pressable
-                    key={p.id}
-                    style={styles.pathPill}
-                    onPress={() => { setSelectedSavedPathId(p.id); Haptics.selectionAsync(); }}
-                  >
-                    <Feather name="map" size={12} color={C.textSecondary} />
-                    <Text style={styles.pathPillName} numberOfLines={1}>{p.name}</Text>
-                    <Text style={styles.pathPillDist}>{p.distance_miles.toFixed(1)}mi</Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            )}
-          </View>
-        )}
-
-        {/* Pace & Distance — pace groups for crew, ranges for public runs */}
+        {/* Route + Planned Distance — side by side for crew, stacked for public */}
         {isCrew ? (
-          <>
-            <View style={styles.field}>
+          <View style={[styles.field, { flexDirection: "row", gap: 10 }]}>
+            {/* Route button */}
+            <View style={{ flex: 1 }}>
+              <Text style={styles.label}>Route (optional)</Text>
+              {selectedSavedPathId ? (
+                <Pressable
+                  style={{ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: C.primaryMuted, borderRadius: 12, borderWidth: 1, borderColor: C.primary + "55", paddingHorizontal: 12, paddingVertical: 11 }}
+                  onPress={() => { setSelectedSavedPathId(null); Haptics.selectionAsync(); }}
+                >
+                  <Feather name="map" size={13} color={C.primary} />
+                  <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.primary, flex: 1 }} numberOfLines={1}>
+                    {mySavedPaths.find(p => p.id === selectedSavedPathId)?.name ?? "Selected"}
+                  </Text>
+                  <Feather name="x" size={13} color={C.primary} />
+                </Pressable>
+              ) : (
+                <Pressable
+                  style={{ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: C.surface, borderRadius: 12, borderWidth: 1, borderColor: C.border, paddingHorizontal: 12, paddingVertical: 11 }}
+                  onPress={() => { setShowPathPicker(true); Haptics.selectionAsync(); }}
+                >
+                  <Feather name="map" size={13} color={C.textMuted} />
+                  <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textMuted }}>Saved Paths</Text>
+                </Pressable>
+              )}
+            </View>
+            {/* Planned Distance */}
+            <View style={{ flex: 1 }}>
               <Text style={styles.label}>Planned Distance (mi)</Text>
               <TextInput
                 style={styles.input}
@@ -534,6 +564,37 @@ export default function CreateRunScreen() {
                 placeholderTextColor={C.textMuted}
               />
             </View>
+          </View>
+        ) : (
+          /* Public run — route button full-width above distance range */
+          <View style={styles.field}>
+            <Text style={styles.label}>Route (optional)</Text>
+            {selectedSavedPathId ? (
+              <Pressable
+                style={{ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: C.primaryMuted, borderRadius: 12, borderWidth: 1, borderColor: C.primary + "55", paddingHorizontal: 12, paddingVertical: 11 }}
+                onPress={() => { setSelectedSavedPathId(null); Haptics.selectionAsync(); }}
+              >
+                <Feather name="map" size={13} color={C.primary} />
+                <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.primary, flex: 1 }} numberOfLines={1}>
+                  {mySavedPaths.find(p => p.id === selectedSavedPathId)?.name ?? "Selected"}
+                </Text>
+                <Feather name="x" size={13} color={C.primary} />
+              </Pressable>
+            ) : (
+              <Pressable
+                style={{ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: C.surface, borderRadius: 12, borderWidth: 1, borderColor: C.border, paddingHorizontal: 12, paddingVertical: 11 }}
+                onPress={() => { setShowPathPicker(true); Haptics.selectionAsync(); }}
+              >
+                <Feather name="map" size={13} color={C.textMuted} />
+                <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textMuted }}>Saved Paths</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
+
+        {/* Pace & Distance — pace groups for crew, ranges for public runs */}
+        {isCrew ? (
+          <>
 
             {/* Pace Groups builder */}
             <View style={styles.field}>
@@ -917,6 +978,92 @@ export default function CreateRunScreen() {
           </View>
         </Modal>
       )}
+
+      {/* ── Saved Paths Picker ────────────────────────────────────────────────── */}
+      {showPathPicker && (
+        <Modal visible transparent animationType="slide" onRequestClose={() => setShowPathPicker(false)}>
+          <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "#00000088" }}>
+            <Pressable style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} onPress={() => setShowPathPicker(false)} />
+            <View style={{ backgroundColor: C.bg, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 12, paddingBottom: insets.bottom + 16, maxHeight: "85%" }}>
+              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: C.border, alignSelf: "center", marginBottom: 14 }} />
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, marginBottom: 14 }}>
+                <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text }}>Saved Paths</Text>
+                <Pressable onPress={() => setShowPathPicker(false)} hitSlop={12}>
+                  <Feather name="x" size={20} color={C.textSecondary} />
+                </Pressable>
+              </View>
+              {/* Search */}
+              <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: C.surface, borderRadius: 12, borderWidth: 1, borderColor: C.border, marginHorizontal: 20, paddingHorizontal: 12, paddingVertical: 8, gap: 8, marginBottom: 12 }}>
+                <Feather name="search" size={14} color={C.textMuted} />
+                <TextInput
+                  style={{ flex: 1, fontFamily: "Outfit_400Regular", fontSize: 14, color: C.text }}
+                  placeholder="Search paths…"
+                  placeholderTextColor={C.textMuted}
+                  value={pathSearch}
+                  onChangeText={setPathSearch}
+                  autoCorrect={false}
+                />
+                {pathSearch.length > 0 && (
+                  <Pressable onPress={() => setPathSearch("")} hitSlop={8}>
+                    <Feather name="x-circle" size={14} color={C.textMuted} />
+                  </Pressable>
+                )}
+              </View>
+              {/* Toggle */}
+              <View style={{ flexDirection: "row", gap: 8, paddingHorizontal: 20, marginBottom: 14 }}>
+                {(["recent", "az"] as const).map((f) => (
+                  <Pressable
+                    key={f}
+                    onPress={() => { setPathFilter(f); Haptics.selectionAsync(); }}
+                    style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: pathFilter === f ? C.primary : C.border, backgroundColor: pathFilter === f ? C.primaryMuted : C.surface }}
+                  >
+                    <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: pathFilter === f ? C.primary : C.textMuted }}>
+                      {f === "recent" ? "Recent" : "A–Z"}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              {/* List */}
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 10, paddingBottom: 8 }}>
+                {(() => {
+                  let paths = mySavedPaths.filter(p => p.activity_type === activityType);
+                  if (pathSearch.trim()) paths = paths.filter(p => p.name.toLowerCase().includes(pathSearch.toLowerCase()));
+                  if (pathFilter === "az") paths = [...paths].sort((a, b) => a.name.localeCompare(b.name));
+                  if (paths.length === 0) return (
+                    <View style={{ alignItems: "center", paddingVertical: 32, gap: 8 }}>
+                      <Feather name="map" size={32} color={C.border} />
+                      <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textMuted }}>
+                        {pathSearch ? "No paths match your search" : `No saved ${activityType} paths yet`}
+                      </Text>
+                    </View>
+                  );
+                  return paths.map((p) => (
+                    <Pressable
+                      key={p.id}
+                      style={{ flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: C.surface, borderRadius: 14, borderWidth: 1, borderColor: C.border, padding: 10 }}
+                      onPress={() => {
+                        setSelectedSavedPathId(p.id);
+                        if (p.distance_miles) setPlannedDistance(p.distance_miles.toFixed(2));
+                        setShowPathPicker(false);
+                        Haptics.selectionAsync();
+                      }}
+                    >
+                      <RouteThumb path={p.route_path} primary={C.primary} size={60} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.text }} numberOfLines={1}>{p.name}</Text>
+                        {p.distance_miles != null && (
+                          <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, marginTop: 2 }}>{p.distance_miles.toFixed(1)} mi</Text>
+                        )}
+                      </View>
+                      <Feather name="chevron-right" size={16} color={C.textMuted} />
+                    </Pressable>
+                  ));
+                })()}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -1046,19 +1193,6 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 13,
   },
   locationBtnTxt: { flex: 1, fontFamily: "Outfit_400Regular", fontSize: 15, color: C.textMuted },
-  pathPill: {
-    flexDirection: "row", alignItems: "center", gap: 6,
-    backgroundColor: C.card, borderRadius: 20, borderWidth: 1, borderColor: C.border,
-    paddingHorizontal: 12, paddingVertical: 8,
-  },
-  pathPillName: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.text, maxWidth: 120 },
-  pathPillDist: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted },
-  selectedPathRow: {
-    flexDirection: "row", alignItems: "center", gap: 10,
-    backgroundColor: C.primaryMuted, borderRadius: 12, borderWidth: 1, borderColor: C.primary + "44",
-    paddingHorizontal: 14, paddingVertical: 12,
-  },
-  selectedPathTxt: { flex: 1, fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.primary },
   pickerSheet: { flex: 1, backgroundColor: C.bg },
   pickerHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: C.border, alignSelf: "center", marginTop: 8, marginBottom: 4 },
   pickerHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.border },
