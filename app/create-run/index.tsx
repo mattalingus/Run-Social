@@ -75,28 +75,31 @@ export default function CreateRunScreen() {
   const [isGeocodingPin, setIsGeocodingPin] = useState(false);
   const [amPm, setAmPm] = useState<"AM" | "PM">("AM");
 
-  // Split date/time fields (T003)
-  const [dateM, setDateM] = useState("");
-  const [dateD, setDateD] = useState("");
-  const [dateY, setDateY] = useState("");
-  const [timeH, setTimeH] = useState("");
-  const [timeMin, setTimeMin] = useState("");
-  const dateDRef = useRef<TextInput>(null);
-  const dateYRef = useRef<TextInput>(null);
-  const timeMinRef = useRef<TextInput>(null);
+  function handleDateChange(text: string) {
+    const digits = text.replace(/\D/g, "").slice(0, 6);
+    let formatted = digits;
+    if (digits.length > 2) formatted = digits.slice(0, 2) + "/" + digits.slice(2);
+    if (digits.length > 4) formatted = digits.slice(0, 2) + "/" + digits.slice(2, 4) + "/" + digits.slice(4);
+    setDate(formatted);
+  }
 
-  // Sync split fields → combined date/time strings used by parsers
-  useEffect(() => {
-    const m = dateM.padStart(2, "0");
-    const d = dateD.padStart(2, "0");
-    const y = dateY;
-    if (m && d && y) setDate(`${m}/${d}/${y}`);
-  }, [dateM, dateD, dateY]);
+  function autoFormatTime(digits: string): string {
+    if (digits.length <= 1) return digits;
+    const first = parseInt(digits[0], 10);
+    const second = parseInt(digits[1], 10);
+    if (digits.length === 2) {
+      if (first > 1 || (first === 1 && second > 2)) return digits[0] + ":" + digits[1];
+      return digits;
+    }
+    if (digits.length === 3) return digits[0] + ":" + digits.slice(1);
+    if (first === 1 && second <= 2) return digits.slice(0, 2) + ":" + digits.slice(2, 4);
+    return digits[0] + ":" + digits.slice(1, 3);
+  }
 
-  useEffect(() => {
-    if (timeH && timeMin) setTime(`${timeH}:${timeMin.padStart(2, "0")}`);
-    else if (timeH) setTime(timeH);
-  }, [timeH, timeMin]);
+  function handleTimeChange(text: string) {
+    const digits = text.replace(/\D/g, "").slice(0, 4);
+    setTime(autoFormatTime(digits));
+  }
   const [plannedDistance, setPlannedDistance] = useState(params.pathDistance ?? "3");
   const [plannedPace, setPlannedPace] = useState("9");
   const [paceGroups, setPaceGroups] = useState<{ label: string; minPace: string; maxPace: string }[]>([
@@ -424,114 +427,37 @@ export default function CreateRunScreen() {
 
         <View style={styles.field}>
           <Text style={styles.label}>Date & Time *</Text>
-          {/* Date row: MM / DD / YY */}
-          <View style={{ flexDirection: "row", gap: 8, marginBottom: 8 }}>
-            <View style={{ flex: 1, alignItems: "center" }}>
-              <Text style={styles.splitLabel}>MM</Text>
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            <TextInput
+              style={[styles.input, { flex: 1 }]}
+              value={date}
+              onChangeText={handleDateChange}
+              placeholder="MM/DD/YY"
+              placeholderTextColor={C.textMuted}
+              keyboardType="number-pad"
+              maxLength={8}
+            />
+            <View style={{ flex: 1, flexDirection: "row", gap: 6 }}>
               <TextInput
-                style={styles.splitInput}
-                value={dateM}
-                onChangeText={(t) => {
-                  const digits = t.replace(/\D/g, "").slice(0, 2);
-                  setDateM(digits);
-                  if (digits.length === 2) dateDRef.current?.focus();
-                }}
-                placeholder="03"
+                style={[styles.input, { flex: 1 }]}
+                value={time}
+                onChangeText={handleTimeChange}
+                placeholder="7:30"
                 placeholderTextColor={C.textMuted}
                 keyboardType="number-pad"
-                maxLength={2}
-                returnKeyType="next"
-                onSubmitEditing={() => dateDRef.current?.focus()}
+                maxLength={5}
               />
-            </View>
-            <View style={{ flex: 1, alignItems: "center" }}>
-              <Text style={styles.splitLabel}>DD</Text>
-              <TextInput
-                ref={dateDRef}
-                style={styles.splitInput}
-                value={dateD}
-                onChangeText={(t) => {
-                  const digits = t.replace(/\D/g, "").slice(0, 2);
-                  setDateD(digits);
-                  if (digits.length === 2) dateYRef.current?.focus();
-                }}
-                placeholder="15"
-                placeholderTextColor={C.textMuted}
-                keyboardType="number-pad"
-                maxLength={2}
-                returnKeyType="next"
-                onSubmitEditing={() => dateYRef.current?.focus()}
-              />
-            </View>
-            <View style={{ flex: 1, alignItems: "center" }}>
-              <Text style={styles.splitLabel}>YY</Text>
-              <TextInput
-                ref={dateYRef}
-                style={styles.splitInput}
-                value={dateY}
-                onChangeText={(t) => {
-                  const digits = t.replace(/\D/g, "").slice(0, 2);
-                  setDateY(digits);
-                }}
-                placeholder="26"
-                placeholderTextColor={C.textMuted}
-                keyboardType="number-pad"
-                maxLength={2}
-                returnKeyType="next"
-              />
-            </View>
-          </View>
-          {/* Time row: HH : MM + AM/PM */}
-          <View style={{ flexDirection: "row", gap: 8, alignItems: "flex-end" }}>
-            <View style={{ flex: 1, alignItems: "center" }}>
-              <Text style={styles.splitLabel}>Hour</Text>
-              <TextInput
-                style={styles.splitInput}
-                value={timeH}
-                onChangeText={(t) => {
-                  const digits = t.replace(/\D/g, "").slice(0, 2);
-                  setTimeH(digits);
-                  if (digits.length === 2) timeMinRef.current?.focus();
-                }}
-                placeholder="7"
-                placeholderTextColor={C.textMuted}
-                keyboardType="number-pad"
-                maxLength={2}
-                returnKeyType="next"
-                onSubmitEditing={() => timeMinRef.current?.focus()}
-              />
-            </View>
-            <View style={{ flex: 1, alignItems: "center" }}>
-              <Text style={styles.splitLabel}>Min</Text>
-              <TextInput
-                ref={timeMinRef}
-                style={styles.splitInput}
-                value={timeMin}
-                onChangeText={(t) => {
-                  const digits = t.replace(/\D/g, "").slice(0, 2);
-                  setTimeMin(digits);
-                }}
-                placeholder="30"
-                placeholderTextColor={C.textMuted}
-                keyboardType="number-pad"
-                maxLength={2}
-              />
-            </View>
-            <View style={{ flexDirection: "column", gap: 4, flex: 1 }}>
-              {(["AM", "PM"] as const).map((period) => (
-                <Pressable
-                  key={period}
-                  onPress={() => { setAmPm(period); Haptics.selectionAsync(); }}
-                  style={{
-                    paddingVertical: 8, borderRadius: 9, borderWidth: 1,
-                    alignItems: "center", justifyContent: "center",
-                    backgroundColor: amPm === period ? C.primary + "33" : C.surface,
-                    borderColor: amPm === period ? C.primary : C.border,
-                  }}
-                >
-                  <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: amPm === period ? C.primary : C.textMuted }}>{period}</Text>
-                </Pressable>
-              ))}
+              <View style={{ flexDirection: "column", gap: 4 }}>
+                {(["AM", "PM"] as const).map((period) => (
+                  <Pressable
+                    key={period}
+                    style={{ flex: 1, paddingHorizontal: 10, borderRadius: 9, borderWidth: 1, alignItems: "center", justifyContent: "center", backgroundColor: amPm === period ? C.primaryMuted : C.surface, borderColor: amPm === period ? C.primary : C.border }}
+                    onPress={() => { setAmPm(period); Haptics.selectionAsync(); }}
+                  >
+                    <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: amPm === period ? C.primary : C.textMuted }}>{period}</Text>
+                  </Pressable>
+                ))}
+              </View>
             </View>
           </View>
         </View>
