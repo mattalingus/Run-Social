@@ -124,6 +124,7 @@ interface Run {
   run_style?: string;
   activity_type?: string;
   crew_id?: string | null;
+  pace_groups?: { label: string; minPace: number; maxPace: number }[] | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -758,10 +759,17 @@ function RunCard({
           </View>
 
           <View style={s.cardStats}>
-            <View style={s.statLg}>
-              <Ionicons name={run.activity_type === "ride" ? "bicycle" : "walk"} size={12} color={getPaceColor(run.min_pace, run.max_pace, C)} />
-              <Text numberOfLines={1} style={[s.statLabel, { color: getPaceColor(run.min_pace, run.max_pace, C) }]}>{run.min_pace === run.max_pace ? toDisplayPace(run.min_pace, distUnit) : `${toDisplayPace(run.min_pace, distUnit)}–${toDisplayPace(run.max_pace, distUnit)}`}</Text>
-            </View>
+            {run.crew_id && run.pace_groups && run.pace_groups.length > 0 ? (
+              <View style={[s.statLg, { backgroundColor: C.primaryMuted, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1, borderColor: C.primary + "44" }]}>
+                <Ionicons name="people" size={11} color={C.primary} />
+                <Text numberOfLines={1} style={[s.statLabel, { color: C.primary }]}>Pace Groups</Text>
+              </View>
+            ) : (
+              <View style={s.statLg}>
+                <Ionicons name={run.activity_type === "ride" ? "bicycle" : "walk"} size={12} color={getPaceColor(run.min_pace, run.max_pace, C)} />
+                <Text numberOfLines={1} style={[s.statLabel, { color: getPaceColor(run.min_pace, run.max_pace, C) }]}>{run.min_pace === run.max_pace ? toDisplayPace(run.min_pace, distUnit) : `${toDisplayPace(run.min_pace, distUnit)}–${toDisplayPace(run.max_pace, distUnit)}`}</Text>
+              </View>
+            )}
             <View style={s.statDiv} />
             <View style={s.statLg}>
               <Feather name="target" size={12} color={C.blue} />
