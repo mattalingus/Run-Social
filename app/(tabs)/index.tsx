@@ -760,7 +760,7 @@ function RunCard({
           <View style={s.cardStats}>
             <View style={s.stat}>
               <Ionicons name={run.activity_type === "ride" ? "bicycle" : "walk"} size={12} color={getPaceColor(run.min_pace, run.max_pace, C)} />
-              <Text numberOfLines={1} style={[s.statLabel, { color: getPaceColor(run.min_pace, run.max_pace, C) }]}>{run.min_pace === run.max_pace ? toDisplayPace(run.min_pace, distUnit) : `${toDisplayPace(run.min_pace, distUnit)}–${toDisplayPace(run.max_pace, distUnit)}`}</Text>
+              <Text style={[s.statLabel, { color: getPaceColor(run.min_pace, run.max_pace, C) }]}>{run.min_pace === run.max_pace ? toDisplayPace(run.min_pace, distUnit) : `${toDisplayPace(run.min_pace, distUnit)}–${toDisplayPace(run.max_pace, distUnit)}`}</Text>
             </View>
             <View style={s.statDiv} />
             <View style={s.stat}>
