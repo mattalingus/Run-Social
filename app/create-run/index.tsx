@@ -880,15 +880,15 @@ export default function CreateRunScreen() {
                     setLocationLng(String(pickerLng));
                     setLocationName(pickerName.trim());
                     setLocationPickerOpen(false);
-                    if (!selectedSavedPathId) {
-                      const match = mySavedPaths.find(p =>
-                        p.route_path && p.route_path.length > 0 &&
-                        haversineKm(pickerLat, pickerLng, p.route_path[0].latitude, p.route_path[0].longitude) < 0.3
-                      );
-                      if (match) {
-                        setSelectedSavedPathId(match.id);
-                        if (match.distance_miles) setPlannedDistance(match.distance_miles.toFixed(2));
-                      }
+                    const match = mySavedPaths.find(p =>
+                      p.route_path && p.route_path.length > 0 &&
+                      haversineKm(pickerLat, pickerLng, p.route_path[0].latitude, p.route_path[0].longitude) < 0.3
+                    );
+                    if (match) {
+                      setSelectedSavedPathId(match.id);
+                      if (match.distance_miles) setPlannedDistance(match.distance_miles.toFixed(2));
+                    } else {
+                      setSelectedSavedPathId(null);
                     }
                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                   }}
@@ -1062,6 +1062,14 @@ export default function CreateRunScreen() {
                       onPress={() => {
                         setSelectedSavedPathId(p.id);
                         if (p.distance_miles) setPlannedDistance(p.distance_miles.toFixed(2));
+                        if (p.route_path && p.route_path.length > 0) {
+                          const start = p.route_path[0];
+                          setLocationLat(String(start.latitude));
+                          setLocationLng(String(start.longitude));
+                          setPickerLat(start.latitude);
+                          setPickerLng(start.longitude);
+                          reverseGeocode(start.latitude, start.longitude);
+                        }
                         setShowPathPicker(false);
                         Haptics.selectionAsync();
                       }}

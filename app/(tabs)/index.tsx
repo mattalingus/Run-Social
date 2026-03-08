@@ -2333,13 +2333,16 @@ export default function DiscoverScreen() {
                     setHLocationLat(pinCoord.latitude);
                     setHLocationLng(pinCoord.longitude);
                     const match = hSavedPaths.find(p =>
-                      p.route_path && p.route_path.length > 0 && !hSavedPathId &&
+                      p.route_path && p.route_path.length > 0 &&
                       haversine(pinCoord.latitude, pinCoord.longitude, p.route_path[0].latitude, p.route_path[0].longitude) < 0.3
                     );
                     if (match) {
                       setHSavedPathId(match.id);
                       setHSavedPathName(match.name);
                       if (match.distance_miles) setHDist(match.distance_miles.toFixed(2));
+                    } else {
+                      setHSavedPathId(null);
+                      setHSavedPathName(null);
                     }
                   }
                   setHostPage("form");
@@ -2457,6 +2460,13 @@ export default function DiscoverScreen() {
                         setHSavedPathId(p.id);
                         setHSavedPathName(p.name);
                         if (p.distance_miles) setHDist(p.distance_miles.toFixed(2));
+                        if (p.route_path && p.route_path.length > 0) {
+                          const start = p.route_path[0];
+                          setHLocationLat(start.latitude);
+                          setHLocationLng(start.longitude);
+                          setPinCoord({ latitude: start.latitude, longitude: start.longitude });
+                          reverseGeocode(start.latitude, start.longitude);
+                        }
                         setHostPage("form");
                         Haptics.selectionAsync();
                       }}
