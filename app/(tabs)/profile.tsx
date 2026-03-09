@@ -124,11 +124,6 @@ function formatDisplayDate(d: string) {
   return new Date(d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
 
-function formatPaceSolo(p: number) {
-  const m = Math.floor(p);
-  const s = Math.round((p - m) * 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
 
 function fmtTotalTime(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -201,10 +196,6 @@ interface TopRunsData {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function fmtPace(p: number | null) {
-  if (!p || p <= 0) return "—";
-  return `${Math.floor(p)}:${Math.round((p % 1) * 60).toString().padStart(2, "0")}/mi`;
-}
 
 function fmtDate(d: string) {
   const date = new Date(d);
@@ -890,7 +881,7 @@ export default function ProfileScreen() {
           onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setTopRunsModal("fastest"); }}
         >
           <Text style={styles.statNum}>
-            {computedTopRuns.fastest[0]?.pace != null ? fmtPace(computedTopRuns.fastest[0].pace) : "—"}
+            {computedTopRuns.fastest[0]?.pace != null ? toDisplayPace(computedTopRuns.fastest[0].pace, distUnit) : "—"}
           </Text>
           <Text style={styles.statName}>Fastest Pace</Text>
           <Feather name="chevron-right" size={10} color={C.textMuted} style={{ marginTop: 2 }} />
@@ -1110,7 +1101,7 @@ export default function ProfileScreen() {
                 </View>
                 <View>
                   <Text style={styles.historyTitle} numberOfLines={1}>{run.title}</Text>
-                  <Text style={styles.historyMeta}>{formatDate(run.date)} · {run.min_distance === run.max_distance ? formatDistance(run.min_distance) : `${formatDistance(run.min_distance)}–${formatDistance(run.max_distance)}`} mi</Text>
+                  <Text style={styles.historyMeta}>{formatDate(run.date)} · {run.min_distance === run.max_distance ? toDisplayDist(run.min_distance, distUnit).split(" ")[0] : `${toDisplayDist(run.min_distance, distUnit).split(" ")[0]}–${toDisplayDist(run.max_distance, distUnit).split(" ")[0]}`} {unitLabel(distUnit)}</Text>
                 </View>
               </View>
               {(() => {
@@ -1213,7 +1204,7 @@ export default function ProfileScreen() {
         <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 24 }]}>
           <Text style={styles.modalTitle}>Set Mileage Goals</Text>
           <View style={styles.modalField}>
-            <Text style={styles.modalLabel}>Monthly Goal (miles)</Text>
+            <Text style={styles.modalLabel}>Monthly Goal ({unitLabel(distUnit)})</Text>
             <TextInput
               style={styles.modalInput}
               value={monthlyGoal}
@@ -1223,7 +1214,7 @@ export default function ProfileScreen() {
             />
           </View>
           <View style={styles.modalField}>
-            <Text style={styles.modalLabel}>Yearly Goal (miles)</Text>
+            <Text style={styles.modalLabel}>Yearly Goal ({unitLabel(distUnit)})</Text>
             <TextInput
               style={styles.modalInput}
               value={yearlyGoal}
@@ -1401,7 +1392,7 @@ export default function ProfileScreen() {
                     </View>
                     <View style={styles.friendInfo}>
                       <Text style={styles.friendName}>{f.name}</Text>
-                      <Text style={styles.friendStat}>{f.completed_runs} runs · {formatDistance(f.total_miles)} mi</Text>
+                      <Text style={styles.friendStat}>{f.completed_runs} runs · {toDisplayDist(f.total_miles, distUnit)}</Text>
                     </View>
                   </Pressable>
                   <Pressable
@@ -1505,7 +1496,7 @@ export default function ProfileScreen() {
                       <View style={styles.friendInfo}>
                         <Text style={styles.friendName}>{u.name}</Text>
                         <Text style={styles.friendStat}>
-                          {u.username ? `@${u.username}  ·  ` : ""}{u.completed_runs} runs · {formatDistance(u.total_miles)} mi
+                          {u.username ? `@${u.username}  ·  ` : ""}{u.completed_runs} runs · {toDisplayDist(u.total_miles, distUnit)}
                         </Text>
                       </View>
                     </Pressable>
@@ -1530,7 +1521,7 @@ export default function ProfileScreen() {
 
           {friendSearch.length >= 2 && searchResults.length === 0 && (
             <View style={styles.searchEmpty}>
-              <Text style={styles.searchEmptyTxt}>No runners found for "{friendSearch}"</Text>
+              <Text style={styles.searchEmptyTxt}>No users found for "{friendSearch}"</Text>
             </View>
           )}
 
@@ -1615,7 +1606,7 @@ export default function ProfileScreen() {
                 {filtered.map((run) => {
                   const isSolo = run.type === "solo";
                   const typeColor = TYPE_COLORS[run.type];
-                  const label = run.title || `${formatDistance(run.distance_miles)} mi ${run.activity_type === "ride" ? "ride" : "run"}`;
+                  const label = run.title || `${toDisplayDist(run.distance_miles, distUnit)} ${run.activity_type === "ride" ? "ride" : "run"}`;
                   const histKey = `${run.type}-${run.id}`;
                   const isExpanded = expandedHistoryId === histKey;
                   return (
@@ -1650,7 +1641,7 @@ export default function ProfileScreen() {
                             </View>
                             <Text style={styles.soloHistMeta}>
                               {formatDisplayDate(run.date)}
-                              {run.pace_min_per_mile ? ` · ${formatPaceSolo(run.pace_min_per_mile)}/mi` : ""}
+                              {run.pace_min_per_mile ? ` · ${toDisplayPace(run.pace_min_per_mile, distUnit)}` : ""}
                               {run.duration_seconds ? ` · ${formatDurationSolo(run.duration_seconds)}` : ""}
                               {!isSolo && run.host_name ? ` · ${run.is_host ? "You hosted" : `by ${run.host_name}`}` : ""}
                               {isSolo && run.elevation_gain_ft ? ` · ${Math.round(run.elevation_gain_ft)}ft elev` : ""}
@@ -1659,8 +1650,8 @@ export default function ProfileScreen() {
                         </View>
                         <View style={[styles.soloHistRight, { flexDirection: "row", alignItems: "center", gap: 6 }]}>
                           <View style={{ alignItems: "flex-end" }}>
-                            <Text style={styles.soloHistDist}>{formatDistance(run.distance_miles)}</Text>
-                            <Text style={styles.soloHistDistUnit}>mi</Text>
+                            <Text style={styles.soloHistDist}>{toDisplayDist(run.distance_miles, distUnit).split(" ")[0]}</Text>
+                            <Text style={styles.soloHistDistUnit}>{unitLabel(distUnit)}</Text>
                           </View>
                           {run.is_starred && <Ionicons name="star" size={12} color={C.gold} />}
                           <Feather name={isExpanded ? "chevron-up" : "chevron-down"} size={14} color={C.textMuted} />
@@ -1687,13 +1678,13 @@ export default function ProfileScreen() {
                               <View style={styles.soloStatItem}>
                                 <Feather name="zap" size={13} color={C.primary} />
                                 <Text style={styles.soloStatLabel}>Pace</Text>
-                                <Text style={styles.soloStatValue}>{formatPaceSolo(run.pace_min_per_mile)}/mi</Text>
+                                <Text style={styles.soloStatValue}>{toDisplayPace(run.pace_min_per_mile, distUnit)}</Text>
                               </View>
                             )}
                             <View style={styles.soloStatItem}>
                               <Feather name="map-pin" size={13} color={C.primary} />
                               <Text style={styles.soloStatLabel}>Distance</Text>
-                              <Text style={styles.soloStatValue}>{formatDistance(run.distance_miles)} mi</Text>
+                              <Text style={styles.soloStatValue}>{toDisplayDist(run.distance_miles, distUnit)}</Text>
                             </View>
                             {run.elevation_gain_ft != null && (
                               <View style={styles.soloStatItem}>
@@ -1714,7 +1705,7 @@ export default function ProfileScreen() {
                         <View style={[styles.soloStatPanel, { paddingVertical: 10 }]}>
                           {run.pace_min_per_mile != null && (
                             <Text style={[styles.soloHistMeta, { textAlign: "center" }]}>
-                              Pace: {formatPaceSolo(run.pace_min_per_mile)}/mi
+                              Pace: {toDisplayPace(run.pace_min_per_mile, distUnit)}
                               {run.duration_seconds ? `  ·  Duration: ${formatDurationSolo(run.duration_seconds)}` : ""}
                             </Text>
                           )}
@@ -1929,21 +1920,21 @@ export default function ProfileScreen() {
                   </View>
                   <View style={styles.topRunInfo}>
                     <Text style={styles.topRunTitle} numberOfLines={1}>
-                      {run.title || (run.run_type === "solo" ? "Solo run" : "Group run")}
+                      {run.title || (run.run_type === "solo" ? (profileActivity === "ride" ? "Solo ride" : "Solo run") : (profileActivity === "ride" ? "Group ride" : "Group run"))}
                     </Text>
                     <Text style={styles.topRunMeta}>
                       {run.date ? fmtDate(run.date) : ""}
-                      {run.pace ? ` · ${fmtPace(run.pace)}` : ""}
+                      {run.pace ? ` · ${toDisplayPace(run.pace, distUnit)}` : ""}
                     </Text>
                   </View>
                   <View style={styles.topRunStat}>
                     {topRunsModal === "longest" ? (
                       <>
-                        <Text style={styles.topRunStatNum}>{formatDistance(run.dist)}</Text>
-                        <Text style={styles.topRunStatUnit}>mi</Text>
+                        <Text style={styles.topRunStatNum}>{toDisplayDist(run.dist, distUnit).split(" ")[0]}</Text>
+                        <Text style={styles.topRunStatUnit}>{unitLabel(distUnit)}</Text>
                       </>
                     ) : (
-                      <Text style={styles.topRunStatNum}>{fmtPace(run.pace)}</Text>
+                      <Text style={styles.topRunStatNum}>{toDisplayPace(run.pace, distUnit)}</Text>
                     )}
                     <View style={[styles.topRunTypePill, { backgroundColor: run.run_type === "solo" ? C.primaryMuted : C.blue + "22" }]}>
                       <Text style={[styles.topRunTypeTxt, { color: run.run_type === "solo" ? C.primary : C.blue }]}>
