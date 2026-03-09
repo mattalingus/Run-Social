@@ -1927,7 +1927,7 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingTop: 12,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     borderTopWidth: 1,
     borderColor: C.border,
     maxHeight: "88%",

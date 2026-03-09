@@ -3765,7 +3765,7 @@ function makeFmStyles(C: ColorScheme) { return StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: C.border,
@@ -3782,7 +3782,7 @@ function makeFmStyles(C: ColorScheme) { return StyleSheet.create({
 
   scrollContent: { paddingBottom: 8 },
 
-  section: { paddingHorizontal: 24, paddingVertical: 20 },
+  section: { paddingHorizontal: 20, paddingVertical: 16 },
   sectionHead: {
     flexDirection: "row",
     alignItems: "center",
