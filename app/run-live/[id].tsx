@@ -90,6 +90,26 @@ export default function RunLiveScreen() {
   const [promotedToHost, setPromotedToHost] = useState(false);
   const wasHostRef = useRef(false);
 
+  // ── Server data ───────────────────────────────────────────────────────────
+
+  const { data: liveState } = useQuery<any>({
+    queryKey: ["/api/runs", id, "live"],
+    queryFn: async () => {
+      const res = await fetch(new URL(`/api/runs/${id}/live`, getApiUrl()).toString(), { credentials: "include" });
+      return res.json();
+    },
+    refetchInterval: 5000,
+    staleTime: 0,
+  });
+
+  const { data: run } = useQuery<any>({
+    queryKey: ["/api/runs", id],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/runs/${id}`);
+      return res.json();
+    },
+  });
+
   // Restore minimized state when screen mounts
   useEffect(() => {
     restore();
@@ -114,26 +134,6 @@ export default function RunLiveScreen() {
       return () => clearTimeout(t);
     }
   }, [presentConfirmed]);
-
-  // ── Server data ───────────────────────────────────────────────────────────
-
-  const { data: liveState } = useQuery<any>({
-    queryKey: ["/api/runs", id, "live"],
-    queryFn: async () => {
-      const res = await fetch(new URL(`/api/runs/${id}/live`, getApiUrl()).toString(), { credentials: "include" });
-      return res.json();
-    },
-    refetchInterval: 5000,
-    staleTime: 0,
-  });
-
-  const { data: run } = useQuery<any>({
-    queryKey: ["/api/runs", id],
-    queryFn: async () => {
-      const res = await apiRequest("GET", `/api/runs/${id}`);
-      return res.json();
-    },
-  });
 
   // Use liveState.hostId so host detection updates every 5s (auto-promotion)
   const isHost = (liveState?.hostId ?? run?.host_id) === user?.id;

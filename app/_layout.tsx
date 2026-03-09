@@ -34,7 +34,7 @@ try {
       shouldShowAlert: true,
       shouldPlaySound: true,
       shouldSetBadge: false,
-    }),
+    } as any),
   });
 } catch (_) {}
 
@@ -84,12 +84,12 @@ async function registerPushToken(userId: string) {
 function RootLayoutNav() {
   const { user, isLoading } = useAuth();
   const { C, theme } = useTheme();
-  const [fontsLoaded] = useFonts({ Outfit_400Regular, Outfit_600SemiBold, Outfit_700Bold, PlayfairDisplay_700Bold, DancingScript_700Bold, Nunito_800ExtraBold });
+  const [fontsLoaded, fontError] = useFonts({ Outfit_400Regular, Outfit_600SemiBold, Outfit_700Bold, PlayfairDisplay_700Bold, DancingScript_700Bold, Nunito_800ExtraBold });
   const splashHidden = useRef(false);
   const pushRegistered = useRef(false);
 
   useEffect(() => {
-    if (!isLoading && fontsLoaded) {
+    if (!isLoading && (fontsLoaded || fontError)) {
       if (!splashHidden.current) {
         splashHidden.current = true;
         SplashScreen.hideAsync();
@@ -98,7 +98,7 @@ function RootLayoutNav() {
         router.replace("/(auth)/login");
       }
     }
-  }, [isLoading, fontsLoaded, user]);
+  }, [isLoading, fontsLoaded, fontError, user]);
 
   // Register push token once when user logs in
   useEffect(() => {
@@ -129,7 +129,7 @@ function RootLayoutNav() {
     return () => { try { sub?.remove(); } catch (_) {} };
   }, []);
 
-  if (isLoading || !fontsLoaded) return null;
+  if (isLoading || (!fontsLoaded && !fontError)) return null;
 
   return (
     <>

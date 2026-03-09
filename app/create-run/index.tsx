@@ -118,31 +118,6 @@ export default function CreateRunScreen() {
   const [isGeocodingPin, setIsGeocodingPin] = useState(false);
   const [amPm, setAmPm] = useState<"AM" | "PM">("AM");
 
-  function handleDateChange(text: string) {
-    const digits = text.replace(/\D/g, "").slice(0, 6);
-    let formatted = digits;
-    if (digits.length > 2) formatted = digits.slice(0, 2) + "/" + digits.slice(2);
-    if (digits.length > 4) formatted = digits.slice(0, 2) + "/" + digits.slice(2, 4) + "/" + digits.slice(4);
-    setDate(formatted);
-  }
-
-  function autoFormatTime(digits: string): string {
-    if (digits.length <= 1) return digits;
-    const first = parseInt(digits[0], 10);
-    const second = parseInt(digits[1], 10);
-    if (digits.length === 2) {
-      if (first > 1 || (first === 1 && second > 2)) return digits[0] + ":" + digits[1];
-      return digits;
-    }
-    if (digits.length === 3) return digits[0] + ":" + digits.slice(1);
-    if (first === 1 && second <= 2) return digits.slice(0, 2) + ":" + digits.slice(2, 4);
-    return digits[0] + ":" + digits.slice(1, 3);
-  }
-
-  function handleTimeChange(text: string) {
-    const digits = text.replace(/\D/g, "").slice(0, 4);
-    setTime(autoFormatTime(digits));
-  }
   const [plannedDistance, setPlannedDistance] = useState(params.pathDistance ?? "3");
   const [plannedPace, setPlannedPace] = useState("9");
   const [paceGroups, setPaceGroups] = useState<{ label: string; minPace: string; maxPace: string }[]>([
@@ -944,7 +919,7 @@ export default function CreateRunScreen() {
                 onPress={() => {
                   setCrewSuccessModal(null);
                   if (router.canGoBack()) router.back();
-                  else router.replace("/(tabs)/");
+                  else router.replace("/(tabs)/" as any);
                 }}
               >
                 <Text style={styles.inviteDoneTxt}>Done</Text>

@@ -88,6 +88,9 @@ interface RunHistoryItem {
   activity_type?: string;
   privacy?: string;
   crew_id?: string | null;
+  my_final_distance?: number | null;
+  my_final_pace?: number | null;
+  my_route_path?: any[] | null;
 }
 
 type HistoryEventType = "solo" | "crew" | "public" | "friends";

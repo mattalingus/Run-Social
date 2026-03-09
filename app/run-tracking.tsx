@@ -325,7 +325,7 @@ export default function RunTrackingScreen() {
             body: "Vehicle speed detected — open the app to resume.",
           },
           trigger: null,
-        }).then((id: string) => { vehicleNotifIdRef.current = id; }).catch(() => {});
+        }).then((id) => { if (id) vehicleNotifIdRef.current = id; }).catch(() => {});
       }
     } else if (!isDriving && isDrivingRef.current) {
       isDrivingRef.current = false;

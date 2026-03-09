@@ -73,6 +73,7 @@ export default function LoginScreen() {
             <View style={styles.inputWrap}>
               <Feather name="user" size={16} color={C.textMuted} style={styles.inputIcon} />
               <TextInput
+                testID="identifier-input"
                 style={styles.input}
                 value={identifier}
                 onChangeText={setIdentifier}
@@ -89,6 +90,7 @@ export default function LoginScreen() {
             <View style={styles.inputWrap}>
               <Feather name="lock" size={16} color={C.textMuted} style={styles.inputIcon} />
               <TextInput
+                testID="password-input"
                 style={[styles.input, { flex: 1 }]}
                 value={password}
                 onChangeText={setPassword}
@@ -103,6 +105,7 @@ export default function LoginScreen() {
           </View>
 
           <Pressable
+            testID="login-submit"
             style={({ pressed }) => [styles.primaryBtn, { opacity: pressed || loading ? 0.85 : 1 }]}
             onPress={handleLogin}
             disabled={loading}

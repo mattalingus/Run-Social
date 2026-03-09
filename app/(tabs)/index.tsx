@@ -122,10 +122,12 @@ interface Run {
   host_photo?: string;
   crew_photo_url?: string | null;
   is_active?: boolean;
+  is_completed?: boolean;
   run_style?: string;
   activity_type?: string;
   crew_id?: string | null;
   pace_groups?: { label: string; minPace: number; maxPace: number }[] | null;
+  plan_count?: string;
 }
 
 // ─── Route thumbnail helpers ──────────────────────────────────────────────────
@@ -836,11 +838,11 @@ function RunCard({
             </View>
           </View>
 
-          {parseInt(run.plan_count) > 0 && (
+          {parseInt(run.plan_count ?? "0") > 0 && (
             <View style={s.metaItem}>
               <Feather name="calendar" size={11} color={C.textMuted} />
               <Text style={s.metaText}>
-                {run.plan_count} {parseInt(run.plan_count) === 1 ? "person" : "people"} planning to {run.activity_type === "ride" ? "ride" : "run"}
+                {run.plan_count} {parseInt(run.plan_count ?? "0") === 1 ? "person" : "people"} planning to {run.activity_type === "ride" ? "ride" : "run"}
               </Text>
             </View>
           )}
@@ -996,7 +998,7 @@ export default function DiscoverScreen() {
   const [ghostBookmarkDone, setGhostBookmarkDone] = useState(true);
   const [ghostPlannedDone, setGhostPlannedDone] = useState(true);
 
-  const { data: notifications = [], refetch: refetchNotifs } = useQuery({
+  const { data: notifications = [], refetch: refetchNotifs } = useQuery<any[]>({
     queryKey: ["/api/notifications"],
     refetchInterval: 30000,
     enabled: !!user,
@@ -1633,6 +1635,7 @@ export default function DiscoverScreen() {
             <Pressable
               style={[s.hBtn, { width: screenWidth < 390 ? 34 : 38 }]}
               onPress={() => { setShowNotifs(true); Haptics.selectionAsync(); }}
+              testID="notifications-bell"
             >
               <View>
                 <Feather name="bell" size={screenWidth < 390 ? 16 : 18} color={C.primary} />

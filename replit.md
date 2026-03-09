@@ -57,6 +57,15 @@ Key columns: `runs.activity_type` ("run" | "ride"), `runs.is_active`, `runs.is_c
 - `GET /api/crews/:id/achievements` — crew milestone badges + stats
 - `POST /api/solo-runs` — saves solo run, returns `prTiers` for PR banner
 
+### Recent Bug Fixes (Session March 2026)
+- `app/(tabs)/index.tsx`: `Run` interface now includes `is_completed: boolean` and `plan_count: string`; `notifications` query typed as `any[]`
+- `app/run-live/[id].tsx`: Moved `liveState` useQuery declaration above the `useEffect` that depends on it (fixes TDZ/used-before-declaration runtime error)
+- `app/_layout.tsx`: Added `as any` cast to notification handler return to fix type mismatch with expo-notifications v5
+- `app/run-tracking.tsx`: Fixed vehicle notification ID capture to handle `string | undefined` return
+- `app/create-run/index.tsx`: Removed duplicate function declarations (`autoFormatTime`, `handleDateChange`, `handleTimeChange`); fixed router.replace type
+- `app/run/[id].tsx`: Fixed router.replace type cast for `"/(tabs)/"`
+- `app/(tabs)/crew.tsx`: Fixed `removeMemberMutation` to invalidate `["/api/crews", crew?.id]` (the actual cache key) instead of the non-existent `[..., "members"]` sub-key
+
 ## External Dependencies
 -   **PostgreSQL:** Primary database for all application data.
 -   **Google Cloud Storage (GCS) / Object Storage:** Used for storing run photos.

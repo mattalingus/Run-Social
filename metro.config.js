@@ -3,6 +3,11 @@ const path = require("path");
 
 const config = getDefaultConfig(__dirname);
 
+config.resolver.blockList = [
+  /\/.local\/.*/,
+  /\/\.local\/.*/,
+];
+
 // ─── Stubs ────────────────────────────────────────────────────────────────────
 const stubs = {
   "expo-sharing": path.resolve(__dirname, "stubs/expo-sharing.js"),

@@ -910,7 +910,7 @@ function CrewDetailSheet({
   const removeMemberMutation = useMutation({
     mutationFn: (memberId: string) => apiRequest("DELETE", `/api/crews/${crew?.id}/members/${memberId}`),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/crews", crew?.id, "members"] });
+      qc.invalidateQueries({ queryKey: ["/api/crews", crew?.id] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
     onError: (e: any) => Alert.alert("Error", e.message ?? "Could not remove member"),
