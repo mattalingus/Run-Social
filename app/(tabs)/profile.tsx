@@ -1573,7 +1573,7 @@ export default function ProfileScreen() {
           </View>
 
           {/* Type filter: All / Solo / Crew / Public / Friends */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.histTypeRow} contentContainerStyle={{ gap: 8, paddingHorizontal: 0, paddingVertical: 4 }}>
+          <View style={{ flexDirection: "row", gap: 6, marginBottom: 8 }}>
             {(["all", "solo", "crew", "public", "friends"] as const).map((t) => {
               const active = historyTypeFilter === t;
               const TYPE_COLORS: Record<string, string> = { solo: C.primary, crew: C.gold, public: C.blue, friends: "#C084FC" };
@@ -1581,7 +1581,7 @@ export default function ProfileScreen() {
               return (
                 <Pressable
                   key={t}
-                  style={[styles.histTypeChip, active && { backgroundColor: color + "22", borderColor: color }]}
+                  style={[styles.histTypeChip, { flex: 1, alignItems: "center" }, active && { backgroundColor: color + "22", borderColor: color }]}
                   onPress={() => { Haptics.selectionAsync(); setHistoryTypeFilter(t); }}
                 >
                   <Text style={[styles.histTypeChipTxt, active && { color }]}>
@@ -1590,7 +1590,7 @@ export default function ProfileScreen() {
                 </Pressable>
               );
             })}
-          </ScrollView>
+          </View>
 
           {/* List */}
           {(() => {
