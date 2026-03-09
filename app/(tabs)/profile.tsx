@@ -109,6 +109,7 @@ interface UnifiedHistoryItem {
   move_time_seconds?: number | null;
   distance_tier?: 1 | 2 | 3 | null;
   route_path?: Array<{ latitude: number; longitude: number }> | null;
+  mile_splits?: Array<{ label: string; paceMinPerMile: number; isPartial: boolean }> | null;
   activity_type: string;
   is_starred?: boolean;
   host_name?: string;
@@ -255,6 +256,7 @@ export default function ProfileScreen() {
   const [showSoloHistory, setShowSoloHistory] = useState(false);
   const [historyActivityFilter, setHistoryActivityFilter] = useState<"run" | "ride">("run");
   const [historyTypeFilter, setHistoryTypeFilter] = useState<"all" | HistoryEventType>("all");
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
   const [showFavorites, setShowFavorites] = useState(false);
   const [expandedFavId, setExpandedFavId] = useState<string | null>(null);
   const [favActivityFilter, setFavActivityFilter] = useState<"run" | "ride">("run");
@@ -484,6 +486,7 @@ export default function ProfileScreen() {
         move_time_seconds: (r as any).move_time_seconds ?? null,
         distance_tier: distRankMap.get(r.id) ?? null,
         route_path: r.route_path,
+        mile_splits: (r as any).mile_splits ?? null,
         activity_type: r.activity_type ?? "run",
         is_starred: r.is_starred,
       }));
@@ -1613,9 +1616,14 @@ export default function ProfileScreen() {
                   const isSolo = run.type === "solo";
                   const typeColor = TYPE_COLORS[run.type];
                   const label = run.title || `${formatDistance(run.distance_miles)} mi ${run.activity_type === "ride" ? "ride" : "run"}`;
+                  const histKey = `${run.type}-${run.id}`;
+                  const isExpanded = expandedHistoryId === histKey;
                   return (
-                    <View key={`${run.type}-${run.id}`} style={styles.soloHistCard}>
-                      <View style={styles.soloHistRow}>
+                    <View key={histKey} style={[styles.soloHistCard, { marginBottom: 10 }]}>
+                      <Pressable
+                        style={({ pressed }) => [styles.soloHistRow, { opacity: pressed ? 0.85 : 1 }]}
+                        onPress={() => { Haptics.selectionAsync(); setExpandedHistoryId(isExpanded ? null : histKey); }}
+                      >
                         <View style={styles.soloHistLeft}>
                           {/* Status dot with type color */}
                           <View style={[styles.soloHistCheck, { backgroundColor: typeColor + "22", borderColor: typeColor + "55" }]}>
@@ -1649,14 +1657,68 @@ export default function ProfileScreen() {
                             </Text>
                           </View>
                         </View>
-                        <View style={styles.soloHistRight}>
-                          <Text style={styles.soloHistDist}>{formatDistance(run.distance_miles)}</Text>
-                          <Text style={styles.soloHistDistUnit}>mi</Text>
-                          {run.is_starred && <Ionicons name="star" size={12} color={C.gold} style={{ marginLeft: 2 }} />}
+                        <View style={[styles.soloHistRight, { flexDirection: "row", alignItems: "center", gap: 6 }]}>
+                          <View style={{ alignItems: "flex-end" }}>
+                            <Text style={styles.soloHistDist}>{formatDistance(run.distance_miles)}</Text>
+                            <Text style={styles.soloHistDistUnit}>mi</Text>
+                          </View>
+                          {run.is_starred && <Ionicons name="star" size={12} color={C.gold} />}
+                          <Feather name={isExpanded ? "chevron-up" : "chevron-down"} size={14} color={C.textMuted} />
                         </View>
-                      </View>
+                      </Pressable>
+
+                      {/* Route map — always visible */}
                       {run.route_path && run.route_path.length > 1 && (
                         <ProfileMiniRouteMap path={run.route_path} />
+                      )}
+
+                      {/* Expanded stats panel */}
+                      {isExpanded && isSolo && (
+                        <View style={styles.soloStatPanel}>
+                          <View style={styles.soloStatRow}>
+                            {run.duration_seconds != null && (
+                              <View style={styles.soloStatItem}>
+                                <Feather name="clock" size={13} color={C.primary} />
+                                <Text style={styles.soloStatLabel}>Time</Text>
+                                <Text style={styles.soloStatValue}>{formatDurationSolo(run.duration_seconds)}</Text>
+                              </View>
+                            )}
+                            {run.pace_min_per_mile != null && (
+                              <View style={styles.soloStatItem}>
+                                <Feather name="zap" size={13} color={C.primary} />
+                                <Text style={styles.soloStatLabel}>Pace</Text>
+                                <Text style={styles.soloStatValue}>{formatPaceSolo(run.pace_min_per_mile)}/mi</Text>
+                              </View>
+                            )}
+                            <View style={styles.soloStatItem}>
+                              <Feather name="map-pin" size={13} color={C.primary} />
+                              <Text style={styles.soloStatLabel}>Distance</Text>
+                              <Text style={styles.soloStatValue}>{formatDistance(run.distance_miles)} mi</Text>
+                            </View>
+                            {run.elevation_gain_ft != null && (
+                              <View style={styles.soloStatItem}>
+                                <Feather name="trending-up" size={13} color={C.primary} />
+                                <Text style={styles.soloStatLabel}>Elevation</Text>
+                                <Text style={styles.soloStatValue}>{Math.round(run.elevation_gain_ft)} ft</Text>
+                              </View>
+                            )}
+                          </View>
+                          {run.mile_splits && run.mile_splits.length > 0 && (
+                            <MileSplitsChart splits={run.mile_splits} activityType={run.activity_type} />
+                          )}
+                        </View>
+                      )}
+
+                      {/* Expanded info for group runs */}
+                      {isExpanded && !isSolo && (
+                        <View style={[styles.soloStatPanel, { paddingVertical: 10 }]}>
+                          {run.pace_min_per_mile != null && (
+                            <Text style={[styles.soloHistMeta, { textAlign: "center" }]}>
+                              Pace: {formatPaceSolo(run.pace_min_per_mile)}/mi
+                              {run.duration_seconds ? `  ·  Duration: ${formatDurationSolo(run.duration_seconds)}` : ""}
+                            </Text>
+                          )}
+                        </View>
                       )}
                     </View>
                   );

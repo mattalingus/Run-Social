@@ -347,8 +347,13 @@ export default function RunTrackingScreen() {
   // Audio Coach state
   const [coachEnabled, setCoachEnabled] = useState(true);
   const [coachInterval, setCoachInterval] = useState<"0.5" | "1" | "2">("1");
+  const coachEnabledRef = useRef(true);
+  const coachIntervalRef = useRef<"0.5" | "1" | "2">("1");
   const lastAnnouncedMileRef = useRef(0);
   const lastAnnouncedPaceRef = useRef<number | null>(null);
+
+  useEffect(() => { coachEnabledRef.current = coachEnabled; }, [coachEnabled]);
+  useEffect(() => { coachIntervalRef.current = coachInterval; }, [coachInterval]);
 
   // Route Publishing state
   const [publishedPath, setPublishedPath] = useState<{ id: string; name: string } | null>(null);
@@ -551,11 +556,11 @@ export default function RunTrackingScreen() {
         setDisplayDist(totalDistRef.current);
 
         // Audio Coach logic
-        if (coachEnabled && Platform.OS !== "web") {
-          const interval = parseFloat(coachInterval);
+        if (coachEnabledRef.current && Platform.OS !== "web") {
+          const interval = parseFloat(coachIntervalRef.current);
           if (totalDistRef.current >= lastAnnouncedMileRef.current + interval) {
             lastAnnouncedMileRef.current += interval;
-            announcePace(lastAnnouncedMileRef.current, elapsed);
+            announcePace(lastAnnouncedMileRef.current, elapsedRef.current);
           }
         }
 
@@ -1026,9 +1031,6 @@ export default function RunTrackingScreen() {
           ]}
           showsVerticalScrollIndicator={false}
         >
-          <View style={t.checkCircle}>
-            <Feather name="check" size={28} color={C.primary} />
-          </View>
           <Text style={t.summaryTitle}>{activityFilter === "ride" ? "Ride Complete" : "Run Complete"}</Text>
 
           {/* Editable run title */}
@@ -1155,9 +1157,12 @@ export default function RunTrackingScreen() {
                 <Text style={t.photoSectionTitle}>Add a photo</Text>
                 {runPhotos.length > 0 && (
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={t.photoScroll}>
-                    {runPhotos.map((p: any) => (
-                      <Image key={p.id} source={{ uri: p.photo_url }} style={t.photoThumb} />
-                    ))}
+                    {runPhotos.map((p: any) => {
+                      const photoUri = p.photo_url?.startsWith("/")
+                        ? new URL(p.photo_url, getApiUrl()).toString()
+                        : p.photo_url;
+                      return <Image key={p.id} source={{ uri: photoUri }} style={t.photoThumb} />;
+                    })}
                   </ScrollView>
                 )}
                 <Pressable
