@@ -50,14 +50,27 @@ TaskManager.defineTask(GROUP_LOCATION_TASK, ({ data, error }: any) => {
   }
 });
 
+export async function requestForegroundPermission(): Promise<boolean> {
+  if (Platform.OS === "web") return true;
+  try {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    return status === "granted";
+  } catch {
+    return false;
+  }
+}
+
 export async function requestBackgroundPermission(): Promise<boolean> {
   if (Platform.OS === "web") return true;
+  try {
+    const { status: fgStatus } = await Location.requestForegroundPermissionsAsync();
+    if (fgStatus !== "granted") return false;
 
-  const { status: fgStatus } = await Location.requestForegroundPermissionsAsync();
-  if (fgStatus !== "granted") return false;
-
-  const { status: bgStatus } = await Location.requestBackgroundPermissionsAsync();
-  return bgStatus === "granted";
+    const { status: bgStatus } = await Location.requestBackgroundPermissionsAsync();
+    return bgStatus === "granted";
+  } catch {
+    return false;
+  }
 }
 
 export async function safeStartLocationUpdates(

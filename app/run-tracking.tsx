@@ -29,6 +29,7 @@ import {
   SOLO_LOCATION_TASK,
   addSoloLocationListener,
   requestBackgroundPermission,
+  requestForegroundPermission,
   safeStartLocationUpdates,
   safeStopLocationUpdates,
 } from "@/lib/locationTasks";
@@ -433,6 +434,7 @@ export default function RunTrackingScreen() {
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const locationSubRef = useRef<Location.LocationSubscription | null>(null);
+  const foregroundOnlyRef = useRef(false);
   const webWatchIdRef = useRef<number | null>(null);
   const lastCoordRef = useRef<Coord | null>(null);
   const totalDistRef = useRef(0);
@@ -593,6 +595,19 @@ export default function RunTrackingScreen() {
       }
       return;
     }
+    if (foregroundOnlyRef.current) {
+      try {
+        const sub = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 5 },
+          (loc) => {
+            const { latitude, longitude, speed, altitude, accuracy } = loc.coords;
+            handleCoord(latitude, longitude, accuracy ?? undefined, speed, altitude);
+          }
+        );
+        locationSubRef.current = sub;
+      } catch (_) {}
+      return;
+    }
     try {
       await safeStartLocationUpdates(SOLO_LOCATION_TASK, {
         accuracy: Location.Accuracy.BestForNavigation,
@@ -608,7 +623,18 @@ export default function RunTrackingScreen() {
         handleCoord(lat, lng, accuracy ?? undefined, speed, altitude);
       });
       locationSubRef.current = { remove: unsub } as any;
-    } catch (_) {}
+    } catch (_) {
+      try {
+        const sub = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 5 },
+          (loc) => {
+            const { latitude, longitude, speed, altitude, accuracy } = loc.coords;
+            handleCoord(latitude, longitude, accuracy ?? undefined, speed, altitude);
+          }
+        );
+        locationSubRef.current = sub;
+      } catch (_2) {}
+    }
   }
 
   function stopWatching() {
@@ -622,7 +648,9 @@ export default function RunTrackingScreen() {
         locationSubRef.current.remove();
         locationSubRef.current = null;
       }
-      safeStopLocationUpdates(SOLO_LOCATION_TASK);
+      if (!foregroundOnlyRef.current) {
+        safeStopLocationUpdates(SOLO_LOCATION_TASK);
+      }
     }
   }
 
@@ -630,13 +658,21 @@ export default function RunTrackingScreen() {
 
   async function handleStart() {
     if (Platform.OS !== "web") {
-      const granted = await requestBackgroundPermission();
-      if (!granted) {
-        Alert.alert(
-          "Location Required",
-          "Enable location access so PaceUp can measure your run distance."
-        );
-        return;
+      let bgGranted = false;
+      try {
+        bgGranted = await requestBackgroundPermission();
+      } catch {}
+      foregroundOnlyRef.current = false;
+      if (!bgGranted) {
+        const fgGranted = await requestForegroundPermission();
+        if (!fgGranted) {
+          Alert.alert(
+            "Location Required",
+            "Enable location access in Settings so PaceUp can track your run."
+          );
+          return;
+        }
+        foregroundOnlyRef.current = true;
       }
     }
     lastCoordRef.current = null;

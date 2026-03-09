@@ -1061,6 +1061,8 @@ export default function CreateRunScreen() {
                       style={{ flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: C.surface, borderRadius: 14, borderWidth: 1, borderColor: C.border, padding: 10 }}
                       onPress={() => {
                         setSelectedSavedPathId(p.id);
+                        setLocationName(p.name);
+                        setPickerName(p.name);
                         if (p.distance_miles) setPlannedDistance(p.distance_miles.toFixed(2));
                         if (p.route_path && p.route_path.length > 0) {
                           const start = p.route_path[0];
