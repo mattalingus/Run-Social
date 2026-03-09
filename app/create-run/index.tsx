@@ -349,6 +349,7 @@ export default function CreateRunScreen() {
             </Text>
           </View>
         ) : null}
+        {/* 1. Activity Type */}
         <View style={styles.field}>
           <Text style={styles.label}>Activity Type</Text>
           <View style={styles.activityRow}>
@@ -369,32 +370,7 @@ export default function CreateRunScreen() {
           </View>
         </View>
 
-        <View style={styles.field}>
-          <Text style={styles.label}>{activityType === "ride" ? "Ride Title *" : "Run Title *"}</Text>
-          <TextInput
-            style={styles.input}
-            value={title}
-            onChangeText={setTitle}
-            placeholder={activityType === "ride" ? "e.g. Sunday Morning Group Ride" : "e.g. Morning 5K in the Park"}
-            placeholderTextColor={C.textMuted}
-            maxLength={60}
-          />
-        </View>
-
-        <View style={styles.field}>
-          <Text style={styles.label}>Description</Text>
-          <TextInput
-            style={[styles.input, styles.textarea]}
-            value={description}
-            onChangeText={setDescription}
-            placeholder={isCrew ? "Tell the crew what to expect..." : "Tell participants what to expect..."}
-            placeholderTextColor={C.textMuted}
-            multiline
-            numberOfLines={3}
-            textAlignVertical="top"
-          />
-        </View>
-
+        {/* 2. View (privacy) */}
         {!params.crewId && (
           <View style={styles.field}>
             <Text style={styles.label}>View</Text>
@@ -446,6 +422,20 @@ export default function CreateRunScreen() {
           </View>
         )}
 
+        {/* 3. Title */}
+        <View style={styles.field}>
+          <Text style={styles.label}>{activityType === "ride" ? "Ride Title *" : "Run Title *"}</Text>
+          <TextInput
+            style={styles.input}
+            value={title}
+            onChangeText={setTitle}
+            placeholder={activityType === "ride" ? "e.g. Sunday Morning Group Ride" : "e.g. Morning 5K in the Park"}
+            placeholderTextColor={C.textMuted}
+            maxLength={60}
+          />
+        </View>
+
+        {/* 4. Date & Time */}
         <View style={styles.field}>
           <Text style={styles.label}>Date & Time *</Text>
           <View style={{ flexDirection: "row", gap: 10 }}>
@@ -483,7 +473,7 @@ export default function CreateRunScreen() {
           </View>
         </View>
 
-        {/* Location picker — map-based */}
+        {/* 5. Start Location */}
         <View style={styles.field}>
           <Text style={styles.label}>Start Location *</Text>
           <Pressable
@@ -508,49 +498,9 @@ export default function CreateRunScreen() {
           </Pressable>
         </View>
 
-        {/* Route + Planned Distance — side by side for crew, stacked for public */}
-        {isCrew ? (
-          <View style={[styles.field, { flexDirection: "row", gap: 10 }]}>
-            {/* Route button */}
-            <View style={{ flex: 1 }}>
-              <Text style={styles.label}>Route (optional)</Text>
-              {selectedSavedPathId ? (
-                <Pressable
-                  style={{ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: C.primaryMuted, borderRadius: 12, borderWidth: 1, borderColor: C.primary + "55", paddingHorizontal: 12, paddingVertical: 11 }}
-                  onPress={() => { setSelectedSavedPathId(null); Haptics.selectionAsync(); }}
-                >
-                  <Feather name="map" size={13} color={C.primary} />
-                  <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.primary, flex: 1 }} numberOfLines={1}>
-                    {mySavedPaths.find(p => p.id === selectedSavedPathId)?.name ?? "Selected"}
-                  </Text>
-                  <Feather name="x" size={13} color={C.primary} />
-                </Pressable>
-              ) : (
-                <Pressable
-                  style={{ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: C.surface, borderRadius: 12, borderWidth: 1, borderColor: C.border, paddingHorizontal: 12, paddingVertical: 11 }}
-                  onPress={() => { setShowPathPicker(true); Haptics.selectionAsync(); }}
-                >
-                  <Feather name="map" size={13} color={C.textMuted} />
-                  <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textMuted }}>Saved Paths</Text>
-                </Pressable>
-              )}
-            </View>
-            {/* Planned Distance */}
-            <View style={{ flex: 1 }}>
-              <Text style={styles.label}>Planned Distance (mi)</Text>
-              <TextInput
-                style={styles.input}
-                value={plannedDistance}
-                onChangeText={setPlannedDistance}
-                keyboardType="decimal-pad"
-                placeholder="3"
-                placeholderTextColor={C.textMuted}
-              />
-            </View>
-          </View>
-        ) : (
-          /* Public run — route button full-width above distance range */
-          <View style={styles.field}>
+        {/* 6. Route | Planned Distance — side by side for both crew and public */}
+        <View style={[styles.field, { flexDirection: "row", gap: 10 }]}>
+          <View style={{ flex: 1 }}>
             <Text style={styles.label}>Route (optional)</Text>
             {selectedSavedPathId ? (
               <Pressable
@@ -573,153 +523,20 @@ export default function CreateRunScreen() {
               </Pressable>
             )}
           </View>
-        )}
+          <View style={{ flex: 1 }}>
+            <Text style={styles.label}>Planned Distance (mi)</Text>
+            <TextInput
+              style={styles.input}
+              value={plannedDistance}
+              onChangeText={setPlannedDistance}
+              keyboardType="decimal-pad"
+              placeholder="3"
+              placeholderTextColor={C.textMuted}
+            />
+          </View>
+        </View>
 
-        {/* Pace & Distance — pace groups for crew, ranges for public runs */}
-        {isCrew ? (
-          <>
-
-            {/* Pace Groups builder */}
-            <View style={styles.field}>
-              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                <View>
-                  <Text style={styles.label}>Pace Groups</Text>
-                  <Text style={styles.fieldHint}>Members will pick their group when they join</Text>
-                </View>
-                {paceGroups.length < 8 && (
-                  <Pressable
-                    style={{ flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: C.primaryMuted, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: C.primary + "55" }}
-                    onPress={() => {
-                      const letters = "ABCDEFGH";
-                      const next = letters[paceGroups.length] ?? String(paceGroups.length + 1);
-                      setPaceGroups([...paceGroups, { label: `Group ${next}`, minPace: "", maxPace: "" }]);
-                      Haptics.selectionAsync();
-                    }}
-                  >
-                    <Feather name="plus" size={13} color={C.primary} />
-                    <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.primary }}>Add Group</Text>
-                  </Pressable>
-                )}
-              </View>
-              {paceGroups.map((group, idx) => (
-                <View key={idx} style={{ backgroundColor: C.surface, borderRadius: 12, borderWidth: 1, borderColor: C.border, padding: 12, marginBottom: 8 }}>
-                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                    <TextInput
-                      style={[styles.input, { flex: 1, marginRight: 8, marginBottom: 0 }]}
-                      value={group.label}
-                      onChangeText={(t) => {
-                        const updated = [...paceGroups];
-                        updated[idx] = { ...updated[idx], label: t };
-                        setPaceGroups(updated);
-                      }}
-                      placeholder="Group name"
-                      placeholderTextColor={C.textMuted}
-                      maxLength={20}
-                    />
-                    {paceGroups.length > 1 && (
-                      <Pressable
-                        onPress={() => { setPaceGroups(paceGroups.filter((_, i) => i !== idx)); Haptics.selectionAsync(); }}
-                        style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: C.danger + "22", alignItems: "center", justifyContent: "center" }}
-                      >
-                        <Feather name="trash-2" size={13} color={C.danger} />
-                      </Pressable>
-                    )}
-                  </View>
-                  <View style={{ flexDirection: "row", gap: 8 }}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.splitLabel, { textAlign: "left" }]}>Min Pace (min/mi)</Text>
-                      <TextInput
-                        style={styles.input}
-                        value={group.minPace}
-                        onChangeText={(t) => {
-                          const updated = [...paceGroups];
-                          updated[idx] = { ...updated[idx], minPace: t };
-                          setPaceGroups(updated);
-                        }}
-                        keyboardType="decimal-pad"
-                        placeholder="7.0"
-                        placeholderTextColor={C.textMuted}
-                      />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.splitLabel, { textAlign: "left" }]}>Max Pace (min/mi)</Text>
-                      <TextInput
-                        style={styles.input}
-                        value={group.maxPace}
-                        onChangeText={(t) => {
-                          const updated = [...paceGroups];
-                          updated[idx] = { ...updated[idx], maxPace: t };
-                          setPaceGroups(updated);
-                        }}
-                        keyboardType="decimal-pad"
-                        placeholder="9.0"
-                        placeholderTextColor={C.textMuted}
-                      />
-                    </View>
-                  </View>
-                </View>
-              ))}
-            </View>
-          </>
-        ) : (
-          <>
-            <View style={styles.sectionDivider}>
-              <Text style={styles.sectionLabel}>Pace Requirements (min/mile)</Text>
-            </View>
-            <View style={styles.row}>
-              <View style={[styles.field, { flex: 1 }]}>
-                <Text style={styles.label}>Min Pace</Text>
-                <TextInput
-                  style={styles.input}
-                  value={minPace}
-                  onChangeText={setMinPace}
-                  keyboardType="decimal-pad"
-                  placeholder="8.0"
-                  placeholderTextColor={C.textMuted}
-                />
-              </View>
-              <View style={[styles.field, { flex: 1 }]}>
-                <Text style={styles.label}>Max Pace</Text>
-                <TextInput
-                  style={styles.input}
-                  value={maxPace}
-                  onChangeText={setMaxPace}
-                  keyboardType="decimal-pad"
-                  placeholder="12.0"
-                  placeholderTextColor={C.textMuted}
-                />
-              </View>
-            </View>
-            <View style={styles.sectionDivider}>
-              <Text style={styles.sectionLabel}>Distance Requirements (miles)</Text>
-            </View>
-            <View style={styles.row}>
-              <View style={[styles.field, { flex: 1 }]}>
-                <Text style={styles.label}>Min Distance</Text>
-                <TextInput
-                  style={styles.input}
-                  value={minDistance}
-                  onChangeText={setMinDistance}
-                  keyboardType="decimal-pad"
-                  placeholder="3"
-                  placeholderTextColor={C.textMuted}
-                />
-              </View>
-              <View style={[styles.field, { flex: 1 }]}>
-                <Text style={styles.label}>Max Distance</Text>
-                <TextInput
-                  style={styles.input}
-                  value={maxDistance}
-                  onChangeText={setMaxDistance}
-                  keyboardType="decimal-pad"
-                  placeholder="6"
-                  placeholderTextColor={C.textMuted}
-                />
-              </View>
-            </View>
-          </>
-        )}
-
+        {/* 7. Max Participants */}
         {!isCrew && (
           <View style={styles.field}>
             <Text style={styles.label}>Max Participants</Text>
@@ -734,45 +551,135 @@ export default function CreateRunScreen() {
           </View>
         )}
 
-        {!isCrew && (
-          <>
-            <View style={styles.field}>
-              <Text style={styles.label}>Run Style</Text>
-              <Text style={styles.fieldHint}>What type of event is this?</Text>
-              <View style={styles.tagsGrid}>
-                {RUN_STYLES.map((s) => (
-                  <Pressable
-                    key={s}
-                    style={[styles.tagChip, styles.runStyleChip, runStyle === s && styles.runStyleChipActive]}
-                    onPress={() => { setRunStyle(runStyle === s ? null : s); Haptics.selectionAsync(); }}
-                  >
-                    <Text style={[styles.tagChipText, runStyle === s && styles.runStyleChipTextActive]}>{s}</Text>
-                  </Pressable>
-                ))}
+        {/* 8. Pace Range */}
+        {isCrew ? (
+          <View style={styles.field}>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <View>
+                <Text style={styles.label}>Pace Groups</Text>
+                <Text style={styles.fieldHint}>Members will pick their group when they join</Text>
               </View>
+              {paceGroups.length < 8 && (
+                <Pressable
+                  style={{ flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: C.primaryMuted, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: C.primary + "55" }}
+                  onPress={() => {
+                    const letters = "ABCDEFGH";
+                    const next = letters[paceGroups.length] ?? String(paceGroups.length + 1);
+                    setPaceGroups([...paceGroups, { label: `Group ${next}`, minPace: "", maxPace: "" }]);
+                    Haptics.selectionAsync();
+                  }}
+                >
+                  <Feather name="plus" size={13} color={C.primary} />
+                  <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.primary }}>Add Group</Text>
+                </Pressable>
+              )}
             </View>
-
-            <View style={styles.field}>
-              <Text style={styles.label}>Group Vibe</Text>
-              <Text style={styles.fieldHint}>What's the vibe of your group? (select all that apply)</Text>
-              {TAG_GROUPS.map((group) => (
-                <View key={group.label} style={styles.tagGroupWrapper}>
-                  <Text style={styles.tagGroupLabel}>{group.label}</Text>
-                  <View style={styles.tagsGrid}>
-                    {group.tags.map((tag) => (
-                      <Pressable
-                        key={tag}
-                        style={[styles.tagChip, selectedTags.includes(tag) && styles.tagChipActive]}
-                        onPress={() => toggleTag(tag)}
-                      >
-                        <Text style={[styles.tagChipText, selectedTags.includes(tag) && styles.tagChipTextActive]}>{tag}</Text>
-                      </Pressable>
-                    ))}
+            {paceGroups.map((group, idx) => (
+              <View key={idx} style={{ backgroundColor: C.surface, borderRadius: 12, borderWidth: 1, borderColor: C.border, padding: 12, marginBottom: 8 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                  <TextInput
+                    style={[styles.input, { flex: 1, marginRight: 8, marginBottom: 0 }]}
+                    value={group.label}
+                    onChangeText={(t) => {
+                      const updated = [...paceGroups];
+                      updated[idx] = { ...updated[idx], label: t };
+                      setPaceGroups(updated);
+                    }}
+                    placeholder="Group name"
+                    placeholderTextColor={C.textMuted}
+                    maxLength={20}
+                  />
+                  {paceGroups.length > 1 && (
+                    <Pressable
+                      onPress={() => { setPaceGroups(paceGroups.filter((_, i) => i !== idx)); Haptics.selectionAsync(); }}
+                      style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: C.danger + "22", alignItems: "center", justifyContent: "center" }}
+                    >
+                      <Feather name="trash-2" size={13} color={C.danger} />
+                    </Pressable>
+                  )}
+                </View>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.splitLabel, { textAlign: "left" }]}>Min Pace (min/mi)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={group.minPace}
+                      onChangeText={(t) => {
+                        const updated = [...paceGroups];
+                        updated[idx] = { ...updated[idx], minPace: t };
+                        setPaceGroups(updated);
+                      }}
+                      keyboardType="decimal-pad"
+                      placeholder="7.0"
+                      placeholderTextColor={C.textMuted}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.splitLabel, { textAlign: "left" }]}>Max Pace (min/mi)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={group.maxPace}
+                      onChangeText={(t) => {
+                        const updated = [...paceGroups];
+                        updated[idx] = { ...updated[idx], maxPace: t };
+                        setPaceGroups(updated);
+                      }}
+                      keyboardType="decimal-pad"
+                      placeholder="9.0"
+                      placeholderTextColor={C.textMuted}
+                    />
                   </View>
                 </View>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.field}>
+            <Text style={styles.label}>Pace Range (min/mile)</Text>
+            <View style={styles.row}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.splitLabel}>Fastest</Text>
+                <TextInput
+                  style={styles.input}
+                  value={minPace}
+                  onChangeText={setMinPace}
+                  keyboardType="decimal-pad"
+                  placeholder="8.0"
+                  placeholderTextColor={C.textMuted}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.splitLabel}>Slowest</Text>
+                <TextInput
+                  style={styles.input}
+                  value={maxPace}
+                  onChangeText={setMaxPace}
+                  keyboardType="decimal-pad"
+                  placeholder="12.0"
+                  placeholderTextColor={C.textMuted}
+                />
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* 9. Host Style */}
+        {!isCrew && (
+          <View style={styles.field}>
+            <Text style={styles.label}>Host Style</Text>
+            <Text style={styles.fieldHint}>What type of event is this?</Text>
+            <View style={styles.tagsGrid}>
+              {RUN_STYLES.map((s) => (
+                <Pressable
+                  key={s}
+                  style={[styles.tagChip, styles.runStyleChip, runStyle === s && styles.runStyleChipActive]}
+                  onPress={() => { setRunStyle(runStyle === s ? null : s); Haptics.selectionAsync(); }}
+                >
+                  <Text style={[styles.tagChipText, runStyle === s && styles.runStyleChipTextActive]}>{s}</Text>
+                </Pressable>
               ))}
             </View>
-          </>
+          </View>
         )}
       </KeyboardAwareScrollViewCompat>
 
