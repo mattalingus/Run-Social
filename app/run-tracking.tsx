@@ -85,14 +85,6 @@ function formatElapsed(s: number): string {
   return `${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
 }
 
-function calcPace(distanceMi: number, elapsedSec: number): string {
-  if (distanceMi < 0.01 || elapsedSec < 1) return "--:--";
-  const min = elapsedSec / 60 / distanceMi;
-  const m = Math.floor(min);
-  const s = Math.round((min - m) * 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
-
 // ─── Audio Coach Phrase Engine ────────────────────────────────────────────────
 
 function pick<T>(arr: T[]): T {
@@ -619,7 +611,7 @@ export default function RunTrackingScreen() {
         distanceInterval: 5,
         showsBackgroundLocationIndicator: true,
         foregroundService: {
-          notificationTitle: "PaceUp is tracking your run",
+          notificationTitle: `PaceUp is tracking your ${activityFilter === "ride" ? "ride" : "run"}`,
           notificationBody: "Your route is being recorded",
           notificationColor: "#00D97E",
         },
@@ -979,8 +971,9 @@ export default function RunTrackingScreen() {
   if (phase === "done") {
     const distance = totalDistRef.current;
     const pace = distance > 0.01 ? (elapsed / 60) / distance : null;
-    const paceM = pace ? Math.floor(pace) : 0;
-    const paceS = pace ? Math.round((pace - paceM) * 60) : 0;
+    const displayPace = pace && distUnit === "km" ? pace / 1.60934 : pace;
+    const paceM = displayPace ? Math.floor(displayPace) : 0;
+    const paceS = displayPace ? Math.round((displayPace - paceM) * 60) : 0;
     const hasRoute = IS_NATIVE && routeState.length > 1;
     const lastPt = routeState[routeState.length - 1];
 
@@ -1091,9 +1084,9 @@ export default function RunTrackingScreen() {
             <View style={t.statDivider} />
             <View style={t.statBlock}>
               <Text style={t.statBig}>
-                {pace ? `${paceM}:${paceS.toString().padStart(2, "0")}` : "--"}
+                {displayPace ? `${paceM}:${paceS.toString().padStart(2, "0")}` : "--"}
               </Text>
-              <Text style={t.statUnit}>min/mi</Text>
+              <Text style={t.statUnit}>{distUnit === "km" ? "min/km" : "min/mi"}</Text>
             </View>
           </View>
 
@@ -1347,6 +1340,14 @@ export default function RunTrackingScreen() {
   const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
   const showMap = IS_NATIVE && MapView && (phase === "active" || phase === "paused") && routeState.length > 0;
   const currentPt = routeState[routeState.length - 1];
+  const livePaceStr = (() => {
+    if (displayDist < 0.01 || elapsed < 1) return "--:--";
+    const minPerMile = elapsed / 60 / displayDist;
+    const p = distUnit === "km" ? minPerMile / 1.60934 : minPerMile;
+    const m = Math.floor(p);
+    const s = Math.round((p - m) * 60);
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  })();
 
   return (
     <View style={t.container}>
@@ -1450,8 +1451,8 @@ export default function RunTrackingScreen() {
           </View>
           <View style={t.liveDivider} />
           <View style={t.liveStat}>
-            <Text style={t.liveVal}>{calcPace(displayDist, elapsed)}</Text>
-            <Text style={t.liveUnit}>min/mi</Text>
+            <Text style={t.liveVal}>{livePaceStr}</Text>
+            <Text style={t.liveUnit}>{distUnit === "km" ? "min/km" : "min/mi"}</Text>
           </View>
         </View>
 

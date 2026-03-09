@@ -407,8 +407,9 @@ function autoFormatTime(digits: string): string {
   return digits[0] + ":" + digits.slice(1, 3);
 }
 
-async function scheduleRunNotifications(runDate: Date, label: string) {
+async function scheduleRunNotifications(runDate: Date, label: string, activityType: string = "run") {
   if (Platform.OS === "web") return;
+  const isRide = activityType === "ride";
   try {
     const { status } = await Notifications.requestPermissionsAsync();
     if (status !== "granted") return;
@@ -419,13 +420,13 @@ async function scheduleRunNotifications(runDate: Date, label: string) {
 
     if (oneHour > now) {
       await Notifications.scheduleNotificationAsync({
-        content: { title: "🏃 Run in 1 hour", body: `${label} — get warmed up!` },
+        content: { title: isRide ? "🚴 Ride in 1 hour" : "🏃 Run in 1 hour", body: `${label} — get warmed up!` },
         trigger: { date: oneHour } as any,
       });
     }
     if (tenMin > now) {
       await Notifications.scheduleNotificationAsync({
-        content: { title: "🏃 Starting soon!", body: `${label} — 10 minutes to go.` },
+        content: { title: isRide ? "🚴 Starting soon!" : "🏃 Starting soon!", body: `${label} — 10 minutes to go.` },
         trigger: { date: tenMin } as any,
       });
     }
@@ -767,7 +768,7 @@ export default function SoloScreen() {
         completed: false,
         activityType: activityFilter,
       });
-      if (pNotify) await scheduleRunNotifications(runDate, label);
+      if (pNotify) await scheduleRunNotifications(runDate, label, activityFilter);
       setShowPlan(false);
       setPTitle(""); setPDate(tomorrowStr()); setPTime("7:00"); setPAmPm("AM"); setPDist(""); setPPace("");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -779,7 +780,8 @@ export default function SoloScreen() {
   }
 
   function confirmDelete(id: string) {
-    Alert.alert("Delete Run", "Remove this run from your history?", [
+    const type = activityFilter === "ride" ? "Ride" : "Run";
+    Alert.alert(`Delete ${type}`, `Remove this ${type.toLowerCase()} from your history?`, [
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: () => deleteMutation.mutate(id) },
     ]);
