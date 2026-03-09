@@ -2354,8 +2354,8 @@ function makeStyles(C: ReturnType<typeof import("@/contexts/ThemeContext").useTh
   soloHistDistUnit: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted },
 
   soloStatPanel: {
-    marginHorizontal: 12, marginBottom: 10, paddingVertical: 12, paddingHorizontal: 8,
-    backgroundColor: C.surface, borderRadius: 12, borderWidth: 1, borderColor: C.border,
+    marginTop: 8, marginBottom: 4, paddingVertical: 12, paddingHorizontal: 8,
+    backgroundColor: C.card, borderRadius: 12, borderWidth: 1, borderColor: C.border,
   },
   soloStatRow: { flexDirection: "row", justifyContent: "space-around" },
   soloStatItem: { alignItems: "center", gap: 3, flex: 1 },
