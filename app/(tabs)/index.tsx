@@ -796,32 +796,43 @@ function RunCard({
           </View>
 
           <View style={s.cardStats}>
-            {run.crew_id && run.pace_groups && run.pace_groups.length > 0 ? (
-              <View style={[s.statLg, { backgroundColor: C.primaryMuted, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1, borderColor: C.primary + "44" }]}>
-                <Ionicons name="people" size={11} color={C.primary} />
-                <Text numberOfLines={1} style={[s.statLabel, { color: C.primary }]}>Pace Groups</Text>
-              </View>
-            ) : (
-              <View style={s.statLg}>
-                <Ionicons name={run.activity_type === "ride" ? "bicycle" : "walk"} size={12} color={getPaceColor(run.min_pace, run.max_pace, C)} />
-                <Text numberOfLines={1} style={[s.statLabel, { color: getPaceColor(run.min_pace, run.max_pace, C) }]}>{run.min_pace === run.max_pace ? toDisplayPace(run.min_pace, distUnit) : `${toDisplayPace(run.min_pace, distUnit)}–${toDisplayPace(run.max_pace, distUnit)}`}</Text>
-              </View>
-            )}
-            <View style={s.statDiv} />
-            <View style={s.statLg}>
-              <Feather name="target" size={12} color={C.blue} />
-              <Text numberOfLines={1} style={s.statLabel}>{run.min_distance === run.max_distance ? toDisplayDist(run.min_distance, distUnit) : `${toDisplayDist(run.min_distance, distUnit)}–${toDisplayDist(run.max_distance, distUnit)}`}</Text>
+            {/* Pace pill */}
+            <View style={s.statPill}>
+              {run.crew_id && run.pace_groups && run.pace_groups.length > 0 ? (
+                <Text numberOfLines={1} style={[s.statPillValue, { color: C.primary }]}>Groups</Text>
+              ) : (
+                <Text numberOfLines={1} style={[s.statPillValue, { color: getPaceColor(run.min_pace, run.max_pace, C) }]}>
+                  {run.min_pace === run.max_pace
+                    ? toDisplayPace(run.min_pace, distUnit)
+                    : `${toDisplayPace(run.min_pace, distUnit)}–${toDisplayPace(run.max_pace, distUnit)}`}
+                </Text>
+              )}
+              <Text style={s.statPillLabel}>Pace {distUnit === "km" ? "min/km" : "min/mi"}</Text>
             </View>
             <View style={s.statDiv} />
-            <View style={s.statSm}>
-              <Ionicons name="people" size={12} color={run.is_active ? C.primary : C.textMuted} />
-              <Text numberOfLines={1} style={[s.statLabel, run.is_active && { color: C.primary }]}>
-                {run.is_active
-                  ? `${run.participant_count} arrived`
-                  : run.crew_id
-                    ? `${run.participant_count} going`
-                    : `${run.participant_count}/${run.max_participants}`}
+            {/* Distance pill */}
+            <View style={s.statPill}>
+              <Text numberOfLines={1} style={[s.statPillValue, { color: C.blue }]}>
+                {run.min_distance === run.max_distance
+                  ? toDisplayDist(run.min_distance, distUnit)
+                  : `${toDisplayDist(run.min_distance, distUnit)}–${toDisplayDist(run.max_distance, distUnit)}`}
               </Text>
+              <Text style={s.statPillLabel}>Distance</Text>
+            </View>
+            <View style={s.statDiv} />
+            {/* Going pill */}
+            <View style={s.statPill}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+                <Ionicons name="people" size={13} color={run.is_active ? C.primary : C.textMuted} />
+                <Text numberOfLines={1} style={[s.statPillValue, run.is_active && { color: C.primary }]}>
+                  {run.is_active
+                    ? run.participant_count
+                    : run.crew_id
+                      ? run.participant_count
+                      : `${run.participant_count}/${run.max_participants}`}
+                </Text>
+              </View>
+              <Text style={s.statPillLabel}>{run.is_active ? "Arrived" : "Going"}</Text>
             </View>
           </View>
 
@@ -3221,13 +3232,16 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   metaItem: { flexDirection: "row", alignItems: "center", gap: 6 },
   metaText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary, flex: 1 },
 
-  cardStats: { flexDirection: "row", alignItems: "center", gap: 6, overflow: "hidden" },
+  cardStats: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 },
   stat: { flexDirection: "row", alignItems: "center", gap: 3, flex: 1, minWidth: 0 },
   statLg: { flexDirection: "row", alignItems: "center", gap: 3, flex: 4, minWidth: 0 },
   statSm: { flexDirection: "row", alignItems: "center", gap: 3, flex: 2, minWidth: 0 },
   statLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.text, flexShrink: 1 },
   statUnit: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted },
-  statDiv: { width: 1, height: 12, backgroundColor: C.border },
+  statDiv: { width: 1, height: 24, backgroundColor: C.border },
+  statPill: { flex: 1, alignItems: "center", gap: 2 },
+  statPillValue: { fontFamily: "Outfit_700Bold", fontSize: 12, color: C.text },
+  statPillLabel: { fontFamily: "Outfit_400Regular", fontSize: 10, color: C.textMuted, textTransform: "uppercase", letterSpacing: 0.3 },
 
   tags: { flexDirection: "row", gap: 5, flexWrap: "wrap" },
   tag: {
