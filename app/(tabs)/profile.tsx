@@ -1542,7 +1542,7 @@ export default function ProfileScreen() {
       {/* ── Past Activity History Modal ─────────────────────────────────────── */}
       <Modal visible={showSoloHistory} transparent animationType="slide" onRequestClose={() => setShowSoloHistory(false)}>
         <Pressable style={styles.modalOverlay} onPress={() => setShowSoloHistory(false)} />
-        <View style={[styles.modalSheet, styles.friendModalSheet, { paddingBottom: insets.bottom + 16, height: "75%", flexDirection: "column" }]}>
+        <View style={[styles.modalSheet, styles.friendModalSheet, { paddingBottom: insets.bottom + 16, paddingHorizontal: 16, height: "75%", flexDirection: "column" }]}>
           {/* Header */}
           <View style={styles.modalTitleRow}>
             <Text style={styles.modalTitle}>Activity History</Text>
@@ -1552,7 +1552,7 @@ export default function ProfileScreen() {
           </View>
 
           {/* Activity toggle: Runs / Rides */}
-          <View style={styles.histToggleRow}>
+          <View style={[styles.histToggleRow, { paddingHorizontal: 0 }]}>
             {(["run", "ride"] as const).map((act) => (
               <Pressable
                 key={act}
@@ -1573,7 +1573,7 @@ export default function ProfileScreen() {
           </View>
 
           {/* Type filter: All / Solo / Crew / Public / Friends */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.histTypeRow} contentContainerStyle={{ gap: 8, paddingHorizontal: 20, paddingVertical: 4 }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.histTypeRow} contentContainerStyle={{ gap: 8, paddingHorizontal: 0, paddingVertical: 4 }}>
             {(["all", "solo", "crew", "public", "friends"] as const).map((t) => {
               const active = historyTypeFilter === t;
               const TYPE_COLORS: Record<string, string> = { solo: C.primary, crew: C.gold, public: C.blue, friends: "#C084FC" };
@@ -1611,7 +1611,7 @@ export default function ProfileScreen() {
             }
 
             return (
-              <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 4, paddingBottom: 8 }}>
+              <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 0, paddingTop: 4, paddingBottom: 8 }}>
                 {filtered.map((run) => {
                   const isSolo = run.type === "solo";
                   const typeColor = TYPE_COLORS[run.type];
