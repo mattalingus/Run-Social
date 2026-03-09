@@ -433,7 +433,7 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
                       !userLocation && fm.proxChipTxtDisabled,
                     ]}
                   >
-                    {mi} mi
+                    {toDisplayDist(mi, distUnit)}
                   </Text>
                 </Pressable>
               ))}
@@ -975,6 +975,7 @@ const PARTICIPANT_STEPS = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 40, 50, 75, 100, 0
 export default function DiscoverScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const distUnit: DistanceUnit = ((user as any)?.distance_unit ?? "miles") as DistanceUnit;
   const qc = useQueryClient();
   const { C } = useTheme();
   const s = useMemo(() => makeStyles(C), [C]);
@@ -2486,7 +2487,7 @@ export default function DiscoverScreen() {
                       <View style={{ flex: 1 }}>
                         <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.text }} numberOfLines={1}>{p.name}</Text>
                         {p.distance_miles != null && (
-                          <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, marginTop: 2 }}>{p.distance_miles.toFixed(1)} mi</Text>
+                          <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, marginTop: 2 }}>{toDisplayDist(p.distance_miles, distUnit)}</Text>
                         )}
                       </View>
                       {p.id === hSavedPathId

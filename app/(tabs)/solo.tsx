@@ -477,7 +477,7 @@ export default function SoloScreen() {
         }
         const mins = Math.round(age / 60000);
         const agoStr = mins < 60 ? `${mins}m ago` : `${Math.round(mins / 60)}h ago`;
-        const distStr = draft.distanceMi > 0 ? `${draft.distanceMi.toFixed(2)} mi` : "a";
+        const distStr = draft.distanceMi > 0 ? toDisplayDist(draft.distanceMi, distUnit) : "a";
         Alert.alert(
           "Unsaved Activity",
           `You have an unsaved ${draft.activityType ?? "run"} (${distStr}, ${agoStr}). Save it?`,
@@ -495,7 +495,7 @@ export default function SoloScreen() {
                     ? (draft.durationSeconds / 60) / draft.distanceMi
                     : null;
                   await apiRequest("POST", "/api/solo-runs", {
-                    title: `${draft.distanceMi.toFixed(2)} mi solo ${draft.activityType ?? "run"}`,
+                    title: `${toDisplayDist(draft.distanceMi, distUnit)} solo ${draft.activityType ?? "run"}`,
                     date: draft.timestamp,
                     distanceMiles: Math.max(draft.distanceMi, 0.001),
                     paceMinPerMile: pace,
@@ -884,7 +884,7 @@ export default function SoloScreen() {
                 <Text style={s.goalLabel}>Distance Goal</Text>
               </View>
               <Text style={s.goalValues}>
-                <Text style={s.goalCurrent}>{formatDistance(currentMiles)}</Text>
+                <Text style={s.goalCurrent}>{toDisplayDist(currentMiles, distUnit).split(" ")[0]}</Text>
                 <Text style={s.goalSlash}> / {toDisplayDist(distGoal, distUnit)}</Text>
               </Text>
             </View>
@@ -1140,7 +1140,7 @@ export default function SoloScreen() {
                 </View>
               ) : displayedRuns.map((run) => {
                 const badge = runBadges[run.id];
-                const label = run.title || `${formatDistance(run.distance_miles)} mi ${run.activity_type === "ride" ? "ride" : "run"}`;
+                const label = run.title || `${toDisplayDist(run.distance_miles, distUnit)} ${run.activity_type === "ride" ? "ride" : "run"}`;
                 const isExpanded = expandedRunId === run.id;
                 return (
                 <View key={run.id} style={s.historyCard}>
@@ -1170,7 +1170,7 @@ export default function SoloScreen() {
                         </View>
                         <Text style={s.historyMeta}>
                           {formatDisplayDate(run.date)}
-                          {run.pace_min_per_mile ? ` · ${formatPace(run.pace_min_per_mile)}/mi` : ""}
+                          {run.pace_min_per_mile ? ` · ${toDisplayPace(run.pace_min_per_mile, distUnit)}` : ""}
                           {run.duration_seconds ? ` · ${formatDuration(run.duration_seconds)}` : ""}
                         </Text>
                       </View>
@@ -1400,7 +1400,7 @@ export default function SoloScreen() {
               keyboardType="decimal-pad"
             />
 
-            <Text style={s.inputLabel}>Target Pace (min:sec /mi, optional)</Text>
+            <Text style={s.inputLabel}>Target Pace (min:sec /{unitLabel(distUnit)}, optional)</Text>
             <TextInput
               style={s.input}
               value={pPace}

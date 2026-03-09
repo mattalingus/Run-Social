@@ -29,6 +29,7 @@ import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { useTheme } from "@/contexts/ThemeContext";
 import { darkColors, type ColorScheme } from "@/constants/colors";
+import { toDisplayPace, toDisplayDist, unitLabel, type DistanceUnit } from "@/lib/units";
 import { Image as ExpoImage } from "expo-image";
 
 const C = darkColors;
@@ -144,12 +145,6 @@ function formatDate(dateStr: string) {
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
-function formatPace(p?: number) {
-  if (!p || p <= 0) return "--";
-  const m = Math.floor(p);
-  const s = Math.round((p - m) * 60);
-  return `${m}:${s.toString().padStart(2, "0")}/mi`;
-}
 
 // ─── Invite Banner ────────────────────────────────────────────────────────────
 function InviteBanner({ invite, onAccept, onDecline }: { invite: CrewInvite; onAccept: () => void; onDecline: () => void }) {
@@ -573,6 +568,8 @@ function MemberProfileSheet({
 }) {
   const { C } = useTheme();
   const s = useMemo(() => makeStyles(C), [C]);
+  const { user: authUser } = useAuth();
+  const distUnit: DistanceUnit = ((authUser as any)?.distance_unit ?? "miles") as DistanceUnit;
   const qc = useQueryClient();
 
   const { data: profile, isLoading: profileLoading } = useQuery<{
@@ -667,7 +664,7 @@ function MemberProfileSheet({
               </View>
 
               {profile.avg_pace && profile.avg_pace > 0 ? (
-                <Text style={s.miniPace}>{formatPace(profile.avg_pace)} avg pace</Text>
+                <Text style={s.miniPace}>{toDisplayPace(profile.avg_pace, distUnit)} avg pace</Text>
               ) : null}
 
               {/* Action buttons */}
@@ -739,10 +736,12 @@ function CrewAchievementsSection({
   achievementsData,
   styles: s,
   C,
+  distUnit = "miles",
 }: {
   achievementsData?: { achievements: any[]; stats: { totalMiles: number; totalEvents: number; totalMembers: number } };
   styles: any;
   C: ColorScheme;
+  distUnit?: DistanceUnit;
 }) {
   const earned = achievementsData?.achievements ?? [];
   const stats = achievementsData?.stats ?? { totalMiles: 0, totalEvents: 0, totalMembers: 0 };
@@ -778,7 +777,7 @@ function CrewAchievementsSection({
     const from = prev?.threshold ?? 0;
     const to = next.threshold;
     const progress = Math.min(1, Math.max(0, (val - from) / (to - from)));
-    const label = cat === "miles" ? `${(val ?? 0).toFixed(1)} / ${to} mi` : cat === "events" ? `${val ?? 0} / ${to} events` : `${val ?? 0} / ${to} members`;
+    const label = cat === "miles" ? `${toDisplayDist(val ?? 0, distUnit)} / ${toDisplayDist(to, distUnit)}` : cat === "events" ? `${val ?? 0} / ${to} events` : `${val ?? 0} / ${to} members`;
     return { key: next.key, label, progress, nextLabel: next.label, nextEmoji: next.emoji };
   }).filter(Boolean);
 
@@ -845,6 +844,8 @@ function CrewDetailSheet({
 }) {
   const { C } = useTheme();
   const s = useMemo(() => makeStyles(C), [C]);
+  const { user: authUser } = useAuth();
+  const distUnit: DistanceUnit = ((authUser as any)?.distance_unit ?? "miles") as DistanceUnit;
   const { activityFilter, setActivityFilter } = useActivity();
   const [showInvite, setShowInvite] = useState(false);
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
@@ -1237,7 +1238,7 @@ function CrewDetailSheet({
                           {run.min_distance ? (
                             <View style={s.eventMetaChip}>
                               <Ionicons name="navigate-outline" size={12} color={C.textMuted} />
-                              <Text style={s.eventMetaChipTxt}>{run.min_distance} mi</Text>
+                              <Text style={s.eventMetaChipTxt}>{toDisplayDist(run.min_distance, distUnit)}</Text>
                             </View>
                           ) : null}
                           <View style={s.eventMetaChip}>
@@ -1458,6 +1459,7 @@ function CrewDetailSheet({
                   achievementsData={crewAchievementsData}
                   styles={s}
                   C={C}
+                  distUnit={distUnit}
                 />
 
                 {/* ── Members ── */}
@@ -1502,7 +1504,7 @@ function CrewDetailSheet({
                             )}
                           </Text>
                           {m.avg_pace && m.avg_pace > 0 ? (
-                            <Text style={s.memberMeta}>{formatPace(m.avg_pace)} avg</Text>
+                            <Text style={s.memberMeta}>{toDisplayPace(m.avg_pace, distUnit)} avg</Text>
                           ) : null}
                         </View>
                         {isCreator && m.user_id !== currentUserId && (
@@ -1551,13 +1553,13 @@ function CrewDetailSheet({
                               </Text>
                               <Text style={s.historyRunDot}>·</Text>
                               <Text style={s.historyRunMetaTxt}>
-                                {run.min_distance} mi
+                                {toDisplayDist(run.min_distance, distUnit)}
                               </Text>
                               {Number(run.avg_attendee_pace) > 0 && (
                                 <>
                                   <Text style={s.historyRunDot}>·</Text>
                                   <Text style={s.historyRunMetaTxt}>
-                                    {formatPace(Number(run.avg_attendee_pace))} avg pace
+                                    {toDisplayPace(Number(run.avg_attendee_pace), distUnit)} avg pace
                                   </Text>
                                 </>
                               )}
@@ -1797,6 +1799,8 @@ interface RankedCrew {
 
 function RankingsModal({ visible, onClose, myCrewIds, myCrewId }: { visible: boolean; onClose: () => void; myCrewIds: string[]; myCrewId?: string }) {
   const { C } = useTheme();
+  const { user: authUser } = useAuth();
+  const distUnit: DistanceUnit = ((authUser as any)?.distance_unit ?? "miles") as DistanceUnit;
   const insets = useSafeAreaInsets();
   const [activityType, setActivityType] = useState<"run" | "ride">("run");
   const [period, setPeriod] = useState<"week" | "month" | "all">("all");
@@ -1829,9 +1833,7 @@ function RankingsModal({ visible, onClose, myCrewIds, myCrewId }: { visible: boo
   }
 
   function formatMiles(m: number | null | undefined) {
-    const n = m ?? 0;
-    if (n >= 1000) return `${(n / 1000).toFixed(1)}k mi`;
-    return `${n.toFixed(1)} mi`;
+    return toDisplayDist(m ?? 0, distUnit);
   }
 
   return (
