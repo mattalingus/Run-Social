@@ -1023,6 +1023,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/runs/:id/broadcast", requireAuth, async (req, res) => {
+    try {
+      const { message } = req.body;
+      if (!message || typeof message !== "string" || !message.trim()) {
+        return res.status(400).json({ message: "Message is required" });
+      }
+      if (message.trim().length > 280) {
+        return res.status(400).json({ message: "Message must be 280 characters or less" });
+      }
+      const run = await storage.getRun(req.params.id, req.session.userId!);
+      if (!run) return res.status(404).json({ message: "Run not found" });
+      if (run.host_id !== req.session.userId) {
+        return res.status(403).json({ message: "Only the host can send messages to participants" });
+      }
+      const tokens = await storage.getRunBroadcastTokens(req.params.id);
+      if (tokens.length) {
+        sendPushNotification(tokens, `${run.title}`, message.trim(), { runId: req.params.id });
+      }
+      res.json({ sent: tokens.length });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.post("/api/runs/:id/complete", requireAuth, async (req, res) => {
     try {
       const { milesLogged } = req.body;

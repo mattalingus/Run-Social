@@ -3136,6 +3136,22 @@ export async function getRunParticipantTokensFiltered(runId: string, notifField:
   return result.rows.map((r: any) => r.push_token);
 }
 
+export async function getRunBroadcastTokens(runId: string): Promise<string[]> {
+  const result = await pool.query(
+    `SELECT u.push_token FROM run_participants rp
+     JOIN users u ON rp.user_id = u.id
+     WHERE rp.run_id = $1 AND rp.status != 'cancelled'
+       AND u.push_token IS NOT NULL AND u.notifications_enabled = true
+     UNION
+     SELECT u.push_token FROM planned_runs pr
+     JOIN users u ON pr.user_id = u.id
+     WHERE pr.run_id = $1
+       AND u.push_token IS NOT NULL AND u.notifications_enabled = true`,
+    [runId]
+  );
+  return result.rows.map((r: any) => r.push_token);
+}
+
 export async function deleteUser(userId: string): Promise<void> {
   await pool.query(`DELETE FROM users WHERE id = $1`, [userId]);
 }

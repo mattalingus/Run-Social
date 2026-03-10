@@ -102,6 +102,9 @@ export default function RunDetailScreen() {
   const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
   const [hostProfileId, setHostProfileId] = useState<string | null>(null);
   const [showEditSheet, setShowEditSheet] = useState(false);
+  const [showMessageSheet, setShowMessageSheet] = useState(false);
+  const [broadcastMsg, setBroadcastMsg] = useState("");
+  const [broadcasting, setBroadcasting] = useState(false);
   const [showPaceGroupSheet, setShowPaceGroupSheet] = useState(false);
   const [pendingJoinPaceGroup, setPendingJoinPaceGroup] = useState<string | null>(null);
   const [editDate, setEditDate] = useState("");
@@ -436,6 +439,24 @@ export default function RunDetailScreen() {
         },
       ]
     );
+  }
+
+  async function handleBroadcast() {
+    const msg = broadcastMsg.trim();
+    if (!msg) return;
+    setBroadcasting(true);
+    try {
+      const res = await apiRequest("POST", `/api/runs/${id}/broadcast`, { message: msg });
+      setBroadcastMsg("");
+      setShowMessageSheet(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert("Sent!", `Your message was delivered to ${res.sent} participant${res.sent !== 1 ? "s" : ""}.`);
+    } catch (e: any) {
+      Alert.alert("Error", e.message || "Could not send message.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setBroadcasting(false);
+    }
   }
 
   async function doJoin(paceGroupLabel?: string) {
@@ -1120,6 +1141,14 @@ export default function RunDetailScreen() {
                   <Text style={styles.hostMgmtTxt}>Edit Time</Text>
                 </Pressable>
                 <Pressable
+                  style={({ pressed }) => [styles.hostMgmtBtn, { opacity: pressed ? 0.75 : 1, borderColor: C.primary + "55", backgroundColor: C.primaryMuted }]}
+                  onPress={() => { setBroadcastMsg(""); setShowMessageSheet(true); Haptics.selectionAsync(); }}
+                  testID="message-participants-btn"
+                >
+                  <Feather name="message-circle" size={15} color={C.primary} />
+                  <Text style={[styles.hostMgmtTxt, { color: C.primary }]}>Message All</Text>
+                </Pressable>
+                <Pressable
                   style={({ pressed }) => [styles.hostMgmtBtn, styles.hostMgmtDangerBtn, { opacity: pressed || cancelling ? 0.75 : 1 }]}
                   onPress={handleCancelRun}
                   disabled={cancelling}
@@ -1532,6 +1561,59 @@ export default function RunDetailScreen() {
                     <>
                       <Feather name="check" size={16} color={C.text} />
                       <Text style={styles.primaryBtnText}>Save Changes</Text>
+                    </>
+                  )}
+                </Pressable>
+              </View>
+            </KeyboardAvoidingView>
+          </View>
+        </Modal>
+      )}
+
+      {/* ── Message Participants Sheet ── */}
+      {showMessageSheet && (
+        <Modal transparent animationType="slide" onRequestClose={() => setShowMessageSheet(false)}>
+          <View style={styles.frModalWrap}>
+            <Pressable style={styles.frOverlay} onPress={() => setShowMessageSheet(false)} />
+            <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.editSheetOuter}>
+              <View style={[styles.editSheet, { paddingBottom: insets.bottom + 24 }]}>
+                <View style={styles.frHandle} />
+                <View style={styles.editSheetHeader}>
+                  <Text style={styles.editSheetTitle}>Message Participants</Text>
+                  <Pressable onPress={() => setShowMessageSheet(false)} hitSlop={12}>
+                    <Feather name="x" size={18} color={C.textSecondary} />
+                  </Pressable>
+                </View>
+                <Text style={styles.editSheetSub}>
+                  All joined and planned attendees will receive a push notification with your message.
+                </Text>
+                <View style={styles.editFieldGroup}>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                    <Text style={styles.editFieldLabel}>Message</Text>
+                    <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: broadcastMsg.length > 250 ? C.danger : C.textMuted }}>
+                      {broadcastMsg.length} / 280
+                    </Text>
+                  </View>
+                  <TextInput
+                    style={[styles.editInput, { minHeight: 100, textAlignVertical: "top", paddingTop: 12 }]}
+                    value={broadcastMsg}
+                    onChangeText={setBroadcastMsg}
+                    placeholder={`e.g. "Heads up — we're meeting by the north entrance today!"`}
+                    placeholderTextColor={C.textMuted}
+                    multiline
+                    maxLength={280}
+                    autoFocus
+                  />
+                </View>
+                <Pressable
+                  style={({ pressed }) => [styles.primaryBtn, { opacity: pressed || broadcasting || !broadcastMsg.trim() ? 0.75 : 1, marginTop: 8 }]}
+                  onPress={handleBroadcast}
+                  disabled={broadcasting || !broadcastMsg.trim()}
+                >
+                  {broadcasting ? <ActivityIndicator color={C.text} /> : (
+                    <>
+                      <Feather name="send" size={16} color={C.text} />
+                      <Text style={styles.primaryBtnText}>Send Message</Text>
                     </>
                   )}
                 </Pressable>
