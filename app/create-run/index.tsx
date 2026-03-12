@@ -679,33 +679,37 @@ export default function CreateRunScreen() {
         )}
 
         {/* 9. Host Style */}
-        <Text style={{ color: "red", fontSize: 12, marginBottom: 4 }}>dbg isCrew={String(isCrew)} act={activityType} cats={RUN_STYLE_CATEGORIES_RUN.length}</Text>
         {!isCrew && (
           <View style={styles.field}>
-            <Text style={styles.label}>Host Style <Text style={{ fontFamily: "Outfit_400Regular", color: C.textMuted }}>— select all that apply</Text></Text>
-            {(activityType === "ride" ? RUN_STYLE_CATEGORIES_RIDE : RUN_STYLE_CATEGORIES_RUN).map(({ label, options }) => (
-              <View key={label}>
-                <Text style={styles.vibeCategoryLabel}>{label}</Text>
-                <View style={styles.vibeChipsGrid}>
-                  {options.map((v) => (
-                    <TouchableOpacity
-                      key={v}
-                      style={[styles.vibeChip, hostTags.includes(v) && styles.vibeChipActive]}
-                      onPress={() => {
-                        setHostTags((prev) => {
-                          if (prev.includes(v)) return prev.filter((t) => t !== v);
-                          if (prev.length >= 8) return prev;
-                          return [...prev, v];
-                        });
-                        Haptics.selectionAsync();
-                      }}
-                    >
-                      <Text style={[styles.vibeChipTxt, hostTags.includes(v) && styles.vibeChipActiveTxt]}>{v}</Text>
-                    </TouchableOpacity>
-                  ))}
+            <Text style={styles.label}>Host Style</Text>
+            {(activityType === "ride" ? RUN_STYLE_CATEGORIES_RIDE : RUN_STYLE_CATEGORIES_RUN).map(function(cat) {
+              return (
+                <View key={cat.label} style={{ marginTop: 14 }}>
+                  <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 11, color: "#3D6B50", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 8 }}>{cat.label}</Text>
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                    {cat.options.map(function(v) {
+                      const active = hostTags.includes(v);
+                      return (
+                        <TouchableOpacity
+                          key={v}
+                          style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: active ? "#00D97E22" : C.surface, borderWidth: 1, borderColor: active ? "#00D97E" : C.border }}
+                          onPress={() => {
+                            setHostTags(function(prev) {
+                              if (prev.includes(v)) return prev.filter(function(t) { return t !== v; });
+                              if (prev.length >= 8) return prev;
+                              return [...prev, v];
+                            });
+                            Haptics.selectionAsync();
+                          }}
+                        >
+                          <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: active ? "#00D97E" : C.text }}>{v}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         )}
       </KeyboardAwareScrollViewCompat>
