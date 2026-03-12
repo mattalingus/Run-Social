@@ -109,6 +109,10 @@ export default function CreateRunScreen() {
   const params = useLocalSearchParams<{ pathLat?: string; pathLng?: string; pathName?: string; pathDistance?: string; activityType?: string; crewId?: string; crewName?: string }>();
 
   const [activityType, setActivityType] = useState<"run" | "ride">(params.activityType === "ride" ? "ride" : "run");
+  const styleCategories = useMemo(
+    () => activityType === "ride" ? RUN_STYLE_CATEGORIES_RIDE : RUN_STYLE_CATEGORIES_RUN,
+    [activityType]
+  );
   const [title, setTitle] = useState(params.pathName ? `${params.activityType === "ride" ? "Ride on" : "Run on"} ${params.pathName}` : "");
   const [description, setDescription] = useState("");
   const [privacy, setPrivacy] = useState("public");
@@ -682,7 +686,7 @@ export default function CreateRunScreen() {
         {!isCrew && (
           <View style={styles.field}>
             <Text style={styles.label}>Host Style <Text style={{ fontFamily: "Outfit_400Regular", color: C.textMuted }}>— select all that apply</Text></Text>
-            {(activityType === "ride" ? RUN_STYLE_CATEGORIES_RIDE : RUN_STYLE_CATEGORIES_RUN).map(({ label, options }) => (
+            {styleCategories.map(({ label, options }) => (
               <View key={label}>
                 <Text style={styles.vibeCategoryLabel}>{label}</Text>
                 <View style={styles.vibeChipsGrid}>
@@ -1083,7 +1087,7 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   tagsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   tagGroupWrapper: { marginTop: 12, gap: 8 },
   tagGroupLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.textMuted, textTransform: "uppercase", letterSpacing: 0.6 },
-  vibeCategoryLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.textMuted, textTransform: "uppercase", letterSpacing: 0.6, marginTop: 14, marginBottom: 6 },
+  vibeCategoryLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.textSecondary, textTransform: "uppercase", letterSpacing: 0.6, marginTop: 14, marginBottom: 6 },
   vibeChipsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 4 },
   vibeChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
   vibeChipActive: { backgroundColor: C.primary + "22", borderColor: C.primary },
