@@ -17,6 +17,7 @@ import MapView, { Marker } from "react-native-maps";
 import Svg, { Polyline as SvgPolyline } from "react-native-svg";
 import * as Location from "expo-location";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
+import { HostStylePicker } from "./HostStylePicker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons } from "@expo/vector-icons";
@@ -682,38 +683,12 @@ export default function CreateRunScreen() {
           <View style={styles.field}>
             <Text style={styles.label}>Host Style</Text>
             <Text style={styles.fieldHint}>Select all that apply</Text>
-            <View style={{ gap: 16, marginTop: 8 }}>
-              {(activityType === "ride" ? RUN_STYLE_CATEGORIES_RIDE : RUN_STYLE_CATEGORIES_RUN).map((cat, idx) => (
-                <View key={cat.label}>
-                  {idx > 0 && <View style={{ height: 1, backgroundColor: C.border, marginBottom: 16 }} />}
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                    <View style={{ backgroundColor: C.primaryMuted, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 }}>
-                      <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 11, color: C.primary, textTransform: "uppercase", letterSpacing: 1.0 }}>{cat.label}</Text>
-                    </View>
-                  </View>
-                  <View style={styles.tagsGrid}>
-                    {cat.styles.map((s) => {
-                      const active = hostTags.includes(s);
-                      return (
-                        <Pressable
-                          key={s}
-                          style={[styles.tagChip, styles.runStyleChip, active && styles.runStyleChipActive]}
-                          onPress={() => {
-                            setHostTags((prev) => {
-                              if (prev.includes(s)) return prev.filter((t) => t !== s);
-                              if (prev.length >= 8) return prev;
-                              return [...prev, s];
-                            });
-                            Haptics.selectionAsync();
-                          }}
-                        >
-                          <Text style={[styles.tagChipText, active && styles.runStyleChipTextActive]}>{s}</Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                </View>
-              ))}
+            <View style={{ marginTop: 8 }}>
+              <HostStylePicker
+                activityType={activityType}
+                selected={hostTags}
+                onChange={setHostTags}
+              />
             </View>
           </View>
         )}
