@@ -109,10 +109,6 @@ export default function CreateRunScreen() {
   const params = useLocalSearchParams<{ pathLat?: string; pathLng?: string; pathName?: string; pathDistance?: string; activityType?: string; crewId?: string; crewName?: string }>();
 
   const [activityType, setActivityType] = useState<"run" | "ride">(params.activityType === "ride" ? "ride" : "run");
-  const styleCategories = useMemo(
-    () => activityType === "ride" ? RUN_STYLE_CATEGORIES_RIDE : RUN_STYLE_CATEGORIES_RUN,
-    [activityType]
-  );
   const [title, setTitle] = useState(params.pathName ? `${params.activityType === "ride" ? "Ride on" : "Run on"} ${params.pathName}` : "");
   const [description, setDescription] = useState("");
   const [privacy, setPrivacy] = useState("public");
@@ -683,10 +679,11 @@ export default function CreateRunScreen() {
         )}
 
         {/* 9. Host Style */}
+        <Text style={{ color: "red", fontSize: 12, marginBottom: 4 }}>dbg isCrew={String(isCrew)} act={activityType} cats={RUN_STYLE_CATEGORIES_RUN.length}</Text>
         {!isCrew && (
           <View style={styles.field}>
             <Text style={styles.label}>Host Style <Text style={{ fontFamily: "Outfit_400Regular", color: C.textMuted }}>— select all that apply</Text></Text>
-            {styleCategories.map(({ label, options }) => (
+            {(activityType === "ride" ? RUN_STYLE_CATEGORIES_RIDE : RUN_STYLE_CATEGORIES_RUN).map(({ label, options }) => (
               <View key={label}>
                 <Text style={styles.vibeCategoryLabel}>{label}</Text>
                 <View style={styles.vibeChipsGrid}>
