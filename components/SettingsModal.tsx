@@ -666,7 +666,10 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
               sublabel="Share PaceUp with your crew"
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                const msg = "Join me on PaceUp — discover group runs & rides! Download it here: https://paceupapp.com";
+                const appLink = Platform.OS === "ios"
+                  ? "https://apps.apple.com/us/app/paceup-move-together/id6760092871"
+                  : "https://paceupapp.com";
+                const msg = `Join me on PaceUp — discover group runs & rides! Download it here: ${appLink}`;
                 if (Platform.OS === "web") {
                   (navigator as any).clipboard?.writeText(msg);
                   Alert.alert("Copied!", "Invite link copied to clipboard.");

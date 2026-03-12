@@ -34,8 +34,8 @@ import { pickAndUploadImage } from "@/lib/uploadImage";
 import MileSplitsChart from "@/components/MileSplitsChart";
 import HostProfileSheet from "@/components/HostProfileSheet";
 import SettingsModal from "@/components/SettingsModal";
-const APP_SHARE_URL = process.env.EXPO_PUBLIC_DOMAIN
-  ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
+const APP_SHARE_URL = Platform.OS === "ios"
+  ? "https://apps.apple.com/us/app/paceup-move-together/id6760092871"
   : "https://paceupapp.com";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
