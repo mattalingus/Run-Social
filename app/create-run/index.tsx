@@ -694,7 +694,11 @@ export default function CreateRunScreen() {
                           key={s}
                           style={[styles.tagChip, styles.runStyleChip, active && styles.runStyleChipActive]}
                           onPress={() => {
-                            setHostTags((prev) => prev.includes(s) ? prev.filter((t) => t !== s) : [...prev, s]);
+                            setHostTags((prev) => {
+                              if (prev.includes(s)) return prev.filter((t) => t !== s);
+                              if (prev.length >= 8) return prev;
+                              return [...prev, s];
+                            });
                             Haptics.selectionAsync();
                           }}
                         >
