@@ -1087,7 +1087,7 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   sectionLabel: { fontFamily: "Outfit_700Bold", fontSize: 14, color: C.text },
   tagsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   tagGroupWrapper: { marginTop: 12, gap: 8 },
-  tagGroupLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.textMuted, textTransform: "uppercase", letterSpacing: 0.6 },
+  tagGroupLabel: { fontFamily: "Outfit_700Bold", fontSize: 11, color: C.primary, textTransform: "uppercase", letterSpacing: 1.0, marginBottom: 2 },
   tagChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
