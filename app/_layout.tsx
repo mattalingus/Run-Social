@@ -61,6 +61,8 @@ function RootLayoutNav() {
   const [fontsLoaded, fontError] = useFonts({ Outfit_400Regular, Outfit_600SemiBold, Outfit_700Bold, PlayfairDisplay_700Bold, DancingScript_700Bold, Nunito_800ExtraBold });
   const splashHidden = useRef(false);
   const pushRegistered = useRef(false);
+  const [updateReady, setUpdateReady] = React.useState(Platform.OS === "web" || __DEV__);
+  const BUNDLE_VERSION = "v20260312-categories";
 
   useEffect(() => {
     if (Platform.OS === "web" || __DEV__) return;
@@ -70,13 +72,15 @@ function RootLayoutNav() {
         if (check.isAvailable) {
           await Updates.fetchUpdateAsync();
           await Updates.reloadAsync();
+          return;
         }
       } catch (_) {}
+      setUpdateReady(true);
     })();
   }, []);
 
   useEffect(() => {
-    if (!isLoading && (fontsLoaded || fontError)) {
+    if (!isLoading && (fontsLoaded || fontError) && updateReady) {
       if (!splashHidden.current) {
         splashHidden.current = true;
         SplashScreen.hideAsync();
@@ -85,7 +89,7 @@ function RootLayoutNav() {
         router.replace("/(auth)/login");
       }
     }
-  }, [isLoading, fontsLoaded, fontError, user]);
+  }, [isLoading, fontsLoaded, fontError, user, updateReady]);
 
   // Register push token once when user logs in
   useEffect(() => {
