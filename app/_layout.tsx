@@ -3,7 +3,6 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack, router } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import * as Notifications from "@/lib/safeNotifications";
-import * as Updates from "expo-updates";
 import React, { useEffect, useRef } from "react";
 import { Platform } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -61,26 +60,9 @@ function RootLayoutNav() {
   const [fontsLoaded, fontError] = useFonts({ Outfit_400Regular, Outfit_600SemiBold, Outfit_700Bold, PlayfairDisplay_700Bold, DancingScript_700Bold, Nunito_800ExtraBold });
   const splashHidden = useRef(false);
   const pushRegistered = useRef(false);
-  const [updateReady, setUpdateReady] = React.useState(Platform.OS === "web" || __DEV__);
-  const BUNDLE_VERSION = "v20260312-fix-route-export";
 
   useEffect(() => {
-    if (Platform.OS === "web" || __DEV__) return;
-    (async () => {
-      try {
-        const check = await Updates.checkForUpdateAsync();
-        if (check.isAvailable) {
-          await Updates.fetchUpdateAsync();
-          await Updates.reloadAsync();
-          return;
-        }
-      } catch (_) {}
-      setUpdateReady(true);
-    })();
-  }, []);
-
-  useEffect(() => {
-    if (!isLoading && (fontsLoaded || fontError) && updateReady) {
+    if (!isLoading && (fontsLoaded || fontError)) {
       if (!splashHidden.current) {
         splashHidden.current = true;
         SplashScreen.hideAsync();
@@ -89,7 +71,7 @@ function RootLayoutNav() {
         router.replace("/(auth)/login");
       }
     }
-  }, [isLoading, fontsLoaded, fontError, user, updateReady]);
+  }, [isLoading, fontsLoaded, fontError, user]);
 
   // Register push token once when user logs in
   useEffect(() => {

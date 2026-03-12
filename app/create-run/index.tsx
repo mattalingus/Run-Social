@@ -17,7 +17,6 @@ import MapView, { Marker } from "react-native-maps";
 import Svg, { Polyline as SvgPolyline } from "react-native-svg";
 import * as Location from "expo-location";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
-import { HostStylePicker } from "@/components/HostStylePicker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons } from "@expo/vector-icons";
@@ -683,12 +682,33 @@ export default function CreateRunScreen() {
           <View style={styles.field}>
             <Text style={styles.label}>Host Style</Text>
             <Text style={styles.fieldHint}>Select all that apply</Text>
-            <View style={{ marginTop: 8 }}>
-              <HostStylePicker
-                activityType={activityType}
-                selected={hostTags}
-                onChange={setHostTags}
-              />
+            <View style={{ gap: 14, marginTop: 4 }}>
+              {(activityType === "ride" ? RUN_STYLE_CATEGORIES_RIDE : RUN_STYLE_CATEGORIES_RUN).map((cat) => (
+                <View key={cat.label}>
+                  <Text style={styles.tagGroupLabel}>{cat.label}</Text>
+                  <View style={[styles.tagsGrid, { marginTop: 8 }]}>
+                    {cat.styles.map((s) => {
+                      const active = hostTags.includes(s);
+                      return (
+                        <Pressable
+                          key={s}
+                          style={[styles.tagChip, styles.runStyleChip, active && styles.runStyleChipActive]}
+                          onPress={() => {
+                            setHostTags((prev) => {
+                              if (prev.includes(s)) return prev.filter((t) => t !== s);
+                              if (prev.length >= 8) return prev;
+                              return [...prev, s];
+                            });
+                            Haptics.selectionAsync();
+                          }}
+                        >
+                          <Text style={[styles.tagChipText, active && styles.runStyleChipTextActive]}>{s}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              ))}
             </View>
           </View>
         )}
@@ -1067,7 +1087,7 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   sectionLabel: { fontFamily: "Outfit_700Bold", fontSize: 14, color: C.text },
   tagsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   tagGroupWrapper: { marginTop: 12, gap: 8 },
-  tagGroupLabel: { fontFamily: "Outfit_700Bold", fontSize: 11, color: C.primary, textTransform: "uppercase", letterSpacing: 1.0, marginBottom: 2 },
+  tagGroupLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.textMuted, textTransform: "uppercase", letterSpacing: 0.6 },
   tagChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
