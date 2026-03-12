@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
+  TouchableOpacity,
   TextInput,
   ActivityIndicator,
   Alert,
@@ -680,36 +681,30 @@ export default function CreateRunScreen() {
         {/* 9. Host Style */}
         {!isCrew && (
           <View style={styles.field}>
-            <Text style={styles.label}>Host Style</Text>
-            <Text style={styles.fieldHint}>Select all that apply</Text>
-            <View style={{ marginTop: 4 }}>
-              {(activityType === "ride" ? RUN_STYLE_CATEGORIES_RIDE : RUN_STYLE_CATEGORIES_RUN).map((cat) => (
-                <View key={cat.label} style={{ marginBottom: 14 }}>
-                  <Text style={styles.label}>{cat.label}</Text>
-                  <View style={[styles.tagsGrid, { marginTop: 8 }]}>
-                    {cat.options.map((s) => {
-                      const active = hostTags.includes(s);
-                      return (
-                        <Pressable
-                          key={s}
-                          style={[styles.tagChip, styles.runStyleChip, active && styles.tagChipActive]}
-                          onPress={() => {
-                            setHostTags((prev) => {
-                              if (prev.includes(s)) return prev.filter((t) => t !== s);
-                              if (prev.length >= 8) return prev;
-                              return [...prev, s];
-                            });
-                            Haptics.selectionAsync();
-                          }}
-                        >
-                          <Text style={[styles.tagChipText, active && styles.tagChipTextActive]}>{s}</Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
+            <Text style={styles.label}>Host Style <Text style={{ fontFamily: "Outfit_400Regular", color: C.textMuted }}>— select all that apply</Text></Text>
+            {(activityType === "ride" ? RUN_STYLE_CATEGORIES_RIDE : RUN_STYLE_CATEGORIES_RUN).map(({ label, options }) => (
+              <View key={label}>
+                <Text style={styles.vibeCategoryLabel}>{label}</Text>
+                <View style={styles.vibeChipsGrid}>
+                  {options.map((v) => (
+                    <TouchableOpacity
+                      key={v}
+                      style={[styles.vibeChip, hostTags.includes(v) && styles.vibeChipActive]}
+                      onPress={() => {
+                        setHostTags((prev) => {
+                          if (prev.includes(v)) return prev.filter((t) => t !== v);
+                          if (prev.length >= 8) return prev;
+                          return [...prev, v];
+                        });
+                        Haptics.selectionAsync();
+                      }}
+                    >
+                      <Text style={[styles.vibeChipTxt, hostTags.includes(v) && styles.vibeChipActiveTxt]}>{v}</Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
-              ))}
-            </View>
+              </View>
+            ))}
           </View>
         )}
       </KeyboardAwareScrollViewCompat>
@@ -1088,6 +1083,12 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   tagsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   tagGroupWrapper: { marginTop: 12, gap: 8 },
   tagGroupLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.textMuted, textTransform: "uppercase", letterSpacing: 0.6 },
+  vibeCategoryLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.textMuted, textTransform: "uppercase", letterSpacing: 0.6, marginTop: 14, marginBottom: 6 },
+  vibeChipsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 4 },
+  vibeChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
+  vibeChipActive: { backgroundColor: C.primary + "22", borderColor: C.primary },
+  vibeChipTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.text },
+  vibeChipActiveTxt: { color: C.primary },
   tagChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
