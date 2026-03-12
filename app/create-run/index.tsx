@@ -35,7 +35,11 @@ const TAG_GROUPS = [
   { label: "Activity",     tags: ["Trail", "Morning Run", "Night Run"] },
   { label: "Extras",       tags: ["Dog Friendly", "Stroller Friendly"] },
 ];
-const RUN_STYLES = ["Easy Pace", "Chill", "Steady", "Tempo", "Fast", "Recovery", "Long Run", "Progressive", "Intervals", "Race Prep"];
+const RUN_STYLE_CATEGORIES = [
+  { label: "Casual",      styles: ["Chill", "Easy Pace", "Recovery"] },
+  { label: "Training",    styles: ["Steady", "Long Run", "Progressive", "Intervals"] },
+  { label: "Performance", styles: ["Tempo", "Fast", "Race Prep"] },
+];
 const PRIVACY_OPTIONS = [
   { value: "public",  label: "Public",       icon: "globe",   desc: "Anyone can join" },
   { value: "friends", label: "Friends Only",  icon: "users",   desc: "Your friends see this" },
@@ -668,15 +672,22 @@ export default function CreateRunScreen() {
           <View style={styles.field}>
             <Text style={styles.label}>Host Style</Text>
             <Text style={styles.fieldHint}>What type of event is this?</Text>
-            <View style={styles.tagsGrid}>
-              {RUN_STYLES.map((s) => (
-                <Pressable
-                  key={s}
-                  style={[styles.tagChip, styles.runStyleChip, runStyle === s && styles.runStyleChipActive]}
-                  onPress={() => { setRunStyle(runStyle === s ? null : s); Haptics.selectionAsync(); }}
-                >
-                  <Text style={[styles.tagChipText, runStyle === s && styles.runStyleChipTextActive]}>{s}</Text>
-                </Pressable>
+            <View style={{ gap: 14, marginTop: 4 }}>
+              {RUN_STYLE_CATEGORIES.map((cat) => (
+                <View key={cat.label}>
+                  <Text style={styles.tagGroupLabel}>{cat.label}</Text>
+                  <View style={[styles.tagsGrid, { marginTop: 8 }]}>
+                    {cat.styles.map((s) => (
+                      <Pressable
+                        key={s}
+                        style={[styles.tagChip, styles.runStyleChip, runStyle === s && styles.runStyleChipActive]}
+                        onPress={() => { setRunStyle(runStyle === s ? null : s); Haptics.selectionAsync(); }}
+                      >
+                        <Text style={[styles.tagChipText, runStyle === s && styles.runStyleChipTextActive]}>{s}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
               ))}
             </View>
           </View>
