@@ -17,7 +17,7 @@ import MapView, { Marker } from "react-native-maps";
 import Svg, { Polyline as SvgPolyline } from "react-native-svg";
 import * as Location from "expo-location";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
-import { HostStylePicker } from "./HostStylePicker";
+import { HostStylePicker } from "@/components/HostStylePicker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons } from "@expo/vector-icons";

@@ -62,7 +62,7 @@ function RootLayoutNav() {
   const splashHidden = useRef(false);
   const pushRegistered = useRef(false);
   const [updateReady, setUpdateReady] = React.useState(Platform.OS === "web" || __DEV__);
-  const BUNDLE_VERSION = "v20260312-categories";
+  const BUNDLE_VERSION = "v20260312-fix-route-export";
 
   useEffect(() => {
     if (Platform.OS === "web" || __DEV__) return;
