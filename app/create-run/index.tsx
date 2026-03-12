@@ -685,14 +685,14 @@ export default function CreateRunScreen() {
             <View style={{ gap: 14, marginTop: 4 }}>
               {(activityType === "ride" ? RUN_STYLE_CATEGORIES_RIDE : RUN_STYLE_CATEGORIES_RUN).map((cat) => (
                 <View key={cat.label}>
-                  <Text style={styles.tagGroupLabel}>{cat.label}</Text>
+                  <Text style={styles.label}>{cat.label}</Text>
                   <View style={[styles.tagsGrid, { marginTop: 8 }]}>
                     {cat.styles.map((s) => {
                       const active = hostTags.includes(s);
                       return (
                         <Pressable
                           key={s}
-                          style={[styles.tagChip, styles.runStyleChip, active && styles.runStyleChipActive]}
+                          style={[styles.tagChip, styles.runStyleChip, active && styles.tagChipActive]}
                           onPress={() => {
                             setHostTags((prev) => {
                               if (prev.includes(s)) return prev.filter((t) => t !== s);
@@ -702,7 +702,7 @@ export default function CreateRunScreen() {
                             Haptics.selectionAsync();
                           }}
                         >
-                          <Text style={[styles.tagChipText, active && styles.runStyleChipTextActive]}>{s}</Text>
+                          <Text style={[styles.tagChipText, active && styles.tagChipTextActive]}>{s}</Text>
                         </Pressable>
                       );
                     })}
