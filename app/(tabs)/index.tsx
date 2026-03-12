@@ -64,13 +64,33 @@ const SORT_OPTIONS: { key: SortOption; label: string }[] = [
 ];
 
 const HOST_STYLES = [
-  "General",
-  "Talkative", "Quiet", "Motivational", "Social", "Ministry", "Recovery",
-  "Beginner Friendly", "Training", "No-Drop", "PR Chaser",
-  "Women Only", "Men Only", "Young Adults", "College", "Seniors",
-  "Trail", "Morning Run", "Night Run",
-  "Dog Friendly", "Stroller Friendly",
+  "Easy Pace", "Beginner Friendly", "No-Drop", "Recovery", "Long Run", "Long Ride", "PR Chaser", "Tempo", "Intervals",
+  "General", "Talkative", "Headphones OK", "Motivational", "Social After",
+  "Women", "Men", "Co-Ed", "Young Adult", "College", "Seniors", "All Ages", "Middle Aged",
+  "Dog Friendly", "Stroller Friendly", "Walk-Run", "Walk-Ride", "Run & Coffee", "Ride & Coffee",
+  "Morning Run", "Morning Ride", "Sunrise Run", "Sunrise Ride", "Sunset Run", "Sunset Ride", "Lunch Run", "Lunch Ride", "Night Run", "Night Ride",
+  "Trail", "Road", "Park Loop",
 ];
+
+const TAG_CATEGORY_ORDER: string[] = [
+  "Easy Pace", "Beginner Friendly", "No-Drop", "Recovery", "Long Run", "Long Ride", "PR Chaser", "Tempo", "Intervals",
+  "General", "Talkative", "Headphones OK", "Motivational", "Social After",
+  "Women", "Men", "Co-Ed", "Young Adult", "College", "Seniors", "All Ages", "Middle Aged",
+  "Dog Friendly", "Stroller Friendly", "Walk-Run", "Walk-Ride", "Run & Coffee", "Ride & Coffee",
+  "Morning Run", "Morning Ride", "Sunrise Run", "Sunrise Ride", "Sunset Run", "Sunset Ride", "Lunch Run", "Lunch Ride", "Night Run", "Night Ride",
+  "Trail", "Road", "Park Loop",
+];
+
+function sortTagsByCategory(tags: string[]): string[] {
+  return [...tags].sort((a, b) => {
+    const ai = TAG_CATEGORY_ORDER.indexOf(a);
+    const bi = TAG_CATEGORY_ORDER.indexOf(b);
+    if (ai === -1 && bi === -1) return 0;
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  });
+}
 const PROX_STEPS  = [1, 5, 10, 25, 50]; // miles (null = Nationwide)
 
 interface FilterState {
@@ -848,13 +868,13 @@ function RunCard({
           )}
 
           {run.tags?.length > 0 && (
-            <View style={s.tags}>
-              {run.tags.slice(0, 3).map((t) => (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.tagsScroll} contentContainerStyle={s.tags}>
+              {sortTagsByCategory(run.tags).map((t) => (
                 <View key={t} style={s.tag}>
                   <Text style={s.tagTxt}>{t}</Text>
                 </View>
               ))}
-            </View>
+            </ScrollView>
           )}
         </View>
       </View>
@@ -3247,7 +3267,8 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   statPillValue: { fontFamily: "Outfit_700Bold", fontSize: 12, color: C.text },
   statPillLabel: { fontFamily: "Outfit_400Regular", fontSize: 10, color: C.textMuted, textTransform: "uppercase", letterSpacing: 0.3 },
 
-  tags: { flexDirection: "row", gap: 5, flexWrap: "wrap" },
+  tagsScroll: { marginTop: 2 },
+  tags: { flexDirection: "row", gap: 5 },
   tag: {
     backgroundColor: C.card,
     borderRadius: 5,

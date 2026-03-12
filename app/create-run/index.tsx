@@ -35,10 +35,21 @@ const TAG_GROUPS = [
   { label: "Activity",     tags: ["Trail", "Morning Run", "Night Run"] },
   { label: "Extras",       tags: ["Dog Friendly", "Stroller Friendly"] },
 ];
-const RUN_STYLE_CATEGORIES = [
-  { label: "Casual",      styles: ["Chill", "Easy Pace", "Recovery"] },
-  { label: "Training",    styles: ["Steady", "Long Run", "Progressive", "Intervals"] },
-  { label: "Performance", styles: ["Tempo", "Fast", "Race Prep"] },
+const RUN_STYLE_CATEGORIES_RUN = [
+  { label: "Effort",      styles: ["Easy Pace", "Beginner Friendly", "No-Drop", "Recovery", "Long Run", "PR Chaser", "Tempo", "Intervals"] },
+  { label: "Social",      styles: ["General", "Talkative", "Headphones OK", "Motivational", "Social After"] },
+  { label: "Community",   styles: ["Women", "Men", "Co-Ed", "Young Adult", "College", "Seniors", "All Ages", "Middle Aged"] },
+  { label: "Lifestyle",   styles: ["Dog Friendly", "Stroller Friendly", "Walk-Run", "Run & Coffee"] },
+  { label: "Time of Day", styles: ["Morning Run", "Sunrise Run", "Sunset Run", "Lunch Run", "Night Run"] },
+  { label: "Terrain",     styles: ["Trail", "Road", "Park Loop"] },
+];
+const RUN_STYLE_CATEGORIES_RIDE = [
+  { label: "Effort",      styles: ["Easy Pace", "Beginner Friendly", "No-Drop", "Recovery", "Long Ride", "PR Chaser", "Tempo", "Intervals"] },
+  { label: "Social",      styles: ["General", "Talkative", "Headphones OK", "Motivational", "Social After"] },
+  { label: "Community",   styles: ["Women", "Men", "Co-Ed", "Young Adult", "College", "Seniors", "All Ages", "Middle Aged"] },
+  { label: "Lifestyle",   styles: ["Dog Friendly", "Stroller Friendly", "Walk-Ride", "Ride & Coffee"] },
+  { label: "Time of Day", styles: ["Morning Ride", "Sunrise Ride", "Sunset Ride", "Lunch Ride", "Night Ride"] },
+  { label: "Terrain",     styles: ["Trail", "Road", "Park Loop"] },
 ];
 const PRIVACY_OPTIONS = [
   { value: "public",  label: "Public",       icon: "globe",   desc: "Anyone can join" },
@@ -110,7 +121,7 @@ export default function CreateRunScreen() {
   const [minPace, setMinPace] = useState("8");
   const [maxPace, setMaxPace] = useState("12");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [runStyle, setRunStyle] = useState<string | null>(null);
+  const [hostTags, setHostTags] = useState<string[]>([]);
   const [maxParticipants, setMaxParticipants] = useState("20");
   const [invitePassword, setInvitePassword] = useState("");
   const [inviteModal, setInviteModal] = useState<{ token: string; title: string } | null>(null);
@@ -269,9 +280,8 @@ export default function CreateRunScreen() {
         maxDistance: distMax,
         minPace: pace,
         maxPace: paceMax,
-        tags: isCrew ? [] : selectedTags,
+        tags: isCrew ? [] : hostTags,
         maxParticipants: isCrew ? 9999 : parseInt(maxParticipants),
-        runStyle: isCrew ? undefined : (runStyle ?? undefined),
         activityType,
         crewId: effectiveCrewId || undefined,
         isStrict: false,
@@ -671,21 +681,27 @@ export default function CreateRunScreen() {
         {!isCrew && (
           <View style={styles.field}>
             <Text style={styles.label}>Host Style</Text>
-            <Text style={styles.fieldHint}>What type of event is this?</Text>
+            <Text style={styles.fieldHint}>Select all that apply</Text>
             <View style={{ gap: 14, marginTop: 4 }}>
-              {RUN_STYLE_CATEGORIES.map((cat) => (
+              {(activityType === "ride" ? RUN_STYLE_CATEGORIES_RIDE : RUN_STYLE_CATEGORIES_RUN).map((cat) => (
                 <View key={cat.label}>
                   <Text style={styles.tagGroupLabel}>{cat.label}</Text>
                   <View style={[styles.tagsGrid, { marginTop: 8 }]}>
-                    {cat.styles.map((s) => (
-                      <Pressable
-                        key={s}
-                        style={[styles.tagChip, styles.runStyleChip, runStyle === s && styles.runStyleChipActive]}
-                        onPress={() => { setRunStyle(runStyle === s ? null : s); Haptics.selectionAsync(); }}
-                      >
-                        <Text style={[styles.tagChipText, runStyle === s && styles.runStyleChipTextActive]}>{s}</Text>
-                      </Pressable>
-                    ))}
+                    {cat.styles.map((s) => {
+                      const active = hostTags.includes(s);
+                      return (
+                        <Pressable
+                          key={s}
+                          style={[styles.tagChip, styles.runStyleChip, active && styles.runStyleChipActive]}
+                          onPress={() => {
+                            setHostTags((prev) => prev.includes(s) ? prev.filter((t) => t !== s) : [...prev, s]);
+                            Haptics.selectionAsync();
+                          }}
+                        >
+                          <Text style={[styles.tagChipText, active && styles.runStyleChipTextActive]}>{s}</Text>
+                        </Pressable>
+                      );
+                    })}
                   </View>
                 </View>
               ))}
