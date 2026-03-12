@@ -36,20 +36,20 @@ const TAG_GROUPS = [
   { label: "Extras",       tags: ["Dog Friendly", "Stroller Friendly"] },
 ];
 const RUN_STYLE_CATEGORIES_RUN = [
-  { label: "Effort",      styles: ["Easy Pace", "Beginner Friendly", "No-Drop", "Recovery", "Long Run", "PR Chaser", "Tempo", "Intervals"] },
-  { label: "Social",      styles: ["General", "Talkative", "Headphones OK", "Motivational", "Social After"] },
-  { label: "Community",   styles: ["Women", "Men", "Co-Ed", "Young Adult", "College", "Seniors", "All Ages", "Middle Aged"] },
-  { label: "Lifestyle",   styles: ["Dog Friendly", "Stroller Friendly", "Walk-Run", "Run & Coffee"] },
-  { label: "Time of Day", styles: ["Morning Run", "Sunrise Run", "Sunset Run", "Lunch Run", "Night Run"] },
-  { label: "Terrain",     styles: ["Trail", "Road", "Park Loop"] },
+  { label: "Effort",      options: ["Easy Pace", "Beginner Friendly", "No-Drop", "Recovery", "Long Run", "PR Chaser", "Tempo", "Intervals"] },
+  { label: "Social",      options: ["General", "Talkative", "Headphones OK", "Motivational", "Social After"] },
+  { label: "Community",   options: ["Women", "Men", "Co-Ed", "Young Adult", "College", "Seniors", "All Ages", "Middle Aged"] },
+  { label: "Lifestyle",   options: ["Dog Friendly", "Stroller Friendly", "Walk-Run", "Run & Coffee"] },
+  { label: "Time of Day", options: ["Morning Run", "Sunrise Run", "Sunset Run", "Lunch Run", "Night Run"] },
+  { label: "Terrain",     options: ["Trail", "Road", "Park Loop"] },
 ];
 const RUN_STYLE_CATEGORIES_RIDE = [
-  { label: "Effort",      styles: ["Easy Pace", "Beginner Friendly", "No-Drop", "Recovery", "Long Ride", "PR Chaser", "Tempo", "Intervals"] },
-  { label: "Social",      styles: ["General", "Talkative", "Headphones OK", "Motivational", "Social After"] },
-  { label: "Community",   styles: ["Women", "Men", "Co-Ed", "Young Adult", "College", "Seniors", "All Ages", "Middle Aged"] },
-  { label: "Lifestyle",   styles: ["Dog Friendly", "Stroller Friendly", "Walk-Ride", "Ride & Coffee"] },
-  { label: "Time of Day", styles: ["Morning Ride", "Sunrise Ride", "Sunset Ride", "Lunch Ride", "Night Ride"] },
-  { label: "Terrain",     styles: ["Trail", "Road", "Park Loop"] },
+  { label: "Effort",      options: ["Easy Pace", "Beginner Friendly", "No-Drop", "Recovery", "Long Ride", "PR Chaser", "Tempo", "Intervals"] },
+  { label: "Social",      options: ["General", "Talkative", "Headphones OK", "Motivational", "Social After"] },
+  { label: "Community",   options: ["Women", "Men", "Co-Ed", "Young Adult", "College", "Seniors", "All Ages", "Middle Aged"] },
+  { label: "Lifestyle",   options: ["Dog Friendly", "Stroller Friendly", "Walk-Ride", "Ride & Coffee"] },
+  { label: "Time of Day", options: ["Morning Ride", "Sunrise Ride", "Sunset Ride", "Lunch Ride", "Night Ride"] },
+  { label: "Terrain",     options: ["Trail", "Road", "Park Loop"] },
 ];
 const PRIVACY_OPTIONS = [
   { value: "public",  label: "Public",       icon: "globe",   desc: "Anyone can join" },
@@ -682,12 +682,12 @@ export default function CreateRunScreen() {
           <View style={styles.field}>
             <Text style={styles.label}>Host Style</Text>
             <Text style={styles.fieldHint}>Select all that apply</Text>
-            <View style={{ gap: 14, marginTop: 4 }}>
+            <View style={{ marginTop: 4 }}>
               {(activityType === "ride" ? RUN_STYLE_CATEGORIES_RIDE : RUN_STYLE_CATEGORIES_RUN).map((cat) => (
-                <View key={cat.label}>
+                <View key={cat.label} style={{ marginBottom: 14 }}>
                   <Text style={styles.label}>{cat.label}</Text>
                   <View style={[styles.tagsGrid, { marginTop: 8 }]}>
-                    {cat.styles.map((s) => {
+                    {cat.options.map((s) => {
                       const active = hostTags.includes(s);
                       return (
                         <Pressable
