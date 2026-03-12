@@ -23,6 +23,9 @@
     "production": {
       "autoIncrement": true,
       "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_DOMAIN": "PaceUp.replit.app"
+      },
       "ios": {
         "resourceClass": "m-medium"
       }
