@@ -337,7 +337,7 @@ export default function CreateRunScreen() {
         <Pressable onPress={() => router.back()} style={styles.cancelBtn}>
           <Feather name="x" size={20} color={C.textSecondary} />
         </Pressable>
-        <Text style={styles.headerTitle}>{activityType === "ride" ? "Create Ride" : "Create Run"}</Text>
+        <Text style={styles.headerTitle}>{activityType === "ride" ? "Host a Ride" : "Host a Run"}</Text>
         <Pressable
           style={({ pressed }) => [styles.createBtn, { opacity: (pressed || createMutation.isPending || (privacy === "crew" && !selectedCrewId && !params.crewId)) ? 0.5 : 1 }]}
           onPress={() => createMutation.mutate()}
