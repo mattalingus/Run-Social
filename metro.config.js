@@ -36,6 +36,6 @@ config.transformer.transformIgnorePatterns = [
   "node_modules/(?!(react-native|@react-native|react-native-view-shot|@expo|expo|@unimodules|unimodules|@react-navigation|react-native-svg|react-native-reanimated|react-native-safe-area-context|react-native-screens|react-native-keyboard-controller|react-native-maps)/)",
 ];
 
-config.cacheVersion = "20260312-v5";
+config.cacheVersion = "20260312-v6";
 
 module.exports = config;

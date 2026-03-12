@@ -28,22 +28,21 @@ interface Props {
 }
 
 export function HostStylePicker({ activityType, selected, onChange }: Props) {
-  const { C } = useTheme();
+  const { C, theme } = useTheme();
   const categories = activityType === "ride" ? RIDE_CATEGORIES : RUN_CATEGORIES;
+  const isDark = theme === "dark";
 
   return (
-    <View style={{ gap: 16 }}>
+    <View style={{ gap: 20 }}>
       {categories.map((cat, idx) => (
         <View key={cat.label}>
           {idx > 0 && (
-            <View style={{ height: 1, backgroundColor: C.border, marginBottom: 16 }} />
+            <View style={{ height: 1, backgroundColor: isDark ? "#1e2d24" : "#d0e8da", marginBottom: 20 }} />
           )}
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 }}>
-            <View style={{ backgroundColor: C.primaryMuted, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 }}>
-              <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 11, color: C.primary, textTransform: "uppercase", letterSpacing: 1.0 }}>
-                {cat.label}
-              </Text>
-            </View>
+          <View style={{ marginBottom: 10, alignSelf: "flex-start", backgroundColor: isDark ? "#00D97E" : "#00A85E", borderRadius: 6, paddingHorizontal: 10, paddingVertical: 5 }}>
+            <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 11, color: "#ffffff", textTransform: "uppercase", letterSpacing: 1.2 }}>
+              {cat.label}
+            </Text>
           </View>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
             {cat.styles.map((s) => {
@@ -52,10 +51,10 @@ export function HostStylePicker({ activityType, selected, onChange }: Props) {
                 <Pressable
                   key={s}
                   style={{
-                    borderRadius: 12,
-                    borderWidth: 1,
-                    borderColor: active ? C.primary : C.border,
-                    backgroundColor: active ? C.primary : "transparent",
+                    borderRadius: 20,
+                    borderWidth: 1.5,
+                    borderColor: active ? (isDark ? "#00D97E" : "#00A85E") : (isDark ? "#1e3828" : "#c0d8ca"),
+                    backgroundColor: active ? (isDark ? "#00D97E" : "#00A85E") : "transparent",
                     paddingHorizontal: 14,
                     paddingVertical: 8,
                   }}
@@ -68,7 +67,7 @@ export function HostStylePicker({ activityType, selected, onChange }: Props) {
                     Haptics.selectionAsync();
                   }}
                 >
-                  <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: active ? C.bg : C.text }}>
+                  <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: active ? "#ffffff" : (isDark ? "#b0c8b8" : "#3a5a45") }}>
                     {s}
                   </Text>
                 </Pressable>
