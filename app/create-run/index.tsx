@@ -38,7 +38,7 @@ const TAG_GROUPS = [
 ];
 const RUN_STYLE_CATEGORIES_RUN = [
   { label: "Effort",      options: ["Easy Pace", "Beginner Friendly", "No-Drop", "Recovery", "Long Run", "PR Chaser", "Tempo", "Intervals"] },
-  { label: "Social",      options: ["General", "Talkative", "Headphones OK", "Motivational", "Social After"] },
+  { label: "Social",      options: ["Talkative", "Headphones OK", "Motivational", "Social After"] },
   { label: "Community",   options: ["Women", "Men", "Co-Ed", "Young Adult", "College", "Seniors", "All Ages", "Middle Aged"] },
   { label: "Lifestyle",   options: ["Dog Friendly", "Stroller Friendly", "Walk-Run", "Run & Coffee"] },
   { label: "Time of Day", options: ["Morning Run", "Sunrise Run", "Sunset Run", "Lunch Run", "Night Run"] },
@@ -46,7 +46,7 @@ const RUN_STYLE_CATEGORIES_RUN = [
 ];
 const RUN_STYLE_CATEGORIES_RIDE = [
   { label: "Effort",      options: ["Easy Pace", "Beginner Friendly", "No-Drop", "Recovery", "Long Ride", "PR Chaser", "Tempo", "Intervals"] },
-  { label: "Social",      options: ["General", "Talkative", "Headphones OK", "Motivational", "Social After"] },
+  { label: "Social",      options: ["Talkative", "Headphones OK", "Motivational", "Social After"] },
   { label: "Community",   options: ["Women", "Men", "Co-Ed", "Young Adult", "College", "Seniors", "All Ages", "Middle Aged"] },
   { label: "Lifestyle",   options: ["Dog Friendly", "Stroller Friendly", "Walk-Ride", "Ride & Coffee"] },
   { label: "Time of Day", options: ["Morning Ride", "Sunrise Ride", "Sunset Ride", "Lunch Ride", "Night Ride"] },

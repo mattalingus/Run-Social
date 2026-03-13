@@ -65,7 +65,7 @@ const SORT_OPTIONS: { key: SortOption; label: string }[] = [
 
 const HOST_STYLES = [
   "Easy Pace", "Beginner Friendly", "No-Drop", "Recovery", "Long Run", "Long Ride", "PR Chaser", "Tempo", "Intervals",
-  "General", "Talkative", "Headphones OK", "Motivational", "Social After",
+  "Talkative", "Headphones OK", "Motivational", "Social After",
   "Women", "Men", "Co-Ed", "Young Adult", "College", "Seniors", "All Ages", "Middle Aged",
   "Dog Friendly", "Stroller Friendly", "Walk-Run", "Walk-Ride", "Run & Coffee", "Ride & Coffee",
   "Morning Run", "Morning Ride", "Sunrise Run", "Sunrise Ride", "Sunset Run", "Sunset Ride", "Lunch Run", "Lunch Ride", "Night Run", "Night Ride",
@@ -74,7 +74,7 @@ const HOST_STYLES = [
 
 const RUN_STYLE_CATEGORIES_RUN = [
   { label: "Effort",      options: ["Easy Pace", "Beginner Friendly", "No-Drop", "Recovery", "Long Run", "PR Chaser", "Tempo", "Intervals"] },
-  { label: "Social",      options: ["General", "Talkative", "Headphones OK", "Motivational", "Social After"] },
+  { label: "Social",      options: ["Talkative", "Headphones OK", "Motivational", "Social After"] },
   { label: "Community",   options: ["Women", "Men", "Co-Ed", "Young Adult", "College", "Seniors", "All Ages", "Middle Aged"] },
   { label: "Lifestyle",   options: ["Dog Friendly", "Stroller Friendly", "Walk-Run", "Run & Coffee"] },
   { label: "Time of Day", options: ["Morning Run", "Sunrise Run", "Sunset Run", "Lunch Run", "Night Run"] },
@@ -82,7 +82,7 @@ const RUN_STYLE_CATEGORIES_RUN = [
 ];
 const RUN_STYLE_CATEGORIES_RIDE = [
   { label: "Effort",      options: ["Easy Pace", "Beginner Friendly", "No-Drop", "Recovery", "Long Ride", "PR Chaser", "Tempo", "Intervals"] },
-  { label: "Social",      options: ["General", "Talkative", "Headphones OK", "Motivational", "Social After"] },
+  { label: "Social",      options: ["Talkative", "Headphones OK", "Motivational", "Social After"] },
   { label: "Community",   options: ["Women", "Men", "Co-Ed", "Young Adult", "College", "Seniors", "All Ages", "Middle Aged"] },
   { label: "Lifestyle",   options: ["Dog Friendly", "Stroller Friendly", "Walk-Ride", "Ride & Coffee"] },
   { label: "Time of Day", options: ["Morning Ride", "Sunrise Ride", "Sunset Ride", "Lunch Ride", "Night Ride"] },
@@ -91,7 +91,7 @@ const RUN_STYLE_CATEGORIES_RIDE = [
 
 const TAG_CATEGORY_ORDER: string[] = [
   "Easy Pace", "Beginner Friendly", "No-Drop", "Recovery", "Long Run", "Long Ride", "PR Chaser", "Tempo", "Intervals",
-  "General", "Talkative", "Headphones OK", "Motivational", "Social After",
+  "Talkative", "Headphones OK", "Motivational", "Social After",
   "Women", "Men", "Co-Ed", "Young Adult", "College", "Seniors", "All Ages", "Middle Aged",
   "Dog Friendly", "Stroller Friendly", "Walk-Run", "Walk-Ride", "Run & Coffee", "Ride & Coffee",
   "Morning Run", "Morning Ride", "Sunrise Run", "Sunrise Ride", "Sunset Run", "Sunset Ride", "Lunch Run", "Lunch Ride", "Night Run", "Night Ride",
@@ -758,6 +758,7 @@ function RunCard({
     <Pressable
       style={({ pressed }) => [s.card, isFriend && s.cardFriend, isCrew && s.cardCrew, { opacity: pressed ? 0.85 : 1 }]}
       onPress={onPress}
+      delayPressIn={80}
       testID={`run-card-${run.id}`}
     >
       <View style={s.cardBody}>
@@ -885,7 +886,7 @@ function RunCard({
           )}
 
           {run.tags?.length > 0 && (
-            <View onStartShouldSetResponder={() => true}>
+            <View onStartShouldSetResponder={() => true} onMoveShouldSetResponder={() => true}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.tagsScroll} contentContainerStyle={s.tags}>
                 {sortTagsByCategory(run.tags).map((t) => (
                   <View key={t} style={s.tag}>
