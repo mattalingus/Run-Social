@@ -217,8 +217,14 @@ function RunMarker({ run, isSelected, isFriend, onPress }: { run: Run; isSelecte
   useEffect(() => {
     if (isLiveNow) return;
     if (!isSelected) return;
+    // Re-enable view tracking to prevent top-left flash during re-render
+    frozen.current = false;
+    setTracksViewChanges(true);
     Animated.spring(scale, { toValue: 1.15, useNativeDriver: true, tension: 400, friction: 10 }).start(() => {
-      Animated.spring(scale, { toValue: 1, useNativeDriver: true, tension: 300, friction: 12 }).start();
+      Animated.spring(scale, { toValue: 1, useNativeDriver: true, tension: 300, friction: 12 }).start(() => {
+        frozen.current = true;
+        setTracksViewChanges(false);
+      });
     });
   }, [isSelected]);
 
@@ -240,10 +246,20 @@ function RunMarker({ run, isSelected, isFriend, onPress }: { run: Run; isSelecte
 
   function handlePress() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Unfreeze before onPress so the re-render from isSelected changing doesn't flash to top-left
+    if (!isLiveNow) {
+      frozen.current = false;
+      setTracksViewChanges(true);
+    }
     Animated.sequence([
       Animated.spring(scale, { toValue: 1.3, useNativeDriver: true, tension: 500, friction: 8 }),
       Animated.spring(scale, { toValue: 1, useNativeDriver: true, tension: 300, friction: 12 }),
-    ]).start();
+    ]).start(() => {
+      if (!isLiveNow) {
+        frozen.current = true;
+        setTracksViewChanges(false);
+      }
+    });
     onPress();
   }
 
