@@ -755,45 +755,48 @@ function RunCard({
       {isLiveNow && (
         <Animated.View style={[s.liveCardGlow, { opacity: pulseAnim }]} pointerEvents="none" />
       )}
-      {/* Card styles on a plain View so the tags ScrollView sits outside Pressable */}
       <View style={[s.card, isFriend && s.cardFriend, isCrew && s.cardCrew]}>
-        <Pressable
-          style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
-          onPress={onPress}
-          testID={`run-card-${run.id}`}
-        >
-          <View style={s.cardBody}>
-            {/* ── Left: Host/Crew column ── */}
-            <View style={s.hostColumn}>
-              {(() => {
-                const avatarUri = run.crew_id
-                  ? resolveImgUrl(run.crew_photo_url) ?? resolveImgUrl(run.host_photo)
-                  : resolveImgUrl(run.host_photo);
-                return avatarUri ? (
-                  <Image source={{ uri: avatarUri }} style={s.hostAvatar} />
-                ) : (
-                  <View style={s.hostAvatarFallback}>
-                    <Text style={s.hostAvatarLetter}>{run.host_name?.charAt(0).toUpperCase()}</Text>
-                  </View>
-                );
-              })()}
-              <Text style={s.hostColumnName} numberOfLines={2}>{run.host_name}</Text>
-              {(() => {
-                const isTopRated = (run.host_rating_count ?? 0) >= 5 && (run.host_rating ?? 0) >= 4.5;
-                if (isTopRated) return <Text style={[s.hostColumnBadge, { color: "#FFB800" }]}>⭐ Top</Text>;
-                if (badge) return <Text style={[s.hostColumnBadge, { color: badge.color }]}>{badge.label}</Text>;
-                return null;
-              })()}
-              <Text style={s.hostColumnDist}>{toDisplayDist(run.min_distance, distUnit)}</Text>
-              {weather && (
-                <Text style={s.hostColumnWeather}>{weather.emoji} {weather.tempF}°</Text>
-              )}
-            </View>
+        {/* Outer row stretches all children to the same height so the divider
+            spans the full card — including the tags row in the right column */}
+        <View style={s.cardBody}>
 
-            <View style={s.cardDivider} />
+          {/* ── Left: Host/Crew column ── */}
+          <Pressable onPress={onPress} style={({ pressed }) => [s.hostColumn, { opacity: pressed ? 0.85 : 1 }]}>
+            {(() => {
+              const avatarUri = run.crew_id
+                ? resolveImgUrl(run.crew_photo_url) ?? resolveImgUrl(run.host_photo)
+                : resolveImgUrl(run.host_photo);
+              return avatarUri ? (
+                <Image source={{ uri: avatarUri }} style={s.hostAvatar} />
+              ) : (
+                <View style={s.hostAvatarFallback}>
+                  <Text style={s.hostAvatarLetter}>{run.host_name?.charAt(0).toUpperCase()}</Text>
+                </View>
+              );
+            })()}
+            <Text style={s.hostColumnName} numberOfLines={2}>{run.host_name}</Text>
+            {(() => {
+              const isTopRated = (run.host_rating_count ?? 0) >= 5 && (run.host_rating ?? 0) >= 4.5;
+              if (isTopRated) return <Text style={[s.hostColumnBadge, { color: "#FFB800" }]}>⭐ Top</Text>;
+              if (badge) return <Text style={[s.hostColumnBadge, { color: badge.color }]}>{badge.label}</Text>;
+              return null;
+            })()}
+            <Text style={s.hostColumnDist}>{toDisplayDist(run.min_distance, distUnit)}</Text>
+            {weather && (
+              <Text style={s.hostColumnWeather}>{weather.emoji} {weather.tempF}°</Text>
+            )}
+          </Pressable>
 
-            {/* ── Right: Run details ── */}
-            <View style={s.cardDetails}>
+          {/* Vertical divider — stretches to full row height (left col vs right col+tags) */}
+          <View style={s.cardDivider} />
+
+          {/* ── Right: details + tags (tags outside Pressable so scroll works) ── */}
+          <View style={s.cardDetails}>
+            <Pressable
+              onPress={onPress}
+              testID={`run-card-${run.id}`}
+              style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1, gap: 8 })}
+            >
               <View style={s.cardTitleRow}>
                 <Text style={s.cardTitle} numberOfLines={2}>{run.title}</Text>
                 <View style={s.cardTitleRight}>
@@ -837,7 +840,6 @@ function RunCard({
               </View>
 
               <View style={s.cardStats}>
-                {/* Pace pill */}
                 <View style={s.statPill}>
                   {run.crew_id && run.pace_groups && run.pace_groups.length > 0 ? (
                     <Text numberOfLines={1} style={[s.statPillValue, { color: C.primary }]}>Groups</Text>
@@ -851,7 +853,6 @@ function RunCard({
                   <Text style={s.statPillLabel}>Pace {distUnit === "km" ? "min/km" : "min/mi"}</Text>
                 </View>
                 <View style={s.statDiv} />
-                {/* Distance pill */}
                 <View style={s.statPill}>
                   <Text numberOfLines={1} style={[s.statPillValue, { color: C.blue }]}>
                     {run.min_distance === run.max_distance
@@ -861,7 +862,6 @@ function RunCard({
                   <Text style={s.statPillLabel}>Distance</Text>
                 </View>
                 <View style={s.statDiv} />
-                {/* Going pill */}
                 <View style={s.statPill}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
                     <Ionicons name="people" size={13} color={run.is_active ? C.primary : C.textMuted} />
@@ -885,25 +885,26 @@ function RunCard({
                   </Text>
                 </View>
               )}
-            </View>
-          </View>
-        </Pressable>
+            </Pressable>
 
-        {/* Tags live OUTSIDE the Pressable so horizontal scroll works without gesture conflict */}
-        {run.tags?.length > 0 && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={[s.tagsScroll, { marginLeft: 91 }]}
-            contentContainerStyle={s.tags}
-          >
-            {sortTagsByCategory(run.tags).map((tag) => (
-              <View key={tag} style={s.tag}>
-                <Text style={s.tagTxt}>{tag}</Text>
-              </View>
-            ))}
-          </ScrollView>
-        )}
+            {/* Tags outside Pressable — scroll works, still inside right column so divider spans them */}
+            {run.tags?.length > 0 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={s.tagsScroll}
+                contentContainerStyle={s.tags}
+              >
+                {sortTagsByCategory(run.tags).map((tag) => (
+                  <View key={tag} style={s.tag}>
+                    <Text style={s.tagTxt}>{tag}</Text>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+
+        </View>
       </View>
     </View>
   );
