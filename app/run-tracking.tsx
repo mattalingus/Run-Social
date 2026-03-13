@@ -18,7 +18,6 @@ import * as Notifications from "@/lib/safeNotifications";
 import * as MediaLibrary from "expo-media-library";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Speech from "expo-speech";
-import { setAudioModeAsync } from "expo-audio";
 import ShareActivityModal from "@/components/ShareActivityModal";
 import MileSplitsChart, { MileSplit } from "@/components/MileSplitsChart";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
@@ -673,14 +672,6 @@ export default function RunTrackingScreen() {
         }
         foregroundOnlyRef.current = true;
       }
-    }
-    if (Platform.OS !== "web") {
-      try {
-        await setAudioModeAsync({
-          playsInSilentMode: true,
-          interruptionMode: "duckOthers",
-        });
-      } catch {}
     }
     lastCoordRef.current = null;
     totalDistRef.current = 0;
