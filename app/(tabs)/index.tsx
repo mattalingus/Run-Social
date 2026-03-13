@@ -755,150 +755,156 @@ function RunCard({
       {isLiveNow && (
         <Animated.View style={[s.liveCardGlow, { opacity: pulseAnim }]} pointerEvents="none" />
       )}
-    <Pressable
-      style={({ pressed }) => [s.card, isFriend && s.cardFriend, isCrew && s.cardCrew, { opacity: pressed ? 0.85 : 1 }]}
-      onPress={onPress}
-      delayPressIn={80}
-      testID={`run-card-${run.id}`}
-    >
-      <View style={s.cardBody}>
-        {/* ── Left: Host/Crew column ── */}
-        <View style={s.hostColumn}>
-          {(() => {
-            const avatarUri = run.crew_id
-              ? resolveImgUrl(run.crew_photo_url) ?? resolveImgUrl(run.host_photo)
-              : resolveImgUrl(run.host_photo);
-            return avatarUri ? (
-              <Image source={{ uri: avatarUri }} style={s.hostAvatar} />
-            ) : (
-              <View style={s.hostAvatarFallback}>
-                <Text style={s.hostAvatarLetter}>{run.host_name?.charAt(0).toUpperCase()}</Text>
-              </View>
-            );
-          })()}
-          <Text style={s.hostColumnName} numberOfLines={2}>{run.host_name}</Text>
-          {(() => {
-            const isTopRated = (run.host_rating_count ?? 0) >= 5 && (run.host_rating ?? 0) >= 4.5;
-            if (isTopRated) return <Text style={[s.hostColumnBadge, { color: "#FFB800" }]}>⭐ Top</Text>;
-            if (badge) return <Text style={[s.hostColumnBadge, { color: badge.color }]}>{badge.label}</Text>;
-            return null;
-          })()}
-          <Text style={s.hostColumnDist}>{toDisplayDist(run.min_distance, distUnit)}</Text>
-          {weather && (
-            <Text style={s.hostColumnWeather}>{weather.emoji} {weather.tempF}°</Text>
-          )}
-        </View>
-
-        <View style={s.cardDivider} />
-
-        {/* ── Right: Run details ── */}
-        <View style={s.cardDetails}>
-          <View style={s.cardTitleRow}>
-            <Text style={s.cardTitle} numberOfLines={2}>{run.title}</Text>
-            <View style={s.cardTitleRight}>
-              {run.is_active && (
-                <View style={s.livePill}>
-                  <Text style={s.livePillTxt}>LIVE</Text>
-                </View>
-              )}
-              {spotsLeft <= 3 && spotsLeft > 0 && !run.is_active && (
-                <View style={s.urgentBadge}>
-                  <Text style={s.urgentText}>{spotsLeft} left</Text>
-                </View>
-              )}
-              {onBookmark && (
-                <Pressable onPress={(e) => { e.stopPropagation?.(); onBookmark(); }} hitSlop={8} style={s.cardBookmarkBtn}>
-                  <Ionicons
-                    name={isBookmarked ? "bookmark" : "bookmark-outline"}
-                    size={16}
-                    color={isBookmarked ? C.primary : C.textMuted}
-                  />
-                </Pressable>
-              )}
-            </View>
-          </View>
-
-          <View style={s.cardMeta}>
-            <View style={s.metaItem}>
-              <Feather name="calendar" size={11} color={C.textMuted} />
-              <Text style={s.metaText}>{formatDate(run.date)} · {formatTime(run.date)}</Text>
-            </View>
-            <View style={s.metaItem}>
-              <Feather name="map-pin" size={11} color={C.textMuted} />
-              <Text style={s.metaText} numberOfLines={1}>{run.location_name}</Text>
-            </View>
-            {distanceMi !== undefined && (
-              <View style={s.metaItem}>
-                <Feather name="navigation" size={11} color={C.textMuted} />
-                <Text style={s.metaText}>{toDisplayDist(distanceMi!, distUnit)} away</Text>
-              </View>
-            )}
-          </View>
-
-          <View style={s.cardStats}>
-            {/* Pace pill */}
-            <View style={s.statPill}>
-              {run.crew_id && run.pace_groups && run.pace_groups.length > 0 ? (
-                <Text numberOfLines={1} style={[s.statPillValue, { color: C.primary }]}>Groups</Text>
-              ) : (
-                <Text numberOfLines={1} style={[s.statPillValue, { color: getPaceColor(run.min_pace, run.max_pace, C) }]}>
-                  {run.min_pace === run.max_pace
-                    ? toDisplayPace(run.min_pace, distUnit)
-                    : `${toDisplayPace(run.min_pace, distUnit)}–${toDisplayPace(run.max_pace, distUnit)}`}
-                </Text>
-              )}
-              <Text style={s.statPillLabel}>Pace {distUnit === "km" ? "min/km" : "min/mi"}</Text>
-            </View>
-            <View style={s.statDiv} />
-            {/* Distance pill */}
-            <View style={s.statPill}>
-              <Text numberOfLines={1} style={[s.statPillValue, { color: C.blue }]}>
-                {run.min_distance === run.max_distance
-                  ? toDisplayDist(run.min_distance, distUnit)
-                  : `${toDisplayDist(run.min_distance, distUnit)}–${toDisplayDist(run.max_distance, distUnit)}`}
-              </Text>
-              <Text style={s.statPillLabel}>Distance</Text>
-            </View>
-            <View style={s.statDiv} />
-            {/* Going pill */}
-            <View style={s.statPill}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
-                <Ionicons name="people" size={13} color={run.is_active ? C.primary : C.textMuted} />
-                <Text numberOfLines={1} style={[s.statPillValue, run.is_active && { color: C.primary }]}>
-                  {run.is_active
-                    ? run.participant_count
-                    : run.crew_id
-                      ? run.participant_count
-                      : `${run.participant_count}/${run.max_participants}`}
-                </Text>
-              </View>
-              <Text style={s.statPillLabel}>{run.is_active ? "Arrived" : "Going"}</Text>
-            </View>
-          </View>
-
-          {parseInt(run.plan_count ?? "0") > 0 && (
-            <View style={s.metaItem}>
-              <Feather name="calendar" size={11} color={C.textMuted} />
-              <Text style={s.metaText}>
-                {run.plan_count} {parseInt(run.plan_count ?? "0") === 1 ? "person" : "people"} planning to {run.activity_type === "ride" ? "ride" : "run"}
-              </Text>
-            </View>
-          )}
-
-          {run.tags?.length > 0 && (
-            <View onStartShouldSetResponder={() => true} onMoveShouldSetResponder={() => true}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.tagsScroll} contentContainerStyle={s.tags}>
-                {sortTagsByCategory(run.tags).map((t) => (
-                  <View key={t} style={s.tag}>
-                    <Text style={s.tagTxt}>{t}</Text>
+      {/* Card styles on a plain View so the tags ScrollView sits outside Pressable */}
+      <View style={[s.card, isFriend && s.cardFriend, isCrew && s.cardCrew]}>
+        <Pressable
+          style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
+          onPress={onPress}
+          testID={`run-card-${run.id}`}
+        >
+          <View style={s.cardBody}>
+            {/* ── Left: Host/Crew column ── */}
+            <View style={s.hostColumn}>
+              {(() => {
+                const avatarUri = run.crew_id
+                  ? resolveImgUrl(run.crew_photo_url) ?? resolveImgUrl(run.host_photo)
+                  : resolveImgUrl(run.host_photo);
+                return avatarUri ? (
+                  <Image source={{ uri: avatarUri }} style={s.hostAvatar} />
+                ) : (
+                  <View style={s.hostAvatarFallback}>
+                    <Text style={s.hostAvatarLetter}>{run.host_name?.charAt(0).toUpperCase()}</Text>
                   </View>
-                ))}
-              </ScrollView>
+                );
+              })()}
+              <Text style={s.hostColumnName} numberOfLines={2}>{run.host_name}</Text>
+              {(() => {
+                const isTopRated = (run.host_rating_count ?? 0) >= 5 && (run.host_rating ?? 0) >= 4.5;
+                if (isTopRated) return <Text style={[s.hostColumnBadge, { color: "#FFB800" }]}>⭐ Top</Text>;
+                if (badge) return <Text style={[s.hostColumnBadge, { color: badge.color }]}>{badge.label}</Text>;
+                return null;
+              })()}
+              <Text style={s.hostColumnDist}>{toDisplayDist(run.min_distance, distUnit)}</Text>
+              {weather && (
+                <Text style={s.hostColumnWeather}>{weather.emoji} {weather.tempF}°</Text>
+              )}
             </View>
-          )}
-        </View>
+
+            <View style={s.cardDivider} />
+
+            {/* ── Right: Run details ── */}
+            <View style={s.cardDetails}>
+              <View style={s.cardTitleRow}>
+                <Text style={s.cardTitle} numberOfLines={2}>{run.title}</Text>
+                <View style={s.cardTitleRight}>
+                  {run.is_active && (
+                    <View style={s.livePill}>
+                      <Text style={s.livePillTxt}>LIVE</Text>
+                    </View>
+                  )}
+                  {spotsLeft <= 3 && spotsLeft > 0 && !run.is_active && (
+                    <View style={s.urgentBadge}>
+                      <Text style={s.urgentText}>{spotsLeft} left</Text>
+                    </View>
+                  )}
+                  {onBookmark && (
+                    <Pressable onPress={(e) => { e.stopPropagation?.(); onBookmark(); }} hitSlop={8} style={s.cardBookmarkBtn}>
+                      <Ionicons
+                        name={isBookmarked ? "bookmark" : "bookmark-outline"}
+                        size={16}
+                        color={isBookmarked ? C.primary : C.textMuted}
+                      />
+                    </Pressable>
+                  )}
+                </View>
+              </View>
+
+              <View style={s.cardMeta}>
+                <View style={s.metaItem}>
+                  <Feather name="calendar" size={11} color={C.textMuted} />
+                  <Text style={s.metaText}>{formatDate(run.date)} · {formatTime(run.date)}</Text>
+                </View>
+                <View style={s.metaItem}>
+                  <Feather name="map-pin" size={11} color={C.textMuted} />
+                  <Text style={s.metaText} numberOfLines={1}>{run.location_name}</Text>
+                </View>
+                {distanceMi !== undefined && (
+                  <View style={s.metaItem}>
+                    <Feather name="navigation" size={11} color={C.textMuted} />
+                    <Text style={s.metaText}>{toDisplayDist(distanceMi!, distUnit)} away</Text>
+                  </View>
+                )}
+              </View>
+
+              <View style={s.cardStats}>
+                {/* Pace pill */}
+                <View style={s.statPill}>
+                  {run.crew_id && run.pace_groups && run.pace_groups.length > 0 ? (
+                    <Text numberOfLines={1} style={[s.statPillValue, { color: C.primary }]}>Groups</Text>
+                  ) : (
+                    <Text numberOfLines={1} style={[s.statPillValue, { color: getPaceColor(run.min_pace, run.max_pace, C) }]}>
+                      {run.min_pace === run.max_pace
+                        ? toDisplayPace(run.min_pace, distUnit)
+                        : `${toDisplayPace(run.min_pace, distUnit)}–${toDisplayPace(run.max_pace, distUnit)}`}
+                    </Text>
+                  )}
+                  <Text style={s.statPillLabel}>Pace {distUnit === "km" ? "min/km" : "min/mi"}</Text>
+                </View>
+                <View style={s.statDiv} />
+                {/* Distance pill */}
+                <View style={s.statPill}>
+                  <Text numberOfLines={1} style={[s.statPillValue, { color: C.blue }]}>
+                    {run.min_distance === run.max_distance
+                      ? toDisplayDist(run.min_distance, distUnit)
+                      : `${toDisplayDist(run.min_distance, distUnit)}–${toDisplayDist(run.max_distance, distUnit)}`}
+                  </Text>
+                  <Text style={s.statPillLabel}>Distance</Text>
+                </View>
+                <View style={s.statDiv} />
+                {/* Going pill */}
+                <View style={s.statPill}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+                    <Ionicons name="people" size={13} color={run.is_active ? C.primary : C.textMuted} />
+                    <Text numberOfLines={1} style={[s.statPillValue, run.is_active && { color: C.primary }]}>
+                      {run.is_active
+                        ? run.participant_count
+                        : run.crew_id
+                          ? run.participant_count
+                          : `${run.participant_count}/${run.max_participants}`}
+                    </Text>
+                  </View>
+                  <Text style={s.statPillLabel}>{run.is_active ? "Arrived" : "Going"}</Text>
+                </View>
+              </View>
+
+              {parseInt(run.plan_count ?? "0") > 0 && (
+                <View style={s.metaItem}>
+                  <Feather name="calendar" size={11} color={C.textMuted} />
+                  <Text style={s.metaText}>
+                    {run.plan_count} {parseInt(run.plan_count ?? "0") === 1 ? "person" : "people"} planning to {run.activity_type === "ride" ? "ride" : "run"}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </View>
+        </Pressable>
+
+        {/* Tags live OUTSIDE the Pressable so horizontal scroll works without gesture conflict */}
+        {run.tags?.length > 0 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={s.tagsScroll}
+            contentContainerStyle={s.tags}
+          >
+            {sortTagsByCategory(run.tags).map((tag) => (
+              <View key={tag} style={s.tag}>
+                <Text style={s.tagTxt}>{tag}</Text>
+              </View>
+            ))}
+          </ScrollView>
+        )}
       </View>
-    </Pressable>
     </View>
   );
 }
