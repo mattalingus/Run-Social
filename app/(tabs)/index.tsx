@@ -894,7 +894,7 @@ function RunCard({
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            style={s.tagsScroll}
+            style={[s.tagsScroll, { marginLeft: 91 }]}
             contentContainerStyle={s.tags}
           >
             {sortTagsByCategory(run.tags).map((tag) => (
