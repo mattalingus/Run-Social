@@ -142,6 +142,13 @@ function avatarUrl(name: string) {
   return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1A2E21&color=00D97E&bold=true&size=200`;
 }
 
+function getPaceColor(minPace: number, maxPace: number, C: { orange: string; gold: string; primary: string }): string {
+  if (maxPace >= 15 || (maxPace - minPace) >= 10) return C.primary;
+  if (minPace < 6) return "#C0392B";
+  if (minPace < 9) return C.orange;
+  return C.gold;
+}
+
 // ─── Custom Marker ─────────────────────────────────────────────────────────
 
 function LockedRunMarker({ run, isSelected, onPress }: { run: Run; isSelected: boolean; onPress: () => void }) {
@@ -209,10 +216,10 @@ function RunMarker({ run, isSelected, isFriend, onPress }: { run: Run; isSelecte
 
   useEffect(() => {
     if (isLiveNow) return;
-    setTracksViewChanges(true);
-    frozen.current = false;
-    const t = setTimeout(() => { frozen.current = true; setTracksViewChanges(false); }, 400);
-    return () => clearTimeout(t);
+    if (!isSelected) return;
+    Animated.spring(scale, { toValue: 1.15, useNativeDriver: true, tension: 400, friction: 10 }).start(() => {
+      Animated.spring(scale, { toValue: 1, useNativeDriver: true, tension: 300, friction: 12 }).start();
+    });
   }, [isSelected]);
 
   useEffect(() => {
@@ -783,8 +790,8 @@ export default function MapScreen() {
                   <Text style={s.chipTxt}>{formatDate(selectedRun.date)} · {formatTime(selectedRun.date)}</Text>
                 </View>
                 <View style={s.chip}>
-                  <Ionicons name="walk" size={11} color={C.orange} />
-                  <Text style={[s.chipTxt, { color: C.orange }]}>
+                  <Ionicons name="walk" size={11} color={getPaceColor(selectedRun.min_pace, selectedRun.max_pace, C)} />
+                  <Text style={[s.chipTxt, { color: getPaceColor(selectedRun.min_pace, selectedRun.max_pace, C) }]}>
                     {selectedRun.min_pace === selectedRun.max_pace ? toDisplayPace(selectedRun.min_pace, distUnit) : `${toDisplayPace(selectedRun.min_pace, distUnit)}–${toDisplayPace(selectedRun.max_pace, distUnit)}`}
                   </Text>
                 </View>

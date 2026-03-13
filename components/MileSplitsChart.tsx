@@ -18,18 +18,6 @@ function fmtPace(pace: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-function interpolateColor(t: number, fast: string, slow: string): string {
-  const parseHex = (h: string) => [
-    parseInt(h.slice(1, 3), 16),
-    parseInt(h.slice(3, 5), 16),
-    parseInt(h.slice(5, 7), 16),
-  ];
-  const r1 = parseHex(fast);
-  const r2 = parseHex(slow);
-  const lerp = (a: number, b: number) => Math.round(a + (b - a) * t);
-  const toHex = (n: number) => n.toString(16).padStart(2, "0");
-  return `#${toHex(lerp(r1[0], r2[0]))}${toHex(lerp(r1[1], r2[1]))}${toHex(lerp(r1[2], r2[2]))}`;
-}
 
 type Props = {
   splits: MileSplit[];
@@ -59,12 +47,6 @@ export default function MileSplitsChart({ splits, activityType }: Props) {
     return MIN_BAR + ((pace - minPace) / paceRange) * (MAX_BAR - MIN_BAR);
   };
 
-  const getBarColor = (pace: number) => {
-    if (paceRange < 0.05) return C.primary;
-    const t = (pace - minPace) / paceRange;
-    return interpolateColor(t, C.primary, "#FF6B35");
-  };
-
   const barWidth = valid.length <= 5 ? 28 : valid.length <= 8 ? 22 : valid.length <= 12 ? 16 : 12;
 
   const label = activityType === "ride" ? "INTERVAL SPLITS" : "MILE SPLITS";
@@ -75,7 +57,6 @@ export default function MileSplitsChart({ splits, activityType }: Props) {
       <View style={styles.chartRow}>
         {valid.map((split, i) => {
           const barHeight = getBarHeight(split.paceMinPerMile);
-          const barColor = getBarColor(split.paceMinPerMile);
           return (
             <View key={i} style={styles.column}>
               <View style={[styles.paceLabelWrap, { height: PACE_LABEL_H }]}>
@@ -89,7 +70,7 @@ export default function MileSplitsChart({ splits, activityType }: Props) {
                     width: barWidth,
                     height: barHeight,
                     borderRadius: 4,
-                    backgroundColor: barColor,
+                    backgroundColor: C.primary,
                     opacity: split.isPartial ? 0.55 : 1,
                   }}
                 />
