@@ -82,3 +82,7 @@ outputType = "console"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "npm run expo:dev"
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 120000
