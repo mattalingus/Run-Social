@@ -1950,7 +1950,7 @@ export default function DiscoverScreen() {
                   style={s.showMoreBtn}
                   onPress={() => setVisibleCount((n) => n + 10)}
                 >
-                  <Text style={s.showMoreTxt}>Show {Math.min(displayList.length - visibleCount, 10)} more</Text>
+                  <Text style={s.showMoreTxt}>Show more</Text>
                   <Feather name="chevron-down" size={15} color={C.primary} />
                 </Pressable>
               )}
