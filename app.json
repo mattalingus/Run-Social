@@ -103,7 +103,8 @@
           "photosPermission": "PaceUp accesses your photo library to add photos to your runs and rides.",
           "cameraPermission": "PaceUp uses your camera to add photos to your runs and rides."
         }
-      ]
+      ],
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true,

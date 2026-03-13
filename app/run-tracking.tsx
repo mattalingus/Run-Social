@@ -18,6 +18,7 @@ import * as Notifications from "@/lib/safeNotifications";
 import * as MediaLibrary from "expo-media-library";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Speech from "expo-speech";
+import { setAudioModeAsync } from "expo-audio";
 import ShareActivityModal from "@/components/ShareActivityModal";
 import MileSplitsChart, { MileSplit } from "@/components/MileSplitsChart";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
@@ -565,6 +566,7 @@ export default function RunTrackingScreen() {
             paceMinPerMile: splitPace,
             isPartial: false,
           });
+          setMileSplits([...mileSplitsRef.current]);
           lastSplitMileRef.current += 1;
           prevMileElapsedRef.current = elapsedRef.current;
         }
@@ -671,6 +673,14 @@ export default function RunTrackingScreen() {
         }
         foregroundOnlyRef.current = true;
       }
+    }
+    if (Platform.OS !== "web") {
+      try {
+        await setAudioModeAsync({
+          playsInSilentMode: true,
+          interruptionMode: "duckOthers",
+        });
+      } catch {}
     }
     lastCoordRef.current = null;
     totalDistRef.current = 0;
@@ -1492,6 +1502,26 @@ export default function RunTrackingScreen() {
           )}
         </View>
 
+        {(phase === "active" || phase === "paused") && mileSplits.length > 0 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 8, paddingHorizontal: 4 }}
+          >
+            {mileSplits.map((split) => {
+              const m = Math.floor(split.paceMinPerMile);
+              const s = Math.round((split.paceMinPerMile - m) * 60);
+              const paceStr = `${m}:${s.toString().padStart(2, "0")}`;
+              return (
+                <View key={split.label} style={t.splitChip}>
+                  <Text style={t.splitChipLabel}>{split.label}</Text>
+                  <Text style={t.splitChipPace}>{paceStr}</Text>
+                </View>
+              );
+            })}
+          </ScrollView>
+        )}
+
         {phase === "idle" && (
           <View style={{ width: "100%", gap: 16 }}>
             {/* Audio Coach Settings */}
@@ -1612,7 +1642,7 @@ const t = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
 
   mapContainer: {
-    height: "55%",
+    height: "45%",
     width: "100%",
     overflow: "hidden",
   },
@@ -1771,6 +1801,28 @@ const t = StyleSheet.create({
     paddingVertical: 16,
   },
   finishBtnTxt: { fontFamily: "Outfit_700Bold", fontSize: 12, color: C.bg },
+
+  splitChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.surface,
+  },
+  splitChipLabel: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 11,
+    color: C.textMuted,
+  },
+  splitChipPace: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 12,
+    color: C.primary,
+  },
 
   hintTxt: {
     fontFamily: "Outfit_400Regular",
