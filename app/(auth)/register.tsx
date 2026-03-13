@@ -25,6 +25,7 @@ export default function RegisterScreen() {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [gender, setGender] = useState<string | null>(null);
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -45,7 +46,7 @@ export default function RegisterScreen() {
     setError("");
     setLoading(true);
     try {
-      await register(email.trim(), password, firstName.trim(), lastName.trim(), username.trim());
+      await register(email.trim(), password, firstName.trim(), lastName.trim(), username.trim(), gender);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace("/(tabs)");
     } catch (e: any) {
@@ -162,6 +163,24 @@ export default function RegisterScreen() {
             </View>
           </View>
 
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Gender (Optional)</Text>
+            <View style={styles.genderRow}>
+              {["Man", "Woman", "Prefer not to say"].map((g) => (
+                <Pressable
+                  key={g}
+                  style={[styles.genderChip, gender === g && styles.genderChipActive]}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setGender(g);
+                  }}
+                >
+                  <Text style={[styles.genderChipTxt, gender === g && styles.genderChipTxtActive]}>{g}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+
           <Pressable
             style={({ pressed }) => [styles.primaryBtn, { opacity: pressed || loading ? 0.85 : 1 }]}
             onPress={handleRegister}
@@ -225,6 +244,20 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: C.text,
   },
+  genderRow: { flexDirection: "row", gap: 8, marginTop: 4 },
+  genderChip: {
+    flex: 1,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  genderChipActive: { borderColor: C.primary, backgroundColor: C.primaryMuted },
+  genderChipTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary },
+  genderChipTxtActive: { color: C.primary },
   eyeBtn: { padding: 4, marginLeft: 8 },
   infoBox: {
     flexDirection: "row",

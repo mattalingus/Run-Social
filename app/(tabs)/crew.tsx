@@ -231,6 +231,8 @@ function CreateCrewSheet({ visible, onClose, onCreated }: { visible: boolean; on
   const [emoji, setEmoji] = useState("🏃");
   const [runStyle, setRunStyle] = useState<string | null>(null);
   const [vibes, setVibes] = useState<string[]>([]);
+  const [homeMetro, setHomeMetro] = useState<string | null>(null);
+  const [homeState, setHomeState] = useState<string | null>(null);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -275,7 +277,7 @@ function CreateCrewSheet({ visible, onClose, onCreated }: { visible: boolean; on
   }
 
   const createMutation = useMutation({
-    mutationFn: async (data: { name: string; description: string; emoji: string; runStyle?: string; tags: string[]; imageUrl?: string }) => {
+    mutationFn: async (data: { name: string; description: string; emoji: string; runStyle?: string; tags: string[]; imageUrl?: string; homeMetro?: string; homeState?: string }) => {
       const res = await apiRequest("POST", "/api/crews", data);
       return res.json() as Promise<Crew>;
     },
@@ -286,6 +288,8 @@ function CreateCrewSheet({ visible, onClose, onCreated }: { visible: boolean; on
       setEmoji("🏃");
       setRunStyle(null);
       setVibes([]);
+      setHomeMetro(null);
+      setHomeState(null);
       setImageUri(null);
       setImageUrl(null);
       onCreated(crew);
@@ -301,10 +305,23 @@ function CreateCrewSheet({ visible, onClose, onCreated }: { visible: boolean; on
 
   const handleCreate = () => {
     if (!name.trim()) { Alert.alert("Name required", "Give your crew a name"); return; }
-    createMutation.mutate({ name: name.trim(), description: description.trim(), emoji, runStyle: runStyle ?? undefined, tags: vibes, imageUrl: imageUrl ?? undefined });
+    createMutation.mutate({ 
+      name: name.trim(), 
+      description: description.trim(), 
+      emoji, 
+      runStyle: runStyle ?? undefined, 
+      tags: vibes, 
+      imageUrl: imageUrl ?? undefined,
+      homeMetro: homeMetro ?? undefined,
+      homeState: homeState ?? undefined
+    });
   };
 
   const toggleVibe = (v: string) => setVibes((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]);
+
+  const { data: metros } = useQuery<{ name: string; state: string }[]>({
+    queryKey: ["/api/metro-areas"],
+  });
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -404,6 +421,30 @@ function CreateCrewSheet({ visible, onClose, onCreated }: { visible: boolean; on
                 </View>
               </View>
             ))}
+
+            <Text style={s.fieldLabel}>Home Base <Text style={s.fieldOptional}>(optional)</Text></Text>
+            <Text style={s.fieldHint}>Set a home city for regional rankings.</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 20 }}>
+              <View style={s.chipsGrid}>
+                {metros?.map((m) => (
+                  <TouchableOpacity
+                    key={`${m.name}-${m.state}`}
+                    style={[s.chip, homeMetro === m.name && s.chipVibeActive]}
+                    onPress={() => {
+                      if (homeMetro === m.name) {
+                        setHomeMetro(null);
+                        setHomeState(null);
+                      } else {
+                        setHomeMetro(m.name);
+                        setHomeState(m.state);
+                      }
+                    }}
+                  >
+                    <Text style={[s.chipTxt, homeMetro === m.name && s.chipVibeActiveTxt]}>{m.name}, {m.state}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
 
             <TouchableOpacity
               style={[s.primaryBtn, createMutation.isPending && { opacity: 0.6 }]}
@@ -1795,6 +1836,7 @@ interface RankedCrew {
   member_count: number;
   total_miles: number;
   total_runs: number;
+  home_metro?: string;
 }
 
 function RankingsModal({ visible, onClose, myCrewIds, myCrewId }: { visible: boolean; onClose: () => void; myCrewIds: string[]; myCrewId?: string }) {
@@ -1804,26 +1846,22 @@ function RankingsModal({ visible, onClose, myCrewIds, myCrewId }: { visible: boo
   const insets = useSafeAreaInsets();
   const [activityType, setActivityType] = useState<"run" | "ride">("run");
   const [period, setPeriod] = useState<"week" | "month" | "all">("all");
+  const [rankingTab, setRankingTab] = useState<"national" | "state" | "metro">("national");
 
-  const rankingsUrl = `/api/crews/rankings?activityType=${activityType}&period=${period}${myCrewId ? `&myCrewId=${myCrewId}` : ""}`;
-  const { data: rankingsData, isLoading } = useQuery<{ top100: RankedCrew[]; myCrew: RankedCrew | null }>({
-    queryKey: ["/api/crews/rankings", activityType, period, myCrewId ?? ""],
+  // Get user's preferred metro/state if available
+  const userMetro = (authUser as any)?.home_metro || "Houston";
+  const userState = (authUser as any)?.home_state || "TX";
+
+  const rankingsUrl = `/api/crews/rankings?type=${rankingTab}&value=${rankingTab === 'state' ? userState : rankingTab === 'metro' ? userMetro : ''}`;
+  const { data: rankings, isLoading } = useQuery<RankedCrew[]>({
+    queryKey: ["/api/crews/rankings", rankingTab, userMetro, userState],
     queryFn: async () => {
-      const res = await fetch(new URL(rankingsUrl, getApiUrl()).toString(), { credentials: "include" });
+      const res = await apiRequest("GET", rankingsUrl);
       return res.json();
     },
     enabled: visible,
     staleTime: 60_000,
   });
-
-  const rankings = rankingsData?.top100 ?? [];
-  const myOutsideCrew = rankingsData?.myCrew ?? null;
-
-  const PERIODS: { key: "week" | "month" | "all"; label: string }[] = [
-    { key: "week", label: "This Week" },
-    { key: "month", label: "This Month" },
-    { key: "all", label: "All Time" },
-  ];
 
   function rankLabel(rank: number) {
     if (rank === 1) return "🥇";
@@ -1833,8 +1871,14 @@ function RankingsModal({ visible, onClose, myCrewIds, myCrewId }: { visible: boo
   }
 
   function formatMiles(m: number | null | undefined) {
-    return toDisplayDist(m ?? 0, distUnit);
+    return `${toDisplayDist(m ?? 0, distUnit)} ${unitLabel(distUnit)}`;
   }
+
+  const TABS: { key: "national" | "state" | "metro"; label: string }[] = [
+    { key: "metro", label: "Local" },
+    { key: "state", label: "State" },
+    { key: "national", label: "National" },
+  ];
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -1842,7 +1886,7 @@ function RankingsModal({ visible, onClose, myCrewIds, myCrewId }: { visible: boo
         {/* Header */}
         <View style={[rStyles.rankHeader, { paddingTop: insets.top > 0 ? 16 : 20 }]}>
           <View>
-            <Text style={[rStyles.rankTitle, { color: C.text, fontFamily: "Outfit_700Bold" }]}>National Rankings</Text>
+            <Text style={[rStyles.rankTitle, { color: C.text, fontFamily: "Outfit_700Bold" }]}>Crew Rankings</Text>
             <Text style={[rStyles.rankSub, { color: C.textMuted, fontFamily: "Outfit_400Regular" }]}>Top crews by total miles</Text>
           </View>
           <TouchableOpacity onPress={onClose} hitSlop={12}>
@@ -1850,36 +1894,16 @@ function RankingsModal({ visible, onClose, myCrewIds, myCrewId }: { visible: boo
           </TouchableOpacity>
         </View>
 
-        {/* Activity toggle */}
-        <View style={[rStyles.toggleRow, { backgroundColor: C.surface, borderColor: C.border }]}>
-          {(["run", "ride"] as const).map((t) => (
+        {/* Tab toggle */}
+        <View style={[rStyles.toggleRow, { backgroundColor: C.surface, borderColor: C.border, marginBottom: 16 }]}>
+          {TABS.map((t) => (
             <TouchableOpacity
-              key={t}
-              style={[rStyles.togglePill, activityType === t && { backgroundColor: C.primary }]}
-              onPress={() => setActivityType(t)}
+              key={t.key}
+              style={[rStyles.togglePill, rankingTab === t.key && { backgroundColor: C.primary }]}
+              onPress={() => setRankingTab(t.key)}
             >
-              <Ionicons
-                name={t === "run" ? "walk-outline" : "bicycle-outline"}
-                size={14}
-                color={activityType === t ? C.bg : C.textMuted}
-              />
-              <Text style={[rStyles.togglePillTxt, { color: activityType === t ? C.bg : C.textMuted, fontFamily: "Outfit_600SemiBold" }]}>
-                {t === "run" ? "Runs" : "Rides"}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Period pills */}
-        <View style={rStyles.periodRow}>
-          {PERIODS.map((p) => (
-            <TouchableOpacity
-              key={p.key}
-              style={[rStyles.periodPill, { borderColor: period === p.key ? C.primary : C.border, backgroundColor: period === p.key ? C.primary + "18" : "transparent" }]}
-              onPress={() => setPeriod(p.key)}
-            >
-              <Text style={[rStyles.periodPillTxt, { color: period === p.key ? C.primary : C.textMuted, fontFamily: "Outfit_600SemiBold" }]}>
-                {p.label}
+              <Text style={[rStyles.togglePillTxt, { color: rankingTab === t.key ? C.bg : C.textMuted, fontFamily: "Outfit_600SemiBold" }]}>
+                {t.label}
               </Text>
             </TouchableOpacity>
           ))}
@@ -1890,12 +1914,12 @@ function RankingsModal({ visible, onClose, myCrewIds, myCrewId }: { visible: boo
           <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
             <ActivityIndicator color={C.primary} size="large" />
           </View>
-        ) : rankings.length === 0 ? (
+        ) : (rankings ?? []).length === 0 ? (
           <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 10, paddingHorizontal: 40 }}>
             <Ionicons name="trophy-outline" size={48} color={C.textMuted} />
-            <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text, textAlign: "center" }}>No activity logged yet</Text>
+            <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text, textAlign: "center" }}>No rankings found</Text>
             <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textMuted, textAlign: "center" }}>
-              Complete {activityType === "run" ? "runs" : "rides"} with your crew to appear on the leaderboard.
+              Be the first crew to log activity in this category!
             </Text>
           </View>
         ) : (
@@ -1904,12 +1928,13 @@ function RankingsModal({ visible, onClose, myCrewIds, myCrewId }: { visible: boo
             keyExtractor={(item) => item.id}
             contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 30, paddingTop: 8 }}
             showsVerticalScrollIndicator={false}
-            renderItem={({ item }) => {
+            renderItem={({ item, index }) => {
+              const rank = index + 1;
               const isMyC = myCrewIds.includes(item.id);
               return (
                 <View style={[rStyles.rankRow, { backgroundColor: C.surface, borderColor: isMyC ? C.primary : C.border, borderLeftWidth: isMyC ? 3 : 1 }]}>
-                  <Text style={[rStyles.rankNum, { fontFamily: item.rank <= 3 ? "Outfit_700Bold" : "Outfit_600SemiBold", color: item.rank <= 3 ? C.text : C.textMuted, fontSize: item.rank <= 3 ? 22 : 14, width: 40, textAlign: "center" }]}>
-                    {rankLabel(item.rank)}
+                  <Text style={[rStyles.rankNum, { fontFamily: rank <= 3 ? "Outfit_700Bold" : "Outfit_600SemiBold", color: rank <= 3 ? C.text : C.textMuted, fontSize: rank <= 3 ? 22 : 14, width: 40, textAlign: "center" }]}>
+                    {rankLabel(rank)}
                   </Text>
                   <View style={[rStyles.rankAvatar, { backgroundColor: C.card }]}>
                     {item.image_url ? (
@@ -1921,7 +1946,7 @@ function RankingsModal({ visible, onClose, myCrewIds, myCrewId }: { visible: boo
                   <View style={{ flex: 1 }}>
                     <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.text }} numberOfLines={1}>{item.name}</Text>
                     <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted }}>
-                      {item.member_count} member{item.member_count !== 1 ? "s" : ""} · {item.total_runs} {activityType === "run" ? "run" : "ride"}{item.total_runs !== 1 ? "s" : ""}
+                      {item.member_count} member{item.member_count !== 1 ? "s" : ""} • {item.home_metro || "National"}
                     </Text>
                     {isMyC && (
                       <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.primary }}>Your Crew</Text>
@@ -1931,35 +1956,6 @@ function RankingsModal({ visible, onClose, myCrewIds, myCrewId }: { visible: boo
                 </View>
               );
             }}
-            ListFooterComponent={myOutsideCrew ? () => (
-              <View style={{ marginTop: 8 }}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                  <View style={{ flex: 1, height: 1, backgroundColor: C.border }} />
-                  <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted }}>your crew</Text>
-                  <View style={{ flex: 1, height: 1, backgroundColor: C.border }} />
-                </View>
-                <View style={[rStyles.rankRow, { backgroundColor: C.surface, borderColor: C.primary, borderLeftWidth: 3 }]}>
-                  <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.textMuted, width: 40, textAlign: "center" }}>
-                    #{myOutsideCrew.rank}
-                  </Text>
-                  <View style={[rStyles.rankAvatar, { backgroundColor: C.card }]}>
-                    {myOutsideCrew.image_url ? (
-                      <Image source={{ uri: resolveImgUrl(myOutsideCrew.image_url)! }} style={{ width: 40, height: 40, borderRadius: 20 }} />
-                    ) : (
-                      <Text style={{ fontSize: 20 }}>{myOutsideCrew.emoji}</Text>
-                    )}
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.text }} numberOfLines={1}>{myOutsideCrew.name}</Text>
-                    <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted }}>
-                      {myOutsideCrew.member_count} member{myOutsideCrew.member_count !== 1 ? "s" : ""} · {myOutsideCrew.total_runs} {activityType === "run" ? "run" : "ride"}{myOutsideCrew.total_runs !== 1 ? "s" : ""}
-                    </Text>
-                    <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.primary }}>Your Crew</Text>
-                  </View>
-                  <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 16, color: C.primary }}>{formatMiles(myOutsideCrew.total_miles)}</Text>
-                </View>
-              </View>
-            ) : null}
           />
         )}
       </View>

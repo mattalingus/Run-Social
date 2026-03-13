@@ -21,6 +21,8 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   password: text("password").notNull(),
   name: text("name").notNull(),
+  username: text("username").unique(),
+  gender: text("gender"), // "Man", "Woman", "Prefer not to say"
   photoUrl: text("photo_url"),
   avgPace: real("avg_pace").default(10),
   avgDistance: real("avg_distance").default(3),

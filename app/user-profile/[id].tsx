@@ -196,7 +196,7 @@ export default function UserProfileScreen() {
                     if (!ach) return null;
                     return (
                       <View key={slug} style={s.badge}>
-                        <Text style={s.badgeEmoji}>{ach.emoji}</Text>
+                        <Text style={s.badgeEmoji}>{ach.icon}</Text>
                         <Text style={s.badgeLabel} numberOfLines={1}>{ach.name}</Text>
                       </View>
                     );

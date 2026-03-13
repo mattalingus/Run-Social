@@ -109,6 +109,7 @@ export async function initDb() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS notif_crew_activity BOOLEAN DEFAULT true;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS notif_weekly_summary BOOLEAN DEFAULT true;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS show_run_routes BOOLEAN DEFAULT true;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS gender TEXT DEFAULT NULL;
     ALTER TABLE runs ADD COLUMN IF NOT EXISTS is_strict BOOLEAN DEFAULT false;
     ALTER TABLE runs ADD COLUMN IF NOT EXISTS run_style TEXT DEFAULT NULL;
     ALTER TABLE runs ADD COLUMN IF NOT EXISTS activity_type TEXT DEFAULT 'run';
@@ -137,6 +138,7 @@ export async function initDb() {
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS activity_type TEXT DEFAULT 'run';
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS is_starred BOOLEAN DEFAULT false;
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS elevation_gain_ft REAL;
+    ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS ai_summary TEXT;
 
     CREATE TABLE IF NOT EXISTS friends (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -350,6 +352,11 @@ export async function initDb() {
       created_at TIMESTAMP DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS idx_remember_tokens_user ON remember_tokens(user_id);
+    ALTER TABLE crews ADD COLUMN IF NOT EXISTS current_streak_weeks INTEGER DEFAULT 0;
+        ALTER TABLE crews ADD COLUMN IF NOT EXISTS last_run_week TIMESTAMP DEFAULT NULL;
+        ALTER TABLE crews ADD COLUMN IF NOT EXISTS home_metro TEXT DEFAULT NULL;
+        ALTER TABLE crews ADD COLUMN IF NOT EXISTS home_state TEXT DEFAULT NULL;
+        ALTER TABLE crews ADD COLUMN IF NOT EXISTS last_overtake_notif_at TIMESTAMP DEFAULT NULL;
   `);
 
   const dummyCheck = await pool.query(`SELECT COUNT(*) FROM users WHERE email LIKE 'dummy-%@paceup.dev'`);
@@ -361,6 +368,23 @@ export async function initDb() {
     await pool.query(`DELETE FROM users WHERE email LIKE 'dummy-%@paceup.dev'`);
     console.log("[cleanup] Removed dummy seed accounts and their runs");
   }
+}
+
+export async function getBuddySuggestions(userId: string, gender: string) {
+  const res = await pool.query(
+    `SELECT id, name, username, photo_url, avg_pace, avg_distance, total_miles
+     FROM users
+     WHERE gender = $1 AND id != $2
+       AND id NOT IN (
+         SELECT CASE WHEN requester_id = $2 THEN addressee_id ELSE requester_id END
+         FROM friends
+         WHERE requester_id = $2 OR addressee_id = $2
+       )
+     ORDER BY RANDOM()
+     LIMIT 10`,
+    [gender, userId]
+  );
+  return res.rows;
 }
 
 export async function getNotifications(userId: string) {
@@ -685,11 +709,11 @@ export async function getUserByEmailOrUsername(identifier: string) {
   return getUserByUsername(identifier);
 }
 
-export async function createUser(data: { email: string; password: string; name: string; username?: string }) {
+export async function createUser(data: { email: string; password: string; name: string; username?: string; gender?: string | null }) {
   const hashedPassword = await bcrypt.hash(data.password, 10);
   const result = await pool.query(
-    `INSERT INTO users (email, password, name, username, avg_pace, avg_distance) VALUES ($1, $2, $3, $4, NULL, NULL) RETURNING *`,
-    [data.email.toLowerCase(), hashedPassword, data.name, data.username?.toLowerCase() ?? null]
+    `INSERT INTO users (email, password, name, username, avg_pace, avg_distance, gender) VALUES ($1, $2, $3, $4, NULL, NULL, $5) RETURNING *`,
+    [data.email.toLowerCase(), hashedPassword, data.name, data.username?.toLowerCase() ?? null, data.gender ?? null]
   );
   return result.rows[0];
 }
@@ -1049,7 +1073,7 @@ export async function getSoloRunById(id: string) {
   const result = await pool.query(`SELECT * FROM solo_runs WHERE id = $1`, [id]);
   if (!result.rows.length) return null;
   const row = result.rows[0];
-  return { ...row, userId: row.user_id };
+  return { ...row, userId: row.user_id, distanceMiles: row.distance_miles, paceMinPerMile: row.pace_min_per_mile, durationSeconds: row.duration_seconds, elevationGainFt: row.elevation_gain_ft };
 }
 
 export async function createSoloRun(data: {
@@ -1159,7 +1183,7 @@ export async function toggleStarSoloRun(id: string, userId: string) {
 }
 
 export async function updateSoloRun(id: string, userId: string, updates: Record<string, any>) {
-  const allowed = ["title", "date", "distance_miles", "pace_min_per_mile", "duration_seconds", "completed", "planned", "notes", "route_path", "is_starred", "elevation_gain_ft", "saved_path_id"];
+  const allowed = ["title", "date", "distance_miles", "pace_min_per_mile", "duration_seconds", "completed", "planned", "notes", "route_path", "is_starred", "elevation_gain_ft", "saved_path_id", "ai_summary"];
   const entries = Object.entries(updates).filter(([k]) => allowed.includes(k));
   if (!entries.length) return null;
   const fields = entries.map(([k], i) => `${k} = $${i + 3}`).join(", ");
@@ -2800,14 +2824,15 @@ export async function getUserRunRecords(userId: string) {
 
 // ─── Crew Storage ─────────────────────────────────────────────────────────────
 
-export async function createCrew(data: { name: string; description?: string; emoji: string; createdBy: string; runStyle?: string; tags?: string[]; imageUrl?: string }) {
+export async function createCrew(data: { name: string; description?: string; emoji: string; createdBy: string; runStyle?: string; tags?: string[]; imageUrl?: string; homeMetro?: string; homeState?: string }) {
   const existing = await pool.query(`SELECT id FROM crews WHERE LOWER(name) = LOWER($1)`, [data.name]);
   if (existing.rows.length > 0) {
     throw Object.assign(new Error("A crew with that name already exists. Please choose a different name."), { code: "DUPLICATE_CREW_NAME" });
   }
   const res = await pool.query(
-    `INSERT INTO crews (name, description, emoji, created_by, run_style, tags, image_url) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-    [data.name, data.description ?? null, data.emoji, data.createdBy, data.runStyle ?? null, data.tags ?? [], data.imageUrl ?? null]
+    `INSERT INTO crews (name, description, emoji, created_by, run_style, tags, image_url, home_metro, home_state) 
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+    [data.name, data.description ?? null, data.emoji, data.createdBy, data.runStyle ?? null, data.tags ?? [], data.imageUrl ?? null, data.homeMetro ?? null, data.homeState ?? null]
   );
   const crew = res.rows[0];
   await pool.query(
@@ -2815,6 +2840,42 @@ export async function createCrew(data: { name: string; description?: string; emo
     [crew.id, data.createdBy, data.createdBy]
   );
   return crew;
+}
+
+export async function updateCrew(crewId: string, data: Partial<{ name: string; description: string; emoji: string; run_style: string; tags: string[]; image_url: string; current_streak_weeks: number; last_run_week: Date; home_metro: string; home_state: string; last_overtake_notif_at: Date }>) {
+  const keys = Object.keys(data);
+  if (keys.length === 0) return null;
+  const sets = keys.map((k, i) => `${k} = $${i + 1}`).join(", ");
+  const res = await pool.query(
+    `UPDATE crews SET ${sets} WHERE id = $${keys.length + 1} RETURNING *`,
+    [...Object.values(data), crewId]
+  );
+  return res.rows[0];
+}
+
+export async function getCrewRankings(type: 'national' | 'state' | 'metro', value?: string) {
+  let whereClause = "";
+  const params: any[] = [];
+  if (type === 'state' && value) {
+    whereClause = "WHERE home_state = $1";
+    params.push(value);
+  } else if (type === 'metro' && value) {
+    whereClause = "WHERE home_metro = $1";
+    params.push(value);
+  }
+
+  const res = await pool.query(
+    `SELECT c.*, u.name as created_by_name,
+       (SELECT COUNT(*) FROM crew_members cm WHERE cm.crew_id = c.id AND cm.status = 'member') as member_count,
+       COALESCE((SELECT SUM(miles_logged) FROM run_participants rp JOIN runs r ON r.id = rp.run_id WHERE r.crew_id = c.id), 0) as total_miles
+     FROM crews c
+     JOIN users u ON u.id = c.created_by
+     ${whereClause}
+     ORDER BY total_miles DESC
+     LIMIT 50`,
+    params
+  );
+  return res.rows;
 }
 
 export async function getCrewsByUser(userId: string) {

@@ -143,6 +143,15 @@ export default function RunResultsScreen() {
   const hasPaceGroups = run?.pace_groups && (run.pace_groups as any[]).length > 0;
   const hasAnyGroupLabel = finished.some((r: any) => r.pace_group_label);
 
+  const { data: aiSummary, isLoading: summaryLoading } = useQuery<{ summary: string }>({
+    queryKey: ["/api/solo-runs", id, "ai-summary"],
+    enabled: !!id,
+    queryFn: async () => {
+      const res = await apiRequest("POST", `/api/solo-runs/${id}/ai-summary`);
+      return res.json();
+    },
+  });
+
   return (
     <View style={s.container}>
       {/* Header */}
@@ -206,6 +215,24 @@ export default function RunResultsScreen() {
               <Text style={s.summaryLabel}>{isRide ? "Still riding" : "Still running"}</Text>
             </View>
           </View>
+
+          {/* AI Coach Summary Card */}
+          {aiSummary?.summary && (
+            <View style={s.aiCoachCard}>
+              <View style={s.aiCoachHeader}>
+                <View style={s.aiIconBox}>
+                  <Ionicons name="sparkles" size={14} color={C.primary} />
+                </View>
+                <Text style={s.aiCoachTitle}>AI COACH SUMMARY</Text>
+              </View>
+              <Text style={s.aiCoachText}>{aiSummary.summary}</Text>
+            </View>
+          )}
+          {summaryLoading && !aiSummary && (
+            <View style={[s.aiCoachCard, { height: 100, justifyContent: "center", alignItems: "center" }]}>
+               <ActivityIndicator size="small" color={C.primary} />
+            </View>
+          )}
 
           {/* Leaderboard */}
           {finished.length > 0 && (() => {
@@ -514,5 +541,39 @@ function makeStyles(C: ColorScheme) {
       backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center",
     },
     photoViewerImg: { width: "100%" as any, height: "80%" as any },
+    aiCoachCard: {
+      backgroundColor: C.primaryMuted,
+      borderRadius: 16,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: C.primary + "33",
+      marginBottom: 20,
+    },
+    aiCoachHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      marginBottom: 8,
+    },
+    aiIconBox: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      backgroundColor: C.primary + "22",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    aiCoachTitle: {
+      fontFamily: "Outfit_700Bold",
+      fontSize: 12,
+      color: C.primary,
+      letterSpacing: 1,
+    },
+    aiCoachText: {
+      fontFamily: "Outfit_400Regular",
+      fontSize: 14,
+      color: C.text,
+      lineHeight: 20,
+    },
   });
 }

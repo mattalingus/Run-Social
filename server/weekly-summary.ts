@@ -1,4 +1,5 @@
 import * as storage from "./storage";
+import * as ai from "./ai";
 import { sendPushNotification } from "./notifications";
 
 export async function sendWeeklySummaries(): Promise<void> {
@@ -16,10 +17,15 @@ export async function sendWeeklySummaries(): Promise<void> {
       const m = mins % 60;
       const timeLabel = h > 0 ? `${h}h ${m}m` : `${m}m`;
 
+      const insight = await ai.generateWeeklyInsight(user.name, stats);
+      const body = insight 
+        ? `${stats.runs} run${stats.runs !== 1 ? "s" : ""} · ${mi} mi · ${timeLabel} — ${insight}`
+        : `${stats.runs} run${stats.runs !== 1 ? "s" : ""} · ${mi} mi · ${timeLabel} this week — keep it up!`;
+
       await sendPushNotification(
         user.push_token,
         `Your weekly PaceUp summary 📊`,
-        `${stats.runs} run${stats.runs !== 1 ? "s" : ""} · ${mi} mi · ${timeLabel} this week — keep it up!`,
+        body,
         { screen: "profile" }
       );
     } catch (err) {

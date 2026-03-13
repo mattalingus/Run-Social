@@ -456,6 +456,10 @@ const barStyle = StyleSheet.create({
 export default function SoloScreen() {
   const insets = useSafeAreaInsets();
   const { user, refreshUser } = useAuth();
+  const { data: buddies = [] } = useQuery<any[]>({
+    queryKey: ["/api/users/buddy-suggestions"],
+    enabled: !!user && (user as any).gender === "Man" || (user as any).gender === "Woman",
+  });
   const { activityFilter, setActivityFilter } = useActivity();
   const { C } = useTheme();
   const s = useMemo(() => makeStyles(C), [C]);
@@ -850,6 +854,55 @@ export default function SoloScreen() {
             <Text style={[s.activityPillTxt, activityFilter === "ride" && s.activityPillTxtActive]}>Rides</Text>
           </Pressable>
         </View>
+
+        {/* ─── Buddy Finder ────────────────────────────────────────────── */}
+        {buddies.length > 0 && (
+          <View style={{ marginTop: 24, paddingHorizontal: 4 }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text }}>Find a Buddy</Text>
+              <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary }}>Matches for you</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingBottom: 4 }}>
+              {buddies.map((buddy) => (
+                <Pressable
+                  key={buddy.id}
+                  style={{
+                    width: 140, backgroundColor: C.surface, borderRadius: 16, padding: 12, borderWidth: 1, borderColor: C.border,
+                    alignItems: "center",
+                  }}
+                  onPress={() => router.push(`/user-profile/${buddy.id}`)}
+                >
+                  <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: C.card, marginBottom: 8, overflow: "hidden" }}>
+                    {buddy.photo_url ? (
+                      <Image source={{ uri: buddy.photo_url }} style={{ width: "100%", height: "100%" }} />
+                    ) : (
+                      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+                        <Feather name="user" size={30} color={C.textMuted} />
+                      </View>
+                    )}
+                  </View>
+                  <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text, textAlign: "center" }} numberOfLines={1}>
+                    {buddy.name}
+                  </Text>
+                  <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary, marginBottom: 8 }} numberOfLines={1}>
+                    @{buddy.username}
+                  </Text>
+                  <View style={{ flexDirection: "row", gap: 8, marginTop: "auto" }}>
+                    <View style={{ alignItems: "center" }}>
+                      <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 10, color: C.primary }}>{buddy.avg_pace || "10:00"}</Text>
+                      <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 8, color: C.textMuted }}>PACE</Text>
+                    </View>
+                    <View style={{ width: 1, height: 16, backgroundColor: C.border }} />
+                    <View style={{ alignItems: "center" }}>
+                      <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 10, color: C.orange }}>{buddy.avg_distance || "3"}mi</Text>
+                      <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 8, color: C.textMuted }}>DIST</Text>
+                    </View>
+                  </View>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         {/* ─── Goal Card ──────────────────────────────────────────────── */}
         <View style={s.goalCard}>

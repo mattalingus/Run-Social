@@ -19,6 +19,7 @@ import * as MediaLibrary from "expo-media-library";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Speech from "expo-speech";
 import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from "expo-av";
+import * as FileSystem from "expo-file-system/legacy";
 import ShareActivityModal from "@/components/ShareActivityModal";
 import MileSplitsChart, { MileSplit } from "@/components/MileSplitsChart";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
@@ -446,6 +447,29 @@ export default function RunTrackingScreen() {
     const paceMinTotal = totalSeconds / 60 / distance;
     const text = pickCoachPhrase(distance, paceMinTotal, totalSeconds, lastAnnouncedPaceRef.current, activityFilter);
     lastAnnouncedPaceRef.current = paceMinTotal;
+
+    // T003: AI TTS with fallback
+    try {
+      const res = await apiRequest("POST", "/api/tts", { text });
+      if (res.ok) {
+        const blob = await res.blob();
+        const reader = new FileReader();
+        reader.onload = async () => {
+          try {
+            const base64 = (reader.result as string).split(",")[1];
+            const filename = `${FileSystem.cacheDirectory}pace_${Math.round(distance * 100)}.mp3`;
+            await FileSystem.writeAsStringAsync(filename, base64, { encoding: FileSystem.EncodingType.Base64 });
+            const { sound } = await Audio.Sound.createAsync({ uri: filename });
+            await sound.playAsync();
+          } catch (e) {
+            Speech.speak(text, { rate: 0.95 });
+          }
+        };
+        reader.readAsDataURL(blob);
+        return;
+      }
+    } catch (e) {}
+
     Speech.speak(text, { rate: 0.95 });
   }, [activityFilter]);
 

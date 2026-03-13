@@ -13,7 +13,8 @@ import {
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons } from "@expo/vector-icons";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/query-client";
 import { useAuth } from "@/contexts/AuthContext";
 import { darkColors as C, type ColorScheme } from "@/constants/colors";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -98,6 +99,24 @@ export default function DiscoverScreen() {
   const st = useMemo(() => makeStStyles(C), [C]);
   const fm = useMemo(() => makeFmStyles(C), [C]);
   const [search, setSearch]       = useState("");
+  async function handleSearch(text: string) {
+    setSearch(text);
+    if (text.length > 5) {
+      try {
+        const res = await apiRequest("POST", "/api/runs/search-ai", { q: text });
+        if (res.ok) {
+          const aiFilters = await res.json();
+          setDraft(prev => ({
+            ...prev,
+            paceMax: aiFilters.paceMax ?? prev.paceMax,
+            distMin: aiFilters.distMin ?? prev.distMin,
+            distMax: aiFilters.distMax ?? prev.distMax,
+            styles: aiFilters.tags ? [...new Set([...prev.styles, ...aiFilters.tags])] : prev.styles,
+          }));
+        }
+      } catch (e) {}
+    }
+  }
   const [sortOption, setSortOption] = useState<SortOption>("soonest");
   const [showSort, setShowSort]   = useState(false);
   const [showFilter, setShowFilter] = useState(false);
@@ -205,7 +224,7 @@ export default function DiscoverScreen() {
           <TextInput
             style={st.searchInput}
             value={search}
-            onChangeText={(t) => { setSearch(t); setShowSort(false); }}
+            onChangeText={(t) => { handleSearch(t); setShowSort(false); }}
             placeholder="Search runs, hosts, locations..."
             placeholderTextColor={C.textMuted}
           />
@@ -257,6 +276,24 @@ export default function DiscoverScreen() {
               <Text style={st.emptyText}>
                 {search || isFiltered ? "Try adjusting your filters" : "Check back soon"}
               </Text>
+
+              {user && (user as any).gender && ((user as any).gender === "Man" || (user as any).gender === "Woman") && (
+                <Pressable
+                  style={{
+                    marginTop: 24, padding: 16, backgroundColor: C.surface, borderRadius: 16, borderWidth: 1, borderColor: C.border,
+                    alignItems: "center", width: "100%", maxWidth: 400,
+                  }}
+                  onPress={() => router.push("/(tabs)/solo")}
+                >
+                  <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: C.primaryMuted, alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
+                    <Feather name="users" size={20} color={C.primary} />
+                  </View>
+                  <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 16, color: C.text, marginBottom: 4 }}>Find a Training Partner</Text>
+                  <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary, textAlign: "center" }}>
+                    We've found runners in your area with similar goals and pace.
+                  </Text>
+                </Pressable>
+              )}
             </View>
           ) : (
             sorted.map((run) => {

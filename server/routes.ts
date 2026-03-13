@@ -5,6 +5,7 @@ import connectPgSimple from "connect-pg-simple";
 import { Pool } from "pg";
 import multer from "multer";
 import * as storage from "./storage";
+import * as ai from "./ai";
 import { generateDummyRuns, clearAndReseedRuns, getRunCount } from "./seed";
 import { uploadPhotoBuffer, streamObject } from "./objectStorage";
 import { sendPushNotification, userWantsNotif } from "./notifications";
@@ -83,8 +84,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/auth/register", async (req, res) => {
     try {
-      const { email, password, firstName, lastName, username } = req.body;
+      const { email, password, firstName, lastName, username, gender } = req.body;
       if (!email || !password || !firstName || !lastName || !username) return res.status(400).json({ message: "All fields required" });
+      if (gender && !["Man", "Woman", "Prefer not to say"].includes(gender)) return res.status(400).json({ message: "Invalid gender selection" });
       if (password.length < 6) return res.status(400).json({ message: "Password must be at least 6 characters" });
       if (!/^[^\s@]{2,30}$/.test(username)) return res.status(400).json({ message: "Username cannot contain spaces or @ and must be 2–30 characters" });
       const existing = await storage.getUserByEmail(email);
@@ -92,7 +94,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const existingUsername = await storage.getUserByUsername(username);
       if (existingUsername) return res.status(400).json({ message: "Username already taken" });
       const name = `${firstName.trim()} ${lastName.trim()}`;
-      const user = await storage.createUser({ email, password, name, username });
+      const user = await storage.createUser({ email, password, name, username, gender });
       req.session.userId = user.id;
       const rememberToken = await storage.createRememberToken(user.id);
       const { password: _, ...safeUser } = user;
@@ -155,10 +157,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/users/me", requireAuth, async (req, res) => {
     try {
-      const allowed = ["name", "avgPace", "avgDistance", "photoUrl", "notificationsEnabled", "distanceUnit", "profilePrivacy", "notifRunReminders", "notifFriendRequests", "notifCrewActivity", "notifWeeklySummary", "showRunRoutes"];
+      const allowed = ["name", "avgPace", "avgDistance", "photoUrl", "notificationsEnabled", "distanceUnit", "profilePrivacy", "notifRunReminders", "notifFriendRequests", "notifCrewActivity", "notifWeeklySummary", "showRunRoutes", "gender"];
       const updates: Record<string, any> = {};
       for (const key of allowed) {
         if (req.body[key] !== undefined) updates[key] = req.body[key];
+      }
+      if (updates.gender && !["Man", "Woman", "Prefer not to say"].includes(updates.gender)) {
+        return res.status(400).json({ message: "Invalid gender selection" });
       }
       const user = await storage.updateUser(req.session.userId!, updates);
       if (!user) return res.status(404).json({ message: "User not found" });
@@ -413,6 +418,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json(deduped);
       }
       res.json(publicRuns);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/users/buddy-suggestions", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId!);
+      if (!user || !user.gender || (user.gender !== "Man" && user.gender !== "Woman")) {
+        return res.json([]);
+      }
+      const buddies = await storage.getBuddySuggestions(user.id, user.gender);
+      res.json(buddies);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/tts", requireAuth, async (req, res) => {
+    try {
+      const { text } = req.body;
+      if (!text) return res.status(400).json({ message: "Text required" });
+      const buffer = await ai.generateTTS(text);
+      if (!buffer) return res.status(500).json({ message: "TTS failed" });
+      res.set("Content-Type", "audio/mpeg");
+      res.send(buffer);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/solo-runs/:id/ai-summary", requireAuth, async (req, res) => {
+    try {
+      const run = await storage.getSoloRunById(req.params.id);
+      if (!run || run.user_id !== req.session.userId) return res.status(404).json({ message: "Run not found" });
+      if ((run as any).ai_summary) return res.json({ summary: (run as any).ai_summary });
+      const summary = await ai.generateRunSummary(run);
+      if (summary) {
+        await storage.updateSoloRun(run.id, req.session.userId!, { ai_summary: summary });
+      }
+      res.json({ summary });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/runs/search-ai", requireAuth, async (req, res) => {
+    try {
+      const { q } = req.body;
+      if (!q) return res.status(400).json({ message: "Query required" });
+      const filters = await ai.generateSearchFilters(q);
+      res.json(filters);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
@@ -1059,7 +1116,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (message.trim().length > 280) {
         return res.status(400).json({ message: "Message must be 280 characters or less" });
       }
-      const run = await storage.getRun(req.params.id, req.session.userId!);
+      const run = await storage.getRunById(req.params.id);
       if (!run) return res.status(404).json({ message: "Run not found" });
       if (run.host_id !== req.session.userId) {
         return res.status(403).json({ message: "Only the host can send messages to participants" });
@@ -1079,6 +1136,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { milesLogged } = req.body;
       const miles = parseFloat(milesLogged) || 3;
       const result = await storage.confirmRunCompletion(req.params.id, req.session.userId!, miles);
+      
+      // Crew enhancements: Streak and Overtake
+      const run = await storage.getRunById(req.params.id as string);
+      if (run && run.crew_id) {
+        const crew = await storage.getCrewById(run.crew_id);
+        if (crew) {
+          // Update streak
+          const now = new Date();
+          const lastRun = crew.last_run_week ? new Date(crew.last_run_week) : null;
+          
+          const getWeekNumber = (d: Date) => {
+            const onejan = new Date(d.getFullYear(), 0, 1);
+            return Math.ceil((((d.getTime() - onejan.getTime()) / 86400000) + onejan.getDay() + 1) / 7);
+          };
+
+          const currentWeek = getWeekNumber(now);
+          const currentYear = now.getFullYear();
+          const lastWeek = lastRun ? getWeekNumber(lastRun) : -1;
+          const lastYear = lastRun ? lastRun.getFullYear() : -1;
+
+          let newStreak = crew.current_streak_weeks || 0;
+          if (lastYear === currentYear && lastWeek === currentWeek) {
+            // Already ran this week
+          } else if (lastYear === currentYear && lastWeek === currentWeek - 1) {
+            newStreak++;
+          } else if (lastYear === currentYear - 1 && lastWeek >= 52 && currentWeek === 1) {
+            newStreak++;
+          } else {
+            newStreak = 1;
+          }
+
+          await storage.updateCrew(crew.id, { current_streak_weeks: newStreak, last_run_week: now });
+
+          // Post milestone message
+          const milestones = [4, 8, 12, 26, 52];
+          if (milestones.includes(newStreak)) {
+            const recap = await ai.generateCrewRecap(
+              crew.name,
+              run.title,
+              (await storage.getRunParticipants(run.id)).length,
+              (run.min_pace + run.max_pace / 2).toFixed(2) // Fallback avg pace
+            );
+            await storage.createCrewMessage(
+              crew.id,
+              "system",
+              "PaceUp Bot",
+              null,
+              `🔥 ${newStreak} WEEK STREAK! ${recap || "This crew is on fire!"}`,
+              "milestone"
+            );
+          }
+
+          // Ranking Overtake Check
+          const oldRankings = await storage.getCrewRankings("national");
+          const crewOldRank = oldRankings.findIndex(r => r.id === crew.id) + 1;
+
+          // Rankings might have changed after milesLogged update
+          const newRankings = await storage.getCrewRankings("national");
+          const crewNewRank = newRankings.findIndex(r => r.id === crew.id) + 1;
+
+          if (crewNewRank < crewOldRank && crewOldRank > 0) {
+            // We overtook someone
+            const overtaken = newRankings[crewNewRank]; // The crew now at our old spot (roughly)
+            if (overtaken && overtaken.id !== crew.id) {
+              const nowMs = Date.now();
+              const lastNotif = overtaken.last_overtake_notif_at ? new Date(overtaken.last_overtake_notif_at).getTime() : 0;
+              if (nowMs - lastNotif > 60 * 60 * 1000) {
+                await storage.createCrewMessage(
+                  overtaken.id,
+                  "system",
+                  "PaceUp Bot",
+                  null,
+                  `⚠️ ${crew.name} just took your #${crewNewRank} spot — take it back!`,
+                  "milestone"
+                );
+                await storage.updateCrew(overtaken.id, { last_overtake_notif_at: new Date() });
+              }
+            }
+          }
+        }
+      }
+      
       res.json(result);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
@@ -1555,12 +1694,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
+  app.get("/api/crews/rankings", requireAuth, async (req, res) => {
+    try {
+      const { type, value } = req.query;
+      if (!type || !["national", "state", "metro"].includes(type as string)) {
+        return res.status(400).json({ message: "Invalid ranking type" });
+      }
+      const rankings = await storage.getCrewRankings(type as any, value as string);
+      res.json(rankings);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/metro-areas", (req, res) => {
+    const { metroAreas } = require("./metro-areas");
+    res.json(metroAreas);
+  });
+
   app.post("/api/crews", requireAuth, async (req, res) => {
     try {
-      const { name, description, emoji, runStyle, tags, imageUrl } = req.body;
+      const { name, description, emoji, runStyle, tags, imageUrl, homeMetro, homeState } = req.body;
       if (!name?.trim()) return res.status(400).json({ message: "Name is required" });
       if (name.trim().length > 20) return res.status(400).json({ message: "Crew name must be 20 characters or less" });
-      const crew = await storage.createCrew({ name: name.trim(), description, emoji: emoji || "🏃", createdBy: req.session.userId!, runStyle, tags: Array.isArray(tags) ? tags : [], imageUrl });
+      const crew = await storage.createCrew({
+        name: name.trim(),
+        description,
+        emoji: emoji || "🏃",
+        createdBy: req.session.userId!,
+        runStyle,
+        tags: Array.isArray(tags) ? tags : [],
+        imageUrl,
+        homeMetro,
+        homeState,
+      });
       res.json(crew);
     } catch (e: any) {
       if ((e as any).code === "DUPLICATE_CREW_NAME") return res.status(409).json({ message: e.message });

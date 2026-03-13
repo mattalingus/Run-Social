@@ -28,13 +28,14 @@ interface User {
   pace_goal?: number | null;
   distance_goal?: number;
   goal_period?: string;
+  gender?: string | null;
 }
 
 interface AuthContextValue {
   user: User | null;
   isLoading: boolean;
   login: (identifier: string, password: string) => Promise<void>;
-  register: (email: string, password: string, firstName: string, lastName: string, username: string) => Promise<void>;
+  register: (email: string, password: string, firstName: string, lastName: string, username: string, gender: string | null) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   updateUser: (updates: Partial<User>) => void;
@@ -113,8 +114,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(userOnly);
   }
 
-  async function register(email: string, password: string, firstName: string, lastName: string, username: string) {
-    const res = await apiRequest("POST", "/api/auth/register", { email, password, firstName, lastName, username });
+  async function register(email: string, password: string, firstName: string, lastName: string, username: string, gender: string | null) {
+    const res = await apiRequest("POST", "/api/auth/register", { email, password, firstName, lastName, username, gender });
     const data = await res.json();
     if (data.rememberToken) await storeToken(data.rememberToken);
     const { rememberToken: _t, ...userOnly } = data;

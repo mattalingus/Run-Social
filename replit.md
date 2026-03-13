@@ -46,7 +46,30 @@ All screens use `useTheme()` → `const { C } = useTheme()` → `const s = useMe
 ### Data Model
 The database schema includes tables for: `users`, `runs`, `run_participants`, `run_completions`, `run_tracking_points`, `host_ratings`, `solo_runs`, `saved_paths`, `community_paths`, `crews`, `crew_members`, `crew_messages` (user_id nullable for system posts), `run_messages`, `achievements`, `friends`, `live_pings`, `run_photos`, `crew_achievements`.
 
-Key columns: `runs.activity_type` ("run" | "ride"), `runs.is_active`, `runs.is_completed`, `runs.host_id`, `runs.location_lat/lng`. `solo_runs.step_count`, `solo_runs.move_time_seconds`, `solo_runs.elevation_gain`.
+Key columns: `runs.activity_type` ("run" | "ride"), `runs.is_active`, `runs.is_completed`, `runs.host_id`, `runs.location_lat/lng`. `solo_runs.step_count`, `solo_runs.move_time_seconds`, `solo_runs.elevation_gain`, `solo_runs.ai_summary`.
+
+`users.gender` ("Man" | "Woman" | "Prefer not to say") — controls buddy-finder visibility.
+`crews.current_streak_weeks`, `crews.last_run_week`, `crews.home_metro`, `crews.home_state`, `crews.last_overtake_notif_at` — for competitive crew features.
+
+### Buddy Finder
+- Gender field on users: Man / Woman / Prefer not to say (registered or edited in profile)
+- `GET /api/users/buddy-suggestions` — returns up to 10 same-gender users to connect with
+- "Find a Buddy" horizontal scroll section on Solo tab (hidden for non-Man/Woman users)
+- "Find a Training Partner" card on Discover empty state (same gender gate)
+
+### Crew Competitive Features
+- Weekly activity streak tracked per crew; milestone system messages at 4/8/12/26/52 weeks
+- Crew Rankings modal with National / State / Local tabs (`GET /api/crews/rankings?type=national|state|metro`)
+- Metro area lookup in `server/metro-areas.ts`; crews optionally set `home_metro` + `home_state`
+- Overtake notifications: when a crew improves rank, the overtaken crew gets a PaceUp Bot message (1hr cooldown)
+
+### OpenAI AI Features (requires OPENAI_API_KEY secret)
+- `server/ai.ts` — typed helpers: `generateRunSummary`, `generateCrewRecap`, `generateSearchFilters`, `generateWeeklyInsight`, `generateTTS`
+- Post-run AI summary card on solo results screen (`POST /api/solo-runs/:id/ai-summary`)
+- Audio coach TTS: `POST /api/tts` → OpenAI alloy voice → saved to device cache, played via expo-av; fallback to expo-speech
+- Natural language search on Discover (`POST /api/runs/search-ai`) — overlays AI-derived pace/distance/tag filters
+- AI pace group suggestion badge on run detail screen (frontend-only)
+- Weekly summary insight uses `generateWeeklyInsight`
 
 ### API — Key Endpoints
 - `GET /api/runs/:id/live` — live participant positions + stats (no auth required)

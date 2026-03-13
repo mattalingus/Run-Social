@@ -241,6 +241,7 @@ export default function ProfileScreen() {
   const [yearlyGoal, setYearlyGoal] = useState(user?.yearly_goal?.toString() || "500");
   const [avgPace, setAvgPace] = useState(user?.avg_pace?.toString() || "10");
   const [avgDistance, setAvgDistance] = useState(user?.avg_distance?.toString() || "3");
+  const [gender, setGender] = useState(user?.gender || "");
   const [devTaps, setDevTaps] = useState(0);
   const [showDevMode, setShowDevMode] = useState(false);
   const [showIconPicker, setShowIconPicker] = useState(false);
@@ -367,6 +368,7 @@ export default function ProfileScreen() {
       await apiRequest("PUT", "/api/users/me", {
         avgPace: parseFloat(avgPace),
         avgDistance: parseFloat(avgDistance),
+        gender: gender || null,
       });
     },
     onSuccess: () => { refreshUser(); setShowPace(false); },
@@ -1262,8 +1264,26 @@ export default function ProfileScreen() {
               placeholderTextColor={C.textMuted}
             />
           </View>
+          <View style={{ gap: 4, marginTop: 16 }}>
+            <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary, marginLeft: 4 }}>Gender</Text>
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              {["Man", "Woman", "Prefer not to say"].map((g) => (
+                <Pressable
+                  key={g}
+                  style={{
+                    flex: 1, height: 40, borderRadius: 10, backgroundColor: C.surface, borderWidth: 1,
+                    borderColor: gender === g ? C.primary : C.border,
+                    alignItems: "center", justifyContent: "center",
+                  }}
+                  onPress={() => { Haptics.selectionAsync(); setGender(g); }}
+                >
+                  <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: gender === g ? C.primary : C.textSecondary }}>{g}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
           <Pressable
-            style={({ pressed }) => [styles.modalBtn, { opacity: pressed ? 0.8 : 1 }]}
+            style={({ pressed }) => [styles.modalBtn, { opacity: pressed ? 0.8 : 1, marginTop: 24 }]}
             onPress={() => paceMutation.mutate()}
             disabled={paceMutation.isPending}
           >

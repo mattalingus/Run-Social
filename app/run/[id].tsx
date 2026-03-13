@@ -267,6 +267,22 @@ export default function RunDetailScreen() {
 
   const isHost = run?.host_id === user?.id;
   const myParticipation = participants.find((p) => p.id === user?.id);
+  const bestPaceGroup = useMemo(() => {
+    if (!run?.pace_groups || !user || (run.pace_groups as any[]).length === 0) return null;
+    const userPace = (user as any).avg_pace || 10;
+    const groups = run.pace_groups as any[];
+    let best = groups[0];
+    let minDiff = Math.abs((groups[0].minPace + groups[0].maxPace) / 2 - userPace);
+    for (const g of groups) {
+      const avg = (g.minPace + g.maxPace) / 2;
+      const diff = Math.abs(avg - userPace);
+      if (diff < minDiff) {
+        minDiff = diff;
+        best = g;
+      }
+    }
+    return best;
+  }, [run?.pace_groups, user]);
   const isParticipant = !!myParticipation && myParticipation.status !== "pending" && myParticipation.status !== "cancelled";
   const hasPendingRequest = !!myParticipation && myParticipation.status === "pending";
   const isPastRun = run ? new Date(run.date) < new Date() : false;
@@ -450,7 +466,8 @@ export default function RunDetailScreen() {
       setBroadcastMsg("");
       setShowMessageSheet(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert("Sent!", `Your message was delivered to ${res.sent} participant${res.sent !== 1 ? "s" : ""}.`);
+      const data = await res.json();
+      Alert.alert("Sent!", `Your message was delivered to ${data.sent} participant${data.sent !== 1 ? "s" : ""}.`);
     } catch (e: any) {
       Alert.alert("Error", e.message || "Could not send message.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -1655,7 +1672,14 @@ export default function RunDetailScreen() {
                       }}
                     >
                       <View>
-                        <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 16, color: C.text }}>{group.label}</Text>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                          <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 16, color: C.text }}>{group.label}</Text>
+                          {bestPaceGroup?.label === group.label && (
+                            <View style={{ backgroundColor: C.primary + "22", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, borderWidth: 0.5, borderColor: C.primary + "44" }}>
+                              <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 10, color: C.primary }}>SUGGESTED</Text>
+                            </View>
+                          )}
+                        </View>
                         <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary, marginTop: 2 }}>
                           {group.minPace} – {group.maxPace} min/mi
                         </Text>

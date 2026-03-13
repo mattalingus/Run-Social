@@ -1036,6 +1036,24 @@ export default function DiscoverScreen() {
   const s = useMemo(() => makeStyles(C), [C]);
 
   const [search, setSearch] = useState("");
+  async function handleSearch(text: string) {
+    setSearch(text);
+    if (text.length > 5) {
+      try {
+        const res = await apiRequest("POST", "/api/runs/search-ai", { q: text });
+        if (res.ok) {
+          const aiFilters = await res.json();
+          setDraft(prev => ({
+            ...prev,
+            paceMax: aiFilters.paceMax ?? prev.paceMax,
+            distMin: aiFilters.distMin ?? prev.distMin,
+            distMax: aiFilters.distMax ?? prev.distMax,
+            styles: aiFilters.tags ? [...new Set([...prev.styles, ...aiFilters.tags])] : prev.styles,
+          }));
+        }
+      } catch (e) {}
+    }
+  }
   const [sortOption, setSortOption] = useState<SortOption>("soonest");
   const [visibleCount, setVisibleCount] = useState(5);
   const { activityFilter, setActivityFilter } = useActivity();
@@ -1713,7 +1731,7 @@ export default function DiscoverScreen() {
           <TextInput
             style={s.searchInput}
             value={search}
-            onChangeText={(t) => { setSearch(t); }}
+            onChangeText={handleSearch}
             placeholder={activityFilter === "ride" ? "Search rides, hosts, locations..." : "Search runs, hosts, locations..."}
             placeholderTextColor={C.textMuted}
           />
@@ -1935,6 +1953,23 @@ export default function DiscoverScreen() {
                 {isFiltered && (
                   <Pressable style={s.clearFiltersBtn} onPress={resetFilters}>
                     <Text style={s.clearFiltersTxt}>Clear Filters</Text>
+                  </Pressable>
+                )}
+                {user && (user as any).gender && ((user as any).gender === "Man" || (user as any).gender === "Woman") && (
+                  <Pressable
+                    style={{
+                      marginTop: 24, padding: 16, backgroundColor: C.surface, borderRadius: 16, borderWidth: 1, borderColor: C.border,
+                      alignItems: "center", width: "100%",
+                    }}
+                    onPress={() => router.push("/(tabs)/solo")}
+                  >
+                    <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: C.primaryMuted, alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
+                      <Feather name="users" size={20} color={C.primary} />
+                    </View>
+                    <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 16, color: C.text, marginBottom: 4 }}>Find a Training Partner</Text>
+                    <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary, textAlign: "center" }}>
+                      We've found runners in your area with similar goals and pace.
+                    </Text>
                   </Pressable>
                 )}
               </View>
