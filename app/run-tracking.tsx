@@ -40,7 +40,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { useActivity } from "@/contexts/ActivityContext";
 import { useAuth } from "@/contexts/AuthContext";
-import C from "@/constants/colors";
+import { type ColorScheme } from "@/constants/colors";
 import { useTheme } from "@/contexts/ThemeContext";
 import { formatDistance } from "@/lib/formatDistance";
 import { toDisplayDist, toDisplayPace, unitLabel, type DistanceUnit } from "@/lib/units";
@@ -300,7 +300,8 @@ export default function RunTrackingScreen() {
   const qc = useQueryClient();
   const { activityFilter } = useActivity();
   const { user } = useAuth();
-  const { C: TC } = useTheme();
+  const { C } = useTheme();
+  const t = useMemo(() => makeRunStyles(C), [C]);
   const distUnit: DistanceUnit = ((user as any)?.distance_unit ?? "miles") as DistanceUnit;
   const { pathId } = useLocalSearchParams<{ pathId?: string }>();
 
@@ -1105,26 +1106,26 @@ export default function RunTrackingScreen() {
               return `${m}:${sec.toString().padStart(2, "0")}`;
             };
             return (
-              <View style={[t.statsRow2, { backgroundColor: TC.card, borderColor: TC.border }]}>
+              <View style={[t.statsRow2, { backgroundColor: C.card, borderColor: C.border }]}>
                 {elev != null && (
                   <View style={t.stat2Block}>
-                    <Feather name="trending-up" size={14} color={TC.textMuted} />
-                    <Text style={[t.stat2Val, { color: TC.text }]}>{elev} ft</Text>
-                    <Text style={[t.stat2Label, { color: TC.textMuted }]}>elevation</Text>
+                    <Feather name="trending-up" size={14} color={C.textMuted} />
+                    <Text style={[t.stat2Val, { color: C.text }]}>{elev} ft</Text>
+                    <Text style={[t.stat2Label, { color: C.textMuted }]}>elevation</Text>
                   </View>
                 )}
                 {moveSecs > 0 && (
                   <View style={t.stat2Block}>
-                    <Feather name="clock" size={14} color={TC.textMuted} />
-                    <Text style={[t.stat2Val, { color: TC.text }]}>{formatMoveTime(moveSecs)}</Text>
-                    <Text style={[t.stat2Label, { color: TC.textMuted }]}>move time</Text>
+                    <Feather name="clock" size={14} color={C.textMuted} />
+                    <Text style={[t.stat2Val, { color: C.text }]}>{formatMoveTime(moveSecs)}</Text>
+                    <Text style={[t.stat2Label, { color: C.textMuted }]}>move time</Text>
                   </View>
                 )}
                 {steps > 0 && (
                   <View style={t.stat2Block}>
-                    <Ionicons name="footsteps-outline" size={14} color={TC.textMuted} />
-                    <Text style={[t.stat2Val, { color: TC.text }]}>{steps.toLocaleString()}</Text>
-                    <Text style={[t.stat2Label, { color: TC.textMuted }]}>steps</Text>
+                    <Ionicons name="footsteps-outline" size={14} color={C.textMuted} />
+                    <Text style={[t.stat2Val, { color: C.text }]}>{steps.toLocaleString()}</Text>
+                    <Text style={[t.stat2Label, { color: C.textMuted }]}>steps</Text>
                   </View>
                 )}
               </View>
@@ -1630,7 +1631,7 @@ const darkMapStyle = [
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const t = StyleSheet.create({
+function makeRunStyles(C: ColorScheme) { return StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
 
   mapContainer: {
@@ -2315,4 +2316,4 @@ const t = StyleSheet.create({
     color: C.textSecondary,
     marginTop: 2,
   },
-});
+}); }
