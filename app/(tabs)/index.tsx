@@ -497,23 +497,28 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
           {/* ── D. Host Style ────────────────────────────────────────────── */}
           <View style={fm.section}>
             <Text style={fm.sectionTitle}>Host Style</Text>
-            <View style={fm.styleGrid}>
-              {HOST_STYLES.map((style) => {
-                const active = draft.styles.includes(style);
-                return (
-                  <Pressable
-                    key={style}
-                    style={[fm.stylePill, active && fm.stylePillActive]}
-                    onPress={() => { Haptics.selectionAsync(); toggleStyle(style); }}
-                  >
-                    {active && (
-                      <Feather name="check" size={11} color={C.primary} style={{ marginRight: 4 }} />
-                    )}
-                    <Text style={[fm.stylePillTxt, active && fm.stylePillTxtActive]}>{style}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+            {(activityFilter === "ride" ? RUN_STYLE_CATEGORIES_RIDE : RUN_STYLE_CATEGORIES_RUN).map((cat) => (
+              <View key={cat.label} style={{ marginTop: 14 }}>
+                <Text style={fm.catLabel}>{cat.label}</Text>
+                <View style={[fm.styleGrid, { marginTop: 8 }]}>
+                  {cat.options.map((style) => {
+                    const active = draft.styles.includes(style);
+                    return (
+                      <Pressable
+                        key={style}
+                        style={[fm.stylePill, active && fm.stylePillActive]}
+                        onPress={() => { Haptics.selectionAsync(); toggleStyle(style); }}
+                      >
+                        {active && (
+                          <Feather name="check" size={11} color={C.primary} style={{ marginRight: 4 }} />
+                        )}
+                        <Text style={[fm.stylePillTxt, active && fm.stylePillTxtActive]}>{style}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            ))}
           </View>
 
           <View style={fm.divider} />
@@ -3958,6 +3963,13 @@ function makeFmStyles(C: ColorScheme) { return StyleSheet.create({
   proxChipTxtActive: { color: C.primary },
   proxChipTxtDisabled: { color: C.textMuted },
 
+  catLabel: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 11,
+    color: "#3D6B50",
+    textTransform: "uppercase",
+    letterSpacing: 0.9,
+  },
   styleGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
   stylePill: {
     flexDirection: "row",

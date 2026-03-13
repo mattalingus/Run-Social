@@ -32,7 +32,14 @@ const SORT_OPTIONS: { key: SortOption; label: string }[] = [
   { key: "dist_desc",label: "Distance: High → Low" },
 ];
 
-const HOST_STYLES = ["Talkative", "Quiet", "Motivational", "Training", "Ministry", "Recovery"];
+const RUN_STYLE_CATEGORIES_RUN = [
+  { label: "Effort",      options: ["Easy Pace", "Beginner Friendly", "No-Drop", "Recovery", "Long Run", "PR Chaser", "Tempo", "Intervals"] },
+  { label: "Social",      options: ["Talkative", "Headphones OK", "Motivational", "Social After"] },
+  { label: "Community",   options: ["Women", "Men", "Co-Ed", "Young Adult", "College", "Seniors", "All Ages", "Middle Aged"] },
+  { label: "Lifestyle",   options: ["Dog Friendly", "Stroller Friendly", "Walk-Run", "Run & Coffee"] },
+  { label: "Time of Day", options: ["Morning Run", "Sunrise Run", "Sunset Run", "Lunch Run", "Night Run"] },
+  { label: "Terrain",     options: ["Trail", "Road", "Park Loop"] },
+];
 
 interface FilterState {
   paceMin: number;
@@ -396,21 +403,26 @@ export default function DiscoverScreen() {
             {/* Host Style */}
             <View style={fm.section}>
               <Text style={fm.sectionTitle}>Host Style</Text>
-              <View style={fm.styleGrid}>
-                {HOST_STYLES.map((style) => {
-                  const active = draft.styles.includes(style);
-                  return (
-                    <Pressable
-                      key={style}
-                      style={[fm.stylePill, active && fm.stylePillActive]}
-                      onPress={() => toggleStyle(style)}
-                    >
-                      {active && <Feather name="check" size={11} color={C.primary} style={{ marginRight: 4 }} />}
-                      <Text style={[fm.stylePillTxt, active && fm.stylePillTxtActive]}>{style}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
+              {RUN_STYLE_CATEGORIES_RUN.map((cat) => (
+                <View key={cat.label} style={{ marginTop: 14 }}>
+                  <Text style={fm.catLabel}>{cat.label}</Text>
+                  <View style={[fm.styleGrid, { marginTop: 8 }]}>
+                    {cat.options.map((style) => {
+                      const active = draft.styles.includes(style);
+                      return (
+                        <Pressable
+                          key={style}
+                          style={[fm.stylePill, active && fm.stylePillActive]}
+                          onPress={() => toggleStyle(style)}
+                        >
+                          {active && <Feather name="check" size={11} color={C.primary} style={{ marginRight: 4 }} />}
+                          <Text style={[fm.stylePillTxt, active && fm.stylePillTxtActive]}>{style}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              ))}
             </View>
             <View style={fm.divider} />
 
@@ -569,6 +581,13 @@ function makeFmStyles(C: ColorScheme) { return StyleSheet.create({
   proxChip: { paddingHorizontal: 13, paddingVertical: 8, borderRadius: 8, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, alignItems: "center", justifyContent: "center" },
   proxChipTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary },
 
+  catLabel: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 11,
+    color: "#3D6B50",
+    textTransform: "uppercase",
+    letterSpacing: 0.9,
+  },
   styleGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
   stylePill: { flexDirection: "row", alignItems: "center", paddingHorizontal: 13, paddingVertical: 8, borderRadius: 8, backgroundColor: C.card, borderWidth: 1, borderColor: C.border },
   stylePillActive: { backgroundColor: C.primaryMuted, borderColor: C.primary },
