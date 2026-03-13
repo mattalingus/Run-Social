@@ -170,7 +170,7 @@ function LockedRunMarker({ run, isSelected, onPress }: { run: Run; isSelected: b
       coordinate={{ latitude: run.location_lat, longitude: run.location_lng }}
       onPress={handlePress}
       anchor={{ x: 0.5, y: 0.5 }}
-      tracksViewChanges={isSelected}
+      tracksViewChanges={false}
     >
       <Animated.View style={[mk.wrap, { transform: [{ scale }] }]}>
         <View style={[mk.circle, mk.circleGray, isSelected && mk.circleGraySelected]}>
@@ -197,10 +197,10 @@ function RunMarker({ run, isSelected, isFriend, onPress }: { run: Run; isSelecte
   const crewPhoto = resolveImgUrl(run.crew_photo_url);
   const photoSrc = isUrlIcon ? icon : (crewPhoto || run.host_photo || avatarUrl(run.host_name));
 
-  // Key fix: derive tracksViewChanges directly from isSelected so they change
-  // in the SAME render cycle — eliminates the top-left flash on tap.
-  // Live markers always track. Others track until content ready, then only when selected.
-  const tracksViewChanges = isLiveNow || isSelected || !contentReady;
+  // tracksViewChanges must NOT include isSelected — toggling it on tap causes
+  // the native marker to briefly unregister and jump to (0,0) = top-left.
+  // Scale animation uses native driver so it doesn't need tracksViewChanges=true.
+  const tracksViewChanges = isLiveNow || !contentReady;
 
   useEffect(() => {
     if (isLiveNow) return;
