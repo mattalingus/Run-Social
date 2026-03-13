@@ -890,6 +890,7 @@ function CrewDetailSheet({
   const { activityFilter, setActivityFilter } = useActivity();
   const [showInvite, setShowInvite] = useState(false);
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
+  const [roleSheetMember, setRoleSheetMember] = useState<{ user_id: string; name: string; role: string } | null>(null);
   const qc = useQueryClient();
 
   const { data: detail, isLoading: detailLoading } = useQuery<CrewDetail>({
@@ -979,6 +980,57 @@ function CrewDetailSheet({
           style: "destructive",
           onPress: () => removeMemberMutation.mutate(memberId),
         },
+      ]
+    );
+  }
+
+  const promoteRoleMutation = useMutation({
+    mutationFn: ({ userId, role }: { userId: string; role: string }) =>
+      apiRequest("PUT", `/api/crews/${crew?.id}/members/${userId}/role`, { role }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/crews", crew?.id] });
+      qc.invalidateQueries({ queryKey: ["/api/crews"] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    onError: (e: any) => Alert.alert("Error", e?.message ?? "Could not update role"),
+  });
+
+  function handleMemberRolePress(m: { user_id: string; name: string; role: string }) {
+    const currentRole = m.role ?? "member";
+    const options: { label: string; role: string; destructive?: boolean }[] = [];
+    if (currentRole !== "crew_chief") {
+      options.push({ label: "Make Crew Chief", role: "crew_chief" });
+    }
+    if (currentRole !== "officer") {
+      options.push({ label: currentRole === "crew_chief" ? "Demote to Officer" : "Make Officer", role: "officer" });
+    }
+    if (currentRole !== "member") {
+      options.push({ label: "Demote to Member", role: "member", destructive: true });
+    }
+    Alert.alert(
+      m.name,
+      `Current role: ${currentRole === "crew_chief" ? "Crew Chief" : currentRole === "officer" ? "Officer" : "Member"}`,
+      [
+        ...options.map((o) => ({
+          text: o.label,
+          style: (o.destructive ? "destructive" : "default") as "destructive" | "default",
+          onPress: () => {
+            if (o.role === "crew_chief") {
+              Alert.alert(
+                "Transfer Leadership",
+                `Make ${m.name} the new Crew Chief? You will become an Officer.`,
+                [
+                  { text: "Cancel", style: "cancel" },
+                  { text: "Confirm", onPress: () => promoteRoleMutation.mutate({ userId: m.user_id, role: o.role }) },
+                ]
+              );
+            } else {
+              promoteRoleMutation.mutate({ userId: m.user_id, role: o.role });
+            }
+          },
+        })),
+        { text: "View Profile", onPress: () => setSelectedMemberId(m.user_id) },
+        { text: "Cancel", style: "cancel" },
       ]
     );
   }
@@ -1520,45 +1572,55 @@ function CrewDetailSheet({
                   {detailLoading ? (
                     <ActivityIndicator color={C.primary} style={{ marginTop: 16 }} />
                   ) : (
-                    members.map((m) => (
-                      <TouchableOpacity
-                        key={m.user_id}
-                        style={s.memberRow}
-                        activeOpacity={0.7}
-                        onPress={() => setSelectedMemberId(m.user_id)}
-                      >
-                        {resolveImgUrl(m.photo_url) ? (
-                          <Image
-                            source={{ uri: resolveImgUrl(m.photo_url)! }}
-                            style={[s.memberAvatar, { overflow: "hidden" }]}
-                          />
-                        ) : (
-                          <View style={s.memberAvatar}>
-                            <Text style={s.memberAvatarText}>{m.name[0]?.toUpperCase()}</Text>
+                    members.map((m) => {
+                      const memberRole = m.role ?? (m.user_id === crew.created_by ? "crew_chief" : "member");
+                      const isCurrentUser = m.user_id === currentUserId;
+                      const myRole = members.find((x) => x.user_id === currentUserId)?.role ?? (isCreator ? "crew_chief" : "member");
+                      const canManage = myRole === "crew_chief" && !isCurrentUser;
+                      return (
+                        <TouchableOpacity
+                          key={m.user_id}
+                          style={s.memberRow}
+                          activeOpacity={0.7}
+                          onPress={() => canManage ? handleMemberRolePress({ user_id: m.user_id, name: m.name, role: memberRole }) : setSelectedMemberId(m.user_id)}
+                        >
+                          {resolveImgUrl(m.photo_url) ? (
+                            <Image
+                              source={{ uri: resolveImgUrl(m.photo_url)! }}
+                              style={[s.memberAvatar, { overflow: "hidden" }]}
+                            />
+                          ) : (
+                            <View style={s.memberAvatar}>
+                              <Text style={s.memberAvatarText}>{m.name[0]?.toUpperCase()}</Text>
+                            </View>
+                          )}
+                          <View style={s.memberInfo}>
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                              <Text style={s.memberName} numberOfLines={1}>{m.name}</Text>
+                              {memberRole === "crew_chief" && (
+                                <Ionicons name="shield" size={13} color="#FFD700" />
+                              )}
+                              {memberRole === "officer" && (
+                                <Ionicons name="shield-outline" size={13} color={C.primary} />
+                              )}
+                            </View>
+                            <Text style={s.memberMeta}>
+                              {memberRole === "crew_chief" ? "Crew Chief" : memberRole === "officer" ? "Officer" : "Member"}
+                              {m.avg_pace && m.avg_pace > 0 ? ` · ${toDisplayPace(m.avg_pace, distUnit)} avg` : ""}
+                            </Text>
                           </View>
-                        )}
-                        <View style={s.memberInfo}>
-                          <Text style={s.memberName}>
-                            {m.name}
-                            {m.user_id === crew.created_by && (
-                              <Text style={s.creatorBadge}> · Crew Chief</Text>
-                            )}
-                          </Text>
-                          {m.avg_pace && m.avg_pace > 0 ? (
-                            <Text style={s.memberMeta}>{toDisplayPace(m.avg_pace, distUnit)} avg</Text>
-                          ) : null}
-                        </View>
-                        {isCreator && m.user_id !== currentUserId && (
-                          <Pressable
-                            onPress={(e) => { e.stopPropagation?.(); handleRemoveMember(m.user_id, m.name); }}
-                            hitSlop={10}
-                            style={s.removeMemberBtn}
-                          >
-                            <Feather name="user-minus" size={15} color={C.orange} />
-                          </Pressable>
-                        )}
-                      </TouchableOpacity>
-                    ))
+                          {canManage && (
+                            <Pressable
+                              onPress={(e) => { e.stopPropagation?.(); handleRemoveMember(m.user_id, m.name); }}
+                              hitSlop={10}
+                              style={s.removeMemberBtn}
+                            >
+                              <Feather name="user-minus" size={15} color={C.orange} />
+                            </Pressable>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })
                   )}
                 </View>
 
@@ -1834,9 +1896,15 @@ interface RankedCrew {
   emoji: string;
   image_url?: string;
   member_count: number;
+  active_members: number;
   total_miles: number;
-  total_runs: number;
+  qualifying_events: number;
+  participation_rate: number;
+  miles_per_member: number;
+  events_per_week: number;
+  crew_score: number;
   home_metro?: string;
+  home_state?: string;
 }
 
 function RankingsModal({ visible, onClose, myCrewIds, myCrewId }: { visible: boolean; onClose: () => void; myCrewIds: string[]; myCrewId?: string }) {
@@ -1887,7 +1955,7 @@ function RankingsModal({ visible, onClose, myCrewIds, myCrewId }: { visible: boo
         <View style={[rStyles.rankHeader, { paddingTop: insets.top > 0 ? 16 : 20 }]}>
           <View>
             <Text style={[rStyles.rankTitle, { color: C.text, fontFamily: "Outfit_700Bold" }]}>Crew Rankings</Text>
-            <Text style={[rStyles.rankSub, { color: C.textMuted, fontFamily: "Outfit_400Regular" }]}>Top crews by total miles</Text>
+            <Text style={[rStyles.rankSub, { color: C.textMuted, fontFamily: "Outfit_400Regular" }]}>Ranked by participation, miles & events</Text>
           </View>
           <TouchableOpacity onPress={onClose} hitSlop={12}>
             <Ionicons name="close" size={24} color={C.textMuted} />
@@ -1946,13 +2014,16 @@ function RankingsModal({ visible, onClose, myCrewIds, myCrewId }: { visible: boo
                   <View style={{ flex: 1 }}>
                     <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.text }} numberOfLines={1}>{item.name}</Text>
                     <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted }}>
-                      {item.member_count} member{item.member_count !== 1 ? "s" : ""} • {item.home_metro || "National"}
+                      {item.active_members ?? item.member_count} active • {item.qualifying_events ?? 0} event{(item.qualifying_events ?? 0) !== 1 ? "s" : ""}
                     </Text>
                     {isMyC && (
                       <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.primary }}>Your Crew</Text>
                     )}
                   </View>
-                  <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 16, color: C.primary }}>{formatMiles(item.total_miles)}</Text>
+                  <View style={{ alignItems: "flex-end" }}>
+                    <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 16, color: C.primary }}>{Number(item.crew_score ?? 0).toFixed(0)}</Text>
+                    <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 10, color: C.textMuted }}>pts</Text>
+                  </View>
                 </View>
               );
             }}

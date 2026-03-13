@@ -312,6 +312,12 @@ export async function initDb() {
     ALTER TABLE crew_messages ADD COLUMN IF NOT EXISTS message_type TEXT DEFAULT 'text';
     ALTER TABLE crew_messages ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT NULL;
     ALTER TABLE crew_members ADD COLUMN IF NOT EXISTS chat_muted BOOLEAN DEFAULT false;
+    ALTER TABLE crew_members ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'member';
+    ALTER TABLE crews ADD COLUMN IF NOT EXISTS streak_risk_notif_week INTEGER DEFAULT NULL;
+    -- Promote existing crew creators to crew_chief
+    UPDATE crew_members cm SET role = 'crew_chief'
+      FROM crews c
+      WHERE c.id = cm.crew_id AND c.created_by = cm.user_id AND cm.role = 'member';
 
     CREATE TABLE IF NOT EXISTS direct_messages (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -368,6 +374,26 @@ export async function initDb() {
     await pool.query(`DELETE FROM users WHERE email LIKE 'dummy-%@paceup.dev'`);
     console.log("[cleanup] Removed dummy seed accounts and their runs");
   }
+}
+
+export async function getBuddyEligibility(userId: string) {
+  // Count group runs user completed where total completions >= 2
+  const groupRes = await pool.query(
+    `SELECT COUNT(DISTINCT rc.run_id) as count
+     FROM run_completions rc
+     WHERE rc.user_id = $1
+       AND (SELECT COUNT(*) FROM run_completions rc2 WHERE rc2.run_id = rc.run_id) >= 2`,
+    [userId]
+  );
+  // Count solo runs
+  const soloRes = await pool.query(
+    `SELECT COUNT(*) as count FROM solo_runs WHERE user_id = $1 AND completed = true AND is_deleted IS NOT TRUE`,
+    [userId]
+  );
+  const groupRuns = parseInt(groupRes.rows[0]?.count ?? "0");
+  const soloRuns = parseInt(soloRes.rows[0]?.count ?? "0");
+  const eligible = groupRuns >= 1 && soloRuns >= 3;
+  return { eligible, groupRuns, soloRuns };
 }
 
 export async function getBuddySuggestions(userId: string, gender: string) {
@@ -2842,7 +2868,7 @@ export async function createCrew(data: { name: string; description?: string; emo
   return crew;
 }
 
-export async function updateCrew(crewId: string, data: Partial<{ name: string; description: string; emoji: string; run_style: string; tags: string[]; image_url: string; current_streak_weeks: number; last_run_week: Date; home_metro: string; home_state: string; last_overtake_notif_at: Date }>) {
+export async function updateCrew(crewId: string, data: Partial<{ name: string; description: string; emoji: string; run_style: string; tags: string[]; image_url: string; current_streak_weeks: number; last_run_week: Date; home_metro: string; home_state: string; last_overtake_notif_at: Date; streak_risk_notif_week: number }>) {
   const keys = Object.keys(data);
   if (keys.length === 0) return null;
   const sets = keys.map((k, i) => `${k} = $${i + 1}`).join(", ");
@@ -2854,28 +2880,134 @@ export async function updateCrew(crewId: string, data: Partial<{ name: string; d
 }
 
 export async function getCrewRankings(type: 'national' | 'state' | 'metro', value?: string) {
-  let whereClause = "";
+  let filterClause = "";
   const params: any[] = [];
   if (type === 'state' && value) {
-    whereClause = "WHERE home_state = $1";
+    filterClause = "AND c.home_state = $1";
     params.push(value);
   } else if (type === 'metro' && value) {
-    whereClause = "WHERE home_metro = $1";
+    filterClause = "AND c.home_metro = $1";
     params.push(value);
   }
 
   const res = await pool.query(
-    `SELECT c.*, u.name as created_by_name,
-       (SELECT COUNT(*) FROM crew_members cm WHERE cm.crew_id = c.id AND cm.status = 'member') as member_count,
-       COALESCE((SELECT SUM(miles_logged) FROM run_participants rp JOIN runs r ON r.id = rp.run_id WHERE r.crew_id = c.id), 0) as total_miles
+    `WITH active_members AS (
+       -- Members who completed a group or solo run in the last 30 days
+       SELECT DISTINCT cm.crew_id, cm.user_id
+       FROM crew_members cm
+       WHERE cm.status = 'member'
+         AND (
+           EXISTS (
+             SELECT 1 FROM run_completions rc
+             JOIN runs r ON r.id = rc.run_id
+             WHERE rc.user_id = cm.user_id AND r.crew_id = cm.crew_id
+               AND rc.created_at > NOW() - INTERVAL '30 days'
+           )
+           OR EXISTS (
+             SELECT 1 FROM solo_runs sr
+             WHERE sr.user_id = cm.user_id AND sr.completed = true
+               AND sr.created_at > NOW() - INTERVAL '30 days'
+           )
+         )
+     ),
+     qualifying_events AS (
+       -- Crew runs with 3+ participant completions
+       SELECT r.crew_id, r.id as run_id, COUNT(rc.user_id) as completion_count,
+              COALESCE(SUM(rc.distance_miles), 0) as event_miles
+       FROM runs r
+       JOIN run_completions rc ON rc.run_id = r.id
+       WHERE r.crew_id IS NOT NULL
+       GROUP BY r.crew_id, r.id
+       HAVING COUNT(rc.user_id) >= 3
+     ),
+     crew_stats AS (
+       SELECT
+         c.id as crew_id,
+         GREATEST(COUNT(DISTINCT am.user_id), 1) as active_members,
+         COUNT(DISTINCT qe.run_id) as qualifying_events,
+         COALESCE(SUM(qe.completion_count), 0) as total_participants,
+         COALESCE(SUM(qe.event_miles), 0) as total_miles,
+         GREATEST(EXTRACT(EPOCH FROM (NOW() - c.created_at)) / 86400, 7) as days_active
+       FROM crews c
+       LEFT JOIN active_members am ON am.crew_id = c.id
+       LEFT JOIN qualifying_events qe ON qe.crew_id = c.id
+       GROUP BY c.id, c.created_at
+     )
+     SELECT c.*,
+       u.name as created_by_name,
+       cs.active_members,
+       cs.qualifying_events,
+       cs.total_miles,
+       (SELECT COUNT(*) FROM crew_members cm2 WHERE cm2.crew_id = c.id AND cm2.status = 'member') as member_count,
+       ROUND(CAST(cs.total_participants AS NUMERIC) / cs.active_members, 4) as participation_rate,
+       ROUND(CAST(cs.total_miles AS NUMERIC) / cs.active_members, 2) as miles_per_member,
+       ROUND(CAST(cs.qualifying_events AS NUMERIC) / (cs.days_active / 7), 2) as events_per_week,
+       ROUND(
+         (CAST(cs.total_participants AS NUMERIC) / cs.active_members * 50) +
+         (CAST(cs.total_miles AS NUMERIC) / cs.active_members * 30) +
+         (CAST(cs.qualifying_events AS NUMERIC) / (cs.days_active / 7) * 20),
+         1
+       ) as crew_score
      FROM crews c
      JOIN users u ON u.id = c.created_by
-     ${whereClause}
-     ORDER BY total_miles DESC
+     JOIN crew_stats cs ON cs.crew_id = c.id
+     WHERE 1=1 ${filterClause}
+     ORDER BY crew_score DESC
      LIMIT 50`,
     params
   );
   return res.rows;
+}
+
+export async function getCrewMemberRole(crewId: string, userId: string): Promise<string> {
+  const res = await pool.query(
+    `SELECT role FROM crew_members WHERE crew_id = $1 AND user_id = $2 AND status = 'member'`,
+    [crewId, userId]
+  );
+  return res.rows[0]?.role ?? 'member';
+}
+
+export async function setCrewMemberRole(crewId: string, targetUserId: string, newRole: string, callerUserId: string) {
+  // Promoting to crew_chief: demote current caller to officer first
+  if (newRole === 'crew_chief') {
+    await pool.query(
+      `UPDATE crew_members SET role = 'officer' WHERE crew_id = $1 AND user_id = $2`,
+      [crewId, callerUserId]
+    );
+  }
+  await pool.query(
+    `UPDATE crew_members SET role = $3 WHERE crew_id = $1 AND user_id = $2`,
+    [crewId, targetUserId, newRole]
+  );
+}
+
+export async function getCrewsAtStreakRisk() {
+  // Crews with active streak where no run is scheduled in the current ISO week
+  // and streak_risk_notif_week != current ISO week number
+  const currentWeek = getISOWeek(new Date());
+  const res = await pool.query(
+    `SELECT c.id, c.name, c.current_streak_weeks, c.streak_risk_notif_week
+     FROM crews c
+     WHERE c.current_streak_weeks > 0
+       AND (c.streak_risk_notif_week IS NULL OR c.streak_risk_notif_week != $1)
+       AND NOT EXISTS (
+         SELECT 1 FROM runs r
+         WHERE r.crew_id = c.id
+           AND r.is_deleted IS NOT TRUE
+           AND r.date >= date_trunc('week', NOW())
+           AND r.date < date_trunc('week', NOW()) + INTERVAL '7 days'
+       )`,
+    [currentWeek]
+  );
+  return res.rows;
+}
+
+function getISOWeek(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
 }
 
 export async function getCrewsByUser(userId: string) {

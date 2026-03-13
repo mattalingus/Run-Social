@@ -427,10 +427,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const user = await storage.getUserById(req.session.userId!);
       if (!user || !user.gender || (user.gender !== "Man" && user.gender !== "Woman")) {
-        return res.json([]);
+        return res.json({ eligible: false, groupRuns: 0, soloRuns: 0, suggestions: [] });
       }
-      const buddies = await storage.getBuddySuggestions(user.id, user.gender);
-      res.json(buddies);
+      const eligibility = await storage.getBuddyEligibility(user.id);
+      if (!eligibility.eligible) {
+        return res.json({ eligible: false, groupRuns: eligibility.groupRuns, soloRuns: eligibility.soloRuns, suggestions: [] });
+      }
+      const suggestions = await storage.getBuddySuggestions(user.id, user.gender);
+      res.json({ eligible: true, groupRuns: eligibility.groupRuns, soloRuns: eligibility.soloRuns, suggestions });
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
@@ -1855,6 +1859,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (e: any) {
       const status = e.message?.includes("Only the Crew Chief") ? 403 : e.message?.includes("not found") ? 404 : 500;
       res.status(status).json({ message: e.message });
+    }
+  });
+
+  app.put("/api/crews/:crewId/members/:userId/role", requireAuth, async (req, res) => {
+    try {
+      const callerId = req.session.userId!;
+      const { crewId, userId } = req.params;
+      const { role } = req.body;
+      if (!["officer", "member", "crew_chief"].includes(role)) {
+        return res.status(400).json({ message: "Invalid role" });
+      }
+      const callerRole = await storage.getCrewMemberRole(crewId, callerId);
+      if (callerRole !== "crew_chief") {
+        return res.status(403).json({ message: "Only the Crew Chief can change roles" });
+      }
+      if (userId === callerId) {
+        return res.status(400).json({ message: "You cannot change your own role" });
+      }
+      await storage.setCrewMemberRole(crewId, userId, role, callerId);
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
     }
   });
 
