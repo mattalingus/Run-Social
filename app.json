@@ -24,6 +24,7 @@
     },
     "ios": {
       "supportsTablet": false,
+      "buildNumber": "16",
       "bundleIdentifier": "com.paceup",
       "infoPlist": {
         "NSCameraUsageDescription": "PaceUp uses your camera to add photos to your runs and rides.",
@@ -104,7 +105,8 @@
           "cameraPermission": "PaceUp uses your camera to add photos to your runs and rides."
         }
       ],
-      "expo-audio"
+      "expo-audio",
+      "expo-av"
     ],
     "experiments": {
       "typedRoutes": true,

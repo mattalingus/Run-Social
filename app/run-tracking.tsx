@@ -18,6 +18,7 @@ import * as Notifications from "@/lib/safeNotifications";
 import * as MediaLibrary from "expo-media-library";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Speech from "expo-speech";
+import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from "expo-av";
 import ShareActivityModal from "@/components/ShareActivityModal";
 import MileSplitsChart, { MileSplit } from "@/components/MileSplitsChart";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
@@ -422,8 +423,26 @@ export default function RunTrackingScreen() {
     } catch (e) {}
   };
 
-  const announcePace = useCallback((distance: number, totalSeconds: number) => {
+  const audioModeConfiguredRef = useRef(false);
+
+  const announcePace = useCallback(async (distance: number, totalSeconds: number) => {
     if (Platform.OS === "web") return;
+
+    if (!audioModeConfiguredRef.current) {
+      try {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: true,
+          interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+        });
+        audioModeConfiguredRef.current = true;
+      } catch (e) {}
+    }
+
     const paceMinTotal = totalSeconds / 60 / distance;
     const text = pickCoachPhrase(distance, paceMinTotal, totalSeconds, lastAnnouncedPaceRef.current, activityFilter);
     lastAnnouncedPaceRef.current = paceMinTotal;
