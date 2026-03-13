@@ -885,13 +885,15 @@ function RunCard({
           )}
 
           {run.tags?.length > 0 && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.tagsScroll} contentContainerStyle={s.tags}>
-              {sortTagsByCategory(run.tags).map((t) => (
-                <View key={t} style={s.tag}>
-                  <Text style={s.tagTxt}>{t}</Text>
-                </View>
-              ))}
-            </ScrollView>
+            <View onStartShouldSetResponder={() => true}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.tagsScroll} contentContainerStyle={s.tags}>
+                {sortTagsByCategory(run.tags).map((t) => (
+                  <View key={t} style={s.tag}>
+                    <Text style={s.tagTxt}>{t}</Text>
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
           )}
         </View>
       </View>
@@ -1021,6 +1023,7 @@ export default function DiscoverScreen() {
 
   const [search, setSearch] = useState("");
   const [sortOption, setSortOption] = useState<SortOption>("soonest");
+  const [visibleCount, setVisibleCount] = useState(5);
   const { activityFilter, setActivityFilter } = useActivity();
   const [showFilter, setShowFilter] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
@@ -1600,6 +1603,9 @@ export default function DiscoverScreen() {
   const isFallback = sorted.length === 0 && fallbackRuns.length > 0 && !isLoading && !search;
   const displayList = isFallback ? fallbackRuns : sorted;
 
+  // Reset to 5 whenever the user changes search/filters/activity
+  useEffect(() => { setVisibleCount(5); }, [search, applied, activityFilter]);
+
   // ─── Filter state helpers ──────────────────────────────────────────────────
 
   const isFiltered =
@@ -1733,7 +1739,7 @@ export default function DiscoverScreen() {
         </View>
       ) : (
         <FlatList
-          data={displayList}
+          data={displayList.slice(0, visibleCount)}
           keyExtractor={(r) => r.id}
           contentContainerStyle={[
             s.list,
@@ -1939,6 +1945,15 @@ export default function DiscoverScreen() {
           }
           ListFooterComponent={
             <View>
+              {displayList.length > visibleCount && (
+                <Pressable
+                  style={s.showMoreBtn}
+                  onPress={() => setVisibleCount((n) => n + 10)}
+                >
+                  <Text style={s.showMoreTxt}>Show {Math.min(displayList.length - visibleCount, 10)} more</Text>
+                  <Feather name="chevron-down" size={15} color={C.primary} />
+                </Pressable>
+              )}
               {user && !checklistDismissed && (
                 <View style={[s.checklistCard, { marginTop: 8 }]}>
                   {checklistAllDone ? (
@@ -3296,6 +3311,13 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
 
   tagsScroll: { marginTop: 2 },
   tags: { flexDirection: "row", gap: 5 },
+  showMoreBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 6, paddingVertical: 14, marginBottom: 4,
+    borderWidth: 1, borderColor: C.border, borderRadius: 12,
+    backgroundColor: C.card,
+  },
+  showMoreTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.primary },
   tag: {
     backgroundColor: C.card,
     borderRadius: 5,
