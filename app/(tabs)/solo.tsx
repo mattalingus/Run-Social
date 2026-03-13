@@ -858,85 +858,51 @@ export default function SoloScreen() {
         </View>
 
         {/* ─── Buddy Finder ────────────────────────────────────────────── */}
-        {!!user && ((user as any).gender === "Man" || (user as any).gender === "Woman") && buddyData !== undefined && (
+        {buddyEligible && buddies.length > 0 && (
           <View style={{ marginTop: 24, paddingHorizontal: 4 }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text }}>Find a Buddy</Text>
-              {buddyEligible && <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary }}>Matches for you</Text>}
+              <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary }}>Matches for you</Text>
             </View>
-            {buddyEligible && buddies.length > 0 ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingBottom: 4 }}>
-                {buddies.map((buddy) => (
-                  <Pressable
-                    key={buddy.id}
-                    style={{
-                      width: 140, backgroundColor: C.surface, borderRadius: 16, padding: 12, borderWidth: 1, borderColor: C.border,
-                      alignItems: "center",
-                    }}
-                    onPress={() => router.push(`/user-profile/${buddy.id}`)}
-                  >
-                    <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: C.card, marginBottom: 8, overflow: "hidden" }}>
-                      {buddy.photo_url ? (
-                        <Image source={{ uri: buddy.photo_url }} style={{ width: "100%", height: "100%" }} />
-                      ) : (
-                        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-                          <Feather name="user" size={30} color={C.textMuted} />
-                        </View>
-                      )}
-                    </View>
-                    <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text, textAlign: "center" }} numberOfLines={1}>
-                      {buddy.name}
-                    </Text>
-                    <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary, marginBottom: 8 }} numberOfLines={1}>
-                      @{buddy.username}
-                    </Text>
-                    <View style={{ flexDirection: "row", gap: 8, marginTop: "auto" }}>
-                      <View style={{ alignItems: "center" }}>
-                        <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 10, color: C.primary }}>{buddy.avg_pace || "10:00"}</Text>
-                        <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 8, color: C.textMuted }}>PACE</Text>
-                      </View>
-                      <View style={{ width: 1, height: 16, backgroundColor: C.border }} />
-                      <View style={{ alignItems: "center" }}>
-                        <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 10, color: C.orange }}>{buddy.avg_distance || "3"}mi</Text>
-                        <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 8, color: C.textMuted }}>DIST</Text>
-                      </View>
-                    </View>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            ) : !buddyEligible ? (
-              <View style={{ backgroundColor: C.surface, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: C.border }}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 }}>
-                  <Ionicons name="lock-closed" size={20} color={C.textMuted} />
-                  <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text }}>Unlock Buddy Finder</Text>
-                </View>
-                <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textMuted, marginBottom: 14 }}>
-                  Complete a few activities to meet compatible training partners.
-                </Text>
-                <View style={{ gap: 10 }}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                    {(buddyData?.groupRuns ?? 0) >= 1 ? (
-                      <Ionicons name="checkmark-circle" size={18} color={C.primary} />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingBottom: 4 }}>
+              {buddies.map((buddy) => (
+                <Pressable
+                  key={buddy.id}
+                  style={{
+                    width: 140, backgroundColor: C.surface, borderRadius: 16, padding: 12, borderWidth: 1, borderColor: C.border,
+                    alignItems: "center",
+                  }}
+                  onPress={() => router.push(`/user-profile/${buddy.id}`)}
+                >
+                  <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: C.card, marginBottom: 8, overflow: "hidden" }}>
+                    {buddy.photo_url ? (
+                      <Image source={{ uri: buddy.photo_url }} style={{ width: "100%", height: "100%" }} />
                     ) : (
-                      <Ionicons name="ellipse-outline" size={18} color={C.border} />
+                      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+                        <Feather name="user" size={30} color={C.textMuted} />
+                      </View>
                     )}
-                    <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.text, flex: 1 }}>
-                      Join 1 group run with another person{(buddyData?.groupRuns ?? 0) >= 1 ? "" : ` (${buddyData?.groupRuns ?? 0}/1)`}
-                    </Text>
                   </View>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                    {(buddyData?.soloRuns ?? 0) >= 3 ? (
-                      <Ionicons name="checkmark-circle" size={18} color={C.primary} />
-                    ) : (
-                      <Ionicons name="ellipse-outline" size={18} color={C.border} />
-                    )}
-                    <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.text, flex: 1 }}>
-                      Log 3 solo runs{(buddyData?.soloRuns ?? 0) >= 3 ? "" : ` (${buddyData?.soloRuns ?? 0}/3)`}
-                    </Text>
+                  <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text, textAlign: "center" }} numberOfLines={1}>
+                    {buddy.name}
+                  </Text>
+                  <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary, marginBottom: 8 }} numberOfLines={1}>
+                    @{buddy.username}
+                  </Text>
+                  <View style={{ flexDirection: "row", gap: 8, marginTop: "auto" }}>
+                    <View style={{ alignItems: "center" }}>
+                      <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 10, color: C.primary }}>{buddy.avg_pace || "10:00"}</Text>
+                      <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 8, color: C.textMuted }}>PACE</Text>
+                    </View>
+                    <View style={{ width: 1, height: 16, backgroundColor: C.border }} />
+                    <View style={{ alignItems: "center" }}>
+                      <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 10, color: C.orange }}>{buddy.avg_distance || "3"}mi</Text>
+                      <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 8, color: C.textMuted }}>DIST</Text>
+                    </View>
                   </View>
-                </View>
-              </View>
-            ) : null}
+                </Pressable>
+              ))}
+            </ScrollView>
           </View>
         )}
 
