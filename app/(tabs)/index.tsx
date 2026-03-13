@@ -72,6 +72,23 @@ const HOST_STYLES = [
   "Trail", "Road", "Park Loop",
 ];
 
+const RUN_STYLE_CATEGORIES_RUN = [
+  { label: "Effort",      options: ["Easy Pace", "Beginner Friendly", "No-Drop", "Recovery", "Long Run", "PR Chaser", "Tempo", "Intervals"] },
+  { label: "Social",      options: ["General", "Talkative", "Headphones OK", "Motivational", "Social After"] },
+  { label: "Community",   options: ["Women", "Men", "Co-Ed", "Young Adult", "College", "Seniors", "All Ages", "Middle Aged"] },
+  { label: "Lifestyle",   options: ["Dog Friendly", "Stroller Friendly", "Walk-Run", "Run & Coffee"] },
+  { label: "Time of Day", options: ["Morning Run", "Sunrise Run", "Sunset Run", "Lunch Run", "Night Run"] },
+  { label: "Terrain",     options: ["Trail", "Road", "Park Loop"] },
+];
+const RUN_STYLE_CATEGORIES_RIDE = [
+  { label: "Effort",      options: ["Easy Pace", "Beginner Friendly", "No-Drop", "Recovery", "Long Ride", "PR Chaser", "Tempo", "Intervals"] },
+  { label: "Social",      options: ["General", "Talkative", "Headphones OK", "Motivational", "Social After"] },
+  { label: "Community",   options: ["Women", "Men", "Co-Ed", "Young Adult", "College", "Seniors", "All Ages", "Middle Aged"] },
+  { label: "Lifestyle",   options: ["Dog Friendly", "Stroller Friendly", "Walk-Ride", "Ride & Coffee"] },
+  { label: "Time of Day", options: ["Morning Ride", "Sunrise Ride", "Sunset Ride", "Lunch Ride", "Night Ride"] },
+  { label: "Terrain",     options: ["Trail", "Road", "Park Loop"] },
+];
+
 const TAG_CATEGORY_ORDER: string[] = [
   "Easy Pace", "Beginner Friendly", "No-Drop", "Recovery", "Long Run", "Long Ride", "PR Chaser", "Tempo", "Intervals",
   "General", "Talkative", "Headphones OK", "Motivational", "Social After",
@@ -2777,20 +2794,30 @@ export default function DiscoverScreen() {
               <Text style={s.hLabel}>Host Style</Text>
               <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted }}>(select all that apply)</Text>
             </View>
-            <View style={s.hTagRow}>
-              {HOST_STYLES.map((tag) => (
-                <Pressable
-                  key={tag}
-                  style={[s.hTag, hTags.includes(tag) && s.hTagActive]}
-                  onPress={() => {
-                    setHTags((prev) => prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]);
-                    Haptics.selectionAsync();
-                  }}
-                >
-                  <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: hTags.includes(tag) ? C.primary : C.textSecondary }}>{tag}</Text>
-                </Pressable>
-              ))}
-            </View>
+            {(hActivityType === "ride" ? RUN_STYLE_CATEGORIES_RIDE : RUN_STYLE_CATEGORIES_RUN).map(function(cat) {
+              return (
+                <View key={cat.label} style={{ marginTop: 14 }}>
+                  <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 11, color: "#3D6B50", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 8 }}>{cat.label}</Text>
+                  <View style={s.hTagRow}>
+                    {cat.options.map(function(v) {
+                      const active = hTags.includes(v);
+                      return (
+                        <Pressable
+                          key={v}
+                          style={[s.hTag, active && s.hTagActive]}
+                          onPress={() => {
+                            setHTags((prev) => prev.includes(v) ? prev.filter((t) => t !== v) : [...prev, v]);
+                            Haptics.selectionAsync();
+                          }}
+                        >
+                          <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: active ? C.primary : C.textSecondary }}>{v}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              );
+            })}
           </ScrollView>
           )}
         </View>
