@@ -35,6 +35,7 @@ import { toDisplayDist, toDisplayPace, unitLabel, type DistanceUnit } from "@/li
 import { useAuth } from "@/contexts/AuthContext";
 import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
+import { onOpenNotifications } from "@/contexts/NotificationBannerContext";
 import WebFAB from "@/components/WebFAB";
 
 function formatDaysAgo(dateStr: string): string {
@@ -1040,6 +1041,11 @@ export default function DiscoverScreen() {
   const { activityFilter, setActivityFilter } = useActivity();
   const [showFilter, setShowFilter] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
+
+  useEffect(() => {
+    return onOpenNotifications(() => setShowNotifs(true));
+  }, []);
+
   const [expandedLiveId, setExpandedLiveId] = useState<string | null>(null);
   const { width: screenWidth } = useWindowDimensions();
   const [showOnboarding, setShowOnboarding] = useState(false);

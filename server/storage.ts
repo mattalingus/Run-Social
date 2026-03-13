@@ -146,6 +146,7 @@ export async function initDb() {
       created_at TIMESTAMP DEFAULT NOW(),
       UNIQUE(requester_id, addressee_id)
     );
+    ALTER TABLE friends ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMP DEFAULT NULL;
 
     CREATE TABLE IF NOT EXISTS run_invites (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -364,7 +365,7 @@ export async function initDb() {
 
 export async function getNotifications(userId: string) {
   const friendRequests = await pool.query(
-    `SELECT fr.id, 'friend_request' as type, u.name as from_name, u.photo_url as from_photo, fr.created_at
+    `SELECT fr.id, 'friend_request' as type, u.name as from_name, u.photo_url as from_photo, u.id as from_id, fr.created_at
      FROM friends fr
      JOIN users u ON u.id = fr.requester_id
      WHERE fr.addressee_id = $1 AND fr.status = 'pending'`,
@@ -472,6 +473,34 @@ export async function getNotifications(userId: string) {
     [userId]
   );
 
+  const friendAccepted = await pool.query(
+    `SELECT fr.id, 'friend_accepted' as type, u.name as friend_name, u.photo_url as friend_photo, u.id as friend_id, fr.accepted_at
+     FROM friends fr
+     JOIN users u ON u.id = fr.addressee_id
+     WHERE fr.requester_id = $1 AND fr.status = 'accepted'
+       AND fr.accepted_at IS NOT NULL
+       AND fr.accepted_at >= NOW() - INTERVAL '48 hours'`,
+    [userId]
+  );
+
+  const friendRunPosted = await pool.query(
+    `SELECT r.id as run_id, r.title, r.activity_type, r.created_at, u.name as friend_name, u.photo_url as friend_photo, u.id as friend_id
+     FROM runs r
+     JOIN users u ON u.id = r.host_id
+     WHERE r.created_at >= NOW() - INTERVAL '24 hours'
+       AND r.host_id != $1
+       AND r.host_id IN (
+         SELECT CASE WHEN requester_id = $1 THEN addressee_id ELSE requester_id END
+         FROM friends
+         WHERE (requester_id = $1 OR addressee_id = $1) AND status = 'accepted'
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM run_participants rp WHERE rp.run_id = r.id AND rp.user_id = $1
+       )
+     ORDER BY r.created_at DESC`,
+    [userId]
+  );
+
   // Deduplicate PR notifications by run id (a run could be both a dist and pace PR)
   const prRunIds = new Set<string>();
   const prRows: any[] = [];
@@ -506,7 +535,7 @@ export async function getNotifications(userId: string) {
       body: `${r.from_name} wants to connect on PaceUp`,
       from_name: r.from_name,
       from_photo: r.from_photo,
-      data: { from_name: r.from_name, from_photo: r.from_photo },
+      data: { from_name: r.from_name, from_photo: r.from_photo, from_id: r.from_id },
       created_at: r.created_at,
     })),
     ...crewInvites.rows.map(r => ({
@@ -544,6 +573,25 @@ export async function getNotifications(userId: string) {
         created_at: r.date,
       };
     }),
+    ...friendAccepted.rows.map(r => ({
+      id: `fa_${r.id}`,
+      type: 'friend_accepted',
+      title: 'Friend Request Accepted',
+      body: `${r.friend_name} accepted your friend request`,
+      data: { friend_id: r.friend_id, friend_name: r.friend_name, friend_photo: r.friend_photo },
+      created_at: r.accepted_at,
+    })),
+    ...friendRunPosted.rows.map(r => {
+      const actLabel = r.activity_type === 'ride' ? 'ride' : 'run';
+      return {
+        id: `frp_${r.run_id}`,
+        type: 'friend_run_posted',
+        title: `Friend Posted a ${actLabel === 'ride' ? 'Ride' : 'Run'}`,
+        body: `${r.friend_name} posted "${r.title}"`,
+        data: { run_id: r.run_id, friend_id: r.friend_id, friend_name: r.friend_name, friend_photo: r.friend_photo, activity_type: r.activity_type },
+        created_at: r.created_at,
+      };
+    }),
     ...prRows.map(r => {
       const isPacePR = distPRs.rows.find((d: any) => d.id === r.id) == null;
       const isDistPR = distPRs.rows.find((d: any) => d.id === r.id) != null;
@@ -567,7 +615,7 @@ export async function getNotifications(userId: string) {
 
 export async function respondToFriendRequest(friendshipId: string, userId: string, action: 'accept' | 'decline') {
   if (action === 'accept') {
-    return pool.query(`UPDATE friends SET status = 'accepted' WHERE id = $1 AND addressee_id = $2`, [friendshipId, userId]);
+    return pool.query(`UPDATE friends SET status = 'accepted', accepted_at = NOW() WHERE id = $1 AND addressee_id = $2`, [friendshipId, userId]);
   } else {
     return pool.query(`DELETE FROM friends WHERE id = $1 AND addressee_id = $2`, [friendshipId, userId]);
   }
@@ -802,7 +850,7 @@ export async function sendFriendRequest(requesterId: string, addresseeId: string
 
 export async function acceptFriendRequest(friendshipId: string, userId: string) {
   const result = await pool.query(
-    `UPDATE friends SET status = 'accepted' WHERE id = $1 AND addressee_id = $2 RETURNING *`,
+    `UPDATE friends SET status = 'accepted', accepted_at = NOW() WHERE id = $1 AND addressee_id = $2 RETURNING *`,
     [friendshipId, userId]
   );
   return result.rows[0] || null;

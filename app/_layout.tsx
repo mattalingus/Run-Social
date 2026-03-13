@@ -13,6 +13,8 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ActivityProvider } from "@/contexts/ActivityContext";
 import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
 import { LiveTrackingProvider } from "@/contexts/LiveTrackingContext";
+import { NotificationBannerProvider } from "@/contexts/NotificationBannerContext";
+import NotificationBanner from "@/components/NotificationBanner";
 import { StatusBar } from "expo-status-bar";
 import {
   useFonts,
@@ -145,7 +147,12 @@ function RootLayoutNav() {
           name="crew-chat/[id]"
           options={{ headerShown: false }}
         />
+        <Stack.Screen
+          name="user-profile/[id]"
+          options={{ presentation: "modal", headerShown: false }}
+        />
       </Stack>
+      {user && <NotificationBanner />}
     </>
   );
 }
@@ -156,15 +163,17 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
           <AuthProvider>
-            <ActivityProvider>
-              <LiveTrackingProvider>
-                <GestureHandlerRootView style={{ flex: 1 }}>
-                  <KeyboardProvider>
-                    <RootLayoutNav />
-                  </KeyboardProvider>
-                </GestureHandlerRootView>
-              </LiveTrackingProvider>
-            </ActivityProvider>
+            <NotificationBannerProvider>
+              <ActivityProvider>
+                <LiveTrackingProvider>
+                  <GestureHandlerRootView style={{ flex: 1 }}>
+                    <KeyboardProvider>
+                      <RootLayoutNav />
+                    </KeyboardProvider>
+                  </GestureHandlerRootView>
+                </LiveTrackingProvider>
+              </ActivityProvider>
+            </NotificationBannerProvider>
           </AuthProvider>
         </ThemeProvider>
       </QueryClientProvider>
