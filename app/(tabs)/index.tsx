@@ -1114,7 +1114,7 @@ export default function DiscoverScreen() {
   const [hPrivacy, setHPrivacy] = useState<"public" | "friends" | "crew">("public");
   const [hPassword, setHPassword] = useState("");
   const [hMaxParticipants, setHMaxParticipants] = useState(20);
-  const [hTags, setHTags] = useState<string[]>(["General"]);
+  const [hTags, setHTags] = useState<string[]>([]);
   const [hDist, setHDist] = useState("3");
   const [hMinPace, setHMinPace] = useState(4);
   const [hMaxPace, setHMaxPace] = useState(20);
@@ -1141,7 +1141,7 @@ export default function DiscoverScreen() {
   function resetHostForm() {
     setHTitle(""); setHLocation(""); setHDate(""); setHTime("");
     setHPrivacy("public"); setHPassword(""); setHMaxParticipants(20);
-    setHTags(["General"]); setHDist("3"); setHMinPace(4); setHMaxPace(20);
+    setHTags([]); setHDist("3"); setHMinPace(4); setHMaxPace(20);
     setHLocationLat(null); setHLocationLng(null); setPinCoord(null); setHostPage("form");
     setHAmPm("AM"); setHStrict(false); setHActivityType("run"); setHCrewId(null);
     setHSavedPathId(null); setHSavedPathName(null); setHRouteSearch(""); setHRouteFilter("recent");

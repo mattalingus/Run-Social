@@ -1497,7 +1497,8 @@ export default function RunTrackingScreen() {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 8, paddingHorizontal: 4 }}
+            style={{ width: "100%" }}
+            contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }}
           >
             {mileSplits.map((split) => {
               const m = Math.floor(split.paceMinPerMile);

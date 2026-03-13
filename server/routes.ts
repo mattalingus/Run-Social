@@ -641,6 +641,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         metadata
       );
       res.status(201).json(newMessage);
+
+      // Fire-and-forget: push to crew members who haven't muted the chat
+      (async () => {
+        try {
+          const crew = await storage.pool.query(`SELECT name FROM crews WHERE id = $1`, [crewId]);
+          const crewName = crew.rows[0]?.name ?? "Crew";
+          const tokensRes = await storage.pool.query(
+            `SELECT u.push_token FROM users u
+             JOIN crew_members cm ON cm.user_id = u.id
+             WHERE cm.crew_id = $1
+               AND cm.status = 'member'
+               AND cm.user_id != $2
+               AND cm.chat_muted IS NOT TRUE
+               AND u.push_token IS NOT NULL
+               AND u.notifications_enabled = true
+               AND u.notif_crew_activity = true`,
+            [crewId, userId]
+          );
+          const tokens: string[] = tokensRes.rows.map((r: any) => r.push_token);
+          if (tokens.length > 0) {
+            const preview = gif_url ? "Sent a GIF 🎬" : (message.length > 60 ? message.slice(0, 57) + "…" : message);
+            sendPushNotification(tokens, `${user.name} · ${crewName}`, preview, { crewId });
+          }
+        } catch (err: any) {
+          console.error("[crew-chat-notif]", err?.message ?? err);
+        }
+      })();
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }

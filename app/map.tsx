@@ -170,7 +170,7 @@ function LockedRunMarker({ run, isSelected, onPress }: { run: Run; isSelected: b
       coordinate={{ latitude: run.location_lat, longitude: run.location_lng }}
       onPress={handlePress}
       anchor={{ x: 0.5, y: 0.5 }}
-      tracksViewChanges={false}
+      tracksViewChanges={isSelected}
     >
       <Animated.View style={[mk.wrap, { transform: [{ scale }] }]}>
         <View style={[mk.circle, mk.circleGray, isSelected && mk.circleGraySelected]}>
@@ -187,8 +187,8 @@ function RunMarker({ run, isSelected, isFriend, onPress }: { run: Run; isSelecte
   const mk = useMemo(() => makeMkStyles(C), [C]);
   const scale = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(0.3)).current;
-  const frozen = useRef(false);
-  const [tracksViewChanges, setTracksViewChanges] = useState(true);
+  // contentReady: true once image/emoji has rendered and we can freeze the snapshot
+  const [contentReady, setContentReady] = useState(false);
   const soon = isWithin24h(run.date);
   const isLiveNow = !!run.is_active && (run.participant_count ?? 0) > 0;
   const icon = run.host_marker_icon;
@@ -197,34 +197,26 @@ function RunMarker({ run, isSelected, isFriend, onPress }: { run: Run; isSelecte
   const crewPhoto = resolveImgUrl(run.crew_photo_url);
   const photoSrc = isUrlIcon ? icon : (crewPhoto || run.host_photo || avatarUrl(run.host_name));
 
-  function freeze() {
-    // Don't freeze live markers — animation requires tracksViewChanges=true
-    if (isLiveNow) return;
-    if (!frozen.current) {
-      frozen.current = true;
-      setTracksViewChanges(false);
-    }
-  }
+  // Key fix: derive tracksViewChanges directly from isSelected so they change
+  // in the SAME render cycle — eliminates the top-left flash on tap.
+  // Live markers always track. Others track until content ready, then only when selected.
+  const tracksViewChanges = isLiveNow || isSelected || !contentReady;
 
   useEffect(() => {
-    if (isEmojiIcon && !isLiveNow) { frozen.current = true; setTracksViewChanges(false); return; }
-    if (!isLiveNow) {
-      const t = setTimeout(freeze, 1500);
+    if (isLiveNow) return;
+    // Emoji renders instantly — freeze after a short delay
+    if (isEmojiIcon) {
+      const t = setTimeout(() => setContentReady(true), 200);
       return () => clearTimeout(t);
     }
+    // URL images: contentReady set via onLoad callback below
   }, []);
 
   useEffect(() => {
     if (isLiveNow) return;
     if (!isSelected) return;
-    // Re-enable view tracking to prevent top-left flash during re-render
-    frozen.current = false;
-    setTracksViewChanges(true);
     Animated.spring(scale, { toValue: 1.15, useNativeDriver: true, tension: 400, friction: 10 }).start(() => {
-      Animated.spring(scale, { toValue: 1, useNativeDriver: true, tension: 300, friction: 12 }).start(() => {
-        frozen.current = true;
-        setTracksViewChanges(false);
-      });
+      Animated.spring(scale, { toValue: 1, useNativeDriver: true, tension: 300, friction: 12 }).start();
     });
   }, [isSelected]);
 
@@ -246,20 +238,10 @@ function RunMarker({ run, isSelected, isFriend, onPress }: { run: Run; isSelecte
 
   function handlePress() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    // Unfreeze before onPress so the re-render from isSelected changing doesn't flash to top-left
-    if (!isLiveNow) {
-      frozen.current = false;
-      setTracksViewChanges(true);
-    }
     Animated.sequence([
       Animated.spring(scale, { toValue: 1.3, useNativeDriver: true, tension: 500, friction: 8 }),
       Animated.spring(scale, { toValue: 1, useNativeDriver: true, tension: 300, friction: 12 }),
-    ]).start(() => {
-      if (!isLiveNow) {
-        frozen.current = true;
-        setTracksViewChanges(false);
-      }
-    });
+    ]).start();
     onPress();
   }
 
@@ -280,7 +262,7 @@ function RunMarker({ run, isSelected, isFriend, onPress }: { run: Run; isSelecte
             <Image
               source={{ uri: photoSrc }}
               style={mk.img}
-              onLoad={freeze}
+              onLoad={() => { if (!isLiveNow) setContentReady(true); }}
             />
           )}
         </View>
