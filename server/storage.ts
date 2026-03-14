@@ -1433,6 +1433,14 @@ export async function getGarminToken(userId: string): Promise<{ access_token: st
   return result.rows[0];
 }
 
+export async function getGarminLastSync(userId: string): Promise<string | null> {
+  const result = await pool.query(
+    `SELECT MAX(created_at) as last_sync FROM solo_runs WHERE user_id = $1 AND garmin_activity_id IS NOT NULL`,
+    [userId]
+  );
+  return result.rows[0]?.last_sync?.toISOString() ?? null;
+}
+
 export async function saveGarminToken(userId: string, accessToken: string, tokenSecret: string): Promise<void> {
   await pool.query(
     `UPDATE users SET garmin_access_token = $1, garmin_token_secret = $2 WHERE id = $3`,

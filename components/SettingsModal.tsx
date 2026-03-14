@@ -129,11 +129,12 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
   const stravaConnected = !!(user as any)?.strava_id;
   const appleHealthConnected = !!(user as any)?.apple_health_connected;
 
-  const { data: garminStatus, refetch: refetchGarmin } = useQuery<{ connected: boolean }>({
+  const { data: garminStatus, refetch: refetchGarmin } = useQuery<{ connected: boolean; lastSync: string | null }>({
     queryKey: ["/api/garmin/status"],
     enabled: visible,
   });
   const garminConnected = garminStatus?.connected ?? false;
+  const garminLastSync = garminStatus?.lastSync ? new Date(garminStatus.lastSync) : null;
 
   const [updatingField, setUpdatingField] = useState<string | null>(null);
   const [showTerms, setShowTerms] = useState(false);
@@ -632,7 +633,7 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
               iconBg="#0A1A2A"
               icon={<FontAwesome5 name="satellite-dish" size={15} color="#009CDE" />}
               label="Garmin"
-              sublabel={garminConnected ? (garminSyncMsg ?? "Connected — tap Sync to import activities") : "Sync from your Garmin device"}
+              sublabel={garminConnected ? (garminSyncMsg ?? (garminLastSync ? `Last synced ${garminLastSync.toLocaleDateString()}` : "Connected — tap Sync to import")) : "Sync from your Garmin device"}
               right={
                 <View style={{ flexDirection: "row", gap: 8 }}>
                   {garminConnected && (

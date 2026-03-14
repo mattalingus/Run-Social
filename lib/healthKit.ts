@@ -61,13 +61,12 @@ export async function requestHealthKitPermissions(): Promise<boolean> {
 
 function mapWorkoutType(typeId: number | string): "run" | "ride" | "walk" | null {
   const id = typeof typeId === "string" ? parseInt(typeId, 10) : typeId;
-  if (id === 37 || id === 52) return "run";
+  if (id === 37) return "run";
   if (id === 13) return "ride";
-  if (id === 52) return "walk";
-  if (id === 83) return "walk";
+  if (id === 52 || id === 83) return "walk";
   const strType = String(typeId).toLowerCase();
-  if (strType.includes("run")) return "run";
-  if (strType.includes("cycl") || strType.includes("bik")) return "ride";
+  if (strType.includes("run") || strType.includes("jog")) return "run";
+  if (strType.includes("cycl") || strType.includes("bik") || strType.includes("ride")) return "ride";
   if (strType.includes("walk") || strType.includes("hik")) return "walk";
   return null;
 }

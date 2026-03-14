@@ -2017,7 +2017,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/garmin/status", requireAuth, async (req, res) => {
     try {
       const token = await storage.getGarminToken(req.session.userId!);
-      res.json({ connected: !!token });
+      let lastSync: string | null = null;
+      if (token) {
+        const result = await storage.getGarminLastSync(req.session.userId!);
+        lastSync = result;
+      }
+      res.json({ connected: !!token, lastSync });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
