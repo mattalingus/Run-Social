@@ -14,6 +14,7 @@ import { ActivityProvider } from "@/contexts/ActivityContext";
 import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
 import { LiveTrackingProvider } from "@/contexts/LiveTrackingContext";
 import { NotificationBannerProvider } from "@/contexts/NotificationBannerContext";
+import { PurchasesProvider } from "@/contexts/PurchasesContext";
 import NotificationBanner from "@/components/NotificationBanner";
 import { StatusBar } from "expo-status-bar";
 import {
@@ -163,17 +164,19 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
           <AuthProvider>
-            <NotificationBannerProvider>
-              <ActivityProvider>
-                <LiveTrackingProvider>
-                  <GestureHandlerRootView style={{ flex: 1 }}>
-                    <KeyboardProvider>
-                      <RootLayoutNav />
-                    </KeyboardProvider>
-                  </GestureHandlerRootView>
-                </LiveTrackingProvider>
-              </ActivityProvider>
-            </NotificationBannerProvider>
+            <PurchasesProvider>
+              <NotificationBannerProvider>
+                <ActivityProvider>
+                  <LiveTrackingProvider>
+                    <GestureHandlerRootView style={{ flex: 1 }}>
+                      <KeyboardProvider>
+                        <RootLayoutNav />
+                      </KeyboardProvider>
+                    </GestureHandlerRootView>
+                  </LiveTrackingProvider>
+                </ActivityProvider>
+              </NotificationBannerProvider>
+            </PurchasesProvider>
           </AuthProvider>
         </ThemeProvider>
       </QueryClientProvider>

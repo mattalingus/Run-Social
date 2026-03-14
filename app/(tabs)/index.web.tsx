@@ -72,6 +72,9 @@ interface Run {
   tags: string[];
   participant_count: number;
   max_participants: number;
+  crew_id?: string | null;
+  crew_name?: string | null;
+  crew_emoji?: string | null;
 }
 
 function formatPace(pace: number) {
@@ -316,6 +319,12 @@ export default function DiscoverScreen() {
                     <Text style={st.hostName}>
                       {run.host_name}
                     </Text>
+                    {run.crew_id && run.crew_name && (
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 }}>
+                        <Text style={{ fontSize: 10 }}>{run.crew_emoji || "🏃"}</Text>
+                        <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.primary }}>{run.crew_name}</Text>
+                      </View>
+                    )}
                   </View>
                   <View style={st.cardMeta}>
                     <View style={st.metaItem}>

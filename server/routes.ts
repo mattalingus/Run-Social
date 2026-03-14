@@ -403,22 +403,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (req.query.swLng) filters.swLng = parseFloat(req.query.swLng as string);
       if (req.query.neLat) filters.neLat = parseFloat(req.query.neLat as string);
       if (req.query.neLng) filters.neLng = parseFloat(req.query.neLng as string);
-      const publicRuns = await storage.getPublicRuns(filters);
+      const bounds = (filters.swLat !== undefined && filters.neLat !== undefined && filters.swLng !== undefined && filters.neLng !== undefined)
+        ? { swLat: filters.swLat, neLat: filters.neLat, swLng: filters.swLng, neLng: filters.neLng }
+        : undefined;
+      const [publicRuns, publicCrewRuns] = await Promise.all([
+        storage.getPublicRuns(filters),
+        storage.getPublicCrewRuns(bounds),
+      ]);
       if (req.session.userId) {
-        const bounds = (filters.swLat !== undefined && filters.neLat !== undefined && filters.swLng !== undefined && filters.neLng !== undefined)
-          ? { swLat: filters.swLat, neLat: filters.neLat, swLng: filters.swLng, neLng: filters.neLng }
-          : undefined;
         const [friendLocked, invited, crewRuns] = await Promise.all([
           storage.getFriendPrivateRuns(req.session.userId, bounds),
           storage.getInvitedPrivateRuns(req.session.userId, bounds),
           storage.getCrewVisibleRuns(req.session.userId, bounds),
         ]);
-        const combined = [...publicRuns, ...invited, ...friendLocked, ...crewRuns];
+        const combined = [...publicRuns, ...publicCrewRuns, ...invited, ...friendLocked, ...crewRuns];
         const seen = new Set<string>();
         const deduped = combined.filter(r => { if (seen.has(r.id)) return false; seen.add(r.id); return true; });
+        deduped.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
         return res.json(deduped);
       }
-      res.json(publicRuns);
+      const unauthCombined = [...publicRuns, ...publicCrewRuns];
+      const unauthSeen = new Set<string>();
+      const unauthDeduped = unauthCombined.filter(r => { if (unauthSeen.has(r.id)) return false; unauthSeen.add(r.id); return true; });
+      unauthDeduped.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      res.json(unauthDeduped);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
@@ -1888,7 +1896,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { accept } = req.body;
       await storage.respondToCrewInvite(req.params.crewId, req.session.userId!, accept ? 'accept' : 'reject');
       res.json({ ok: true });
-    } catch (e: any) { res.status(500).json({ message: e.message }); }
+    } catch (e: any) {
+      if ((e as any).code === "MEMBER_CAP_REACHED") return res.status(400).json({ message: e.message, code: "MEMBER_CAP_REACHED" });
+      res.status(500).json({ message: e.message });
+    }
   });
 
   app.get("/api/crews/search", requireAuth, async (req, res) => {
@@ -1901,10 +1912,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
+  app.get("/api/crews/suggested", requireAuth, async (req, res) => {
+    try {
+      const userCrews = await storage.getCrewsByUser(req.session.userId!);
+      if (userCrews.length >= 3) return res.json([]);
+      const suggestions = await storage.getSuggestedCrews(req.session.userId!, 10);
+      res.json(suggestions);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
   app.post("/api/crews/:id/join-request", requireAuth, async (req, res) => {
     try {
       const result = await storage.requestToJoinCrew(req.params.id, req.session.userId!);
-      if ("error" in result) return res.status(400).json({ message: result.error });
+      if ("error" in result) {
+        if (result.error === "member_cap_reached") {
+          return res.status(400).json({ message: "This crew has reached its 100-member limit. The crew chief needs to upgrade.", code: "MEMBER_CAP_REACHED" });
+        }
+        return res.status(400).json({ message: result.error });
+      }
       const crew = await storage.getCrewById(req.params.id);
       if (crew) {
         const chief = await storage.getUserById(crew.created_by);
@@ -1951,7 +1976,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
       }
       res.json({ ok: true });
-    } catch (e: any) { res.status(500).json({ message: e.message }); }
+    } catch (e: any) {
+      if ((e as any).code === "MEMBER_CAP_REACHED") return res.status(400).json({ message: e.message, code: "MEMBER_CAP_REACHED" });
+      res.status(500).json({ message: e.message });
+    }
   });
 
   app.get("/api/crews/:id", requireAuth, async (req, res) => {
@@ -2054,6 +2082,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const data = await storage.getCrewAchievements(req.params.id);
       res.json(data);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/crews/:id/subscription", requireAuth, async (req, res) => {
+    try {
+      const status = await storage.getCrewSubscriptionStatus(req.params.id);
+      if (!status) return res.status(404).json({ message: "Crew not found" });
+      res.json(status);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/webhooks/revenuecat", async (req, res) => {
+    try {
+      const webhookSecret = process.env.REVENUECAT_WEBHOOK_SECRET;
+      if (!webhookSecret && process.env.NODE_ENV === "production") {
+        console.error("[revenuecat webhook] REVENUECAT_WEBHOOK_SECRET not set in production — rejecting request");
+        return res.status(500).json({ message: "Webhook not configured" });
+      }
+      if (webhookSecret) {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || authHeader !== `Bearer ${webhookSecret}`) {
+          return res.status(401).json({ message: "Unauthorized" });
+        }
+      }
+      const event = req.body?.event;
+      if (!event) return res.status(200).json({ ok: true });
+      const { type, app_user_id, product_id } = event;
+      if (!app_user_id || !product_id) return res.status(200).json({ ok: true });
+      const crewId = app_user_id.replace('crew_', '');
+      const crew = await storage.getCrewById(crewId);
+      if (!crew) return res.status(200).json({ ok: true });
+      const subStatus = await storage.getCrewSubscriptionStatus(crewId);
+      const currentTier = subStatus.subscription_tier;
+      const isGrowth = product_id === 'crew_growth_monthly';
+      const isBoost = product_id === 'crew_discovery_boost_monthly';
+      const isPurchase = ['INITIAL_PURCHASE', 'RENEWAL', 'PRODUCT_CHANGE'].includes(type);
+      const isCancellation = ['CANCELLATION', 'EXPIRATION'].includes(type);
+      const hasGrowth = currentTier === 'growth' || currentTier === 'both';
+      const hasBoost = currentTier === 'discovery_boost' || currentTier === 'both';
+
+      let newHasGrowth = hasGrowth;
+      let newHasBoost = hasBoost;
+
+      if (isPurchase) {
+        if (isGrowth) newHasGrowth = true;
+        if (isBoost) newHasBoost = true;
+      } else if (isCancellation) {
+        if (isGrowth) newHasGrowth = false;
+        if (isBoost) newHasBoost = false;
+      }
+
+      const newTier = newHasGrowth && newHasBoost ? 'both'
+        : newHasGrowth ? 'growth'
+        : newHasBoost ? 'discovery_boost'
+        : 'none';
+
+      if (newTier !== currentTier) {
+        await storage.updateCrewSubscription(crewId, newTier);
+      }
+      res.status(200).json({ ok: true });
+    } catch (e: any) {
+      console.error("[revenuecat webhook]", e.message);
+      res.status(200).json({ ok: true });
+    }
   });
 
   app.get("/api/gifs/search", async (req, res) => {

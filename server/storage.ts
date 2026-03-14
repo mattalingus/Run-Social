@@ -374,6 +374,8 @@ export async function initDb() {
         ALTER TABLE crews ADD COLUMN IF NOT EXISTS home_metro TEXT DEFAULT NULL;
         ALTER TABLE crews ADD COLUMN IF NOT EXISTS home_state TEXT DEFAULT NULL;
         ALTER TABLE crews ADD COLUMN IF NOT EXISTS last_overtake_notif_at TIMESTAMP DEFAULT NULL;
+        ALTER TABLE crews ADD COLUMN IF NOT EXISTS subscription_tier TEXT DEFAULT 'none';
+        ALTER TABLE crews ADD COLUMN IF NOT EXISTS member_cap_override INTEGER DEFAULT NULL;
   `);
 
   const dummyCheck = await pool.query(`SELECT COUNT(*) FROM users WHERE email LIKE 'dummy-%@paceup.dev'`);
@@ -684,6 +686,11 @@ export async function respondToFriendRequest(friendshipId: string, userId: strin
 
 export async function respondToCrewInvite(crewId: string, userId: string, action: 'accept' | 'decline') {
   if (action === 'accept') {
+    const memberCount = await getCrewMemberCount(crewId);
+    const cap = await getCrewMemberCap(crewId);
+    if (memberCount >= cap) {
+      throw Object.assign(new Error("This crew has reached its member cap. The crew chief needs to upgrade to the Crew Growth plan."), { code: "MEMBER_CAP_REACHED" });
+    }
     return pool.query(`UPDATE crew_members SET status = 'member', joined_at = NOW() WHERE crew_id = $1 AND user_id = $2`, [crewId, userId]);
   } else {
     return pool.query(`DELETE FROM crew_members WHERE crew_id = $1 AND user_id = $2`, [crewId, userId]);
@@ -3082,6 +3089,11 @@ export async function getCrewJoinRequests(crewId: string) {
 
 export async function respondToCrewJoinRequest(crewId: string, requesterId: string, accept: boolean) {
   if (accept) {
+    const memberCount = await getCrewMemberCount(crewId);
+    const cap = await getCrewMemberCap(crewId);
+    if (memberCount >= cap) {
+      throw Object.assign(new Error("This crew has reached its member cap. Upgrade to the Crew Growth plan to add more members."), { code: "MEMBER_CAP_REACHED" });
+    }
     await pool.query(
       `UPDATE crew_members SET status = 'member', invited_by = invited_by WHERE crew_id = $1 AND user_id = $2 AND status = 'pending'`,
       [crewId, requesterId]
@@ -3349,6 +3361,167 @@ export async function searchCrews(userId: string, query: string, friendsOnly: bo
   return res.rows;
 }
 
+export async function getCrewMemberCount(crewId: string): Promise<number> {
+  const res = await pool.query(
+    `SELECT COUNT(*) as cnt FROM crew_members WHERE crew_id = $1 AND status = 'member'`,
+    [crewId]
+  );
+  return parseInt(res.rows[0].cnt, 10);
+}
+
+export async function getCrewMemberCap(crewId: string): Promise<number> {
+  const res = await pool.query(
+    `SELECT subscription_tier, member_cap_override FROM crews WHERE id = $1`,
+    [crewId]
+  );
+  if (!res.rows[0]) return 100;
+  const { subscription_tier, member_cap_override } = res.rows[0];
+  if (member_cap_override) return member_cap_override;
+  if (subscription_tier === 'growth' || subscription_tier === 'both') return 999999;
+  return 100;
+}
+
+export async function updateCrewSubscription(crewId: string, tier: string) {
+  await pool.query(
+    `UPDATE crews SET subscription_tier = $2 WHERE id = $1`,
+    [crewId, tier]
+  );
+}
+
+export async function getCrewSubscriptionStatus(crewId: string) {
+  const res = await pool.query(
+    `SELECT subscription_tier, member_cap_override FROM crews WHERE id = $1`,
+    [crewId]
+  );
+  if (!res.rows[0]) return null;
+  const memberCount = await getCrewMemberCount(crewId);
+  const cap = await getCrewMemberCap(crewId);
+  return {
+    subscription_tier: res.rows[0].subscription_tier || 'none',
+    member_cap_override: res.rows[0].member_cap_override,
+    member_count: memberCount,
+    member_cap: cap,
+    at_cap: memberCount >= cap,
+  };
+}
+
+interface SuggestedCrewRow {
+  id: string;
+  name: string;
+  emoji: string;
+  description: string | null;
+  run_style: string | null;
+  home_metro: string | null;
+  home_state: string | null;
+  image_url: string | null;
+  member_count: string;
+  created_by_name: string;
+  recent_activity: string;
+  is_boosted: boolean;
+  boost_factor: string;
+  metro_bonus: string;
+  state_bonus: string;
+  run_style_bonus: string;
+  sub_tier: string;
+}
+
+export async function getSuggestedCrews(userId: string, limit = 10): Promise<SuggestedCrewRow[]> {
+  const userRes = await pool.query(
+    `SELECT home_metro, home_state,
+       (SELECT r.run_style FROM runs r WHERE r.host_id = $1 AND r.run_style IS NOT NULL GROUP BY r.run_style ORDER BY COUNT(*) DESC LIMIT 1) AS preferred_run_style
+     FROM users WHERE id = $1`,
+    [userId]
+  );
+  const userMetro = userRes.rows[0]?.home_metro || null;
+  const userState = userRes.rows[0]?.home_state || null;
+  const userRunStyle = userRes.rows[0]?.preferred_run_style || null;
+
+  const fetchLimit = limit * 3;
+  const res = await pool.query(
+    `SELECT c.*,
+       (SELECT COUNT(*) FROM crew_members WHERE crew_id = c.id AND status = 'member') AS member_count,
+       u.name AS created_by_name,
+       c.image_url,
+       (SELECT COUNT(DISTINCT r.id) FROM runs r WHERE r.crew_id = c.id AND r.is_completed = true AND r.date > NOW() - INTERVAL '30 days') AS recent_activity,
+       CASE WHEN c.subscription_tier IN ('discovery_boost', 'both') THEN true ELSE false END AS is_boosted,
+       CASE WHEN c.subscription_tier IN ('discovery_boost', 'both') THEN 1.3 ELSE 1.0 END AS boost_factor,
+       CASE WHEN c.home_metro = $2 AND $2 IS NOT NULL THEN 20 ELSE 0 END AS metro_bonus,
+       CASE WHEN c.home_state = $3 AND $3 IS NOT NULL THEN 10 ELSE 0 END AS state_bonus,
+       CASE WHEN c.run_style = $4 AND $4 IS NOT NULL THEN 15 ELSE 0 END AS run_style_bonus,
+       COALESCE(c.subscription_tier, 'none') AS sub_tier
+     FROM crews c
+     JOIN users u ON u.id = c.created_by
+     WHERE NOT EXISTS (
+       SELECT 1 FROM crew_members cm WHERE cm.crew_id = c.id AND cm.user_id = $1
+     )
+     ORDER BY
+       (CASE WHEN c.subscription_tier IN ('discovery_boost', 'both') THEN 1.3 ELSE 1.0 END) *
+       (
+         (SELECT COUNT(DISTINCT r.id) FROM runs r WHERE r.crew_id = c.id AND r.is_completed = true AND r.date > NOW() - INTERVAL '30 days') * 10 +
+         (SELECT COUNT(*) FROM crew_members WHERE crew_id = c.id AND status = 'member') * 2 +
+         CASE WHEN c.home_metro = $2 AND $2 IS NOT NULL THEN 20 ELSE 0 END +
+         CASE WHEN c.home_state = $3 AND $3 IS NOT NULL THEN 10 ELSE 0 END +
+         CASE WHEN c.run_style = $4 AND $4 IS NOT NULL THEN 15 ELSE 0 END
+       ) DESC
+     LIMIT $5`,
+    [userId, userMetro, userState, userRunStyle, fetchLimit]
+  );
+
+  const rows: SuggestedCrewRow[] = res.rows;
+  const boostedTiers = ['discovery_boost', 'both'];
+  const freeCrews = rows.filter(r => !boostedTiers.includes(r.sub_tier));
+  const boostedCrews = rows.filter(r => boostedTiers.includes(r.sub_tier));
+
+  const minFreeSlots = Math.ceil(limit / 2);
+  const freeToAdd = freeCrews.slice(0, Math.max(minFreeSlots, limit - boostedCrews.length));
+  const boostedToAdd = boostedCrews.slice(0, limit - freeToAdd.length);
+
+  const result: SuggestedCrewRow[] = [];
+  let fi = 0, bi = 0;
+  for (let i = 0; i < limit && (fi < freeToAdd.length || bi < boostedToAdd.length); i++) {
+    if (bi < boostedToAdd.length && fi >= minFreeSlots) {
+      result.push(boostedToAdd[bi++]);
+    } else if (fi < freeToAdd.length) {
+      result.push(freeToAdd[fi++]);
+    } else if (bi < boostedToAdd.length) {
+      result.push(boostedToAdd[bi++]);
+    }
+  }
+
+  return result;
+}
+
+export async function getPublicCrewRuns(filters?: {
+  swLat?: number; swLng?: number; neLat?: number; neLng?: number;
+}) {
+  let query = `SELECT r.*, u.name as host_name, u.avg_rating as host_rating, u.rating_count as host_rating_count, u.photo_url as host_photo,
+      u.marker_icon as host_marker_icon, u.hosted_runs as host_hosted_runs,
+      (1 + (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status != 'cancelled')) as participant_count,
+      (SELECT COUNT(*) FROM planned_runs pr WHERE pr.run_id = r.id) as plan_count,
+      c.name as crew_name, c.emoji as crew_emoji, c.image_url as crew_photo_url
+    FROM runs r
+    JOIN users u ON u.id = r.host_id
+    JOIN crews c ON c.id = r.crew_id
+    WHERE r.crew_id IS NOT NULL
+      AND r.privacy = 'public'
+      AND (r.is_active = true OR r.date > NOW() - INTERVAL '90 minutes')
+      AND r.is_completed = false
+      AND r.is_deleted IS NOT TRUE`;
+  const params: any[] = [];
+  let idx = 1;
+  if (filters?.swLat !== undefined && filters.neLat !== undefined) {
+    query += ` AND r.location_lat BETWEEN $${idx++} AND $${idx++}`;
+    params.push(filters.swLat, filters.neLat);
+  }
+  if (filters?.swLng !== undefined && filters.neLng !== undefined) {
+    query += ` AND r.location_lng BETWEEN $${idx++} AND $${idx++}`;
+    params.push(filters.swLng, filters.neLng);
+  }
+  query += ` ORDER BY r.date ASC LIMIT 100`;
+  const result = await pool.query(query, params);
+  return result.rows;
+}
+
 export async function requestToJoinCrew(crewId: string, userId: string) {
   const existing = await pool.query(
     `SELECT status FROM crew_members WHERE crew_id = $1 AND user_id = $2`,
@@ -3356,6 +3529,11 @@ export async function requestToJoinCrew(crewId: string, userId: string) {
   );
   if (existing.rows.length > 0) {
     return { error: existing.rows[0].status === "member" ? "already_member" : "already_requested" };
+  }
+  const memberCount = await getCrewMemberCount(crewId);
+  const cap = await getCrewMemberCap(crewId);
+  if (memberCount >= cap) {
+    return { error: "member_cap_reached" };
   }
   await pool.query(
     `INSERT INTO crew_members (crew_id, user_id, status, invited_by) VALUES ($1, $2, 'pending', $2)`,

@@ -173,6 +173,8 @@ interface Run {
   run_style?: string;
   activity_type?: string;
   crew_id?: string | null;
+  crew_name?: string | null;
+  crew_emoji?: string | null;
   pace_groups?: { label: string; minPace: number; maxPace: number }[] | null;
   plan_count?: string;
 }
@@ -790,6 +792,12 @@ function RunCard({
               );
             })()}
             <Text style={s.hostColumnName} numberOfLines={2}>{run.host_name}</Text>
+            {run.crew_id && run.crew_name && (
+              <View style={s.crewBadge}>
+                <Text style={s.crewBadgeEmoji}>{run.crew_emoji || "🏃"}</Text>
+                <Text style={s.crewBadgeName} numberOfLines={1}>{run.crew_name}</Text>
+              </View>
+            )}
             {(() => {
               const isTopRated = (run.host_rating_count ?? 0) >= 5 && (run.host_rating ?? 0) >= 4.5;
               if (isTopRated) return <Text style={[s.hostColumnBadge, { color: "#FFB800" }]}>⭐ Top</Text>;
@@ -3377,6 +3385,9 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   hostColumnName: { fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.text, textAlign: "center" },
   hostColumnRating: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.gold, textAlign: "center" },
   hostColumnBadge: { fontFamily: "Outfit_600SemiBold", fontSize: 10, textAlign: "center" },
+  crewBadge: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: C.primaryMuted, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2, marginTop: 3, alignSelf: "center" as const },
+  crewBadgeEmoji: { fontSize: 10 },
+  crewBadgeName: { fontFamily: "Outfit_600SemiBold", fontSize: 9, color: C.primary, maxWidth: 60 },
   hostColumnDist: { fontFamily: "Outfit_700Bold", fontSize: 13, color: C.text, textAlign: "center", marginTop: 2 },
   hostColumnWeather: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted, textAlign: "center", marginTop: 3 },
 

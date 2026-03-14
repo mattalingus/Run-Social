@@ -68,6 +68,19 @@ Key columns: `runs.activity_type` ("run" | "ride"), `runs.is_active`, `runs.is_c
 - Metro area lookup in `server/metro-areas.ts`; crews optionally set `home_metro` + `home_state`
 - Overtake notifications: when a crew improves rank, the overtaken crew gets a PaceUp Bot message (1hr cooldown)
 
+### Crew Subscriptions & Discovery Boost
+- Two paid tiers via RevenueCat: `crew_growth_monthly` ($1.99) and `crew_discovery_boost_monthly` ($4.99)
+- `crews.subscription_tier` column: `none` | `growth` | `discovery_boost` | `both`
+- Free crews capped at 100 members; Growth tier removes cap (enforced in join-request accept + invite accept)
+- Discovery Boost gives ~30% score lift in suggested crews algorithm
+- `PurchasesContext` (`contexts/PurchasesContext.tsx`) provides `purchasePackage`, `restorePurchases`, `hasEntitlement` — currently stubbed (needs real RevenueCat API keys + `react-native-purchases` installed for native builds)
+- Crew Plans UI in CrewDetailSheet (crew chief only): shows plan cards with subscribe buttons
+- Member cap upsell modal (`MemberCapUpsell`) triggered when crew chief hits MEMBER_CAP_REACHED
+- Suggested Crews section: horizontal scroll on crew screen for users with <3 crews (`GET /api/crews/suggested`)
+- Public crew events visible on discover page with crew badges (emoji + name)
+- RevenueCat webhook endpoint: `POST /api/webhooks/revenuecat`
+- Subscription management: `GET/POST /api/crews/:id/subscription`
+
 ### OpenAI AI Features (requires OPENAI_API_KEY secret)
 - `server/ai.ts` — typed helpers: `generateRunSummary`, `generateCrewRecap`, `generateSearchFilters`, `generateWeeklyInsight`, `generateTTS`
 - Post-run AI summary card on solo results screen (`POST /api/solo-runs/:id/ai-summary`)

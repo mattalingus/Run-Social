@@ -15,6 +15,7 @@ import {
   Keyboard,
   Image,
   Pressable,
+  Linking,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
@@ -28,6 +29,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { useTheme } from "@/contexts/ThemeContext";
+import { usePurchases } from "@/contexts/PurchasesContext";
 import { darkColors, type ColorScheme } from "@/constants/colors";
 import { toDisplayPace, toDisplayDist, unitLabel, type DistanceUnit } from "@/lib/units";
 import { Image as ExpoImage } from "expo-image";
@@ -73,6 +75,26 @@ interface Crew {
   tags?: string[];
   pending_request_count?: number;
   chat_muted?: boolean;
+  subscription_tier?: string;
+}
+
+interface SuggestedCrew {
+  id: string;
+  name: string;
+  emoji: string;
+  image_url?: string;
+  description?: string;
+  member_count: number;
+  run_style?: string;
+  recent_activity?: number;
+}
+
+interface SubscriptionStatus {
+  subscription_tier: string;
+  member_cap_override: number | null;
+  member_count: number;
+  member_cap: number;
+  at_cap: boolean;
 }
 
 interface JoinRequest {
@@ -878,10 +900,12 @@ function CrewDetailSheet({
   crew,
   onClose,
   currentUserId,
+  onCapReached,
 }: {
   crew: Crew | null;
   onClose: () => void;
   currentUserId: string;
+  onCapReached?: (crewId: string) => void;
 }) {
   const { C } = useTheme();
   const s = useMemo(() => makeStyles(C), [C]);
@@ -928,7 +952,18 @@ function CrewDetailSheet({
       qc.invalidateQueries({ queryKey: ["/api/crews", crew?.id] });
       qc.invalidateQueries({ queryKey: ["/api/crews"] });
     },
-    onError: (e: any) => Alert.alert("Error", e.message ?? "Could not respond to request"),
+    onError: (e: any) => {
+      const msg = e?.message || "";
+      if (msg.includes("MEMBER_CAP_REACHED") || msg.includes("member cap")) {
+        if (isCreatorLocal && crew?.id && onCapReached) {
+          onCapReached(crew.id);
+        } else {
+          Alert.alert("Crew Full", "This crew has reached its 100-member limit.");
+        }
+      } else {
+        Alert.alert("Error", e?.message ?? "Could not respond to request");
+      }
+    },
   });
 
   const leaveMutation = useMutation({
@@ -1685,6 +1720,10 @@ function CrewDetailSheet({
                   </View>
                 )}
 
+                {isCreator && crew && (
+                  <CrewPlansSection crewId={crew.id} />
+                )}
+
                 {isCreator && (
                   <TouchableOpacity
                     style={s.disbandBtn}
@@ -1838,6 +1877,284 @@ function CrewDetailSheet({
         </KeyboardAvoidingView>
       </Modal>
     </>
+  );
+}
+
+// ─── Suggested Crews Section ──────────────────────────────────────────────────
+function SuggestedCrewsSection() {
+  const { C } = useTheme();
+  const s = useMemo(() => makeStyles(C), [C]);
+  const qc = useQueryClient();
+
+  const { data: suggested = [], isLoading } = useQuery<SuggestedCrew[]>({
+    queryKey: ["/api/crews/suggested"],
+    staleTime: 60_000,
+  });
+
+  const joinRequestMutation = useMutation({
+    mutationFn: (crewId: string) => apiRequest("POST", `/api/crews/${crewId}/join-request`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/crews/suggested"] });
+    },
+  });
+
+  if (isLoading || suggested.length === 0) return null;
+
+  return (
+    <View style={s.suggestedSection}>
+      <View style={s.suggestedHeader}>
+        <Ionicons name="compass-outline" size={18} color={C.primary} />
+        <Text style={s.suggestedTitle}>Suggested Crews</Text>
+      </View>
+      <FlatList
+        horizontal
+        data={suggested.slice(0, 8)}
+        keyExtractor={(item) => item.id}
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: 4, gap: 10 }}
+        renderItem={({ item }) => (
+          <View style={s.suggestedCard}>
+            {resolveImgUrl(item.image_url) ? (
+              <Image source={{ uri: resolveImgUrl(item.image_url)! }} style={s.suggestedCardImg} />
+            ) : (
+              <View style={s.suggestedCardEmoji}>
+                <Text style={{ fontSize: 24 }}>{item.emoji}</Text>
+              </View>
+            )}
+            <Text style={s.suggestedCardName} numberOfLines={1}>{item.name}</Text>
+            <Text style={s.suggestedCardMeta}>
+              {item.member_count} {Number(item.member_count) === 1 ? "member" : "members"}
+            </Text>
+            {item.run_style ? (
+              <Text style={s.suggestedCardStyle} numberOfLines={1}>{item.run_style}</Text>
+            ) : null}
+            <TouchableOpacity
+              style={s.suggestedCardBtn}
+              onPress={() => joinRequestMutation.mutate(item.id)}
+              disabled={joinRequestMutation.isPending}
+              activeOpacity={0.8}
+            >
+              <Text style={s.suggestedCardBtnTxt}>Request</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      />
+    </View>
+  );
+}
+
+// ─── Crew Plans Section ──────────────────────────────────────────────────────
+const PLAN_TIERS = [
+  {
+    id: "growth",
+    productId: "crew_growth_monthly",
+    name: "Crew Growth",
+    price: "$1.99/mo",
+    icon: "people" as const,
+    color: "#4CAF50",
+    features: ["Unlimited members (remove 100 cap)", "Priority support"],
+  },
+  {
+    id: "discovery_boost",
+    productId: "crew_discovery_boost_monthly",
+    name: "Discovery Boost",
+    price: "$4.99/mo",
+    icon: "rocket" as const,
+    color: "#FF9800",
+    features: ["~30% boost in Suggested Crews", "Public crew events featured", "Crew badge on discover page"],
+  },
+];
+
+function CrewPlansSection({ crewId }: { crewId: string }) {
+  const { C } = useTheme();
+  const s = useMemo(() => makeStyles(C), [C]);
+  const qc = useQueryClient();
+  const { purchasePackage, restorePurchases } = usePurchases();
+  const [purchasing, setPurchasing] = useState<string | null>(null);
+
+  const { data: subStatus } = useQuery<SubscriptionStatus>({
+    queryKey: ["/api/crews", crewId, "subscription"],
+    enabled: !!crewId,
+  });
+
+  const currentTier = subStatus?.subscription_tier || "none";
+
+  function isTierActive(tierId: string): boolean {
+    if (currentTier === "both") return true;
+    return currentTier === tierId;
+  }
+
+  async function handleSubscribe(tier: typeof PLAN_TIERS[0]) {
+    setPurchasing(tier.id);
+    try {
+      const purchased = await purchasePackage(tier.productId, crewId);
+      if (purchased) {
+        setTimeout(() => {
+          qc.invalidateQueries({ queryKey: ["/api/crews", crewId, "subscription"] });
+          qc.invalidateQueries({ queryKey: ["/api/crews"] });
+        }, 2000);
+        Alert.alert("Subscribed!", `${tier.name} plan is now active. It may take a moment to reflect.`);
+      } else {
+        Alert.alert("Purchase Not Completed", "The purchase was not completed. Please try again.");
+      }
+    } catch {
+      Alert.alert("Error", "Could not complete purchase. Please try again.");
+    } finally {
+      setPurchasing(null);
+    }
+  }
+
+  function handleManageSubscription() {
+    if (Platform.OS === "ios") {
+      Linking.openURL("https://apps.apple.com/account/subscriptions");
+    } else if (Platform.OS === "android") {
+      Linking.openURL("https://play.google.com/store/account/subscriptions");
+    } else {
+      Alert.alert(
+        "Manage Subscription",
+        "To cancel or change your subscription, open your device's subscription settings (App Store on iOS, Google Play on Android)."
+      );
+    }
+  }
+
+  async function handleRestore() {
+    try {
+      await restorePurchases();
+      qc.invalidateQueries({ queryKey: ["/api/crews", crewId, "subscription"] });
+      Alert.alert("Restored", "Your purchases have been restored.");
+    } catch {
+      Alert.alert("Error", "Could not restore purchases.");
+    }
+  }
+
+  return (
+    <View style={s.plansSection}>
+      <View style={s.plansSectionHeader}>
+        <Ionicons name="diamond-outline" size={18} color={C.primary} />
+        <Text style={s.plansSectionTitle}>Crew Plans</Text>
+      </View>
+
+      <View style={s.planStatusRow}>
+        <Text style={s.planStatusLabel}>Members</Text>
+        <Text style={s.planStatusValue}>
+          {subStatus?.member_count ?? "—"} / {subStatus?.member_cap === Infinity || (subStatus?.member_cap ?? 0) > 99999 ? "∞" : subStatus?.member_cap ?? 100}
+        </Text>
+      </View>
+
+      {PLAN_TIERS.map((tier) => {
+        const active = isTierActive(tier.id);
+        return (
+          <View key={tier.id} style={[s.planCard, active && { borderColor: tier.color }]}>
+            <View style={s.planCardHeader}>
+              <View style={[s.planIconCircle, { backgroundColor: tier.color + "22" }]}>
+                <Ionicons name={tier.icon} size={18} color={tier.color} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.planCardName}>{tier.name}</Text>
+                <Text style={s.planCardPrice}>{tier.price}</Text>
+              </View>
+              {active && (
+                <View style={[s.planActiveBadge, { backgroundColor: tier.color + "22" }]}>
+                  <Ionicons name="checkmark-circle" size={14} color={tier.color} />
+                  <Text style={[s.planActiveBadgeTxt, { color: tier.color }]}>Active</Text>
+                </View>
+              )}
+            </View>
+            {tier.features.map((f, i) => (
+              <View key={i} style={s.planFeatureRow}>
+                <Ionicons name="checkmark" size={14} color={tier.color} />
+                <Text style={s.planFeatureTxt}>{f}</Text>
+              </View>
+            ))}
+            {!active ? (
+              <TouchableOpacity
+                style={[s.planSubscribeBtn, { backgroundColor: tier.color }]}
+                onPress={() => handleSubscribe(tier)}
+                disabled={purchasing === tier.id}
+                activeOpacity={0.85}
+              >
+                {purchasing === tier.id ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={s.planSubscribeBtnTxt}>Subscribe</Text>
+                )}
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[s.planSubscribeBtn, { backgroundColor: C.cardBg, borderWidth: 1, borderColor: tier.color }]}
+                onPress={handleManageSubscription}
+                activeOpacity={0.85}
+              >
+                <Text style={[s.planSubscribeBtnTxt, { color: tier.color }]}>Manage Subscription</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        );
+      })}
+
+      <TouchableOpacity onPress={handleRestore} style={s.restoreBtn}>
+        <Text style={s.restoreBtnTxt}>Restore Purchases</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+// ─── Member Cap Upsell Sheet ─────────────────────────────────────────────────
+function MemberCapUpsell({ visible, onClose, crewId }: { visible: boolean; onClose: () => void; crewId: string }) {
+  const { C } = useTheme();
+  const s = useMemo(() => makeStyles(C), [C]);
+  const { purchasePackage } = usePurchases();
+  const qc = useQueryClient();
+  const [purchasing, setPurchasing] = useState(false);
+
+  async function handleUpgrade() {
+    setPurchasing(true);
+    try {
+      const purchased = await purchasePackage("crew_growth_monthly", crewId);
+      if (purchased) {
+        setTimeout(() => {
+          qc.invalidateQueries({ queryKey: ["/api/crews", crewId, "subscription"] });
+          qc.invalidateQueries({ queryKey: ["/api/crews"] });
+        }, 2000);
+        Alert.alert("Upgraded!", "Your crew can now have unlimited members. It may take a moment to reflect.");
+        onClose();
+      } else {
+        Alert.alert("Purchase Not Completed", "The purchase was not completed. Please try again.");
+      }
+    } catch {
+      Alert.alert("Error", "Could not complete purchase.");
+    } finally {
+      setPurchasing(false);
+    }
+  }
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={s.upsellOverlay} onPress={onClose}>
+        <View style={s.upsellCard} onStartShouldSetResponder={() => true}>
+          <Ionicons name="people" size={40} color={C.primary} />
+          <Text style={s.upsellTitle}>Crew Full!</Text>
+          <Text style={s.upsellBody}>
+            Your crew has reached the 100-member limit. Upgrade to Crew Growth to remove the cap and accept unlimited members.
+          </Text>
+          <TouchableOpacity
+            style={s.upsellBtn}
+            onPress={handleUpgrade}
+            disabled={purchasing}
+            activeOpacity={0.85}
+          >
+            {purchasing ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Text style={s.upsellBtnTxt}>Upgrade — $1.99/mo</Text>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onClose} style={{ marginTop: 10 }}>
+            <Text style={s.upsellDismissTxt}>Not now</Text>
+          </TouchableOpacity>
+        </View>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -2116,6 +2433,7 @@ export default function CrewScreen() {
   const [friendsOnly, setFriendsOnly] = useState(false);
   const [searchActive, setSearchActive] = useState(false);
   const [showRankings, setShowRankings] = useState(false);
+  const [capUpsellCrewId, setCapUpsellCrewId] = useState<string | null>(null);
   const searchInputRef = useRef<TextInput>(null);
 
   const isSearching = searchText.trim().length > 0 || friendsOnly;
@@ -2168,12 +2486,21 @@ export default function CrewScreen() {
       qc.invalidateQueries({ queryKey: ["/api/crew-invites"] });
       qc.invalidateQueries({ queryKey: ["/api/crews"] });
     },
+    onError: (e: any) => {
+      const msg = e?.message || "";
+      if (msg.includes("MEMBER_CAP_REACHED") || msg.includes("member cap")) {
+        Alert.alert("Crew Full", "This crew has reached its 100-member limit.");
+      } else {
+        Alert.alert("Error", e?.message ?? "Could not respond to invite");
+      }
+    },
   });
 
   const joinRequestMutation = useMutation({
     mutationFn: (crewId: string) => apiRequest("POST", `/api/crews/${crewId}/join-request`, {}),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [searchUrl] });
+      qc.invalidateQueries({ queryKey: ["/api/crews/suggested"] });
     },
   });
 
@@ -2307,6 +2634,9 @@ export default function CrewScreen() {
                   onDecline={() => respondMutation.mutate({ crewId: invite.crew_id, accept: false })}
                 />
               ))}
+              {crews.length < 3 && (
+                <SuggestedCrewsSection />
+              )}
             </>
           )}
           renderItem={({ item }) => (
@@ -2390,6 +2720,7 @@ export default function CrewScreen() {
         crew={selectedCrew}
         onClose={() => setSelectedCrew(null)}
         currentUserId={currentUser?.id ?? ""}
+        onCapReached={(crewId) => setCapUpsellCrewId(crewId)}
       />
 
       <RankingsModal
@@ -2398,6 +2729,14 @@ export default function CrewScreen() {
         myCrewIds={(crews as Crew[]).map((c) => c.id)}
         myCrewId={(crews as Crew[])[0]?.id}
       />
+
+      {capUpsellCrewId && (
+        <MemberCapUpsell
+          visible={!!capUpsellCrewId}
+          onClose={() => setCapUpsellCrewId(null)}
+          crewId={capUpsellCrewId}
+        />
+      )}
     </View>
   );
 }
@@ -3952,5 +4291,229 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     fontFamily: "Outfit_600SemiBold",
     fontSize: 15,
     flex: 1,
+  },
+
+  suggestedSection: {
+    marginBottom: 16,
+  },
+  suggestedHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
+  },
+  suggestedTitle: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 16,
+    color: C.text,
+  },
+  suggestedCard: {
+    width: 130,
+    backgroundColor: C.card,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.border,
+    padding: 12,
+    alignItems: "center",
+    gap: 4,
+  },
+  suggestedCardImg: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    marginBottom: 4,
+  },
+  suggestedCardEmoji: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: C.primaryMuted,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  suggestedCardName: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 13,
+    color: C.text,
+    textAlign: "center",
+  },
+  suggestedCardMeta: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 11,
+    color: C.textMuted,
+  },
+  suggestedCardStyle: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 10,
+    color: C.textSecondary,
+  },
+  suggestedCardBtn: {
+    backgroundColor: C.primary,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    marginTop: 4,
+  },
+  suggestedCardBtnTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 12,
+    color: C.bg,
+  },
+
+  plansSection: {
+    marginHorizontal: 20,
+    marginTop: 20,
+    marginBottom: 8,
+  },
+  plansSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
+  },
+  plansSectionTitle: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 17,
+    color: C.text,
+  },
+  planStatusRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  planStatusLabel: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 13,
+    color: C.textMuted,
+  },
+  planStatusValue: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 14,
+    color: C.text,
+  },
+  planCard: {
+    backgroundColor: C.card,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: C.border,
+    padding: 14,
+    marginBottom: 10,
+    gap: 8,
+  },
+  planCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  planIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  planCardName: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 15,
+    color: C.text,
+  },
+  planCardPrice: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 12,
+    color: C.textMuted,
+  },
+  planActiveBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  planActiveBadgeTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 12,
+  },
+  planFeatureRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingLeft: 4,
+  },
+  planFeatureTxt: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 13,
+    color: C.textSecondary,
+  },
+  planSubscribeBtn: {
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: "center",
+    marginTop: 4,
+  },
+  planSubscribeBtnTxt: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 14,
+    color: "#fff",
+  },
+  restoreBtn: {
+    alignSelf: "center",
+    paddingVertical: 8,
+    marginTop: 4,
+  },
+  restoreBtnTxt: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 13,
+    color: C.textMuted,
+    textDecorationLine: "underline" as const,
+  },
+
+  upsellOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 30,
+  },
+  upsellCard: {
+    backgroundColor: C.card,
+    borderRadius: 20,
+    padding: 28,
+    alignItems: "center",
+    gap: 12,
+    maxWidth: 340,
+    width: "100%",
+  },
+  upsellTitle: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 22,
+    color: C.text,
+  },
+  upsellBody: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 14,
+    color: C.textSecondary,
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  upsellBtn: {
+    backgroundColor: C.primary,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    marginTop: 6,
+  },
+  upsellBtnTxt: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 15,
+    color: "#fff",
+  },
+  upsellDismissTxt: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 13,
+    color: C.textMuted,
   },
 }); }
