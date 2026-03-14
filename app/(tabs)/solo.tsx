@@ -1260,7 +1260,7 @@ export default function SoloScreen() {
         )}
         {showHistory && !isLoading && historyRuns.length === 0 && (
           <View style={s.emptyCard}>
-            {!ghostSoloDone && (
+            {!ghostSoloDone ? (
               <View style={s.ghostHistoryCard}>
                 <View style={s.historyRow}>
                   <View style={s.historyLeft}>
@@ -1302,6 +1302,13 @@ export default function SoloScreen() {
                   <Feather name="info" size={10} color={C.textMuted} />
                   <Text style={s.ghostHistoryTip}>Your runs save here — every route, pace, and split</Text>
                 </View>
+              </View>
+            ) : (
+              <View style={{ alignItems: "center", paddingVertical: 24 }}>
+                <Feather name="activity" size={28} color={C.textMuted} />
+                <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 15, color: C.textMuted, marginTop: 10, textAlign: "center" }}>
+                  {activityFilter === "ride" ? "No rides yet — start your first one!" : activityFilter === "walk" ? "No walks yet — start your first one!" : "No runs yet — start your first one!"}
+                </Text>
               </View>
             )}
             <Pressable
