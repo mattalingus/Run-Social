@@ -37,7 +37,7 @@ export default function TabLayout() {
   const onCrewTab = pathname === "/crew" || pathname.startsWith("/crew/");
   const onDiscoverTab = pathname === "/" || pathname === "/index";
 
-  const { data: notifData } = useQuery<any[]>({
+  const { data: notifData } = useQuery<{ items: any[]; lastReadAt: string | null }>({
     queryKey: ["/api/notifications"],
     queryFn: async () => {
       const res = await fetch(new URL("/api/notifications", getApiUrl()).toString(), { credentials: "include" });
@@ -47,8 +47,9 @@ export default function TabLayout() {
     refetchInterval: 30000,
     staleTime: 15000,
   });
-  const unreadNotifCount = (notifData ?? []).filter(
-    (n: any) => n.type === "friend_request" || n.type === "crew_invite" || n.type === "join_request"
+  const lastReadAt = notifData?.lastReadAt ? new Date(notifData.lastReadAt).getTime() : 0;
+  const unreadNotifCount = (notifData?.items ?? []).filter(
+    (n: any) => new Date(n.created_at).getTime() > lastReadAt
   ).length;
 
   // Load persisted timestamp on mount — defaults to now if never visited (no false positives)
@@ -124,8 +125,6 @@ export default function TabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? "search" : "search-outline"} size={22} color={color} />
           ),
-          tabBarBadge: !onDiscoverTab && unreadNotifCount > 0 ? unreadNotifCount : undefined,
-          tabBarBadgeStyle: { backgroundColor: "#FF3B30", fontSize: 10 },
         }}
       />
       <Tabs.Screen
@@ -160,7 +159,10 @@ export default function TabLayout() {
         options={{
           title: "Profile",
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "person" : "person-outline"} size={22} color={color} />
+            <View>
+              <Ionicons name={focused ? "person" : "person-outline"} size={22} color={color} />
+              {unreadNotifCount > 0 && <View style={styles.redDot} />}
+            </View>
           ),
         }}
       />
@@ -183,5 +185,14 @@ const styles = StyleSheet.create({
     height:          8,
     borderRadius:    4,
     backgroundColor: "#00D97E",
+  },
+  redDot: {
+    position:        "absolute",
+    top:             -2,
+    right:           -4,
+    width:           8,
+    height:          8,
+    borderRadius:    4,
+    backgroundColor: "#FF3B30",
   },
 });

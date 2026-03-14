@@ -1092,11 +1092,12 @@ export default function DiscoverScreen() {
   const [ghostBookmarkDone, setGhostBookmarkDone] = useState(true);
   const [ghostPlannedDone, setGhostPlannedDone] = useState(true);
 
-  const { data: notifications = [], refetch: refetchNotifs } = useQuery<any[]>({
+  const { data: notifDataRaw, refetch: refetchNotifs } = useQuery<{ items: any[]; lastReadAt: string | null }>({
     queryKey: ["/api/notifications"],
     refetchInterval: 30000,
     enabled: !!user,
   });
+  const notifications = notifDataRaw?.items ?? [];
 
   const { data: unreadDmData } = useQuery<{ count: number }>({
     queryKey: ["/api/dm/unread-count"],

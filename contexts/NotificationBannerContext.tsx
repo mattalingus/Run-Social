@@ -104,7 +104,8 @@ export function NotificationBannerProvider({ children }: { children: React.React
         const url = new URL("/api/notifications", baseUrl);
         const res = await fetch(url.toString(), { credentials: "include" });
         if (!res.ok) return;
-        const notifications: BannerNotification[] = await res.json();
+        const json = await res.json();
+        const notifications: BannerNotification[] = Array.isArray(json) ? json : (json.items ?? []);
 
         if (firstPollRef.current) {
           firstPollRef.current = false;

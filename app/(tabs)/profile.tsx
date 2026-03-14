@@ -674,6 +674,12 @@ export default function ProfileScreen() {
 
         <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
           <Pressable
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/notifications"); }}
+            style={styles.logoutBtn}
+          >
+            <Feather name="bell" size={18} color={C.textMuted} />
+          </Pressable>
+          <Pressable
             onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowSettings(true); }}
             style={styles.logoutBtn}
           >

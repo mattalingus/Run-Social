@@ -43,6 +43,7 @@ export const users = pgTable("users", {
   garminId: text("garmin_id"),
   garminAccessToken: text("garmin_access_token"),
   garminTokenSecret: text("garmin_token_secret"),
+  notificationsReadAt: timestamp("notifications_read_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

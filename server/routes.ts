@@ -491,7 +491,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/notifications", requireAuth, async (req, res) => {
     try {
       const data = await storage.getNotifications(req.session.userId!);
-      res.json(data);
+      const readAtRow = await pool.query(`SELECT notifications_read_at FROM users WHERE id = $1`, [req.session.userId!]);
+      const lastReadAt = readAtRow.rows[0]?.notifications_read_at ?? null;
+      res.json({ items: data, lastReadAt });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/notifications/mark-read", requireAuth, async (req, res) => {
+    try {
+      await pool.query(`UPDATE users SET notifications_read_at = NOW() WHERE id = $1`, [req.session.userId!]);
+      res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
