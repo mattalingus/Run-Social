@@ -78,7 +78,13 @@ export interface ContactMatch {
   username: string | null;
   photo_url: string | null;
   total_miles: number;
+  phone_hash: string;
   contactName?: string;
+}
+
+export interface NonMemberContact {
+  name: string;
+  phone: string;
 }
 
 export async function requestContactsPermission(): Promise<boolean> {
@@ -87,14 +93,20 @@ export async function requestContactsPermission(): Promise<boolean> {
   return status === "granted";
 }
 
-export async function scanContacts(): Promise<ContactMatch[]> {
-  if (Platform.OS === "web") return [];
+export interface ContactScanResult {
+  matches: ContactMatch[];
+  nonMembers: NonMemberContact[];
+}
+
+export async function scanContacts(): Promise<ContactScanResult> {
+  if (Platform.OS === "web") return { matches: [], nonMembers: [] };
 
   const { data } = await Contacts.getContactsAsync({
     fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Name],
   });
 
-  const phoneToName = new Map<string, string>();
+  const hashToName = new Map<string, string>();
+  const hashToPhone = new Map<string, string>();
   const hashes: string[] = [];
 
   for (const contact of data) {
@@ -106,19 +118,36 @@ export async function scanContacts(): Promise<ContactMatch[]> {
       const h = await hashPhone(pn.number);
       hashes.push(h);
       const cName = contact.name || contact.firstName || "Contact";
-      phoneToName.set(h, cName);
+      hashToName.set(h, cName);
+      hashToPhone.set(h, pn.number);
     }
   }
 
-  if (hashes.length === 0) return [];
+  if (hashes.length === 0) return { matches: [], nonMembers: [] };
 
   const res = await apiRequest("POST", "/api/users/find-by-contacts", { phoneHashes: hashes });
-  const matches: ContactMatch[] = await res.json();
+  const rawMatches: ContactMatch[] = await res.json();
 
-  return matches.map((m) => ({
+  const matchedHashes = new Set(rawMatches.map((m) => m.phone_hash));
+
+  const matches = rawMatches.map((m) => ({
     ...m,
-    contactName: phoneToName.get(m.id),
+    contactName: hashToName.get(m.phone_hash),
   }));
+
+  const nonMembers: NonMemberContact[] = [];
+  const seenPhones = new Set<string>();
+  for (const h of hashes) {
+    if (matchedHashes.has(h)) continue;
+    const phone = hashToPhone.get(h);
+    const name = hashToName.get(h);
+    if (phone && name && !seenPhones.has(phone)) {
+      seenPhones.add(phone);
+      nonMembers.push({ name, phone });
+    }
+  }
+
+  return { matches, nonMembers: nonMembers.slice(0, 50) };
 }
 
 export async function registerMyPhone(phone: string): Promise<void> {

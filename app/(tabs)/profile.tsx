@@ -34,7 +34,9 @@ import { pickAndUploadImage } from "@/lib/uploadImage";
 import MileSplitsChart from "@/components/MileSplitsChart";
 import HostProfileSheet from "@/components/HostProfileSheet";
 import SettingsModal from "@/components/SettingsModal";
-import { requestContactsPermission, scanContacts, type ContactMatch } from "@/lib/contactsDiscovery";
+import * as WebBrowser from "expo-web-browser";
+import { Linking } from "react-native";
+import { requestContactsPermission, scanContacts, type ContactMatch, type NonMemberContact, type ContactScanResult } from "@/lib/contactsDiscovery";
 const APP_SHARE_URL = Platform.OS === "ios"
   ? "https://apps.apple.com/us/app/paceup-move-together/id6760092871"
   : "https://paceupapp.com";
@@ -269,8 +271,11 @@ export default function ProfileScreen() {
   const [nameDaysRemaining, setNameDaysRemaining] = useState<number | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [contactMatches, setContactMatches] = useState<ContactMatch[]>([]);
+  const [nonMemberContacts, setNonMemberContacts] = useState<NonMemberContact[]>([]);
   const [contactsScanning, setContactsScanning] = useState(false);
   const [contactsScanned, setContactsScanned] = useState(false);
+  const [fbConnecting, setFbConnecting] = useState(false);
+  const [dismissedContacts, setDismissedContacts] = useState<Set<string>>(new Set());
 
   const styles = makeStyles(C);
   const devStylesObj = makeDevStyles(C);
@@ -1553,9 +1558,11 @@ export default function ProfileScreen() {
                       Alert.alert("Contacts Access", "Please allow access to your contacts in Settings to find friends on PaceUp.");
                       return;
                     }
-                    const matches = await scanContacts();
-                    setContactMatches(matches);
+                    const result = await scanContacts();
+                    setContactMatches(result.matches);
+                    setNonMemberContacts(result.nonMembers);
                     setContactsScanned(true);
+                    setDismissedContacts(new Set());
                   } catch (e: any) {
                     Alert.alert("Error", e.message || "Could not scan contacts");
                   } finally {
@@ -1580,10 +1587,10 @@ export default function ProfileScreen() {
                 <Feather name="chevron-right" size={18} color={C.textMuted} />
               </Pressable>
 
-              {contactsScanned && contactMatches.length > 0 && (
+              {contactsScanned && contactMatches.filter((u) => !dismissedContacts.has(u.id)).length > 0 && (
                 <View style={styles.friendsSection}>
                   <Text style={styles.friendsSectionTitle}>From Your Contacts</Text>
-                  {contactMatches.map((u) => {
+                  {contactMatches.filter((u) => !dismissedContacts.has(u.id)).map((u) => {
                     const isAlreadyFriend = friendIds.has(u.id);
                     const hasSent = sentIds.has(u.id);
                     return (
@@ -1597,19 +1604,35 @@ export default function ProfileScreen() {
                           </View>
                           <View style={styles.friendInfo}>
                             <Text style={styles.friendName}>{u.name}</Text>
+                            {u.contactName && u.contactName !== u.name && <Text style={[styles.friendStat, { fontSize: 11, color: C.textMuted }]}>{u.contactName} in your contacts</Text>}
                             <Text style={styles.friendStat}>
                               {u.username ? `@${u.username}` : ""}{u.total_miles ? ` · ${toDisplayDist(u.total_miles, distUnit)}` : ""}
                             </Text>
                           </View>
                         </Pressable>
                         {isAlreadyFriend ? (
-                          <View style={styles.friendStatusBadge}><Feather name="check" size={12} color={C.primary} /><Text style={styles.friendStatusTxt}>Friends</Text></View>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                            <View style={styles.friendStatusBadge}><Feather name="check" size={12} color={C.primary} /><Text style={styles.friendStatusTxt}>Friends</Text></View>
+                            <Pressable onPress={() => setDismissedContacts((s) => new Set(s).add(u.id))} hitSlop={8}>
+                              <Feather name="x" size={14} color={C.textMuted} />
+                            </Pressable>
+                          </View>
                         ) : hasSent ? (
-                          <View style={styles.friendStatusBadge}><Text style={styles.friendStatusTxt}>Sent</Text></View>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                            <View style={styles.friendStatusBadge}><Text style={styles.friendStatusTxt}>Sent</Text></View>
+                            <Pressable onPress={() => setDismissedContacts((s) => new Set(s).add(u.id))} hitSlop={8}>
+                              <Feather name="x" size={14} color={C.textMuted} />
+                            </Pressable>
+                          </View>
                         ) : (
-                          <Pressable style={styles.friendAddBtn} onPress={() => sendRequestMutation.mutate(u.id)} disabled={sendRequestMutation.isPending}>
-                            <Feather name="user-plus" size={14} color={C.bg} />
-                          </Pressable>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                            <Pressable style={styles.friendAddBtn} onPress={() => sendRequestMutation.mutate(u.id)} disabled={sendRequestMutation.isPending}>
+                              <Feather name="user-plus" size={14} color={C.bg} />
+                            </Pressable>
+                            <Pressable onPress={() => setDismissedContacts((s) => new Set(s).add(u.id))} hitSlop={8}>
+                              <Feather name="x" size={14} color={C.textMuted} />
+                            </Pressable>
+                          </View>
                         )}
                       </View>
                     );
@@ -1624,23 +1647,95 @@ export default function ProfileScreen() {
                   <Text style={[styles.searchEmptyTxt, { fontSize: 12, marginTop: 2 }]}>Invite them below!</Text>
                 </View>
               )}
+
+              {contactsScanned && nonMemberContacts.length > 0 && (
+                <View style={styles.friendsSection}>
+                  <Text style={styles.friendsSectionTitle}>Invite to PaceUp</Text>
+                  {nonMemberContacts.slice(0, 15).map((c, idx) => (
+                    <View key={`nm-${idx}`} style={styles.friendCard}>
+                      <View style={styles.friendCardInfo}>
+                        <View style={[styles.friendAvatar, { backgroundColor: C.border }]}>
+                          <Text style={styles.friendAvatarTxt}>{c.name.charAt(0).toUpperCase()}</Text>
+                        </View>
+                        <View style={styles.friendInfo}>
+                          <Text style={styles.friendName}>{c.name}</Text>
+                          <Text style={styles.friendStat}>Not on PaceUp</Text>
+                        </View>
+                      </View>
+                      <Pressable
+                        style={({ pressed }) => [styles.inviteSmsBtnSmall, { opacity: pressed ? 0.75 : 1 }]}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          const body = encodeURIComponent(`Hey! Join me on PaceUp for group runs & rides: ${APP_SHARE_URL}`);
+                          const phone = c.phone.replace(/\D/g, "");
+                          const smsUrl = Platform.OS === "ios"
+                            ? `sms:${phone}&body=${body}`
+                            : `sms:${phone}?body=${body}`;
+                          Linking.openURL(smsUrl).catch(() => {});
+                        }}
+                      >
+                        <Feather name="message-circle" size={13} color={C.primary} />
+                        <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.primary }}>Invite</Text>
+                      </Pressable>
+                    </View>
+                  ))}
+                </View>
+              )}
             </>
           )}
 
-          {/* ── Facebook (Coming Soon) ─────────────────────────────────── */}
-          <View style={[styles.contactsScanBtn, { opacity: 0.5, marginTop: Platform.OS === "web" ? 16 : 0 }]}>
-            <Ionicons name="logo-facebook" size={20} color="#1877F2" />
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.inviteCardTitle, { color: C.text }]}>Find Facebook Friends</Text>
-              <Text style={styles.inviteCardSub}>Coming soon</Text>
-            </View>
-            <View style={{ backgroundColor: C.surface, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
-              <Text style={{ color: C.textMuted, fontSize: 11, fontFamily: "Outfit_600SemiBold" }}>Soon</Text>
-            </View>
+          {/* ── Find Facebook Friends ─────────────────────────────────── */}
+          <View style={[styles.inviteDivider, { marginTop: Platform.OS === "web" ? 16 : 6 }]}>
+            <View style={styles.inviteDivLine} />
+            <Text style={styles.inviteDivTxt}>social</Text>
+            <View style={styles.inviteDivLine} />
           </View>
 
+          <Pressable
+            style={({ pressed }) => [styles.contactsScanBtn, { opacity: pressed ? 0.8 : 1 }]}
+            onPress={async () => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setFbConnecting(true);
+              try {
+                const res = await apiRequest("GET", "/api/auth/facebook/start");
+                const data = await res.json();
+                if (data.url) {
+                  await WebBrowser.openBrowserAsync(data.url);
+                  qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
+                  refreshUser();
+                }
+              } catch (e: any) {
+                if (e.message?.includes("501") || e.message?.includes("not configured")) {
+                  Alert.alert("Coming Soon", "Facebook friend discovery will be available in a future update.");
+                } else {
+                  Alert.alert("Error", e.message || "Could not connect Facebook");
+                }
+              } finally {
+                setFbConnecting(false);
+              }
+            }}
+            disabled={fbConnecting}
+          >
+            {fbConnecting ? (
+              <ActivityIndicator size="small" color="#1877F2" />
+            ) : (
+              <Ionicons name="logo-facebook" size={20} color="#1877F2" />
+            )}
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.inviteCardTitle, { color: C.text }]}>Find Facebook Friends</Text>
+              <Text style={styles.inviteCardSub}>
+                {(user as any)?.facebook_id ? "Connected" : "Connect to find friends on Facebook"}
+              </Text>
+            </View>
+            {(user as any)?.facebook_id ? (
+              <Feather name="check-circle" size={18} color={C.primary} />
+            ) : (
+              <Feather name="chevron-right" size={18} color={C.textMuted} />
+            )}
+          </Pressable>
+
           {/* ── Invite Share ─────────────────────────────────────────────── */}
-          <View style={[styles.inviteDivider, { marginTop: 16 }]}>
+          <View style={[styles.inviteDivider, { marginTop: 6 }]}>
             <View style={styles.inviteDivLine} />
             <Text style={styles.inviteDivTxt}>invite</Text>
             <View style={styles.inviteDivLine} />
@@ -2455,6 +2550,11 @@ function makeStyles(C: ReturnType<typeof import("@/contexts/ThemeContext").useTh
     flexDirection: "row" as const, alignItems: "center" as const, gap: 12,
     backgroundColor: C.surface, borderRadius: 14, padding: 14,
     borderWidth: 1, borderColor: C.border, marginBottom: 10,
+  },
+  inviteSmsBtnSmall: {
+    flexDirection: "row" as const, alignItems: "center" as const, gap: 4,
+    borderWidth: 1, borderColor: C.primary + "44", borderRadius: 10,
+    paddingHorizontal: 10, paddingVertical: 6,
   },
 
   ratingWarningCard: {

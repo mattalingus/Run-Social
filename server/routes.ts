@@ -518,7 +518,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "phoneHashes array required" });
       const limited = phoneHashes.slice(0, 5000);
       const result = await pool.query(
-        `SELECT u.id, u.name, u.username, u.photo_url, u.total_miles
+        `SELECT u.id, u.name, u.username, u.photo_url, u.total_miles, u.phone_hash
          FROM users u
          WHERE u.phone_hash = ANY($1::text[])
            AND u.id != $2
@@ -529,6 +529,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
                AND status IN ('pending', 'accepted')
            )`,
         [limited, req.session.userId]
+      );
+      res.json(result.rows);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/auth/facebook/start", requireAuth, (req, res) => {
+    const appId = process.env.FACEBOOK_APP_ID;
+    if (!appId) return res.status(501).json({ message: "Facebook integration not configured" });
+    const redirectUri = `${req.protocol}://${req.get("host")}/api/auth/facebook/callback`;
+    const scope = "public_profile,user_friends";
+    const state = req.session.userId;
+    const url = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scope}&state=${state}&response_type=code`;
+    res.json({ url });
+  });
+
+  app.get("/api/auth/facebook/callback", async (req, res) => {
+    try {
+      const { code, state } = req.query as { code?: string; state?: string };
+      if (!code || !state) return res.status(400).send("Missing code or state");
+      const appId = process.env.FACEBOOK_APP_ID;
+      const appSecret = process.env.FACEBOOK_APP_SECRET;
+      if (!appId || !appSecret) return res.status(501).send("Facebook not configured");
+      const redirectUri = `${req.protocol}://${req.get("host")}/api/auth/facebook/callback`;
+      const tokenRes = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${appSecret}&code=${code}`);
+      const tokenData = await tokenRes.json() as any;
+      if (!tokenData.access_token) return res.status(400).send("Failed to get access token");
+      const meRes = await fetch(`https://graph.facebook.com/v19.0/me?fields=id,name&access_token=${tokenData.access_token}`);
+      const me = await meRes.json() as any;
+      if (me.id) {
+        await pool.query(`UPDATE users SET facebook_id = $1 WHERE id = $2`, [me.id, state]);
+      }
+      res.send(`<html><body><script>window.close();</script><p>Connected! You can close this window.</p></body></html>`);
+    } catch (e: any) {
+      res.status(500).send("Facebook auth error: " + e.message);
+    }
+  });
+
+  app.delete("/api/auth/facebook/disconnect", requireAuth, async (req, res) => {
+    try {
+      await pool.query(`UPDATE users SET facebook_id = NULL WHERE id = $1`, [req.session.userId]);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/friends/facebook-suggestions", requireAuth, async (req, res) => {
+    try {
+      const userRow = await pool.query(`SELECT facebook_id FROM users WHERE id = $1`, [req.session.userId]);
+      const fbId = userRow.rows[0]?.facebook_id;
+      if (!fbId) return res.json([]);
+      const result = await pool.query(
+        `SELECT u.id, u.name, u.username, u.photo_url, u.total_miles
+         FROM users u
+         WHERE u.facebook_id IS NOT NULL
+           AND u.id != $1
+           AND u.id NOT IN (
+             SELECT CASE WHEN requester_id = $1 THEN addressee_id ELSE requester_id END
+             FROM friends
+             WHERE (requester_id = $1 OR addressee_id = $1)
+               AND status IN ('pending', 'accepted')
+           )
+         LIMIT 50`,
+        [req.session.userId]
       );
       res.json(result.rows);
     } catch (e: any) {
