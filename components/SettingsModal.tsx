@@ -689,36 +689,6 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
                 </Pressable>
               }
             />
-            <Divider C={C} />
-
-            {/* X / Twitter */}
-            <SettingRow
-              C={C}
-              iconBg="#0A0A0A"
-              icon={<FontAwesome5 name="twitter" size={17} color={C.text} />}
-              label="X (Twitter)"
-              sublabel="Coming soon"
-              right={
-                <Pressable style={[st.connectBtn, { borderColor: C.border, backgroundColor: C.surface, opacity: 0.5 }]} onPress={() => handleConnectSocial("X (Twitter)")}>
-                  <Text style={[st.connectBtnTxt, { color: C.textMuted }]}>Soon</Text>
-                </Pressable>
-              }
-            />
-            <Divider C={C} />
-
-            {/* TikTok */}
-            <SettingRow
-              C={C}
-              iconBg="#0A0A0F"
-              icon={<FontAwesome5 name="tiktok" size={17} color={C.text} />}
-              label="TikTok"
-              sublabel="Coming soon"
-              right={
-                <Pressable style={[st.connectBtn, { borderColor: C.border, backgroundColor: C.surface, opacity: 0.5 }]} onPress={() => handleConnectSocial("TikTok")}>
-                  <Text style={[st.connectBtnTxt, { color: C.textMuted }]}>Soon</Text>
-                </Pressable>
-              }
-            />
           </SectionCard>
 
           {/* ── ACCOUNT ──────────────────────────────────────────────────── */}
