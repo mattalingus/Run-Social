@@ -333,6 +333,12 @@ export async function initDb() {
     ALTER TABLE direct_messages ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT NULL;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_hash TEXT DEFAULT NULL;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_id TEXT DEFAULT NULL;
+    CREATE TABLE IF NOT EXISTS facebook_friends (
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      fb_friend_id VARCHAR NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW(),
+      PRIMARY KEY(user_id, fb_friend_id)
+    );
     ALTER TABLE users ADD COLUMN IF NOT EXISTS garmin_access_token TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS garmin_token_secret TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS apple_health_connected BOOLEAN DEFAULT false;

@@ -504,6 +504,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { phoneHash } = req.body;
       if (!phoneHash) return res.status(400).json({ message: "phoneHash required" });
+      if (typeof phoneHash !== "string" || !/^[a-f0-9]{64}$/.test(phoneHash)) {
+        return res.status(400).json({ message: "Invalid phone hash format" });
+      }
       await pool.query(`UPDATE users SET phone_hash = $1 WHERE id = $2`, [phoneHash, req.session.userId]);
       res.json({ success: true });
     } catch (e: any) {
@@ -570,6 +573,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const me = await meRes.json() as any;
       if (me.id) {
         await pool.query(`UPDATE users SET facebook_id = $1 WHERE id = $2`, [me.id, storedUserId]);
+        try {
+          const friendsRes = await fetch(`https://graph.facebook.com/v19.0/me/friends?fields=id&limit=5000&access_token=${tokenData.access_token}`);
+          const friendsData = await friendsRes.json() as any;
+          if (friendsData.data && Array.isArray(friendsData.data)) {
+            await pool.query(`DELETE FROM facebook_friends WHERE user_id = $1`, [storedUserId]);
+            for (const friend of friendsData.data) {
+              await pool.query(
+                `INSERT INTO facebook_friends (user_id, fb_friend_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+                [storedUserId, friend.id]
+              );
+            }
+          }
+        } catch (friendErr) {
+          console.error("Failed to fetch Facebook friends:", friendErr);
+        }
       }
       res.send(`<html><body><script>window.close();</script><p>Connected! You can close this window.</p></body></html>`);
     } catch (e: any) {
@@ -579,6 +597,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/auth/facebook/disconnect", requireAuth, async (req, res) => {
     try {
+      await pool.query(`DELETE FROM facebook_friends WHERE user_id = $1`, [req.session.userId]);
       await pool.query(`UPDATE users SET facebook_id = NULL WHERE id = $1`, [req.session.userId]);
       res.json({ success: true });
     } catch (e: any) {
@@ -596,6 +615,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
          FROM users u
          WHERE u.facebook_id IS NOT NULL
            AND u.id != $1
+           AND (
+             u.facebook_id IN (SELECT fb_friend_id FROM facebook_friends WHERE user_id = $1)
+             OR u.id IN (SELECT ff.user_id FROM facebook_friends ff WHERE ff.fb_friend_id = $2)
+           )
            AND u.id NOT IN (
              SELECT CASE WHEN requester_id = $1 THEN addressee_id ELSE requester_id END
              FROM friends
@@ -603,7 +626,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                AND status IN ('pending', 'accepted')
            )
          LIMIT 50`,
-        [req.session.userId]
+        [req.session.userId, fbId]
       );
       res.json(result.rows);
     } catch (e: any) {
