@@ -576,12 +576,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
           const friendsRes = await fetch(`https://graph.facebook.com/v19.0/me/friends?fields=id&limit=5000&access_token=${tokenData.access_token}`);
           const friendsData = await friendsRes.json() as any;
-          if (friendsData.data && Array.isArray(friendsData.data)) {
+          if (friendsData.data && Array.isArray(friendsData.data) && friendsData.data.length > 0) {
             await pool.query(`DELETE FROM facebook_friends WHERE user_id = $1`, [storedUserId]);
-            for (const friend of friendsData.data) {
+            const friendIds = friendsData.data.map((f: any) => f.id).filter(Boolean);
+            if (friendIds.length > 0) {
+              const values = friendIds.map((_: string, i: number) => `($1, $${i + 2})`).join(", ");
               await pool.query(
-                `INSERT INTO facebook_friends (user_id, fb_friend_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-                [storedUserId, friend.id]
+                `INSERT INTO facebook_friends (user_id, fb_friend_id) VALUES ${values} ON CONFLICT DO NOTHING`,
+                [storedUserId, ...friendIds]
               );
             }
           }
