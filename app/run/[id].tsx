@@ -700,9 +700,9 @@ export default function RunDetailScreen() {
               hitSlop={8}
               onPress={async () => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                const date = run.scheduled_date ? new Date(run.scheduled_date).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }) : "";
+                const date = run.date ? new Date(run.date).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }) : "";
                 const loc = run.location_name ? ` at ${run.location_name}` : "";
-                const msg = `Join me on PaceUp! ${run.title}${date ? ` — ${date}` : ""}${loc}`;
+                const msg = `Join me for ${run.title} on PaceUp!${date ? ` ${date}` : ""}${loc}`;
                 try {
                   await Share.share(Platform.OS === "ios" ? { message: msg, url: `paceup://run/${id}` } : { message: `${msg}\npaceup://run/${id}` });
                 } catch {}
