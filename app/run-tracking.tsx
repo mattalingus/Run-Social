@@ -300,7 +300,7 @@ function pickCoachPhrase(
 export default function RunTrackingScreen() {
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
-  const { activityFilter } = useActivity();
+  const { activityFilter, setActivityFilter } = useActivity();
   const { user } = useAuth();
   const { C } = useTheme();
   const t = useMemo(() => makeRunStyles(C), [C]);
@@ -407,30 +407,21 @@ export default function RunTrackingScreen() {
         const raw = await AsyncStorage.getItem(key);
         if (!raw) return;
         const data = JSON.parse(raw);
+        const validTypes = ["run", "ride", "walk"];
+        const recoveredType = validTypes.includes(data.activityType) ? data.activityType : "run";
+        setActivityFilter(recoveredType);
         totalDistRef.current = data.distanceMi ?? 0;
         elapsedRef.current = data.durationSeconds ?? 0;
         routePathRef.current = data.routePath ?? [];
         mileSplitsRef.current = data.splits ?? [];
         elevationGainRef.current = data.elevationGainFt ?? 0;
+        lastSplitMileRef.current = Math.floor(data.distanceMi ?? 0);
+        prevMileElapsedRef.current = data.durationSeconds ?? 0;
         setElapsed(data.durationSeconds ?? 0);
         setDisplayDist(data.distanceMi ?? 0);
         setRouteState(data.routePath ?? []);
-        setMileSplits(data.splits ?? []);
         await AsyncStorage.removeItem(key);
-        const finalSplits = [...(data.splits ?? [])];
-        if (user) {
-          const draft = {
-            distanceMi: data.distanceMi ?? 0,
-            durationSeconds: data.durationSeconds ?? 0,
-            routePath: data.routePath ?? [],
-            splits: finalSplits,
-            activityType: data.activityType ?? "run",
-            elevationGainFt: data.elevationGainFt ?? 0,
-            timestamp: new Date().toISOString(),
-          };
-          AsyncStorage.setItem(`paceup_draft_run_${user.id}`, JSON.stringify(draft)).catch(() => {});
-        }
-        setPhase("done");
+        setTimeout(() => doFinish(), 100);
       } catch {}
     })();
   }, [recover, user]);

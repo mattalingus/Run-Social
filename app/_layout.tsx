@@ -108,8 +108,8 @@ function RootLayoutNav() {
         const mins = Math.floor((data.durationSeconds ?? 0) / 60);
         const type = data.activityType === "ride" ? "ride" : data.activityType === "walk" ? "walk" : "run";
         Alert.alert(
-          "Recover Your Last Activity?",
-          `It looks like PaceUp was closed while tracking a ${type} (${dist} mi, ${mins} min). Would you like to save it?`,
+          "Recover your last run?",
+          `It looks like PaceUp was closed while you were tracking a ${type} (${dist} mi, ${mins} min).`,
           [
             { text: "Discard", style: "destructive", onPress: () => AsyncStorage.removeItem(key).catch(() => {}) },
             { text: "Recover", onPress: () => router.push("/run-tracking?recover=1") },
