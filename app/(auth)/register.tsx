@@ -33,7 +33,7 @@ export default function RegisterScreen() {
   const [error, setError] = useState("");
 
   async function handleRegister() {
-    if (!firstName.trim() || !lastName.trim() || !username.trim() || !email.trim() || !password) {
+    if (!firstName.trim() || !lastName.trim() || !username.trim() || !email.trim() || !password || !confirmPassword) {
       setError("Please fill in all fields");
       return;
     }

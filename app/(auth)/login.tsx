@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   ScrollView,
   Alert,
+  Linking,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -124,7 +125,10 @@ export default function LoginScreen() {
               if (Platform.OS === "web") {
                 window.alert(msg);
               } else {
-                Alert.alert("Reset Password", msg, [{ text: "OK" }]);
+                Alert.alert("Reset Password", msg, [
+                  { text: "Cancel", style: "cancel" },
+                  { text: "Email Support", onPress: () => Linking.openURL("mailto:support@paceupapp.com?subject=Password%20Reset%20Request") },
+                ]);
               }
             }}
             style={styles.forgotBtn}
