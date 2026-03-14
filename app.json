@@ -42,9 +42,7 @@
           "instagram",
           "snapchat",
           "fb",
-          "facebook-stories",
-          "snssdk1233",
-          "tiktok"
+          "facebook-stories"
         ],
         "NSHealthShareUsageDescription": "PaceUp reads your workouts from Apple Health to import runs, rides, and walks tracked by your Apple Watch or other fitness apps.",
         "NSHealthUpdateUsageDescription": "PaceUp can save your activity data to Apple Health."

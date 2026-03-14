@@ -284,39 +284,6 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
     }
   }, [captureCard, fallbackShare, saveToLibraryQuietly]);
 
-  const shareToTikTok = useCallback(async () => {
-    setActiveAction("share");
-    try {
-      const uri = await captureCard();
-      if (!uri) return;
-      if (Platform.OS === "web") {
-        await fallbackShare(uri);
-        return;
-      }
-      const canOpen = await Linking.canOpenURL("snssdk1233://");
-      if (canOpen) {
-        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-        await Clipboard.setImageAsync(base64);
-        await saveToLibraryQuietly(uri);
-        await Linking.openURL("snssdk1233://");
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert("Ready to Share", "Your activity card has been copied and saved. Paste it into your TikTok post.");
-      } else {
-        Alert.alert("TikTok Not Found", "TikTok is not installed on this device.", [
-          { text: "Share Anyway", onPress: () => fallbackShare(uri) },
-          { text: "Cancel", style: "cancel" },
-        ]);
-      }
-    } catch (e: any) {
-      if (!e.message?.includes("cancel")) {
-        const uri = await captureCard();
-        await fallbackShare(uri);
-      }
-    } finally {
-      setActiveAction(null);
-    }
-  }, [captureCard, fallbackShare, saveToLibraryQuietly]);
-
   // ─── Pick background photo ─────────────────────────────────────────────────
 
   const handlePickPhoto = useCallback(async () => {
@@ -583,16 +550,6 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
                 <Text style={st.socialBtnLabel}>Facebook</Text>
               </Pressable>
 
-              <Pressable
-                style={({ pressed }) => [st.socialBtn, { opacity: pressed ? 0.7 : 1 }]}
-                onPress={shareToTikTok}
-                disabled={activeAction !== null}
-              >
-                <View style={[st.socialIconCircle, { backgroundColor: "#010101" }]}>
-                  <FontAwesome5 name="tiktok" size={16} color="#fff" />
-                </View>
-                <Text style={st.socialBtnLabel}>TikTok</Text>
-              </Pressable>
             </View>
           </View>
 
