@@ -9,6 +9,7 @@ import {
   Platform,
   ActivityIndicator,
   ScrollView,
+  Alert,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -116,6 +117,20 @@ export default function LoginScreen() {
               <Text style={styles.primaryBtnText}>Sign In</Text>
             )}
           </Pressable>
+
+          <Pressable
+            onPress={() => {
+              const msg = "To reset your password, please email us at support@paceupapp.com and we'll send you a reset link.";
+              if (Platform.OS === "web") {
+                window.alert(msg);
+              } else {
+                Alert.alert("Reset Password", msg, [{ text: "OK" }]);
+              }
+            }}
+            style={styles.forgotBtn}
+          >
+            <Text style={styles.forgotText}>Forgot password?</Text>
+          </Pressable>
         </View>
 
         <View style={styles.footer}>
@@ -187,6 +202,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   primaryBtnText: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.bg },
+  forgotBtn: { alignSelf: "center", paddingVertical: 8 },
+  forgotText: { fontFamily: "Outfit_400Regular", fontSize: 14, color: C.primary },
   footer: { flexDirection: "row", justifyContent: "center", marginTop: 32 },
   footerText: { fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textSecondary },
   footerLink: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.primary },

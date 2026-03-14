@@ -25,8 +25,10 @@ export default function RegisterScreen() {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [gender, setGender] = useState<string | null>(null);
   const [showPass, setShowPass] = useState(false);
+  const [showConfirmPass, setShowConfirmPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -35,8 +37,18 @@ export default function RegisterScreen() {
       setError("Please fill in all fields");
       return;
     }
+    const emailVal = email.trim();
+    const atIdx = emailVal.indexOf("@");
+    if (atIdx < 1 || emailVal.indexOf(".", atIdx) === -1) {
+      setError("Please enter a valid email address");
+      return;
+    }
     if (password.length < 6) {
       setError("Password must be at least 6 characters");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match");
       return;
     }
     if (!/^[^\s@]{2,30}$/.test(username.trim())) {
@@ -164,6 +176,24 @@ export default function RegisterScreen() {
           </View>
 
           <View style={styles.inputGroup}>
+            <Text style={styles.label}>Confirm Password</Text>
+            <View style={styles.inputWrap}>
+              <Feather name="lock" size={16} color={C.textMuted} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.input, { flex: 1 }]}
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                placeholder="Re-enter password"
+                placeholderTextColor={C.textMuted}
+                secureTextEntry={!showConfirmPass}
+              />
+              <Pressable onPress={() => setShowConfirmPass((v) => !v)} style={styles.eyeBtn}>
+                <Feather name={showConfirmPass ? "eye-off" : "eye"} size={16} color={C.textMuted} />
+              </Pressable>
+            </View>
+          </View>
+
+          <View style={styles.inputGroup}>
             <Text style={styles.label}>Gender (Optional)</Text>
             <View style={styles.genderRow}>
               {["Man", "Woman", "Prefer not to say"].map((g) => (
@@ -172,7 +202,7 @@ export default function RegisterScreen() {
                   style={[styles.genderChip, gender === g && styles.genderChipActive]}
                   onPress={() => {
                     Haptics.selectionAsync();
-                    setGender(g);
+                    setGender(gender === g ? null : g);
                   }}
                 >
                   <Text style={[styles.genderChipTxt, gender === g && styles.genderChipTxtActive]}>{g}</Text>
