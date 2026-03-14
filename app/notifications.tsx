@@ -92,6 +92,7 @@ const ICON_MAP: Record<string, { name: FeatherIconName; color: string; bg: strin
   host_arrived: { name: "map-pin", color: "#00D97E", bg: "#00D97E22" },
   friend_run_posted: { name: "activity", color: "#00D97E", bg: "#00D97E22" },
   pr_notification: { name: "award", color: "#F59E0B", bg: "#F59E0B22" },
+  milestone_achievement: { name: "star", color: "#F59E0B", bg: "#F59E0B22" },
 };
 
 const DEFAULT_ICON: { name: FeatherIconName; color: string; bg: string } = { name: "bell", color: "#999", bg: "#99999922" };

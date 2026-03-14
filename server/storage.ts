@@ -163,6 +163,7 @@ export async function initDb() {
     ALTER TABLE runs ADD COLUMN IF NOT EXISTS invite_password TEXT DEFAULT NULL;
 
     ALTER TABLE achievements ADD COLUMN IF NOT EXISTS slug VARCHAR DEFAULT NULL;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS notifications_read_at TIMESTAMP DEFAULT NULL;
 
     ALTER TABLE runs ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT false;
     ALTER TABLE runs ADD COLUMN IF NOT EXISTS started_at TIMESTAMP;
@@ -547,6 +548,16 @@ export async function getNotifications(userId: string) {
     [userId]
   );
 
+  const milestoneAchievements = await pool.query(
+    `SELECT a.id, a.milestone, a.slug, a.earned_at
+     FROM achievements a
+     WHERE a.user_id = $1
+       AND a.earned_at >= NOW() - INTERVAL '7 days'
+     ORDER BY a.earned_at DESC
+     LIMIT 10`,
+    [userId]
+  );
+
   const friendAccepted = await pool.query(
     `SELECT fr.id, 'friend_accepted' as type, u.name as friend_name, u.photo_url as friend_photo, u.id as friend_id, fr.accepted_at
      FROM friends fr
@@ -674,6 +685,14 @@ export async function getNotifications(userId: string) {
         created_at: r.created_at,
       };
     }),
+    ...milestoneAchievements.rows.map(r => ({
+      id: `ach_${r.id}`,
+      type: 'milestone_achievement',
+      title: 'Achievement Unlocked',
+      body: r.slug ? `You earned the "${r.slug}" achievement!` : `You reached milestone ${r.milestone}!`,
+      data: { achievement_id: r.id, milestone: r.milestone, slug: r.slug },
+      created_at: r.earned_at,
+    })),
     ...prRows.map(r => {
       const isPacePR = distPRs.rows.find((d: any) => d.id === r.id) == null;
       const isDistPR = distPRs.rows.find((d: any) => d.id === r.id) != null;
