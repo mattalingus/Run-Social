@@ -346,7 +346,7 @@ export default function RunDetailScreen() {
     if (liveTracking.phase !== "idle" || liveTracking.runId === id) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     Alert.alert(run.activity_type === "ride" ? "Ride started — let's go!" : run.activity_type === "walk" ? "Walk started — let's go!" : "Run started — let's go!");
-    liveTracking.startTracking(id, (run.activity_type ?? "run") as "run" | "ride");
+    liveTracking.startTracking(id, (run.activity_type ?? "run") as "run" | "ride" | "walk");
     liveTracking.minimize();
   }, [isLive]);
 

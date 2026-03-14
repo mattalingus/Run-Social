@@ -188,18 +188,16 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
       }
       const canOpen = await Linking.canOpenURL("instagram-stories://share");
       if (canOpen) {
-        const saved = await saveToLibraryQuietly(uri);
-        if (saved) {
-          try {
-            await Linking.openURL("instagram-stories://share");
-          } catch {
-            await Linking.openURL("instagram://camera");
-          }
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          Alert.alert("Image Saved", "Your activity card was saved. Select it from your camera roll in Instagram Stories.");
-        } else {
-          await fallbackShare(uri);
+        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        await Clipboard.setImageAsync(base64);
+        await saveToLibraryQuietly(uri);
+        try {
+          await Linking.openURL("instagram-stories://share");
+        } catch {
+          await Linking.openURL("instagram://camera");
         }
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Alert.alert("Ready to Share", "Your activity card has been copied. Paste it into your Instagram Story.");
       } else {
         Alert.alert("Instagram Not Found", "Instagram is not installed on this device.", [
           { text: "Share Anyway", onPress: () => fallbackShare(uri) },
@@ -227,14 +225,12 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
       }
       const canOpen = await Linking.canOpenURL("snapchat://");
       if (canOpen) {
-        const saved = await saveToLibraryQuietly(uri);
-        if (saved) {
-          await Linking.openURL("snapchat://");
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          Alert.alert("Image Saved", "Your activity card was saved. Select it from your camera roll in Snapchat.");
-        } else {
-          await fallbackShare(uri);
-        }
+        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        await Clipboard.setImageAsync(base64);
+        await saveToLibraryQuietly(uri);
+        await Linking.openURL("snapchat://");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Alert.alert("Ready to Share", "Your activity card has been copied and saved. Paste it into your Snapchat Snap.");
       } else {
         Alert.alert("Snapchat Not Found", "Snapchat is not installed on this device.", [
           { text: "Share Anyway", onPress: () => fallbackShare(uri) },
@@ -262,18 +258,16 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
       }
       const canOpen = await Linking.canOpenURL("fb://");
       if (canOpen) {
-        const saved = await saveToLibraryQuietly(uri);
-        if (saved) {
-          try {
-            await Linking.openURL("facebook-stories://share");
-          } catch {
-            await Linking.openURL("fb://");
-          }
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          Alert.alert("Image Saved", "Your activity card was saved. Select it from your camera roll in Facebook.");
-        } else {
-          await fallbackShare(uri);
+        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        await Clipboard.setImageAsync(base64);
+        await saveToLibraryQuietly(uri);
+        try {
+          await Linking.openURL("facebook-stories://share");
+        } catch {
+          await Linking.openURL("fb://");
         }
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Alert.alert("Ready to Share", "Your activity card has been copied and saved. Paste it into your Facebook Story.");
       } else {
         Alert.alert("Facebook Not Found", "Facebook is not installed on this device.", [
           { text: "Share Anyway", onPress: () => fallbackShare(uri) },
@@ -301,14 +295,12 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
       }
       const canOpen = await Linking.canOpenURL("snssdk1233://");
       if (canOpen) {
-        const saved = await saveToLibraryQuietly(uri);
-        if (saved) {
-          await Linking.openURL("snssdk1233://");
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          Alert.alert("Image Saved", "Your activity card was saved. Select it from your camera roll in TikTok.");
-        } else {
-          await fallbackShare(uri);
-        }
+        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        await Clipboard.setImageAsync(base64);
+        await saveToLibraryQuietly(uri);
+        await Linking.openURL("snssdk1233://");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Alert.alert("Ready to Share", "Your activity card has been copied and saved. Paste it into your TikTok post.");
       } else {
         Alert.alert("TikTok Not Found", "TikTok is not installed on this device.", [
           { text: "Share Anyway", onPress: () => fallbackShare(uri) },

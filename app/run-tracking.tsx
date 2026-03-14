@@ -117,7 +117,7 @@ function pickCoachPhrase(
   paceMinTotal: number,
   totalSeconds: number,
   prevPace: number | null,
-  activityType: "run" | "ride" = "run"
+  activityType: "run" | "ride" | "walk" = "run"
 ): string {
   const isRide = activityType === "ride";
   const pS = spokenPace(paceMinTotal);
