@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { Feather, FontAwesome5, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Notifications from "@/lib/safeNotifications";
 import * as ImagePicker from "expo-image-picker";
@@ -48,10 +48,13 @@ interface SoloRun {
   notes: string | null;
   route_path: Array<{ latitude: number; longitude: number }> | null;
   created_at: string;
-  activity_type: "run" | "ride";
+  activity_type: "run" | "ride" | "walk";
   is_starred: boolean;
   elevation_gain_ft: number | null;
   mile_splits: Array<{ label: string; paceMinPerMile: number; isPartial: boolean }> | null;
+  source?: string | null;
+  garmin_activity_id?: string | null;
+  apple_health_id?: string | null;
 }
 
 interface SavedPath {
@@ -1226,6 +1229,16 @@ export default function SoloScreen() {
                       <View style={{ flex: 1 }}>
                         <View style={s.historyTitleRow}>
                           <Text style={s.historyTitle} numberOfLines={1}>{label}</Text>
+                          {(run.source === "garmin" || run.garmin_activity_id) && (
+                            <View style={[s.sourceBadge, { backgroundColor: "#009CDE22" }]}>
+                              <FontAwesome5 name="satellite-dish" size={8} color="#009CDE" />
+                            </View>
+                          )}
+                          {(run.source === "apple_health" || run.apple_health_id) && (
+                            <View style={[s.sourceBadge, { backgroundColor: "#FF3B3022" }]}>
+                              <Ionicons name="heart" size={9} color="#FF3B30" />
+                            </View>
+                          )}
                           {badge && (
                             <Text style={s.historyBadge}>{RANK_EMOJI[badge.rank - 1]}</Text>
                           )}
@@ -1946,6 +1959,7 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   historyTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   historyTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text, flex: 1 },
   historyBadge: { fontSize: 14 },
+  sourceBadge: { width: 18, height: 18, borderRadius: 9, alignItems: "center" as const, justifyContent: "center" as const, marginLeft: 4 },
   historyMeta: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary, marginTop: 3 },
   historyRight: { flexDirection: "row", alignItems: "center", gap: 4 },
   historyDist: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.primary },

@@ -333,7 +333,10 @@ export async function initDb() {
     ALTER TABLE direct_messages ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT NULL;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS garmin_access_token TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS garmin_token_secret TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS apple_health_connected BOOLEAN DEFAULT false;
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS garmin_activity_id TEXT UNIQUE;
+    ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS apple_health_id TEXT UNIQUE;
+    ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'manual';
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS step_count INTEGER;
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS move_time_seconds INTEGER;
     ALTER TABLE crew_messages ALTER COLUMN user_id DROP NOT NULL;
@@ -1451,9 +1454,30 @@ export async function saveGarminActivity(userId: string, garminActivityId: strin
   );
   if (existing.rows.length > 0) return false;
   await pool.query(
-    `INSERT INTO solo_runs (user_id, garmin_activity_id, title, date, distance_miles, pace_min_per_mile, duration_seconds, activity_type, completed, planned)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, false)`,
+    `INSERT INTO solo_runs (user_id, garmin_activity_id, source, title, date, distance_miles, pace_min_per_mile, duration_seconds, activity_type, completed, planned)
+     VALUES ($1, $2, 'garmin', $3, $4, $5, $6, $7, $8, true, false)`,
     [userId, garminActivityId, data.title, data.date, data.distanceMiles, data.paceMinPerMile, data.durationSeconds, data.activityType]
+  );
+  return true;
+}
+
+export async function saveHealthKitActivity(userId: string, healthKitId: string, data: {
+  title: string;
+  date: Date;
+  distanceMiles: number;
+  paceMinPerMile: number | null;
+  durationSeconds: number | null;
+  activityType: string;
+}): Promise<boolean> {
+  const existing = await pool.query(
+    `SELECT id FROM solo_runs WHERE apple_health_id = $1`,
+    [healthKitId]
+  );
+  if (existing.rows.length > 0) return false;
+  await pool.query(
+    `INSERT INTO solo_runs (user_id, apple_health_id, source, title, date, distance_miles, pace_min_per_mile, duration_seconds, activity_type, completed, planned)
+     VALUES ($1, $2, 'apple_health', $3, $4, $5, $6, $7, $8, true, false)`,
+    [userId, healthKitId, data.title, data.date, data.distanceMiles, data.paceMinPerMile, data.durationSeconds, data.activityType]
   );
   return true;
 }

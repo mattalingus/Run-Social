@@ -157,7 +157,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/users/me", requireAuth, async (req, res) => {
     try {
-      const allowed = ["name", "avgPace", "avgDistance", "photoUrl", "notificationsEnabled", "distanceUnit", "profilePrivacy", "notifRunReminders", "notifFriendRequests", "notifCrewActivity", "notifWeeklySummary", "showRunRoutes", "gender"];
+      const allowed = ["name", "avgPace", "avgDistance", "photoUrl", "notificationsEnabled", "distanceUnit", "profilePrivacy", "notifRunReminders", "notifFriendRequests", "notifCrewActivity", "notifWeeklySummary", "showRunRoutes", "gender", "appleHealthConnected"];
       const updates: Record<string, any> = {};
       for (const key of allowed) {
         if (req.body[key] !== undefined) updates[key] = req.body[key];
@@ -2112,6 +2112,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       res.json({ imported, total: activities.length });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/health/import", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.user!.id;
+      const { workouts } = req.body;
+      if (!Array.isArray(workouts) || workouts.length === 0) {
+        return res.status(400).json({ message: "No workouts provided" });
+      }
+
+      let imported = 0;
+      for (const w of workouts) {
+        if (!w.id || !w.activityType || !w.startDate || !w.distanceMeters || !w.durationSeconds) continue;
+
+        const distMiles = w.distanceMeters / 1609.344;
+        const paceMinPerMile = w.durationSeconds > 0 && distMiles > 0
+          ? (w.durationSeconds / 60) / distMiles
+          : null;
+
+        const typeMap: Record<string, string> = { run: "run", ride: "ride", walk: "walk" };
+        const actType = typeMap[w.activityType] || "run";
+        const title = `${actType === "ride" ? "Ride" : actType === "walk" ? "Walk" : "Run"} via ${w.sourceName || "Apple Health"}`;
+
+        const wasNew = await storage.saveHealthKitActivity(userId, w.id, {
+          title,
+          date: new Date(w.startDate),
+          distanceMiles: Math.round(distMiles * 100) / 100,
+          paceMinPerMile: paceMinPerMile ? Math.round(paceMinPerMile * 100) / 100 : null,
+          durationSeconds: Math.round(w.durationSeconds),
+          activityType: actType,
+        });
+        if (wasNew) imported++;
+      }
+      res.json({ imported, total: workouts.length });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
   });
 
   app.post("/api/admin/seed-runs", requireAuth, async (req: any, res) => {

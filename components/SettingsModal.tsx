@@ -127,7 +127,7 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
   const showRunRoutes: boolean = (user as any)?.show_run_routes ?? true;
 
   const stravaConnected = !!(user as any)?.strava_id;
-  const appleHealthConnected = !!(user as any)?.apple_health_id;
+  const appleHealthConnected = !!(user as any)?.apple_health_connected;
 
   const { data: garminStatus, refetch: refetchGarmin } = useQuery<{ connected: boolean }>({
     queryKey: ["/api/garmin/status"],
@@ -169,18 +169,81 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
     );
   }
 
-  function handleConnectAppleHealth() {
+  const [healthSyncing, setHealthSyncing] = useState(false);
+  const [healthSyncMsg, setHealthSyncMsg] = useState<string | null>(null);
+
+  async function handleConnectAppleHealth() {
     if (Platform.OS !== "ios") {
       Alert.alert("Apple Health", "Apple Health is only available on iPhone.");
       return;
     }
-    Alert.alert(
-      appleHealthConnected ? "Disconnect Apple Health" : "Connect Apple Health",
-      appleHealthConnected
-        ? "Stop syncing workouts with Apple Health?"
-        : "Sync your PaceUp runs to Apple Health and get credit for your workouts. Full integration coming soon!",
-      [{ text: "Got it", style: "cancel" }]
-    );
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (appleHealthConnected) {
+      Alert.alert(
+        "Disconnect Apple Health",
+        "Stop syncing workouts with Apple Health? Your imported activities will remain.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Disconnect",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await apiRequest("PUT", "/api/users/me", { appleHealthConnected: false });
+                await refreshUser();
+                setHealthSyncMsg(null);
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              } catch (e: any) {
+                Alert.alert("Error", e.message || "Could not disconnect Apple Health.");
+              }
+            },
+          },
+        ]
+      );
+      return;
+    }
+    try {
+      const { requestHealthKitPermissions } = require("@/lib/healthKit");
+      const granted = await requestHealthKitPermissions();
+      if (!granted) {
+        Alert.alert("Permission Required", "Please allow PaceUp to access Apple Health in your device settings.");
+        return;
+      }
+      await apiRequest("PUT", "/api/users/me", { appleHealthConnected: true });
+      await refreshUser();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert("Connected!", "Apple Health is now connected. Tap Sync to import your workouts.");
+    } catch (e: any) {
+      Alert.alert("Apple Health", "Apple Health integration requires the latest app update from the App Store. Please update to enable this feature.");
+    }
+  }
+
+  async function handleHealthSync() {
+    if (healthSyncing) return;
+    setHealthSyncing(true);
+    setHealthSyncMsg(null);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      const { fetchWorkouts } = require("@/lib/healthKit");
+      const workouts = await fetchWorkouts(90);
+      if (workouts.length === 0) {
+        setHealthSyncMsg("No new workouts found.");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        return;
+      }
+      const resp = await apiRequest("POST", "/api/health/import", { workouts });
+      const msg = resp.imported > 0
+        ? `${resp.imported} new activit${resp.imported === 1 ? "y" : "ies"} imported!`
+        : "All activities already synced.";
+      setHealthSyncMsg(msg);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      qc.invalidateQueries({ queryKey: ["/api/solo-runs"] });
+    } catch (e: any) {
+      setHealthSyncMsg(`Sync failed: ${e.message}`);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setHealthSyncing(false);
+    }
   }
 
   async function handleConnectGarmin() {
@@ -536,16 +599,30 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
                   iconBg="#2A0A0A"
                   icon={<Ionicons name="heart" size={18} color="#FF3B30" />}
                   label="Apple Health"
-                  sublabel={appleHealthConnected ? "Connected" : "Sync workouts to Health app"}
+                  sublabel={appleHealthConnected ? (healthSyncMsg ?? "Connected — tap Sync to import workouts") : "Import runs, rides & walks from Health"}
                   right={
-                    <Pressable
-                      style={[st.connectBtn, { borderColor: appleHealthConnected ? "#FF3B30" : C.border, backgroundColor: appleHealthConnected ? "#FF3B3022" : C.surface }]}
-                      onPress={handleConnectAppleHealth}
-                    >
-                      <Text style={[st.connectBtnTxt, { color: appleHealthConnected ? "#FF3B30" : C.textSecondary }]}>
-                        {appleHealthConnected ? "Connected" : "Connect"}
-                      </Text>
-                    </Pressable>
+                    <View style={{ flexDirection: "row", gap: 8 }}>
+                      {appleHealthConnected && (
+                        <Pressable
+                          style={[st.connectBtn, { borderColor: "#FF3B30", backgroundColor: "#FF3B3022" }]}
+                          onPress={handleHealthSync}
+                          disabled={healthSyncing}
+                        >
+                          {healthSyncing
+                            ? <ActivityIndicator size="small" color="#FF3B30" />
+                            : <Text style={[st.connectBtnTxt, { color: "#FF3B30" }]}>Sync</Text>
+                          }
+                        </Pressable>
+                      )}
+                      <Pressable
+                        style={[st.connectBtn, { borderColor: appleHealthConnected ? "#FF4D4D" : C.border, backgroundColor: appleHealthConnected ? "#FF4D4D22" : C.surface }]}
+                        onPress={handleConnectAppleHealth}
+                      >
+                        <Text style={[st.connectBtnTxt, { color: appleHealthConnected ? "#FF4D4D" : C.textSecondary }]}>
+                          {appleHealthConnected ? "Disconnect" : "Connect"}
+                        </Text>
+                      </Pressable>
+                    </View>
                   }
                 />
                 <Divider C={C} />

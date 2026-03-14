@@ -32,6 +32,8 @@ The backend is an Express.js application written in TypeScript, using `tsx` for 
 9.  **Mile Splits:** Auto-recorded per-mile splits shown as a chart on the done screen and in run history.
 10. **Content Sharing:** Users can share run/ride activities via branded cards with optional photo backgrounds and captions, utilizing native sharing sheets. Screenshot detection triggers the share sheet automatically.
 11. **Garmin Connect OAuth:** Users can link their Garmin account from the profile screen.
+12. **Apple Health Integration:** Users can connect Apple Health from Settings to import runs, rides, and walks. The HealthKit module (`lib/healthKit.ts`) requests workout permissions and fetches activities. Backend endpoint `POST /api/health/import` deduplicates via `apple_health_id` on `solo_runs`. Requires native rebuild for HealthKit native module to function; frontend gracefully falls back with an "update required" message in Expo Go/web.
+13. **Activity Source Tracking:** `solo_runs.source` column tracks origin ('manual', 'garmin', 'apple_health'). Source badges (Garmin satellite dish / Apple Health heart) shown in solo history alongside run titles.
 
 ### Theming Pattern
 All screens use `useTheme()` → `const { C } = useTheme()` → `const s = useMemo(() => makeStyles(C), [C])` where `makeStyles` is a module-level function taking `ColorScheme`. The `constants/colors.ts` default export is `lightColors`; `darkColors` is the dark variant. Both are typed as `ColorScheme`.
