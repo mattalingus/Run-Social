@@ -10,15 +10,18 @@ import {
   ActivityIndicator,
   Platform,
   Alert,
+  Linking,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { Feather, Ionicons, FontAwesome5 } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import * as Sharing from "expo-sharing";
 import * as MediaLibrary from "expo-media-library";
 import * as Clipboard from "expo-clipboard";
+import * as FileSystem from "expo-file-system/legacy";
 import { captureRef } from "react-native-view-shot";
+import { LinearGradient } from "expo-linear-gradient";
 
 import ShareCard, { ShareCardProps } from "./ShareCard";
 
@@ -29,7 +32,7 @@ export interface ShareRunData {
   paceMinPerMile?: number | null;
   durationSeconds?: number | null;
   routePath?: { latitude: number; longitude: number }[];
-  activityType?: "run" | "ride" | string;
+  activityType?: "run" | "ride" | "walk" | string;
   participantCount?: number;
   finishRank?: number;
   eventTitle?: string;
@@ -154,6 +157,173 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
       setActiveAction(null);
     }
   }, [captureCard]);
+
+  // ─── Platform deep-link sharing ────────────────────────────────────────────
+
+  const fallbackShare = useCallback(async (uri: string | null) => {
+    if (!uri) return;
+    const canShare = await Sharing.isAvailableAsync();
+    if (canShare) await Sharing.shareAsync(uri, { mimeType: "image/jpeg", dialogTitle: "Share your activity" });
+  }, []);
+
+  const saveToLibraryQuietly = useCallback(async (uri: string): Promise<boolean> => {
+    try {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== "granted") return false;
+      await MediaLibrary.saveToLibraryAsync(uri);
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const shareToInstagram = useCallback(async () => {
+    setActiveAction("share");
+    try {
+      const uri = await captureCard();
+      if (!uri) return;
+      if (Platform.OS === "web") {
+        await fallbackShare(uri);
+        return;
+      }
+      const canOpen = await Linking.canOpenURL("instagram-stories://share");
+      if (canOpen) {
+        const saved = await saveToLibraryQuietly(uri);
+        if (saved) {
+          try {
+            await Linking.openURL("instagram-stories://share");
+          } catch {
+            await Linking.openURL("instagram://camera");
+          }
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          Alert.alert("Image Saved", "Your activity card was saved. Select it from your camera roll in Instagram Stories.");
+        } else {
+          await fallbackShare(uri);
+        }
+      } else {
+        Alert.alert("Instagram Not Found", "Instagram is not installed on this device.", [
+          { text: "Share Anyway", onPress: () => fallbackShare(uri) },
+          { text: "Cancel", style: "cancel" },
+        ]);
+      }
+    } catch (e: any) {
+      if (!e.message?.includes("cancel")) {
+        const uri = await captureCard();
+        await fallbackShare(uri);
+      }
+    } finally {
+      setActiveAction(null);
+    }
+  }, [captureCard, fallbackShare, saveToLibraryQuietly]);
+
+  const shareToSnapchat = useCallback(async () => {
+    setActiveAction("share");
+    try {
+      const uri = await captureCard();
+      if (!uri) return;
+      if (Platform.OS === "web") {
+        await fallbackShare(uri);
+        return;
+      }
+      const canOpen = await Linking.canOpenURL("snapchat://");
+      if (canOpen) {
+        const saved = await saveToLibraryQuietly(uri);
+        if (saved) {
+          await Linking.openURL("snapchat://");
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          Alert.alert("Image Saved", "Your activity card was saved. Select it from your camera roll in Snapchat.");
+        } else {
+          await fallbackShare(uri);
+        }
+      } else {
+        Alert.alert("Snapchat Not Found", "Snapchat is not installed on this device.", [
+          { text: "Share Anyway", onPress: () => fallbackShare(uri) },
+          { text: "Cancel", style: "cancel" },
+        ]);
+      }
+    } catch (e: any) {
+      if (!e.message?.includes("cancel")) {
+        const uri = await captureCard();
+        await fallbackShare(uri);
+      }
+    } finally {
+      setActiveAction(null);
+    }
+  }, [captureCard, fallbackShare, saveToLibraryQuietly]);
+
+  const shareToFacebook = useCallback(async () => {
+    setActiveAction("share");
+    try {
+      const uri = await captureCard();
+      if (!uri) return;
+      if (Platform.OS === "web") {
+        await fallbackShare(uri);
+        return;
+      }
+      const canOpen = await Linking.canOpenURL("fb://");
+      if (canOpen) {
+        const saved = await saveToLibraryQuietly(uri);
+        if (saved) {
+          try {
+            await Linking.openURL("facebook-stories://share");
+          } catch {
+            await Linking.openURL("fb://");
+          }
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          Alert.alert("Image Saved", "Your activity card was saved. Select it from your camera roll in Facebook.");
+        } else {
+          await fallbackShare(uri);
+        }
+      } else {
+        Alert.alert("Facebook Not Found", "Facebook is not installed on this device.", [
+          { text: "Share Anyway", onPress: () => fallbackShare(uri) },
+          { text: "Cancel", style: "cancel" },
+        ]);
+      }
+    } catch (e: any) {
+      if (!e.message?.includes("cancel")) {
+        const uri = await captureCard();
+        await fallbackShare(uri);
+      }
+    } finally {
+      setActiveAction(null);
+    }
+  }, [captureCard, fallbackShare, saveToLibraryQuietly]);
+
+  const shareToTikTok = useCallback(async () => {
+    setActiveAction("share");
+    try {
+      const uri = await captureCard();
+      if (!uri) return;
+      if (Platform.OS === "web") {
+        await fallbackShare(uri);
+        return;
+      }
+      const canOpen = await Linking.canOpenURL("snssdk1233://");
+      if (canOpen) {
+        const saved = await saveToLibraryQuietly(uri);
+        if (saved) {
+          await Linking.openURL("snssdk1233://");
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          Alert.alert("Image Saved", "Your activity card was saved. Select it from your camera roll in TikTok.");
+        } else {
+          await fallbackShare(uri);
+        }
+      } else {
+        Alert.alert("TikTok Not Found", "TikTok is not installed on this device.", [
+          { text: "Share Anyway", onPress: () => fallbackShare(uri) },
+          { text: "Cancel", style: "cancel" },
+        ]);
+      }
+    } catch (e: any) {
+      if (!e.message?.includes("cancel")) {
+        const uri = await captureCard();
+        await fallbackShare(uri);
+      }
+    } finally {
+      setActiveAction(null);
+    }
+  }, [captureCard, fallbackShare, saveToLibraryQuietly]);
 
   // ─── Pick background photo ─────────────────────────────────────────────────
 
@@ -379,12 +549,67 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
             </>
           )}
 
+          {/* ── Social platform buttons ──────────────────────────────────── */}
+          <View style={st.socialRow}>
+            <Text style={st.socialLabel}>Share to</Text>
+            <View style={st.socialIcons}>
+              <Pressable
+                style={({ pressed }) => [st.socialBtn, { opacity: pressed ? 0.7 : 1 }]}
+                onPress={shareToInstagram}
+                disabled={activeAction !== null}
+              >
+                <LinearGradient
+                  colors={["#F58529", "#DD2A7B", "#8134AF", "#515BD4"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={st.socialIconCircle}
+                >
+                  <FontAwesome5 name="instagram" size={18} color="#fff" />
+                </LinearGradient>
+                <Text style={st.socialBtnLabel}>Instagram</Text>
+              </Pressable>
+
+              <Pressable
+                style={({ pressed }) => [st.socialBtn, { opacity: pressed ? 0.7 : 1 }]}
+                onPress={shareToSnapchat}
+                disabled={activeAction !== null}
+              >
+                <View style={[st.socialIconCircle, { backgroundColor: "#FFFC00" }]}>
+                  <FontAwesome5 name="snapchat-ghost" size={18} color="#000" />
+                </View>
+                <Text style={st.socialBtnLabel}>Snapchat</Text>
+              </Pressable>
+
+              <Pressable
+                style={({ pressed }) => [st.socialBtn, { opacity: pressed ? 0.7 : 1 }]}
+                onPress={shareToFacebook}
+                disabled={activeAction !== null}
+              >
+                <View style={[st.socialIconCircle, { backgroundColor: "#1877F2" }]}>
+                  <FontAwesome5 name="facebook-f" size={18} color="#fff" />
+                </View>
+                <Text style={st.socialBtnLabel}>Facebook</Text>
+              </Pressable>
+
+              <Pressable
+                style={({ pressed }) => [st.socialBtn, { opacity: pressed ? 0.7 : 1 }]}
+                onPress={shareToTikTok}
+                disabled={activeAction !== null}
+              >
+                <View style={[st.socialIconCircle, { backgroundColor: "#010101" }]}>
+                  <FontAwesome5 name="tiktok" size={16} color="#fff" />
+                </View>
+                <Text style={st.socialBtnLabel}>TikTok</Text>
+              </Pressable>
+            </View>
+          </View>
+
           {/* ── Share action row ──────────────────────────────────────────── */}
           <View style={st.actionsRow}>
             <ActionBtn
               action="share"
               icon="share-2"
-              label="Share"
+              label="More"
               color={PRIMARY}
               onPress={handleShare}
             />
@@ -403,11 +628,6 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
               onPress={handleCopy}
             />
           </View>
-
-          {/* ── Social hint ───────────────────────────────────────────────── */}
-          <Text style={st.hint}>
-            Tap Share to post to Instagram Stories, Snapchat, and more
-          </Text>
         </ScrollView>
       </View>
     </Modal>
@@ -579,13 +799,37 @@ const st = StyleSheet.create({
     color: PRIMARY,
   },
 
-  // Hint
-  hint: {
+  // Social platform row
+  socialRow: {
+    width: "100%",
+    alignItems: "center",
+    gap: 12,
+  },
+  socialLabel: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 13,
+    color: TEXT_SEC,
+    letterSpacing: 0.5,
+  },
+  socialIcons: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 16,
+  },
+  socialBtn: {
+    alignItems: "center",
+    gap: 6,
+  },
+  socialIconCircle: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  socialBtnLabel: {
     fontFamily: "Outfit_400Regular",
-    fontSize: 12,
-    color: TEXT_MUTED,
-    textAlign: "center",
-    lineHeight: 17,
-    paddingHorizontal: 20,
+    fontSize: 10,
+    color: TEXT_SEC,
   },
 });

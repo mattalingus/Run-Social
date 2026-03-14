@@ -113,7 +113,7 @@ export interface ShareCardProps {
   paceMinPerMile?: number | null;
   durationSeconds?: number | null;
   routePath?: { latitude: number; longitude: number }[];
-  activityType?: "run" | "ride" | string;
+  activityType?: "run" | "ride" | "walk" | string;
   participantCount?: number;
   finishRank?: number;
   eventTitle?: string;
@@ -256,6 +256,10 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
   const hasRoute = routePath.length >= 2;
   const isGroup = participantCount != null && participantCount > 1;
   const isRide = activityType === "ride";
+  const isWalk = activityType === "walk";
+  const actIcon: any = isRide ? "bicycle" : isWalk ? "footsteps" : "walk";
+  const actLabel = isRide ? "Ride" : isWalk ? "Walk" : "Run";
+  const actParticipants = isRide ? "Riders" : isWalk ? "Walkers" : "Runners";
 
   // ── Standard SVG (route panel height) ──────────────────────────────────────
   const svgPoints = hasRoute ? normalizePath(routePath, CARD_W, ROUTE_H) : "";
@@ -269,8 +273,8 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
     <View style={s.headerRow}>
       <Text style={s.logo}>PaceUp</Text>
       <View style={s.actPill}>
-        <Ionicons name={isRide ? "bicycle" : "walk"} size={11} color={PRIMARY} style={{ marginRight: 4 }} />
-        <Text style={s.actPillTxt}>{isRide ? "Ride" : "Run"}</Text>
+        <Ionicons name={actIcon} size={11} color={PRIMARY} style={{ marginRight: 4 }} />
+        <Text style={s.actPillTxt}>{actLabel}</Text>
       </View>
     </View>
   );
@@ -333,8 +337,8 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
         <View style={s.photoHeaderRow}>
           <Text style={s.logo}>PaceUp</Text>
           <View style={s.actPill}>
-            <Ionicons name={isRide ? "bicycle" : "walk"} size={11} color={PRIMARY} style={{ marginRight: 4 }} />
-            <Text style={s.actPillTxt}>{isRide ? "Ride" : "Run"}</Text>
+            <Ionicons name={actIcon} size={11} color={PRIMARY} style={{ marginRight: 4 }} />
+            <Text style={s.actPillTxt}>{actLabel}</Text>
           </View>
         </View>
 
@@ -345,7 +349,7 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
             <View style={[s.groupRow, { paddingHorizontal: 22, paddingBottom: 8 }]}>
               <View style={s.groupPill}>
                 <Ionicons name="people" size={13} color={GOLD} style={{ marginRight: 5 }} />
-                <Text style={s.groupPillTxt}>{participantCount} {isRide ? "Riders" : "Runners"}</Text>
+                <Text style={s.groupPillTxt}>{participantCount} {actParticipants}</Text>
               </View>
               {finishRank != null && (
                 <View style={s.rankPill}>
@@ -406,8 +410,8 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
         <View style={s.photoHeaderRow}>
           <Text style={s.logo}>PaceUp</Text>
           <View style={s.actPill}>
-            <Ionicons name={isRide ? "bicycle" : "walk"} size={11} color={PRIMARY} style={{ marginRight: 4 }} />
-            <Text style={s.actPillTxt}>{isRide ? "Ride" : "Run"}</Text>
+            <Ionicons name={actIcon} size={11} color={PRIMARY} style={{ marginRight: 4 }} />
+            <Text style={s.actPillTxt}>{actLabel}</Text>
           </View>
         </View>
 
@@ -416,7 +420,7 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
             <View style={[s.groupRow, { paddingHorizontal: 22, paddingBottom: 8 }]}>
               <View style={s.groupPill}>
                 <Ionicons name="people" size={13} color={GOLD} style={{ marginRight: 5 }} />
-                <Text style={s.groupPillTxt}>{participantCount} {isRide ? "Riders" : "Runners"}</Text>
+                <Text style={s.groupPillTxt}>{participantCount} {actParticipants}</Text>
               </View>
               {finishRank != null && (
                 <View style={s.rankPill}>
@@ -524,7 +528,7 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
         <View style={s.groupRow}>
           <View style={s.groupPill}>
             <Ionicons name="people" size={13} color={GOLD} style={{ marginRight: 5 }} />
-            <Text style={s.groupPillTxt}>{participantCount} {isRide ? "Riders" : "Runners"}</Text>
+            <Text style={s.groupPillTxt}>{participantCount} {actParticipants}</Text>
           </View>
           {finishRank != null && (
             <View style={s.rankPill}>
