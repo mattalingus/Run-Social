@@ -24,6 +24,7 @@ import { captureRef } from "react-native-view-shot";
 import { LinearGradient } from "expo-linear-gradient";
 
 import ShareCard, { ShareCardProps } from "./ShareCard";
+import { useTheme } from "@/contexts/ThemeContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -63,6 +64,7 @@ const GOLD = "#FFB800";
 
 export default function ShareActivityModal({ visible, onClose, runData, eventPhotos = [] }: Props) {
   const insets = useSafeAreaInsets();
+  const { C } = useTheme();
   const cardRef = useRef<View>(null);
 
   const [caption, setCaption] = useState("");
@@ -71,6 +73,18 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
   const [activeAction, setActiveAction] = useState<ActiveAction>(null);
   const [captionFont, setCaptionFont] = useState<"Outfit_700Bold" | "PlayfairDisplay_700Bold" | "DancingScript_700Bold">("Outfit_700Bold");
   const [captionSize, setCaptionSize] = useState<20 | 32 | 46>(32);
+  const [transparentMode, setTransparentMode] = useState(false);
+  const [layoutIndex, setLayoutIndex] = useState(0);
+
+  const themeBg = C.bg;
+  const themeSurface = C.surface;
+  const themeText = C.text;
+  const themeTextSec = C.textSecondary;
+  const themeTextMuted = C.textMuted;
+  const themeBorder = C.border;
+
+  const isGroupRun = (runData.participantCount ?? 1) > 1;
+  const hasGroupPhotos = isGroupRun && eventPhotos.length >= 2;
 
   // ─── Capture card as image ─────────────────────────────────────────────────
 
@@ -78,7 +92,7 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
     if (!cardRef.current) return null;
     try {
       const uri = await captureRef(cardRef, {
-        format: "jpg",
+        format: transparentMode ? "png" : "jpg",
         quality: 0.95,
         result: "tmpfile",
       });
@@ -87,7 +101,7 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
       Alert.alert("Capture failed", e.message || "Could not capture the card");
       return null;
     }
-  }, []);
+  }, [transparentMode]);
 
   // ─── Share to socials ──────────────────────────────────────────────────────
 
@@ -101,7 +115,8 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
         Alert.alert("Sharing not available", "Your device does not support sharing.");
         return;
       }
-      await Sharing.shareAsync(uri, { mimeType: "image/jpeg", dialogTitle: "Share your activity" });
+      const mime = transparentMode ? "image/png" : "image/jpeg";
+      await Sharing.shareAsync(uri, { mimeType: mime, dialogTitle: "Share your activity" });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e: any) {
       if (!e.message?.includes("cancel")) {
@@ -110,7 +125,7 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
     } finally {
       setActiveAction(null);
     }
-  }, [captureCard]);
+  }, [captureCard, transparentMode]);
 
   // ─── Save to camera roll ───────────────────────────────────────────────────
 
@@ -149,7 +164,8 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
       } else {
         // Fallback: share with copy intent
         const canShare = await Sharing.isAvailableAsync();
-        if (canShare) await Sharing.shareAsync(uri, { mimeType: "image/jpeg" });
+        const mime = transparentMode ? "image/png" : "image/jpeg";
+        if (canShare) await Sharing.shareAsync(uri, { mimeType: mime });
       }
     } catch (e: any) {
       Alert.alert("Copy failed", e.message || "Could not copy the image");
@@ -163,8 +179,9 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
   const fallbackShare = useCallback(async (uri: string | null) => {
     if (!uri) return;
     const canShare = await Sharing.isAvailableAsync();
-    if (canShare) await Sharing.shareAsync(uri, { mimeType: "image/jpeg", dialogTitle: "Share your activity" });
-  }, []);
+    const mime = transparentMode ? "image/png" : "image/jpeg";
+    if (canShare) await Sharing.shareAsync(uri, { mimeType: mime, dialogTitle: "Share your activity" });
+  }, [transparentMode]);
 
   const saveToLibraryQuietly = useCallback(async (uri: string): Promise<boolean> => {
     try {
@@ -313,11 +330,18 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
 
   // ─── Action button helper ──────────────────────────────────────────────────
 
+  const handleCardTap = useCallback(() => {
+    if (!backgroundPhoto && !collageMode && !transparentMode) {
+      setLayoutIndex((prev) => (prev + 1) % 4);
+      Haptics.selectionAsync();
+    }
+  }, [backgroundPhoto, collageMode, transparentMode]);
+
   function ActionBtn({
     action,
     icon,
     label,
-    color = TEXT,
+    color = themeText,
     onPress,
   }: {
     action: ActiveAction;
@@ -340,7 +364,7 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
         {isLoading ? (
           <ActivityIndicator size="small" color={color} />
         ) : (
-          <View style={[st.actionIconWrap, { borderColor: color + "44" }]}>
+          <View style={[st.actionIconWrap, { borderColor: color + "44", backgroundColor: themeSurface }]}>
             <Feather name={icon as any} size={20} color={color} />
           </View>
         )}
@@ -354,10 +378,12 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
   const cardProps: ShareCardProps = {
     ...runData,
     caption,
-    backgroundPhoto,
-    collagePhotos: collageMode ? eventPhotos : undefined,
+    backgroundPhoto: transparentMode ? null : backgroundPhoto,
+    collagePhotos: collageMode && !transparentMode ? eventPhotos : undefined,
     captionFont,
     captionSize,
+    transparentMode,
+    layoutIndex,
   };
 
   return (
@@ -368,13 +394,13 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <View style={st.container}>
+      <View style={[st.container, { backgroundColor: themeBg }]}>
         {/* ── Header ───────────────────────────────────────────────────────── */}
-        <View style={[st.header, { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 16) }]}>
+        <View style={[st.header, { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 16), borderBottomColor: themeBorder }]}>
           <View style={{ width: 40 }} />
-          <Text style={st.headerTitle}>Share Activity</Text>
-          <Pressable onPress={onClose} hitSlop={12} style={st.closeBtn}>
-            <Feather name="x" size={20} color={TEXT_SEC} />
+          <Text style={[st.headerTitle, { color: themeText }]}>Share Activity</Text>
+          <Pressable onPress={onClose} hitSlop={12} style={[st.closeBtn, { backgroundColor: themeSurface, borderColor: themeBorder }]}>
+            <Feather name="x" size={20} color={themeTextSec} />
           </Pressable>
         </View>
 
@@ -384,66 +410,94 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
           keyboardShouldPersistTaps="handled"
         >
           {/* ── Card preview ─────────────────────────────────────────────── */}
-          <View style={st.cardWrapper}>
+          <Pressable onPress={handleCardTap} style={st.cardWrapper}>
             <View style={st.cardGlow} />
             <ShareCard ref={cardRef} {...cardProps} />
-          </View>
+          </Pressable>
 
           {/* ── Photo background controls ─────────────────────────────────── */}
           <View style={st.photoRow}>
             <Pressable
-              style={({ pressed }) => [st.photoBtn, backgroundPhoto && st.photoBtnActive, { opacity: pressed ? 0.7 : (collageMode ? 0.4 : 1) }]}
+              style={({ pressed }) => [st.photoBtn, { backgroundColor: themeSurface, borderColor: themeBorder }, backgroundPhoto && st.photoBtnActive, { opacity: pressed ? 0.7 : (collageMode || transparentMode ? 0.4 : 1) }]}
               onPress={() => {
-                if (collageMode) return;
+                if (collageMode || transparentMode) return;
                 if (backgroundPhoto) {
                   handleRemovePhoto();
                 } else {
                   handlePickPhoto();
                 }
               }}
-              disabled={collageMode}
+              disabled={collageMode || transparentMode}
             >
               <Ionicons
                 name={backgroundPhoto ? "image" : "image-outline"}
                 size={15}
-                color={backgroundPhoto ? PRIMARY : TEXT_SEC}
+                color={backgroundPhoto ? PRIMARY : themeTextSec}
                 style={{ marginRight: 6 }}
               />
-              <Text style={[st.photoBtnTxt, backgroundPhoto && { color: PRIMARY }]}>
+              <Text style={[st.photoBtnTxt, { color: themeTextSec }, backgroundPhoto && { color: PRIMARY }]}>
                 {backgroundPhoto ? "Remove Photo" : "Background Photo"}
               </Text>
             </Pressable>
 
+            {hasGroupPhotos && (
+              <Pressable
+                style={({ pressed }) => [
+                  st.photoBtn,
+                  { backgroundColor: themeSurface, borderColor: themeBorder },
+                  collageMode && st.photoBtnActive,
+                  { opacity: pressed ? 0.7 : (backgroundPhoto || transparentMode ? 0.4 : 1) },
+                ]}
+                onPress={() => {
+                  if (backgroundPhoto || transparentMode) return;
+                  setCollageMode((prev) => !prev);
+                }}
+                disabled={!!backgroundPhoto || transparentMode}
+              >
+                <Ionicons
+                  name={collageMode ? "grid" : "grid-outline"}
+                  size={15}
+                  color={collageMode ? PRIMARY : themeTextSec}
+                  style={{ marginRight: 6 }}
+                />
+                <Text style={[st.photoBtnTxt, { color: themeTextSec }, collageMode && { color: PRIMARY }]}>
+                  Collage ({eventPhotos.length})
+                </Text>
+              </Pressable>
+            )}
+
             <Pressable
               style={({ pressed }) => [
                 st.photoBtn,
-                collageMode && st.photoBtnActive,
-                { opacity: pressed ? 0.7 : (backgroundPhoto || eventPhotos.length === 0 ? 0.4 : 1) },
+                { backgroundColor: themeSurface, borderColor: themeBorder },
+                transparentMode && st.photoBtnActive,
+                { opacity: pressed ? 0.7 : (backgroundPhoto || collageMode ? 0.4 : 1) },
               ]}
               onPress={() => {
-                if (backgroundPhoto || eventPhotos.length === 0) return;
-                setCollageMode((prev) => !prev);
+                if (backgroundPhoto || collageMode) return;
+                setTransparentMode((prev) => !prev);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               }}
-              disabled={!!backgroundPhoto || eventPhotos.length === 0}
+              disabled={!!backgroundPhoto || collageMode}
             >
               <Ionicons
-                name={collageMode ? "grid" : "grid-outline"}
+                name={transparentMode ? "layers" : "layers-outline"}
                 size={15}
-                color={collageMode ? PRIMARY : TEXT_SEC}
+                color={transparentMode ? PRIMARY : themeTextSec}
                 style={{ marginRight: 6 }}
               />
-              <Text style={[st.photoBtnTxt, collageMode && { color: PRIMARY }]}>
-                Collage{eventPhotos.length > 0 ? ` (${eventPhotos.length})` : ""}
+              <Text style={[st.photoBtnTxt, { color: themeTextSec }, transparentMode && { color: PRIMARY }]}>
+                Transparent
               </Text>
             </Pressable>
           </View>
 
           {/* ── Caption input ─────────────────────────────────────────────── */}
-          <View style={st.captionWrap}>
+          <View style={[st.captionWrap, { backgroundColor: themeSurface, borderColor: themeBorder }]}>
             <TextInput
-              style={[st.captionInput, { fontFamily: captionFont, fontStyle: captionFont === "DancingScript_700Bold" ? "normal" : "italic" }]}
+              style={[st.captionInput, { fontFamily: captionFont, fontStyle: captionFont === "DancingScript_700Bold" ? "normal" : "italic", color: themeText }]}
               placeholder="Add a caption…"
-              placeholderTextColor={TEXT_MUTED}
+              placeholderTextColor={themeTextMuted}
               value={caption}
               onChangeText={setCaption}
               multiline
@@ -451,7 +505,7 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
               returnKeyType="done"
             />
             {caption.length > 0 && (
-              <Text style={st.captionCount}>{160 - caption.length}</Text>
+              <Text style={[st.captionCount, { color: themeTextMuted }]}>{160 - caption.length}</Text>
             )}
           </View>
 
@@ -471,10 +525,10 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
                   return (
                     <Pressable
                       key={key}
-                      style={[st.fontPill, active && st.fontPillActive]}
+                      style={[st.fontPill, { backgroundColor: themeSurface, borderColor: themeBorder }, active && st.fontPillActive]}
                       onPress={() => { setCaptionFont(key); Haptics.selectionAsync(); }}
                     >
-                      <Text style={[st.fontPillTxt, { fontFamily: key }, active && st.fontPillTxtActive]}>
+                      <Text style={[st.fontPillTxt, { fontFamily: key, color: themeTextSec }, active && st.fontPillTxtActive]}>
                         {label}
                       </Text>
                     </Pressable>
@@ -495,10 +549,10 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
                   return (
                     <Pressable
                       key={size}
-                      style={[st.fontPill, active && st.fontPillActive]}
+                      style={[st.fontPill, { backgroundColor: themeSurface, borderColor: themeBorder }, active && st.fontPillActive]}
                       onPress={() => { setCaptionSize(size); Haptics.selectionAsync(); }}
                     >
-                      <Text style={[st.fontPillTxt, { fontSize: display, fontFamily: captionFont }, active && st.fontPillTxtActive]}>
+                      <Text style={[st.fontPillTxt, { fontSize: display, fontFamily: captionFont, color: themeTextSec }, active && st.fontPillTxtActive]}>
                         {label}
                       </Text>
                     </Pressable>
@@ -510,7 +564,7 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
 
           {/* ── Social platform buttons ──────────────────────────────────── */}
           <View style={st.socialRow}>
-            <Text style={st.socialLabel}>Share to</Text>
+            <Text style={[st.socialLabel, { color: themeTextSec }]}>Share to</Text>
             <View style={st.socialIcons}>
               <Pressable
                 style={({ pressed }) => [st.socialBtn, { opacity: pressed ? 0.7 : 1 }]}
@@ -525,7 +579,7 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
                 >
                   <FontAwesome5 name="instagram" size={18} color="#fff" />
                 </LinearGradient>
-                <Text style={st.socialBtnLabel}>Instagram</Text>
+                <Text style={[st.socialBtnLabel, { color: themeTextSec }]}>Instagram</Text>
               </Pressable>
 
               <Pressable
@@ -536,7 +590,7 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
                 <View style={[st.socialIconCircle, { backgroundColor: "#FFFC00" }]}>
                   <FontAwesome5 name="snapchat-ghost" size={18} color="#000" />
                 </View>
-                <Text style={st.socialBtnLabel}>Snapchat</Text>
+                <Text style={[st.socialBtnLabel, { color: themeTextSec }]}>Snapchat</Text>
               </Pressable>
 
               <Pressable
@@ -547,7 +601,7 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
                 <View style={[st.socialIconCircle, { backgroundColor: "#1877F2" }]}>
                   <FontAwesome5 name="facebook-f" size={18} color="#fff" />
                 </View>
-                <Text style={st.socialBtnLabel}>Facebook</Text>
+                <Text style={[st.socialBtnLabel, { color: themeTextSec }]}>Facebook</Text>
               </Pressable>
 
             </View>
@@ -566,14 +620,14 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
               action="save"
               icon="download"
               label="Save"
-              color={TEXT}
+              color={themeText}
               onPress={handleSave}
             />
             <ActionBtn
               action="copy"
               icon="copy"
               label="Copy"
-              color={TEXT}
+              color={themeText}
               onPress={handleCopy}
             />
           </View>
@@ -629,9 +683,9 @@ const st = StyleSheet.create({
     borderRadius: 20,
     shadowColor: PRIMARY,
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.25,
-    shadowRadius: 24,
-    elevation: 12,
+    shadowOpacity: 0.10,
+    shadowRadius: 12,
+    elevation: 6,
   },
   cardGlow: {
     ...StyleSheet.absoluteFillObject,

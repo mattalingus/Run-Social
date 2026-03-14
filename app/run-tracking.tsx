@@ -516,7 +516,8 @@ export default function RunTrackingScreen() {
   const lastSplitMileRef = useRef(0);
   // New stat tracking refs
   const elevationGainRef = useRef(0);
-  const lastAltitudeRef = useRef<number | null>(null);
+  const altitudeBufferRef = useRef<number[]>([]);
+  const lastSmoothedAltRef = useRef<number | null>(null);
   const moveTimeRef = useRef(0);
   const lastMoveTimestampRef = useRef<number | null>(null);
   const stepCountRef = useRef(0);
@@ -609,15 +610,25 @@ export default function RunTrackingScreen() {
     }
     setIsDriving(false);
 
-    // Elevation gain: accumulate positive altitude deltas (filter noise < 0.3 m ≈ 1 ft)
     if (altitude != null && Platform.OS !== "web") {
-      if (lastAltitudeRef.current != null) {
-        const deltaM = altitude - lastAltitudeRef.current;
-        if (deltaM > 0.3) {
-          elevationGainRef.current += deltaM * 3.28084; // convert meters to feet
+      altitudeBufferRef.current.push(altitude);
+      if (altitudeBufferRef.current.length > 5) {
+        altitudeBufferRef.current.shift();
+      }
+      if (altitudeBufferRef.current.length === 5) {
+        const smoothed = altitudeBufferRef.current.reduce((a, b) => a + b, 0) / 5;
+        if (lastSmoothedAltRef.current != null) {
+          const deltaM = smoothed - lastSmoothedAltRef.current;
+          if (deltaM > 0.6) {
+            elevationGainRef.current += deltaM * 3.28084;
+            lastSmoothedAltRef.current = smoothed;
+          } else if (deltaM < -0.6) {
+            lastSmoothedAltRef.current = smoothed;
+          }
+        } else {
+          lastSmoothedAltRef.current = smoothed;
         }
       }
-      lastAltitudeRef.current = altitude;
     }
 
     // Move time: accumulate when actively moving (speed > 0.5 m/s ≈ 1.1 mph)
@@ -784,7 +795,8 @@ export default function RunTrackingScreen() {
     setMileSplits([]);
     // Reset new stat refs
     elevationGainRef.current = 0;
-    lastAltitudeRef.current = null;
+    altitudeBufferRef.current = [];
+    lastSmoothedAltRef.current = null;
     moveTimeRef.current = 0;
     lastMoveTimestampRef.current = null;
     stepCountRef.current = 0;

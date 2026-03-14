@@ -122,6 +122,8 @@ export interface ShareCardProps {
   collagePhotos?: string[];
   captionFont?: string;
   captionSize?: number;
+  transparentMode?: boolean;
+  layoutIndex?: number;
 }
 
 // ─── Collage background — adapts to photo count ───────────────────────────────
@@ -250,6 +252,8 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
     collagePhotos,
     captionFont = "Outfit_700Bold",
     captionSize = 32,
+    transparentMode = false,
+    layoutIndex = 0,
   },
   ref
 ) {
@@ -261,11 +265,6 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
   const actLabel = isRide ? "Ride" : isWalk ? "Walk" : "Run";
   const actParticipants = isRide ? "Riders" : isWalk ? "Walkers" : "Runners";
 
-  // ── Standard SVG (route panel height) ──────────────────────────────────────
-  const svgPoints = hasRoute ? normalizePath(routePath, CARD_W, ROUTE_H) : "";
-  const endPts = hasRoute ? getEndPoints(routePath, CARD_W, ROUTE_H) : null;
-
-  // ── Photo-mode SVG (full card height, faint overlay) ───────────────────────
   const svgPointsFull = hasRoute ? normalizePath(routePath, CARD_W, CARD_H) : "";
 
   // ── Shared sub-components ──────────────────────────────────────────────────
@@ -457,98 +456,196 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
     );
   }
 
-  // ── STANDARD MODE (no photo) ───────────────────────────────────────────────
-  return (
-    <View ref={ref} style={s.card}>
-      {HeaderRow}
-
-      {/* ── Route panel ──────────────────────────────────────────────────── */}
-      <View style={s.routePanel}>
-        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: CARD_BG }]} />
-
-        {/* Grid lines */}
-        <View style={[StyleSheet.absoluteFillObject, s.gridContainer]}>
-          {[0.25, 0.5, 0.75].map((f) => (
-            <View key={f} style={[s.gridLine, { top: `${f * 100}%` as any }]} />
-          ))}
-          {[0.25, 0.5, 0.75].map((f) => (
-            <View key={f} style={[s.gridLineV, { left: `${f * 100}%` as any }]} />
-          ))}
-        </View>
-
-        {/* SVG Route */}
+  const RoutePanel = (panelHeight: number, showBadge = true) => {
+    const pts = hasRoute ? normalizePath(routePath, CARD_W, panelHeight) : "";
+    const ep = hasRoute ? getEndPoints(routePath, CARD_W, panelHeight) : null;
+    return (
+      <View style={[s.routePanel, { height: panelHeight }]}>
+        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: transparentMode ? "transparent" : CARD_BG }]} />
+        {!transparentMode && (
+          <View style={[StyleSheet.absoluteFillObject, s.gridContainer]}>
+            {[0.25, 0.5, 0.75].map((f) => (
+              <View key={f} style={[s.gridLine, { top: `${f * 100}%` as any }]} />
+            ))}
+            {[0.25, 0.5, 0.75].map((f) => (
+              <View key={f} style={[s.gridLineV, { left: `${f * 100}%` as any }]} />
+            ))}
+          </View>
+        )}
         {hasRoute ? (
-          <Svg width={CARD_W} height={ROUTE_H} style={s.svg}>
-            <Polyline points={svgPoints} fill="none" stroke={PRIMARY + "40"} strokeWidth={8} strokeLinecap="round" strokeLinejoin="round" />
-            <Polyline points={svgPoints} fill="none" stroke={PRIMARY} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
-            {endPts && <Circle cx={endPts.startX} cy={endPts.startY} r={5} fill="#FFFFFF" />}
-            {endPts && (
-              <>
-                <Circle cx={endPts.endX} cy={endPts.endY} r={7} fill={PRIMARY + "55"} />
-                <Circle cx={endPts.endX} cy={endPts.endY} r={4} fill={PRIMARY} />
-              </>
-            )}
+          <Svg width={CARD_W} height={panelHeight} style={s.svg}>
+            <Polyline points={pts} fill="none" stroke={PRIMARY + "40"} strokeWidth={8} strokeLinecap="round" strokeLinejoin="round" />
+            <Polyline points={pts} fill="none" stroke={PRIMARY} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+            {ep && <Circle cx={ep.startX} cy={ep.startY} r={5} fill="#FFFFFF" />}
+            {ep && <><Circle cx={ep.endX} cy={ep.endY} r={7} fill={PRIMARY + "55"} /><Circle cx={ep.endX} cy={ep.endY} r={4} fill={PRIMARY} /></>}
           </Svg>
         ) : (
           <View style={s.noRoutePlaceholder}>
-            <Feather name="map" size={28} color={TEXT_MUTED} />
-            <Text style={s.noRouteTxt}>No GPS route</Text>
+            <Feather name="map" size={28} color={transparentMode ? "#FFFFFF66" : TEXT_MUTED} />
+            <Text style={[s.noRouteTxt, transparentMode && { color: "#FFFFFF99" }]}>No GPS route</Text>
           </View>
         )}
-
-        <View style={s.routeBadge}>
-          <Feather name="map-pin" size={9} color={PRIMARY} style={{ marginRight: 3 }} />
-          <Text style={s.routeBadgeTxt}>GPS Route</Text>
-        </View>
-      </View>
-
-      {/* ── Stats row ────────────────────────────────────────────────────── */}
-      <View style={s.statsRow}>
-        <View style={[s.statBlock, { flex: 1.4 }]}>
-          <Text style={s.statBig}>{formatDist(distanceMi)}</Text>
-          <Text style={s.statUnit}>miles</Text>
-        </View>
-        <View style={s.statDivider} />
-        <View style={s.statBlock}>
-          <Text style={s.statMid}>{formatPace(paceMinPerMile)}</Text>
-          <Text style={s.statUnit}>min/mi</Text>
-        </View>
-        <View style={s.statDivider} />
-        <View style={s.statBlock}>
-          <Text style={s.statMid}>{formatDuration(durationSeconds)}</Text>
-          <Text style={s.statUnit}>time</Text>
-        </View>
-      </View>
-
-      {/* ── Divider ──────────────────────────────────────────────────────── */}
-      <View style={s.divider} />
-
-      {/* ── Group badge + event title ─────────────────────────────────────── */}
-      {isGroup && (
-        <View style={s.groupRow}>
-          <View style={s.groupPill}>
-            <Ionicons name="people" size={13} color={GOLD} style={{ marginRight: 5 }} />
-            <Text style={s.groupPillTxt}>{participantCount} {actParticipants}</Text>
+        {showBadge && !transparentMode && (
+          <View style={s.routeBadge}>
+            <Feather name="map-pin" size={9} color={PRIMARY} style={{ marginRight: 3 }} />
+            <Text style={s.routeBadgeTxt}>GPS Route</Text>
           </View>
-          {finishRank != null && (
-            <View style={s.rankPill}>
-              <Ionicons name="trophy" size={11} color={PRIMARY} style={{ marginRight: 4 }} />
-              <Text style={s.rankPillTxt}>{ordinal(finishRank)}</Text>
+        )}
+      </View>
+    );
+  };
+
+  const StatsRow = (big = true) => (
+    <View style={s.statsRow}>
+      <View style={[s.statBlock, { flex: 1.4 }]}>
+        <Text style={[big ? s.statBig : s.statMid, transparentMode && { color: "#FFFFFF" }]}>{formatDist(distanceMi)}</Text>
+        <Text style={[s.statUnit, transparentMode && { color: "#FFFFFF99" }]}>miles</Text>
+      </View>
+      <View style={[s.statDivider, transparentMode && { backgroundColor: "#FFFFFF33" }]} />
+      <View style={s.statBlock}>
+        <Text style={[s.statMid, transparentMode && { color: "#FFFFFF" }]}>{formatPace(paceMinPerMile)}</Text>
+        <Text style={[s.statUnit, transparentMode && { color: "#FFFFFF99" }]}>min/mi</Text>
+      </View>
+      <View style={[s.statDivider, transparentMode && { backgroundColor: "#FFFFFF33" }]} />
+      <View style={s.statBlock}>
+        <Text style={[s.statMid, transparentMode && { color: "#FFFFFF" }]}>{formatDuration(durationSeconds)}</Text>
+        <Text style={[s.statUnit, transparentMode && { color: "#FFFFFF99" }]}>time</Text>
+      </View>
+    </View>
+  );
+
+  const LayoutDots = (
+    <View style={s.layoutDots}>
+      {[0, 1, 2, 3].map((i) => (
+        <View key={i} style={[s.layoutDot, layoutIndex === i && s.layoutDotActive]} />
+      ))}
+    </View>
+  );
+
+  const GroupBadges = isGroup ? (
+    <View style={s.groupRow}>
+      <View style={s.groupPill}>
+        <Ionicons name="people" size={13} color={GOLD} style={{ marginRight: 5 }} />
+        <Text style={s.groupPillTxt}>{participantCount} {actParticipants}</Text>
+      </View>
+      {finishRank != null && (
+        <View style={s.rankPill}>
+          <Ionicons name="trophy" size={11} color={PRIMARY} style={{ marginRight: 4 }} />
+          <Text style={s.rankPillTxt}>{ordinal(finishRank)}</Text>
+        </View>
+      )}
+      {eventTitle && <Text style={s.eventTitle} numberOfLines={1}>{eventTitle}</Text>}
+    </View>
+  ) : null;
+
+  const CaptionBlock = !!caption ? (
+    <View style={s.captionArea}>
+      <Text style={[s.captionTxt, { fontFamily: captionFont }, transparentMode && { color: "#FFFFFFCC" }]}>{caption}</Text>
+    </View>
+  ) : null;
+
+  if (transparentMode) {
+    return (
+      <View ref={ref} style={[s.card, { backgroundColor: "transparent" }]}>
+        {RoutePanel(CARD_H - 100, false)}
+        <View style={{ position: "absolute", bottom: 16, left: 0, right: 0 }}>
+          <View style={s.statsRow}>
+            <View style={[s.statBlock, { flex: 1.4 }]}>
+              <Text style={[s.statBig, { color: "#FFFFFF" }]}>{formatDist(distanceMi)}</Text>
+              <Text style={[s.statUnit, { color: "#FFFFFF99" }]}>miles</Text>
             </View>
-          )}
-          {eventTitle && <Text style={s.eventTitle} numberOfLines={1}>{eventTitle}</Text>}
+            <View style={[s.statDivider, { backgroundColor: "#FFFFFF33" }]} />
+            <View style={s.statBlock}>
+              <Text style={[s.statMid, { color: "#FFFFFF" }]}>{formatPace(paceMinPerMile)}</Text>
+              <Text style={[s.statUnit, { color: "#FFFFFF99" }]}>min/mi</Text>
+            </View>
+            <View style={[s.statDivider, { backgroundColor: "#FFFFFF33" }]} />
+            <View style={s.statBlock}>
+              <Text style={[s.statMid, { color: "#FFFFFF" }]}>{formatDuration(durationSeconds)}</Text>
+              <Text style={[s.statUnit, { color: "#FFFFFF99" }]}>time</Text>
+            </View>
+          </View>
         </View>
-      )}
+      </View>
+    );
+  }
 
-      {/* ── Caption ──────────────────────────────────────────────────────── */}
-      {!!caption && (
-        <View style={s.captionArea}>
-          <Text style={[s.captionTxt, { fontFamily: captionFont }]}>{caption}</Text>
+  // ── STANDARD MODE — 4 tappable layouts ──────────────────────────────────────
+
+  if (layoutIndex === 1) {
+    return (
+      <View ref={ref} style={s.card}>
+        {HeaderRow}
+        <View style={s.heroBlock}>
+          <Text style={s.heroDist}>{formatDist(distanceMi)}</Text>
+          <Text style={s.heroUnit}>miles</Text>
         </View>
-      )}
+        {RoutePanel(220, true)}
+        <View style={s.heroSmallStats}>
+          <View style={s.heroSmallStat}>
+            <Text style={s.heroSmallVal}>{formatPace(paceMinPerMile)}</Text>
+            <Text style={s.heroSmallLabel}>min/mi</Text>
+          </View>
+          <View style={[s.statDivider, { height: 28 }]} />
+          <View style={s.heroSmallStat}>
+            <Text style={s.heroSmallVal}>{formatDuration(durationSeconds)}</Text>
+            <Text style={s.heroSmallLabel}>time</Text>
+          </View>
+        </View>
+        {GroupBadges}
+        {CaptionBlock}
+        <View style={{ flex: 1 }} />
+        {FooterStrip}
+        {LayoutDots}
+      </View>
+    );
+  }
 
+  if (layoutIndex === 2) {
+    return (
+      <View ref={ref} style={s.card}>
+        {HeaderRow}
+        {RoutePanel(CARD_H - 130, false)}
+        <View style={s.frostedPillWrap}>
+          <View style={s.frostedPill}>
+            <Text style={s.frostedPillTxt}>
+              {formatDist(distanceMi)} mi  ·  {formatPace(paceMinPerMile)} /mi  ·  {formatDuration(durationSeconds)}
+            </Text>
+          </View>
+        </View>
+        {FooterStrip}
+        {LayoutDots}
+      </View>
+    );
+  }
+
+  if (layoutIndex === 3) {
+    return (
+      <View ref={ref} style={s.card}>
+        {HeaderRow}
+        {StatsRow(true)}
+        <View style={s.divider} />
+        {GroupBadges}
+        {CaptionBlock}
+        {RoutePanel(CARD_H - (isGroup ? 260 : caption ? 240 : 200), true)}
+        {FooterStrip}
+        {LayoutDots}
+      </View>
+    );
+  }
+
+  // Layout 0 (default): route top, stats bottom
+  return (
+    <View ref={ref} style={s.card}>
+      {HeaderRow}
+      {RoutePanel(ROUTE_H, true)}
+      {StatsRow(true)}
+      <View style={s.divider} />
+      {GroupBadges}
+      {CaptionBlock}
       <View style={{ flex: 1 }} />
       {FooterStrip}
+      {LayoutDots}
     </View>
   );
 });
@@ -800,6 +897,91 @@ const s = StyleSheet.create({
     fontFamily: "Outfit_400Regular",
     fontSize: 11,
     color: TEXT_MUTED,
+    letterSpacing: 0.3,
+  },
+
+  layoutDots: {
+    position: "absolute",
+    right: 12,
+    top: "50%" as any,
+    transform: [{ translateY: -20 }],
+    gap: 6,
+    alignItems: "center",
+  },
+  layoutDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: "#FFFFFF33",
+  },
+  layoutDotActive: {
+    backgroundColor: PRIMARY,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  heroBlock: {
+    alignItems: "center",
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  heroDist: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 64,
+    color: PRIMARY,
+    letterSpacing: -2,
+    lineHeight: 68,
+  },
+  heroUnit: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 14,
+    color: TEXT_MUTED,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  heroSmallStats: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 22,
+  },
+  heroSmallStat: {
+    alignItems: "center",
+    gap: 2,
+  },
+  heroSmallVal: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 18,
+    color: TEXT,
+  },
+  heroSmallLabel: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 10,
+    color: TEXT_MUTED,
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+  },
+  frostedPillWrap: {
+    position: "absolute",
+    bottom: 50,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+  },
+  frostedPill: {
+    backgroundColor: "rgba(0,0,0,0.65)",
+    borderRadius: 24,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+  },
+  frostedPillTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 14,
+    color: "#FFFFFF",
     letterSpacing: 0.3,
   },
 
