@@ -1407,29 +1407,78 @@ export async function getUserRuns(userId: string) {
 
 
 export async function joinRun(runId: string, userId: string, paceGroupLabel?: string | null) {
-  const existing = await pool.query(
-    `SELECT * FROM run_participants WHERE run_id = $1 AND user_id = $2`,
-    [runId, userId]
-  );
-  if (existing.rows.length > 0) {
-    if (existing.rows[0].status === "cancelled") {
-      await pool.query(
-        `UPDATE run_participants SET status = 'joined', pace_group_label = $3 WHERE run_id = $1 AND user_id = $2`,
-        [runId, userId, paceGroupLabel || null]
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`SELECT id FROM runs WHERE id = $1 FOR UPDATE`, [runId]);
+
+    const existing = await client.query(
+      `SELECT * FROM run_participants WHERE run_id = $1 AND user_id = $2`,
+      [runId, userId]
+    );
+    if (existing.rows.length > 0) {
+      if (existing.rows[0].status === "cancelled") {
+        const runRow = await client.query(
+          `SELECT max_participants FROM runs WHERE id = $1`,
+          [runId]
+        );
+        const maxP = runRow.rows[0]?.max_participants;
+        if (maxP) {
+          const countRes = await client.query(
+            `SELECT COUNT(*) FROM run_participants WHERE run_id = $1 AND status IN ('joined', 'confirmed')`,
+            [runId]
+          );
+          if (parseInt(countRes.rows[0].count, 10) >= maxP) {
+            await client.query('ROLLBACK');
+            throw new Error("EVENT_FULL");
+          }
+        }
+        await client.query(
+          `UPDATE run_participants SET status = 'joined', pace_group_label = $3 WHERE run_id = $1 AND user_id = $2`,
+          [runId, userId, paceGroupLabel || null]
+        );
+      } else if (paceGroupLabel) {
+        await client.query(
+          `UPDATE run_participants SET pace_group_label = $3 WHERE run_id = $1 AND user_id = $2`,
+          [runId, userId, paceGroupLabel]
+        );
+      }
+      const updated = await client.query(
+        `SELECT * FROM run_participants WHERE run_id = $1 AND user_id = $2`,
+        [runId, userId]
       );
-    } else if (paceGroupLabel) {
-      await pool.query(
-        `UPDATE run_participants SET pace_group_label = $3 WHERE run_id = $1 AND user_id = $2`,
-        [runId, userId, paceGroupLabel]
-      );
+      await client.query('COMMIT');
+      return updated.rows[0];
     }
-    return existing.rows[0];
+
+    const runRow = await client.query(
+      `SELECT max_participants FROM runs WHERE id = $1`,
+      [runId]
+    );
+    const maxP = runRow.rows[0]?.max_participants;
+    if (maxP) {
+      const countRes = await client.query(
+        `SELECT COUNT(*) FROM run_participants WHERE run_id = $1 AND status IN ('joined', 'confirmed')`,
+        [runId]
+      );
+      if (parseInt(countRes.rows[0].count, 10) >= maxP) {
+        await client.query('ROLLBACK');
+        throw new Error("EVENT_FULL");
+      }
+    }
+
+    const result = await client.query(
+      `INSERT INTO run_participants (run_id, user_id, pace_group_label) VALUES ($1, $2, $3) RETURNING *`,
+      [runId, userId, paceGroupLabel || null]
+    );
+    await client.query('COMMIT');
+    return result.rows[0];
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
   }
-  const result = await pool.query(
-    `INSERT INTO run_participants (run_id, user_id, pace_group_label) VALUES ($1, $2, $3) RETURNING *`,
-    [runId, userId, paceGroupLabel || null]
-  );
-  return result.rows[0];
 }
 
 export async function requestJoinRun(runId: string, userId: string) {
@@ -1597,38 +1646,88 @@ export async function getRunParticipants(runId: string) {
 }
 
 export async function confirmRunCompletion(runId: string, userId: string, milesLogged: number) {
-  await pool.query(
-    `UPDATE run_participants SET status = 'confirmed', miles_logged = $3 WHERE run_id = $1 AND user_id = $2`,
-    [runId, userId, milesLogged]
-  );
-  const userResult = await pool.query(
-    `UPDATE users SET
-      completed_runs = completed_runs + 1,
-      total_miles = total_miles + $2,
-      miles_this_year = miles_this_year + $2,
-      miles_this_month = miles_this_month + $2
-     WHERE id = $1 RETURNING total_miles`,
-    [userId, milesLogged]
-  );
-  const totalMiles = userResult.rows[0]?.total_miles;
-  if (totalMiles !== undefined) {
-    await checkAndAwardAchievements(userId, totalMiles);
-  }
-  await checkHostUnlock(userId);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-  const runRes = await pool.query(`SELECT host_id FROM runs WHERE id = $1`, [runId]);
-  const hostId = runRes.rows[0]?.host_id;
-  if (hostId && userId !== hostId) {
-    const confirmedNonHost = await pool.query(
-      `SELECT COUNT(*) as cnt FROM run_participants WHERE run_id = $1 AND status = 'confirmed' AND user_id != $2`,
-      [runId, hostId]
+    await client.query(
+      `UPDATE run_participants SET status = 'confirmed', miles_logged = $3 WHERE run_id = $1 AND user_id = $2`,
+      [runId, userId, milesLogged]
     );
-    if (parseInt(confirmedNonHost.rows[0]?.cnt) === 1) {
-      await pool.query(`UPDATE users SET hosted_runs = hosted_runs + 1 WHERE id = $1`, [hostId]);
-    }
-  }
+    const userResult = await client.query(
+      `UPDATE users SET
+        completed_runs = completed_runs + 1,
+        total_miles = total_miles + $2,
+        miles_this_year = miles_this_year + $2,
+        miles_this_month = miles_this_month + $2
+       WHERE id = $1 RETURNING total_miles`,
+      [userId, milesLogged]
+    );
+    const totalMiles = userResult.rows[0]?.total_miles;
 
-  return { success: true };
+    const runRes = await client.query(`SELECT host_id FROM runs WHERE id = $1`, [runId]);
+    const hostId = runRes.rows[0]?.host_id;
+    if (hostId && userId !== hostId) {
+      const confirmedNonHost = await client.query(
+        `SELECT COUNT(*) as cnt FROM run_participants WHERE run_id = $1 AND status = 'confirmed' AND user_id != $2`,
+        [runId, hostId]
+      );
+      if (parseInt(confirmedNonHost.rows[0]?.cnt) === 1) {
+        await client.query(`UPDATE users SET hosted_runs = hosted_runs + 1 WHERE id = $1`, [hostId]);
+      }
+    }
+
+    if (totalMiles !== undefined) {
+      await checkAndAwardAchievements(userId, totalMiles, client);
+    }
+    await checkHostUnlock(userId, client);
+
+    const runData = await client.query(`SELECT crew_id FROM runs WHERE id = $1`, [runId]);
+    let crewStreakUpdated: { crewId: string; newStreak: number } | null = null;
+    if (runData.rows[0]?.crew_id) {
+      const crewId = runData.rows[0].crew_id;
+      const crewRes = await client.query(
+        `SELECT id, name, current_streak_weeks, last_run_week FROM crews WHERE id = $1 FOR UPDATE`,
+        [crewId]
+      );
+      if (crewRes.rows[0]) {
+        const crew = crewRes.rows[0];
+        const now = new Date();
+        const lastRun = crew.last_run_week ? new Date(crew.last_run_week) : null;
+        const getWeekNumber = (d: Date) => {
+          const onejan = new Date(d.getFullYear(), 0, 1);
+          return Math.ceil((((d.getTime() - onejan.getTime()) / 86400000) + onejan.getDay() + 1) / 7);
+        };
+        const currentWeek = getWeekNumber(now);
+        const currentYear = now.getFullYear();
+        const lastWeek = lastRun ? getWeekNumber(lastRun) : -1;
+        const lastYear = lastRun ? lastRun.getFullYear() : -1;
+        let newStreak = crew.current_streak_weeks || 0;
+        if (lastYear === currentYear && lastWeek === currentWeek) {
+        } else if (lastYear === currentYear && lastWeek === currentWeek - 1) {
+          newStreak++;
+        } else if (lastYear === currentYear - 1 && lastWeek >= 52 && currentWeek === 1) {
+          newStreak++;
+        } else {
+          newStreak = 1;
+        }
+        await client.query(
+          `UPDATE crews SET current_streak_weeks = $2, last_run_week = $3 WHERE id = $1`,
+          [crewId, newStreak, now]
+        );
+        crewStreakUpdated = { crewId, newStreak };
+      }
+    }
+
+    await client.query('COMMIT');
+
+    return { success: true, crewStreakUpdated };
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
 }
 
 // ─── Live Group Run ───────────────────────────────────────────────────────────
@@ -1732,47 +1831,100 @@ export async function getLiveRunState(runId: string) {
     [runId]
   );
 
-  const presentCount = participantsRes.rows.filter((r: any) => r.is_present).length;
+  const STALE_THRESHOLD_MS = 90 * 1000;
+  const now = Date.now();
+  const participants = participantsRes.rows.map((r: any) => {
+    const lastPingAge = r.recorded_at ? now - new Date(r.recorded_at).getTime() : null;
+    const isStale = r.is_present && r.final_pace == null && lastPingAge != null && lastPingAge > STALE_THRESHOLD_MS;
+    return { ...r, isStale: !!isStale };
+  });
+
+  const activeCount = participants.filter((r: any) => r.is_present && !r.isStale && r.final_pace == null).length;
+  const staleCount = participants.filter((r: any) => r.isStale).length;
+  const presentCount = participants.filter((r: any) => r.is_present).length;
+
   return {
     isActive: run.is_active,
     isCompleted: run.is_completed,
     startedAt: run.started_at,
     hostId: run.host_id,
     presentCount,
-    participants: participantsRes.rows,
+    activeCount,
+    staleCount,
+    participants,
   };
 }
 
 export async function finishRunnerRun(runId: string, userId: string, finalDistance: number, finalPace: number) {
-  // Ensure the user has a participant row with is_present=true before writing final data
-  await pool.query(
-    `INSERT INTO run_participants (run_id, user_id, status, is_present)
-     VALUES ($1, $2, 'joined', true)
-     ON CONFLICT (run_id, user_id) DO UPDATE SET is_present = true`,
-    [runId, userId]
-  );
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-  await pool.query(
-    `UPDATE run_participants SET final_distance = $3, final_pace = $4 WHERE run_id = $1 AND user_id = $2`,
-    [runId, userId, finalDistance, finalPace]
-  );
+    await client.query(
+      `INSERT INTO run_participants (run_id, user_id, status, is_present)
+       VALUES ($1, $2, 'joined', true)
+       ON CONFLICT (run_id, user_id) DO UPDATE SET is_present = true`,
+      [runId, userId]
+    );
 
-  // Recompute leaderboard ranks for everyone who has finished with a valid pace (> 0)
-  // For crew runs with pace groups, rank within each pace group separately
-  // 0-pace finishers (GPS failure / 0 distance) are excluded from ranking but still count as done
-  const runInfoRes = await pool.query(`SELECT crew_id FROM runs WHERE id = $1`, [runId]);
+    await client.query(
+      `UPDATE run_participants SET final_distance = $3, final_pace = $4 WHERE run_id = $1 AND user_id = $2`,
+      [runId, userId, finalDistance, finalPace]
+    );
+
+    const runRes = await client.query(`SELECT host_id FROM runs WHERE id = $1`, [runId]);
+    let shouldComplete = false;
+    if (runRes.rows.length) {
+      const hostId = runRes.rows[0].host_id;
+      const isHost = hostId === userId;
+      shouldComplete = isHost;
+      if (!shouldComplete) {
+        const hostDone = await client.query(
+          `SELECT 1 FROM run_participants WHERE run_id = $1 AND user_id = $2 AND final_pace IS NOT NULL`,
+          [runId, hostId]
+        );
+        if (hostDone.rows.length > 0) {
+          const remaining = await client.query(
+            `SELECT COUNT(*) FROM run_participants
+             WHERE run_id = $1 AND is_present = true AND final_pace IS NULL AND status != 'cancelled'`,
+            [runId]
+          );
+          shouldComplete = parseInt(remaining.rows[0].count) === 0;
+        }
+      }
+      if (shouldComplete) {
+        await client.query(
+          `UPDATE runs SET is_completed = true, is_active = false WHERE id = $1`,
+          [runId]
+        );
+        await computeLeaderboardRanksWithClient(runId, client);
+      }
+    }
+
+    await client.query('COMMIT');
+
+    return { success: true, shouldComplete };
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+async function computeLeaderboardRanksWithClient(runId: string, db: any) {
+  const runInfoRes = await db.query(`SELECT crew_id FROM runs WHERE id = $1`, [runId]);
   const isCrewRun = runInfoRes.rows.length > 0 && !!runInfoRes.rows[0].crew_id;
 
   if (isCrewRun) {
-    // Rank within each pace group
-    const groupsRes = await pool.query(
+    const groupsRes = await db.query(
       `SELECT DISTINCT pace_group_label FROM run_participants
        WHERE run_id = $1 AND final_pace IS NOT NULL AND final_pace > 0`,
       [runId]
     );
     for (const groupRow of groupsRes.rows) {
       const label = groupRow.pace_group_label;
-      const finishedRes = await pool.query(
+      const finishedRes = await db.query(
         `SELECT user_id, final_pace FROM run_participants
          WHERE run_id = $1 AND final_pace IS NOT NULL AND final_pace > 0
            AND (pace_group_label = $2 OR ($2::text IS NULL AND pace_group_label IS NULL))
@@ -1780,60 +1932,29 @@ export async function finishRunnerRun(runId: string, userId: string, finalDistan
         [runId, label]
       );
       for (let i = 0; i < finishedRes.rows.length; i++) {
-        await pool.query(
+        await db.query(
           `UPDATE run_participants SET final_rank = $3 WHERE run_id = $1 AND user_id = $2`,
           [runId, finishedRes.rows[i].user_id, i + 1]
         );
       }
     }
   } else {
-    const finishedRes = await pool.query(
+    const finishedRes = await db.query(
       `SELECT user_id, final_pace FROM run_participants
        WHERE run_id = $1 AND final_pace IS NOT NULL AND final_pace > 0 ORDER BY final_pace ASC`,
       [runId]
     );
     for (let i = 0; i < finishedRes.rows.length; i++) {
-      await pool.query(
+      await db.query(
         `UPDATE run_participants SET final_rank = $3 WHERE run_id = $1 AND user_id = $2`,
         [runId, finishedRes.rows[i].user_id, i + 1]
       );
     }
   }
+}
 
-  // Auto-complete the run:
-  // - If the caller IS the host → complete immediately (host ending = session over)
-  // - If the caller is NOT the host → only complete once the host has also submitted
-  //   their final_pace AND no other is_present participant is still running
-  const runRes = await pool.query(`SELECT host_id FROM runs WHERE id = $1`, [runId]);
-  if (runRes.rows.length) {
-    const hostId = runRes.rows[0].host_id;
-    const isHost = hostId === userId;
-    let shouldComplete = isHost;
-    if (!shouldComplete) {
-      // Require the host to have finished before a participant can trigger completion
-      const hostDone = await pool.query(
-        `SELECT 1 FROM run_participants WHERE run_id = $1 AND user_id = $2 AND final_pace IS NOT NULL`,
-        [runId, hostId]
-      );
-      if (hostDone.rows.length > 0) {
-        // All present participants (excluding the one who just finished) must also be done
-        const remaining = await pool.query(
-          `SELECT COUNT(*) FROM run_participants
-           WHERE run_id = $1 AND is_present = true AND final_pace IS NULL AND status != 'cancelled'`,
-          [runId]
-        );
-        shouldComplete = parseInt(remaining.rows[0].count) === 0;
-      }
-    }
-    if (shouldComplete) {
-      await pool.query(
-        `UPDATE runs SET is_completed = true, is_active = false WHERE id = $1`,
-        [runId]
-      );
-    }
-  }
-
-  return { success: true };
+export async function computeLeaderboardRanks(runId: string) {
+  await computeLeaderboardRanksWithClient(runId, pool);
 }
 
 export async function getRunResults(runId: string) {
@@ -1863,8 +1984,8 @@ export async function getHostRoutePath(runId: string): Promise<{ latitude: numbe
   return result.rows;
 }
 
-export async function checkHostUnlock(userId: string) {
-  const result = await pool.query(
+export async function checkHostUnlock(userId: string, db: any = pool) {
+  const result = await db.query(
     `SELECT COUNT(DISTINCT r.host_id) as unique_hosts, COUNT(*) as total_runs
      FROM run_participants rp
      JOIN runs r ON r.id = rp.run_id
@@ -1873,7 +1994,7 @@ export async function checkHostUnlock(userId: string) {
   );
   const { unique_hosts, total_runs } = result.rows[0];
   if (parseInt(total_runs) >= 3 && parseInt(unique_hosts) >= 2) {
-    await pool.query(
+    await db.query(
       `UPDATE users SET host_unlocked = true, role = 'host' WHERE id = $1`,
       [userId]
     );
@@ -1893,13 +2014,13 @@ export async function getHostUnlockProgress(userId: string) {
   return { unique_hosts: parseInt(result.rows[0].unique_hosts), total_runs: parseInt(result.rows[0].total_runs) };
 }
 
-async function awardSlug(userId: string, slug: string): Promise<boolean> {
-  const existing = await pool.query(
+async function awardSlug(userId: string, slug: string, db: any = pool): Promise<boolean> {
+  const existing = await db.query(
     `SELECT id FROM achievements WHERE user_id = $1 AND slug = $2`,
     [userId, slug]
   );
   if (existing.rows.length === 0) {
-    await pool.query(
+    await db.query(
       `INSERT INTO achievements (user_id, milestone, slug) VALUES ($1, 0, $2)`,
       [userId, slug]
     );
@@ -1978,45 +2099,45 @@ export async function toggleCrewChatMute(crewId: string, userId: string): Promis
   return newMuted;
 }
 
-export async function checkAndAwardAchievements(userId: string, totalMiles: number) {
-  const user = await pool.query(`SELECT completed_runs, hosted_runs FROM users WHERE id = $1`, [userId]);
+export async function checkAndAwardAchievements(userId: string, totalMiles: number, db: any = pool) {
+  const user = await db.query(`SELECT completed_runs, hosted_runs FROM users WHERE id = $1`, [userId]);
   const { completed_runs, hosted_runs } = user.rows[0] ?? {};
 
-  if (totalMiles >= 25) await awardSlug(userId, "miles_25");
+  if (totalMiles >= 25) await awardSlug(userId, "miles_25", db);
   if (totalMiles >= 100) {
-    await awardSlug(userId, "miles_100");
+    await awardSlug(userId, "miles_100", db);
   }
   if (totalMiles >= 250) {
-    await awardSlug(userId, "miles_250");
+    await awardSlug(userId, "miles_250", db);
   }
-  if (completed_runs >= 1) await awardSlug(userId, "first_step");
-  if (completed_runs >= 5) await awardSlug(userId, "five_alive");
-  if (completed_runs >= 10) await awardSlug(userId, "ten_toes_down");
-  if (hosted_runs >= 1) await awardSlug(userId, "host_in_making");
-  if (hosted_runs >= 5) await awardSlug(userId, "crew_builder");
+  if (completed_runs >= 1) await awardSlug(userId, "first_step", db);
+  if (completed_runs >= 5) await awardSlug(userId, "five_alive", db);
+  if (completed_runs >= 10) await awardSlug(userId, "ten_toes_down", db);
+  if (hosted_runs >= 1) await awardSlug(userId, "host_in_making", db);
+  if (hosted_runs >= 5) await awardSlug(userId, "crew_builder", db);
 
-  const maxSingleRun = await pool.query(
+  const maxSingleRun = await db.query(
     `SELECT COALESCE(MAX(miles_logged), 0) as max FROM run_participants WHERE user_id = $1 AND status = 'confirmed'`,
     [userId]
   );
   const maxMiles = parseFloat(maxSingleRun.rows[0]?.max ?? 0);
-  if (maxMiles >= 13.1) await awardSlug(userId, "half_marathon");
-  if (maxMiles >= 26.2) await awardSlug(userId, "marathoner");
+  if (maxMiles >= 13.1) await awardSlug(userId, "half_marathon", db);
+  if (maxMiles >= 26.2) await awardSlug(userId, "marathoner", db);
 
-  const publicJoined = await pool.query(
+  const publicJoined = await db.query(
     `SELECT COUNT(*) as cnt FROM run_participants rp JOIN runs r ON r.id = rp.run_id WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND r.privacy = 'public' AND r.host_id != $1`,
     [userId]
   );
-  if (parseInt(publicJoined.rows[0]?.cnt) >= 1) await awardSlug(userId, "social_starter");
+  if (parseInt(publicJoined.rows[0]?.cnt) >= 1) await awardSlug(userId, "social_starter", db);
 
-  const squadRuns = await pool.query(
+  const squadRuns = await db.query(
     `SELECT COUNT(DISTINCT rp.run_id) as cnt FROM run_participants rp WHERE rp.user_id = $1 AND rp.status = 'confirmed'
      AND (SELECT COUNT(*) FROM run_participants rp2 WHERE rp2.run_id = rp.run_id AND rp2.status != 'cancelled') >= 3`,
     [userId]
   );
-  if (parseInt(squadRuns.rows[0]?.cnt) >= 1) await awardSlug(userId, "squad_runner");
+  if (parseInt(squadRuns.rows[0]?.cnt) >= 1) await awardSlug(userId, "squad_runner", db);
 
-  const monthlyMax = await pool.query(
+  const monthlyMax = await db.query(
     `SELECT COALESCE(MAX(cnt), 0) as max FROM (
        SELECT DATE_TRUNC('month', r.date) as m, COUNT(*) as cnt
        FROM run_participants rp JOIN runs r ON r.id = rp.run_id
@@ -2025,9 +2146,9 @@ export async function checkAndAwardAchievements(userId: string, totalMiles: numb
      ) sub`,
     [userId]
   );
-  if (parseInt(monthlyMax.rows[0]?.max) >= 8) await awardSlug(userId, "monthly_grinder");
+  if (parseInt(monthlyMax.rows[0]?.max) >= 8) await awardSlug(userId, "monthly_grinder", db);
 
-  const streakResult = await pool.query(
+  const streakResult = await db.query(
     `WITH dates AS (
        SELECT DISTINCT DATE_TRUNC('day', r.date)::date AS d
        FROM run_participants rp JOIN runs r ON r.id = rp.run_id
@@ -2041,47 +2162,47 @@ export async function checkAndAwardAchievements(userId: string, totalMiles: numb
      SELECT COALESCE(MAX(cnt), 0) AS max FROM (SELECT grp, COUNT(*) AS cnt FROM groups GROUP BY grp) sub`,
     [userId]
   );
-  if (parseInt(streakResult.rows[0]?.max) >= 3) await awardSlug(userId, "streak_week");
+  if (parseInt(streakResult.rows[0]?.max) >= 3) await awardSlug(userId, "streak_week", db);
 
-  const nightRuns = await pool.query(
+  const nightRuns = await db.query(
     `SELECT COUNT(*) as cnt FROM run_participants rp JOIN runs r ON r.id = rp.run_id
      WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND EXTRACT(HOUR FROM r.date AT TIME ZONE 'UTC') >= 20`,
     [userId]
   );
-  if (parseInt(nightRuns.rows[0]?.cnt) >= 5) await awardSlug(userId, "night_owl");
+  if (parseInt(nightRuns.rows[0]?.cnt) >= 5) await awardSlug(userId, "night_owl", db);
 
-  const morningRuns = await pool.query(
+  const morningRuns = await db.query(
     `SELECT COUNT(*) as cnt FROM run_participants rp JOIN runs r ON r.id = rp.run_id
      WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND EXTRACT(HOUR FROM r.date AT TIME ZONE 'UTC') < 7`,
     [userId]
   );
-  if (parseInt(morningRuns.rows[0]?.cnt) >= 10) await awardSlug(userId, "morning_warrior");
+  if (parseInt(morningRuns.rows[0]?.cnt) >= 10) await awardSlug(userId, "morning_warrior", db);
 
-  const communityLeader = await pool.query(
+  const communityLeader = await db.query(
     `SELECT COUNT(*) as cnt FROM run_participants rp JOIN runs r ON r.id = rp.run_id
      WHERE r.host_id = $1 AND rp.user_id != $1 AND rp.status = 'confirmed'`,
     [userId]
   );
-  if (parseInt(communityLeader.rows[0]?.cnt) >= 20) await awardSlug(userId, "community_leader");
+  if (parseInt(communityLeader.rows[0]?.cnt) >= 20) await awardSlug(userId, "community_leader", db);
 
-  const committedRes = await pool.query(
+  const committedRes = await db.query(
     `SELECT COUNT(*) as cnt FROM run_participants rp JOIN runs r ON r.id = rp.run_id
      WHERE rp.user_id = $1 AND rp.status != 'cancelled' AND r.date < NOW()`,
     [userId]
   );
   const committedCount = parseInt(committedRes.rows[0]?.cnt ?? 0);
   if (committedCount >= 5) {
-    const presentRes = await pool.query(
+    const presentRes = await db.query(
       `SELECT COUNT(*) as cnt FROM run_participants rp JOIN runs r ON r.id = rp.run_id
        WHERE rp.user_id = $1 AND rp.status != 'cancelled' AND rp.is_present = true AND r.date < NOW()`,
       [userId]
     );
     const presentCount = parseInt(presentRes.rows[0]?.cnt ?? 0);
     const rate = (presentCount / committedCount) * 100;
-    if (rate >= 50) await awardSlug(userId, "reliable_50");
-    if (rate >= 65) await awardSlug(userId, "reliable_65");
-    if (rate >= 80) await awardSlug(userId, "reliable_80");
-    if (rate >= 90) await awardSlug(userId, "reliable_90");
+    if (rate >= 50) await awardSlug(userId, "reliable_50", db);
+    if (rate >= 65) await awardSlug(userId, "reliable_65", db);
+    if (rate >= 80) await awardSlug(userId, "reliable_80", db);
+    if (rate >= 90) await awardSlug(userId, "reliable_90", db);
   }
 }
 

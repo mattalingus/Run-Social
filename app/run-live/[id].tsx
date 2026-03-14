@@ -293,6 +293,8 @@ export default function RunLiveScreen() {
 
   const presentParticipants: any[] = liveState?.participants?.filter((p: any) => p.is_present) ?? [];
   const presentCount = liveState?.presentCount ?? 0;
+  const activeCount = liveState?.activeCount ?? presentCount;
+  const staleCount = liveState?.staleCount ?? 0;
   const runPin = run ? { latitude: run.location_lat, longitude: run.location_lng } : null;
   const paceNum = calcPaceNum(displayDist, elapsed);
   const otherRunners = presentParticipants.filter((p: any) => p.user_id !== user?.id);
@@ -305,7 +307,7 @@ export default function RunLiveScreen() {
         ? displayDist
         : parseFloat(p.cumulative_distance ?? p.final_distance ?? 0);
       const pace = isSelf ? paceNum : parseFloat(p.current_pace ?? p.final_pace ?? 0);
-      return { user_id: p.user_id, name: p.name || "Runner", distMi, pace };
+      return { user_id: p.user_id, name: p.name || "Runner", distMi, pace, isStale: !!p.isStale };
     })
     .sort((a, b) => b.distMi - a.distMi);
 
@@ -340,7 +342,9 @@ export default function RunLiveScreen() {
         </View>
         <View style={s.runnerCount}>
           <Feather name="users" size={14} color={C.primary} />
-          <Text style={s.runnerCountText}>{presentCount}</Text>
+          <Text style={s.runnerCountText}>
+            {staleCount > 0 ? `${activeCount} active · ${staleCount} lost` : presentCount}
+          </Text>
         </View>
       </View>
 
@@ -401,7 +405,7 @@ export default function RunLiveScreen() {
                 )}
                 {otherRunners.map((runner: any, i: number) => {
                   if (!runner.latitude || !runner.longitude) return null;
-                  const color = DOT_COLORS[i % DOT_COLORS.length];
+                  const color = runner.isStale ? "#888888" : DOT_COLORS[i % DOT_COLORS.length];
                   return (
                     <Marker
                       key={runner.user_id}
@@ -409,7 +413,7 @@ export default function RunLiveScreen() {
                       anchor={{ x: 0.5, y: 0.5 }}
                       tracksViewChanges={false}
                     >
-                      <View style={[s.runnerDot, { backgroundColor: color }]}>
+                      <View style={[s.runnerDot, { backgroundColor: color, opacity: runner.isStale ? 0.5 : 1 }]}>
                         <Text style={s.runnerDotText}>{runner.name?.[0] ?? "?"}</Text>
                       </View>
                     </Marker>
@@ -499,7 +503,9 @@ export default function RunLiveScreen() {
                         <Text style={[s.leaderboardName, isSelf && { color: C.primary }]} numberOfLines={1}>
                           {isSelf ? "You" : runner.name.split(" ")[0]}
                         </Text>
-                        <Text style={s.leaderboardPaceTxt}>{formatPaceStr(runner.pace)} /mi</Text>
+                        <Text style={s.leaderboardPaceTxt}>
+                          {runner.isStale ? "Signal lost" : `${formatPaceStr(runner.pace)} /mi`}
+                        </Text>
                       </View>
                       <View style={s.leaderboardRight}>
                         <Text style={s.leaderboardDist}>{runner.distMi.toFixed(2)} mi</Text>

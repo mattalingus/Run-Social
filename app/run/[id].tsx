@@ -88,6 +88,7 @@ export default function RunDetailScreen() {
   const pillPulse = useRef(new Animated.Value(1)).current;
   const wasLiveRef = useRef(false);
   const [joining, setJoining] = useState(false);
+  const [fullToast, setFullToast] = useState(false);
   const [requestingJoin, setRequestingJoin] = useState(false);
   const [joinRequestSent, setJoinRequestSent] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -487,28 +488,19 @@ export default function RunDetailScreen() {
     try {
       const body_payload: Record<string, any> = {};
       if (paceGroupLabel) body_payload.paceGroupLabel = paceGroupLabel;
-      const res = await apiRequest("POST", `/api/runs/${id}/join`, body_payload);
-      if (!res.ok) {
-        const body = await res.json();
-        if (body.message === "This event is full") {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-          Alert.alert(
-            "This one's full",
-            `Request to be added? The host will be notified and can approve you.`,
-            [
-              { text: "Maybe Later", style: "cancel" },
-              { text: "Request to Join", onPress: () => doRequestJoin() },
-            ]
-          );
-          return;
-        }
-        throw new Error(body.message || "Unable to join");
-      }
+      await apiRequest("POST", `/api/runs/${id}/join`, body_payload);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       qc.invalidateQueries({ queryKey: ["/api/runs", id, "participants"] });
       qc.invalidateQueries({ queryKey: ["/api/runs"] });
       Alert.alert("You're in! 🎉", `You've been added to the live count.\n\nNow tap "Join Live ${run?.activity_type === "ride" ? "Ride" : run?.activity_type === "walk" ? "Walk" : "Run"}" to check in with your host and let them know you're ready.`);
     } catch (e: any) {
+      const errMsg = e?.message ?? "";
+      if (errMsg.includes("This event is full") || errMsg.includes("Event is full")) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        setFullToast(true);
+        setTimeout(() => setFullToast(false), 4000);
+        return;
+      }
       Alert.alert("Can't Join", e.message || `Unable to join ${run?.activity_type === "ride" ? "ride" : run?.activity_type === "walk" ? "walk" : "run"}`);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
@@ -667,6 +659,15 @@ export default function RunDetailScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: C.bg }]}>
+      {fullToast && (
+        <View style={styles.fullToast}>
+          <Feather name="alert-circle" size={16} color="#FF6B6B" />
+          <Text style={styles.fullToastText}>This event is full</Text>
+          <Pressable onPress={() => doRequestJoin()} hitSlop={8}>
+            <Text style={[styles.fullToastText, { color: C.primary, fontFamily: "Outfit_600SemiBold" }]}>Request to Join</Text>
+          </Pressable>
+        </View>
+      )}
       <ScrollView
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 120 }]}
         showsVerticalScrollIndicator={false}
@@ -1750,6 +1751,8 @@ export default function RunDetailScreen() {
 
 function makeStyles(C: ColorScheme) { return StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
+  fullToast: { position: "absolute" as const, top: 60, left: 20, right: 20, zIndex: 100, backgroundColor: C.surface, borderWidth: 1, borderColor: "#FF6B6B55", borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, flexDirection: "row" as const, alignItems: "center" as const, gap: 10 },
+  fullToastText: { fontFamily: "Outfit_500Medium", fontSize: 14, color: C.text },
   content: { paddingHorizontal: 20 },
   topBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 20 },
   topBarRight: { flexDirection: "row", alignItems: "center", gap: 8 },

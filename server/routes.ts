@@ -1139,18 +1139,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "This event has already taken place" });
       }
 
-      // Capacity check: reject if event is full
-      if (run.max_participants) {
-        const participantCount = await storage.getRunParticipantCount(req.params.id);
-        if (participantCount >= run.max_participants) {
-          return res.status(400).json({ message: "This event is full" });
-        }
-      }
-
       const paceGroupLabel = req.body.paceGroupLabel ?? null;
-      const participant = await storage.joinRun(req.params.id, req.session.userId!, paceGroupLabel);
+      let participant;
+      try {
+        participant = await storage.joinRun(req.params.id, req.session.userId!, paceGroupLabel);
+      } catch (joinErr: any) {
+        if (joinErr.message === "EVENT_FULL") {
+          return res.status(409).json({ message: "This event is full" });
+        }
+        throw joinErr;
+      }
       res.json(participant);
-      // Notify host (fire-and-forget)
       storage.getUserById(run.host_id).then((host) => {
         if (userWantsNotif(host, 'run_reminders')) {
           sendPushNotification(
@@ -1296,89 +1295,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { milesLogged } = req.body;
       const miles = parseFloat(milesLogged) || 3;
       const result = await storage.confirmRunCompletion(req.params.id, req.session.userId!, miles);
-      
-      // Crew enhancements: Streak and Overtake
-      const run = await storage.getRunById(req.params.id as string);
-      if (run && run.crew_id) {
-        const crew = await storage.getCrewById(run.crew_id);
-        if (crew) {
-          // Update streak
-          const now = new Date();
-          const lastRun = crew.last_run_week ? new Date(crew.last_run_week) : null;
-          
-          const getWeekNumber = (d: Date) => {
-            const onejan = new Date(d.getFullYear(), 0, 1);
-            return Math.ceil((((d.getTime() - onejan.getTime()) / 86400000) + onejan.getDay() + 1) / 7);
-          };
+      res.json({ success: result.success });
 
-          const currentWeek = getWeekNumber(now);
-          const currentYear = now.getFullYear();
-          const lastWeek = lastRun ? getWeekNumber(lastRun) : -1;
-          const lastYear = lastRun ? lastRun.getFullYear() : -1;
-
-          let newStreak = crew.current_streak_weeks || 0;
-          if (lastYear === currentYear && lastWeek === currentWeek) {
-            // Already ran this week
-          } else if (lastYear === currentYear && lastWeek === currentWeek - 1) {
-            newStreak++;
-          } else if (lastYear === currentYear - 1 && lastWeek >= 52 && currentWeek === 1) {
-            newStreak++;
-          } else {
-            newStreak = 1;
-          }
-
-          await storage.updateCrew(crew.id, { current_streak_weeks: newStreak, last_run_week: now });
-
-          // Post milestone message
-          const milestones = [4, 8, 12, 26, 52];
-          if (milestones.includes(newStreak)) {
-            const recap = await ai.generateCrewRecap(
-              crew.name,
-              run.title,
-              (await storage.getRunParticipants(run.id)).length,
-              (run.min_pace + run.max_pace / 2).toFixed(2) // Fallback avg pace
-            );
-            await storage.createCrewMessage(
-              crew.id,
-              "system",
-              "PaceUp Bot",
-              null,
-              `🔥 ${newStreak} WEEK STREAK! ${recap || "This crew is on fire!"}`,
-              "milestone"
-            );
-          }
-
-          // Ranking Overtake Check
-          const oldRankings = await storage.getCrewRankings("national");
-          const crewOldRank = oldRankings.findIndex(r => r.id === crew.id) + 1;
-
-          // Rankings might have changed after milesLogged update
-          const newRankings = await storage.getCrewRankings("national");
-          const crewNewRank = newRankings.findIndex(r => r.id === crew.id) + 1;
-
-          if (crewNewRank < crewOldRank && crewOldRank > 0) {
-            // We overtook someone
-            const overtaken = newRankings[crewNewRank]; // The crew now at our old spot (roughly)
-            if (overtaken && overtaken.id !== crew.id) {
-              const nowMs = Date.now();
-              const lastNotif = overtaken.last_overtake_notif_at ? new Date(overtaken.last_overtake_notif_at).getTime() : 0;
-              if (nowMs - lastNotif > 60 * 60 * 1000) {
-                await storage.createCrewMessage(
-                  overtaken.id,
-                  "system",
-                  "PaceUp Bot",
-                  null,
-                  `⚠️ ${crew.name} just took your #${crewNewRank} spot — take it back!`,
-                  "milestone"
-                );
-                await storage.updateCrew(overtaken.id, { last_overtake_notif_at: new Date() });
+      if (result.crewStreakUpdated) {
+        const runId = req.params.id;
+        const { crewId, newStreak } = result.crewStreakUpdated;
+        (async () => {
+          try {
+            const run = await storage.getRunById(runId);
+            const crew = await storage.getCrewById(crewId);
+            if (!run || !crew) return;
+            const milestones = [4, 8, 12, 26, 52];
+            if (milestones.includes(newStreak)) {
+              const recap = await ai.generateCrewRecap(
+                crew.name,
+                run.title,
+                (await storage.getRunParticipants(run.id)).length,
+                (run.min_pace + run.max_pace / 2).toFixed(2)
+              );
+              await storage.createCrewMessage(
+                crewId, "system", "PaceUp Bot", null,
+                `🔥 ${newStreak} WEEK STREAK! ${recap || "This crew is on fire!"}`,
+                "milestone"
+              );
+            }
+            const rankings = await storage.getCrewRankings("national");
+            const crewRank = rankings.findIndex((r: any) => r.id === crewId) + 1;
+            if (crewRank > 1) {
+              const overtaken = rankings[crewRank];
+              if (overtaken && overtaken.id !== crewId) {
+                const nowMs = Date.now();
+                const lastNotif = overtaken.last_overtake_notif_at ? new Date(overtaken.last_overtake_notif_at).getTime() : 0;
+                if (nowMs - lastNotif > 60 * 60 * 1000) {
+                  await storage.createCrewMessage(
+                    overtaken.id, "system", "PaceUp Bot", null,
+                    `⚠️ ${crew.name} just took your #${crewRank} spot — take it back!`,
+                    "milestone"
+                  );
+                  await storage.updateCrew(overtaken.id, { last_overtake_notif_at: new Date() });
+                }
               }
             }
+          } catch (bgErr: any) {
+            console.error("[bg] crew streak side-effects:", bgErr?.message ?? bgErr);
           }
-        }
+        })();
       }
-      
-      res.json(result);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
@@ -1633,7 +1595,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         req.params.id, req.session.userId!,
         safeDist, safePace
       );
-      res.json(result);
+      res.json({ success: result.success });
       // Fire-and-forget crew achievement check
       storage.getRunById(req.params.id).then((run: any) => {
         if (run?.crew_id) {

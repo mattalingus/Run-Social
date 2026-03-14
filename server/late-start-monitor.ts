@@ -79,23 +79,104 @@ async function cleanupUnstartedRuns(): Promise<void> {
 
 async function cleanupStaleActiveRuns(): Promise<void> {
   try {
-    // Runs that have been is_active for more than 8 hours with no recent pings are dead test/abandoned runs
     const stale = await pool.query(
-      `UPDATE runs
-       SET is_completed = true, is_active = false
+      `SELECT id, title, crew_id FROM runs
        WHERE is_active = true
          AND is_completed = false
-         AND started_at < NOW() - INTERVAL '8 hours'
-       RETURNING id, title`
+         AND started_at < NOW() - INTERVAL '8 hours'`
     );
-    if (stale.rowCount && stale.rowCount > 0) {
-      for (const r of stale.rows) {
-        console.log(`[late-start] Auto-completed stale run ${r.id} ("${r.title}")`);
+    for (const r of stale.rows) {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const lockRes = await client.query(
+          `SELECT id FROM runs WHERE id = $1 AND is_active = true AND is_completed = false FOR UPDATE`,
+          [r.id]
+        );
+        if (lockRes.rows.length === 0) {
+          await client.query('ROLLBACK');
+          continue;
+        }
+        const finishedParticipants = await client.query(
+          `SELECT rp.user_id, rp.final_distance
+           FROM run_participants rp
+           WHERE rp.run_id = $1 AND rp.final_pace IS NOT NULL AND rp.status != 'confirmed'`,
+          [r.id]
+        );
+        for (const p of finishedParticipants.rows) {
+          const miles = parseFloat(p.final_distance) || 3;
+          await client.query(
+            `UPDATE run_participants SET status = 'confirmed', miles_logged = $3 WHERE run_id = $1 AND user_id = $2`,
+            [r.id, p.user_id, miles]
+          );
+          await client.query(
+            `UPDATE users SET
+              completed_runs = completed_runs + 1,
+              total_miles = total_miles + $2,
+              miles_this_year = miles_this_year + $2,
+              miles_this_month = miles_this_month + $2
+             WHERE id = $1`,
+            [p.user_id, miles]
+          );
+        }
+        if (r.crew_id && finishedParticipants.rows.length > 0) {
+          const crew = await client.query(
+            `SELECT id, current_streak_weeks, last_run_week FROM crews WHERE id = $1 FOR UPDATE`,
+            [r.crew_id]
+          );
+          if (crew.rows.length > 0) {
+            const c = crew.rows[0];
+            const now = new Date();
+            const lastRun = c.last_run_week ? new Date(c.last_run_week) : null;
+            const getWeekNumber = (d: Date) => {
+              const onejan = new Date(d.getFullYear(), 0, 1);
+              return Math.ceil((((d.getTime() - onejan.getTime()) / 86400000) + onejan.getDay() + 1) / 7);
+            };
+            const currentWeek = getWeekNumber(now);
+            const currentYear = now.getFullYear();
+            const lastWeek = lastRun ? getWeekNumber(lastRun) : -1;
+            const lastYear = lastRun ? lastRun.getFullYear() : -1;
+            let newStreak = c.current_streak_weeks || 0;
+            if (lastYear === currentYear && lastWeek === currentWeek) {
+            } else if (lastYear === currentYear && lastWeek === currentWeek - 1) {
+              newStreak++;
+            } else if (lastYear === currentYear - 1 && lastWeek >= 52 && currentWeek === 1) {
+              newStreak++;
+            } else {
+              newStreak = 1;
+            }
+            await client.query(
+              `UPDATE crews SET current_streak_weeks = $2, last_run_week = $3 WHERE id = $1`,
+              [r.crew_id, newStreak, now]
+            );
+            console.log(`[late-start] Updated crew ${r.crew_id} streak to ${newStreak} weeks`);
+          }
+        }
+        const ranksRes = await client.query(
+          `SELECT user_id, final_pace FROM run_participants
+           WHERE run_id = $1 AND final_pace IS NOT NULL AND final_pace > 0 ORDER BY final_pace ASC`,
+          [r.id]
+        );
+        for (let i = 0; i < ranksRes.rows.length; i++) {
+          await client.query(
+            `UPDATE run_participants SET final_rank = $3 WHERE run_id = $1 AND user_id = $2`,
+            [r.id, ranksRes.rows[i].user_id, i + 1]
+          );
+        }
+        await client.query(
+          `UPDATE runs SET is_completed = true, is_active = false WHERE id = $1`,
+          [r.id]
+        );
+        await client.query('COMMIT');
+        console.log(`[late-start] Auto-completed stale run ${r.id} ("${r.title}") with ${finishedParticipants.rows.length} credited`);
+      } catch (err: any) {
+        await client.query('ROLLBACK').catch(() => {});
+        console.error(`[late-start] Auto-completion failed for run ${r.id}:`, err?.message);
+      } finally {
+        client.release();
       }
     }
 
-    // Also clean up runs that were set is_active but never started (started_at is null)
-    // and are more than 3 hours past their scheduled date
     const neverStarted = await pool.query(
       `UPDATE runs
        SET is_active = false

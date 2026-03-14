@@ -13,6 +13,7 @@ import {
   ScrollView,
   Image,
   Share,
+  Linking,
 } from "react-native";
 import * as Notifications from "@/lib/safeNotifications";
 import * as MediaLibrary from "expo-media-library";
@@ -396,8 +397,9 @@ export default function RunTrackingScreen() {
     }
   }, [pathId, savedPaths]);
 
-  // ─── Crash recovery: restore from autosave ─────────────────────────────────
+  const [pendingRecoveryFinish, setPendingRecoveryFinish] = useState(false);
   const recoveryDone = useRef(false);
+  const draftIdRef = useRef(Date.now().toString() + Math.random().toString(36).substr(2, 9));
   useEffect(() => {
     if (recover !== "1" || !user || recoveryDone.current) return;
     recoveryDone.current = true;
@@ -407,8 +409,15 @@ export default function RunTrackingScreen() {
         const raw = await AsyncStorage.getItem(key);
         if (!raw) return;
         const data = JSON.parse(raw);
+        const savedToken = await AsyncStorage.getItem(`paceup_saved_draft_${user.id}`);
+        if (savedToken && data.draftId && savedToken === data.draftId) {
+          await AsyncStorage.removeItem(key);
+          await AsyncStorage.removeItem(`paceup_saved_draft_${user.id}`).catch(() => {});
+          return;
+        }
         const validTypes = ["run", "ride", "walk"];
         const recoveredType = validTypes.includes(data.activityType) ? data.activityType : "run";
+        draftIdRef.current = data.draftId || draftIdRef.current;
         setActivityFilter(recoveredType);
         totalDistRef.current = data.distanceMi ?? 0;
         elapsedRef.current = data.durationSeconds ?? 0;
@@ -421,10 +430,16 @@ export default function RunTrackingScreen() {
         setDisplayDist(data.distanceMi ?? 0);
         setRouteState(data.routePath ?? []);
         await AsyncStorage.removeItem(key);
-        setTimeout(() => doFinish(), 100);
+        setPendingRecoveryFinish(true);
       } catch {}
     })();
   }, [recover, user]);
+
+  useEffect(() => {
+    if (!pendingRecoveryFinish || !user) return;
+    setPendingRecoveryFinish(false);
+    doFinish();
+  }, [pendingRecoveryFinish, user]);
 
   // ─── Audio Coach Prefs ────────────────────────────────────────────────────
 
@@ -456,29 +471,29 @@ export default function RunTrackingScreen() {
 
   const audioModeConfiguredRef = useRef(false);
 
+  const ensureAudioMode = useCallback(async (duck: boolean) => {
+    try {
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+        interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
+        shouldDuckAndroid: duck,
+        playThroughEarpieceAndroid: false,
+      });
+    } catch (e) {}
+  }, []);
+
   const announcePace = useCallback(async (distance: number, totalSeconds: number) => {
     if (Platform.OS === "web") return;
 
-    if (!audioModeConfiguredRef.current) {
-      try {
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-          interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: true,
-          interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
-          shouldDuckAndroid: true,
-          playThroughEarpieceAndroid: false,
-        });
-        audioModeConfiguredRef.current = true;
-      } catch (e) {}
-    }
+    await ensureAudioMode(true);
 
     const paceMinTotal = totalSeconds / 60 / distance;
     const text = pickCoachPhrase(distance, paceMinTotal, totalSeconds, lastAnnouncedPaceRef.current, activityFilter);
     lastAnnouncedPaceRef.current = paceMinTotal;
 
-    // T003: AI TTS with fallback
     try {
       const res = await apiRequest("POST", "/api/tts", { text });
       if (res.ok) {
@@ -490,9 +505,19 @@ export default function RunTrackingScreen() {
             const filename = `${FileSystem.cacheDirectory}pace_${Math.round(distance * 100)}.mp3`;
             await FileSystem.writeAsStringAsync(filename, base64, { encoding: FileSystem.EncodingType.Base64 });
             const { sound } = await Audio.Sound.createAsync({ uri: filename });
+            sound.setOnPlaybackStatusUpdate((status: any) => {
+              if (status.didJustFinish) {
+                ensureAudioMode(false);
+                sound.unloadAsync().catch(() => {});
+              }
+            });
             await sound.playAsync();
           } catch (e) {
-            Speech.speak(text, { rate: 0.95 });
+            Speech.speak(text, {
+              rate: 0.95,
+              onDone: () => ensureAudioMode(false),
+              onError: () => ensureAudioMode(false),
+            });
           }
         };
         reader.readAsDataURL(blob);
@@ -500,7 +525,11 @@ export default function RunTrackingScreen() {
       }
     } catch (e) {}
 
-    Speech.speak(text, { rate: 0.95 });
+    Speech.speak(text, {
+      rate: 0.95,
+      onDone: () => ensureAudioMode(false),
+      onError: () => ensureAudioMode(false),
+    });
   }, [activityFilter]);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -544,6 +573,7 @@ export default function RunTrackingScreen() {
     if ((phase !== "active" && phase !== "paused") || !AUTOSAVE_KEY) return;
     const save = () => {
       const data = {
+        draftId: draftIdRef.current,
         distanceMi: totalDistRef.current,
         durationSeconds: elapsedRef.current,
         routePath: routePathRef.current,
@@ -710,7 +740,9 @@ export default function RunTrackingScreen() {
           }
         );
         locationSubRef.current = sub;
-      } catch (_) {}
+      } catch (err: any) {
+        handleLocationPermissionError(err);
+      }
       return;
     }
     try {
@@ -728,7 +760,11 @@ export default function RunTrackingScreen() {
         handleCoord(lat, lng, accuracy ?? undefined, speed, altitude);
       });
       locationSubRef.current = { remove: unsub } as any;
-    } catch (_) {
+    } catch (err: any) {
+      if (isPermissionError(err)) {
+        handleLocationPermissionError(err);
+        return;
+      }
       try {
         const sub = await Location.watchPositionAsync(
           { accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 5 },
@@ -738,8 +774,38 @@ export default function RunTrackingScreen() {
           }
         );
         locationSubRef.current = sub;
-      } catch (_2) {}
+      } catch (err2: any) {
+        handleLocationPermissionError(err2);
+      }
     }
+  }
+
+  function isPermissionError(err: any): boolean {
+    const msg = (err?.message ?? "").toLowerCase();
+    return msg.includes("permission") || msg.includes("denied") || msg.includes("not authorized") || msg.includes("not granted");
+  }
+
+  const permAlertShownRef = useRef(false);
+  function handleLocationPermissionError(err: any) {
+    if (!isPermissionError(err) || permAlertShownRef.current) return;
+    permAlertShownRef.current = true;
+    Alert.alert(
+      "Location Access Lost",
+      "Location permission was revoked. Your route will stop recording. Please re-enable location access in Settings.",
+      [
+        { text: "Dismiss", style: "cancel" },
+        {
+          text: "Open Settings",
+          onPress: () => {
+            if (Platform.OS === "ios") {
+              Linking.openURL("app-settings:");
+            } else {
+              Linking.openSettings();
+            }
+          },
+        },
+      ]
+    );
   }
 
   function stopWatching() {
@@ -886,6 +952,7 @@ export default function RunTrackingScreen() {
     // T002: persist draft so data survives app crash on done screen
     if (user) {
       const draft = {
+        draftId: draftIdRef.current,
         distanceMi: totalDistRef.current,
         durationSeconds: elapsedRef.current,
         routePath: routePathRef.current,
@@ -938,40 +1005,51 @@ export default function RunTrackingScreen() {
     const distance = totalDistRef.current;
     const pace = distance > 0.01 ? (elapsed / 60) / distance : null;
     setSaving(true);
-    try {
-      const elevFt = elevationGainRef.current > 0 ? Math.round(elevationGainRef.current) : null;
-      const moveSecs = moveTimeRef.current > 0 ? Math.round(moveTimeRef.current) : null;
-      const steps = activityFilter === "run" && stepCountRef.current > 0 ? stepCountRef.current : null;
-      const res = await apiRequest("POST", "/api/solo-runs", {
-        title: `${toDisplayDist(distance, distUnit)} solo ${activityFilter === "ride" ? "ride" : activityFilter === "walk" ? "walk" : "run"}`,
-        date: new Date().toISOString(),
-        distanceMiles: Math.max(distance, 0.001),
-        paceMinPerMile: pace,
-        durationSeconds: elapsed,
-        completed: true,
-        planned: false,
-        routePath: routePathRef.current.length > 1 ? routePathRef.current : null,
-        activityType: activityFilter,
-        savedPathId: selectedPath?.id ?? null,
-        mileSplits: mileSplits.length > 0 ? mileSplits : null,
-        elevationGainFt: elevFt,
-        stepCount: steps,
-        moveTimeSeconds: moveSecs,
-      });
-      const saved = await res.json();
-      setSavedRunId(saved.id);
-      setRunTitle(saved.title ?? "");
-      if (saved.prTiers) setPrTiers(saved.prTiers);
-      qc.invalidateQueries({ queryKey: ["/api/solo-runs"] });
-      qc.invalidateQueries({ queryKey: ["/api/runs/mine"] });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      // T002: clear draft after successful save
-      if (user) AsyncStorage.removeItem(`paceup_draft_run_${user.id}`).catch(() => {});
-    } catch (e: any) {
-      Alert.alert("Save Failed", e.message);
-    } finally {
-      setSaving(false);
+    const MAX_RETRIES = 3;
+    const payload = {
+      title: `${toDisplayDist(distance, distUnit)} solo ${activityFilter === "ride" ? "ride" : activityFilter === "walk" ? "walk" : "run"}`,
+      date: new Date().toISOString(),
+      distanceMiles: Math.max(distance, 0.001),
+      paceMinPerMile: pace,
+      durationSeconds: elapsed,
+      completed: true,
+      planned: false,
+      routePath: routePathRef.current.length > 1 ? routePathRef.current : null,
+      activityType: activityFilter,
+      savedPathId: selectedPath?.id ?? null,
+      mileSplits: mileSplits.length > 0 ? mileSplits : null,
+      elevationGainFt: elevationGainRef.current > 0 ? Math.round(elevationGainRef.current) : null,
+      stepCount: activityFilter === "run" && stepCountRef.current > 0 ? stepCountRef.current : null,
+      moveTimeSeconds: moveTimeRef.current > 0 ? Math.round(moveTimeRef.current) : null,
+    };
+
+    let lastErr: any = null;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const res = await apiRequest("POST", "/api/solo-runs", payload);
+        const saved = await res.json();
+        setSavedRunId(saved.id);
+        setRunTitle(saved.title ?? "");
+        if (saved.prTiers) setPrTiers(saved.prTiers);
+        qc.invalidateQueries({ queryKey: ["/api/solo-runs"] });
+        qc.invalidateQueries({ queryKey: ["/api/runs/mine"] });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        if (user) {
+          await AsyncStorage.setItem(`paceup_saved_draft_${user.id}`, draftIdRef.current);
+          await AsyncStorage.removeItem(`paceup_draft_run_${user.id}`).catch(() => {});
+        }
+        setSaving(false);
+        return;
+      } catch (e: any) {
+        lastErr = e;
+        console.log(`[saveRun] Attempt ${attempt}/${MAX_RETRIES} failed: ${e.message}`);
+        if (attempt < MAX_RETRIES) {
+          await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
+        }
+      }
     }
+    setSaving(false);
+    Alert.alert("Save Failed", lastErr?.message ?? "Could not save your activity. Your data has been preserved — try again.");
   }
 
   async function saveTitleIfChanged(newTitle: string) {
@@ -1374,23 +1452,27 @@ export default function RunTrackingScreen() {
                 disabled={saving}
               >
                 {saving ? (
-                  <ActivityIndicator color={C.bg} />
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <ActivityIndicator color={C.bg} />
+                    <Text style={t.saveBtnTxt}>Saving…</Text>
+                  </View>
                 ) : (
                   <Text style={t.saveBtnTxt}>{activityFilter === "ride" ? "Save Ride" : activityFilter === "walk" ? "Save Walk" : "Save Run"}</Text>
                 )}
               </Pressable>
 
-              <Pressable
-                style={t.discardBtn}
-                onPress={() => {
-                  // T002: clear draft on explicit discard
-                  if (user) AsyncStorage.removeItem(`paceup_draft_run_${user.id}`).catch(() => {});
-                  stopWatching();
-                  router.back();
-                }}
-              >
-                <Text style={t.discardTxt}>Discard</Text>
-              </Pressable>
+              {!saving && (
+                <Pressable
+                  style={t.discardBtn}
+                  onPress={() => {
+                    if (user) AsyncStorage.removeItem(`paceup_draft_run_${user.id}`).catch(() => {});
+                    stopWatching();
+                    router.back();
+                  }}
+                >
+                  <Text style={t.discardTxt}>Discard</Text>
+                </Pressable>
+              )}
             </>
           )}
         </ScrollView>

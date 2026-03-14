@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { Platform } from "react-native";
+import { Alert, Linking, Platform } from "react-native";
 import * as Location from "expo-location";
 import {
   GROUP_LOCATION_TASK,
@@ -125,6 +125,30 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
     lastCoordRef.current = { latitude, longitude };
   }
 
+  const permAlertShownRef = useRef(false);
+
+  function showPermissionLostAlert() {
+    if (permAlertShownRef.current) return;
+    permAlertShownRef.current = true;
+    Alert.alert(
+      "Location Access Lost",
+      "Location permission was revoked. Your route will stop recording. Please re-enable location in Settings.",
+      [
+        { text: "Dismiss", style: "cancel" },
+        {
+          text: "Open Settings",
+          onPress: () => {
+            if (Platform.OS === "ios") {
+              Linking.openURL("app-settings:");
+            } else {
+              Linking.openSettings();
+            }
+          },
+        },
+      ]
+    );
+  }
+
   async function watchLocation() {
     if (Platform.OS === "web") {
       if (typeof navigator !== "undefined" && navigator.geolocation) {
@@ -151,7 +175,12 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
         handleCoord(lat, lng);
       });
       locationSubRef.current = { remove: unsub } as any;
-    } catch {}
+    } catch (err: any) {
+      const msg = (err?.message ?? "").toLowerCase();
+      if (msg.includes("permission") || msg.includes("denied") || msg.includes("not authorized")) {
+        showPermissionLostAlert();
+      }
+    }
   }
 
   function clearLocationAndPing() {

@@ -472,11 +472,20 @@ export default function SoloScreen() {
   const qc = useQueryClient();
   const [ghostSoloDone, setGhostSoloDone] = useState(true);
 
-  // T002: Check for unsaved draft run on mount and offer recovery
   useEffect(() => {
     if (!user) return;
     const key = `paceup_draft_run_${user.id}`;
-    AsyncStorage.getItem(key).then((raw) => {
+    AsyncStorage.getItem(key).then(async (raw) => {
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      const savedToken = await AsyncStorage.getItem(`paceup_saved_draft_${user.id}`);
+      if (savedToken && parsed.draftId && savedToken === parsed.draftId) {
+        await AsyncStorage.removeItem(key).catch(() => {});
+        await AsyncStorage.removeItem(`paceup_saved_draft_${user.id}`).catch(() => {});
+        return null;
+      }
+      return raw;
+    }).then((raw) => {
       if (!raw) return;
       try {
         const draft = JSON.parse(raw);
@@ -517,6 +526,9 @@ export default function SoloScreen() {
                     mileSplits: draft.splits && draft.splits.length > 0 ? draft.splits : null,
                     elevationGainFt: draft.elevationGainFt > 0 ? Math.round(draft.elevationGainFt) : null,
                   });
+                  if (draft.draftId) {
+                    await AsyncStorage.setItem(`paceup_saved_draft_${user!.id}`, draft.draftId);
+                  }
                   await AsyncStorage.removeItem(key);
                   qc.invalidateQueries({ queryKey: ["/api/solo-runs"] });
                   qc.invalidateQueries({ queryKey: ["/api/runs/mine"] });
