@@ -663,7 +663,7 @@ export async function getNotifications(userId: string) {
         title: `Upcoming ${actLabel === 'ride' ? 'Ride' : actLabel === 'walk' ? 'Walk' : 'Run'}`,
         body: `"${r.title}" with ${r.host_name} starts in ${timeStr}${r.location_name ? ` · ${r.location_name}` : ''}`,
         data: { run_id: r.id, host_name: r.host_name, location_name: r.location_name, date: r.date, activity_type: r.activity_type },
-        created_at: r.date,
+        created_at: now.toISOString(),
       };
     }),
     ...friendAccepted.rows.map(r => ({
