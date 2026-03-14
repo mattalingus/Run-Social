@@ -89,17 +89,18 @@ function RootLayoutNav() {
   }, [user]);
 
   // Check for interrupted active run (crash recovery)
-  const recoveryChecked = useRef(false);
+  const recoveryCheckedForUser = useRef<string | null>(null);
   useEffect(() => {
-    if (!user || recoveryChecked.current) return;
-    recoveryChecked.current = true;
+    if (!user || recoveryCheckedForUser.current === user.id) return;
+    recoveryCheckedForUser.current = user.id;
     (async () => {
       try {
         const key = `paceup_active_run_${user.id}`;
         const raw = await AsyncStorage.getItem(key);
         if (!raw) return;
         const data = JSON.parse(raw);
-        const age = Date.now() - new Date(data.timestamp).getTime();
+        const ts = new Date(data.timestamp).getTime();
+        const age = Number.isFinite(ts) ? Date.now() - ts : Infinity;
         if (age > 24 * 60 * 60 * 1000) {
           await AsyncStorage.removeItem(key);
           return;
