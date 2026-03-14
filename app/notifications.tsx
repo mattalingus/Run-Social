@@ -11,19 +11,44 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons } from "@expo/vector-icons";
+import type { ComponentProps } from "react";
 import * as Haptics from "expo-haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
-import { apiRequest, getApiUrl } from "@/lib/query-client";
+import { apiRequest } from "@/lib/query-client";
 import { useTheme } from "@/contexts/ThemeContext";
+
+type FeatherIconName = ComponentProps<typeof Feather>["name"];
+
+interface NotifData {
+  run_id?: string;
+  friend_id?: string;
+  friend_name?: string;
+  friend_photo?: string;
+  from_id?: string;
+  from_name?: string;
+  from_photo?: string;
+  crew_id?: string;
+  crew_name?: string;
+  emoji?: string;
+  participant_id?: string;
+  run_title?: string;
+  requester_id?: string;
+  requester_name?: string;
+  requester_photo?: string;
+  host_name?: string;
+  location_name?: string;
+  activity_type?: string;
+  date?: string;
+}
 
 interface NotifItem {
   id: string;
   type: string;
   title: string;
   body: string;
-  data?: any;
+  data?: NotifData;
   created_at: string;
   from_name?: string;
   from_photo?: string;
@@ -57,16 +82,19 @@ function sectionKey(dateStr: string): string {
   return "Earlier";
 }
 
-const ICON_MAP: Record<string, { name: string; color: string; bg: string }> = {
+const ICON_MAP: Record<string, { name: FeatherIconName; color: string; bg: string }> = {
   friend_request: { name: "user-plus", color: "#4DA6FF", bg: "#4DA6FF22" },
   friend_accepted: { name: "user-check", color: "#00D97E", bg: "#00D97E22" },
   crew_invite: { name: "users", color: "#A78BFA", bg: "#A78BFA22" },
+  crew_join_request: { name: "users", color: "#F59E0B", bg: "#F59E0B22" },
   join_request: { name: "user-plus", color: "#F59E0B", bg: "#F59E0B22" },
   event_reminder: { name: "clock", color: "#3B82F6", bg: "#3B82F622" },
   host_arrived: { name: "map-pin", color: "#00D97E", bg: "#00D97E22" },
   friend_run_posted: { name: "activity", color: "#00D97E", bg: "#00D97E22" },
   pr_notification: { name: "award", color: "#F59E0B", bg: "#F59E0B22" },
 };
+
+const DEFAULT_ICON: { name: FeatherIconName; color: string; bg: string } = { name: "bell", color: "#999", bg: "#99999922" };
 
 export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
@@ -130,6 +158,17 @@ export default function NotificationsScreen() {
     },
   });
 
+  const respondCrewJoinReqMut = useMutation({
+    mutationFn: async ({ crewId, requesterId, accept }: { crewId: string; requesterId: string; accept: boolean }) => {
+      await apiRequest("POST", `/api/crews/${crewId}/join-requests/${requesterId}/respond`, { accept });
+    },
+    onSuccess: () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      qc.invalidateQueries({ queryKey: ["/api/notifications"] });
+      qc.invalidateQueries({ queryKey: ["/api/crews"] });
+    },
+  });
+
   const sections = useMemo(() => {
     const groups: Record<string, NotifItem[]> = { Today: [], "This Week": [], Earlier: [] };
     items.forEach((item) => {
@@ -144,95 +183,114 @@ export default function NotificationsScreen() {
 
   function handleTap(item: NotifItem) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (item.data?.run_id) {
-      router.push(`/run/${item.data.run_id}`);
-    } else if (item.data?.friend_id && item.type === "friend_accepted") {
-      router.push(`/user-profile/${item.data.friend_id}`);
-    } else if (item.data?.crew_id || item.crew_id) {
-      router.push("/(tabs)/crew");
+    const d = item.data;
+    if (d?.run_id) {
+      router.push(`/run/${d.run_id}`);
+    } else if (d?.friend_id && item.type === "friend_accepted") {
+      router.push(`/user-profile/${d.friend_id}`);
+    } else if (d?.crew_id) {
+      router.push(`/crew-chat/${d.crew_id}`);
+    } else if (item.crew_id) {
+      router.push(`/crew-chat/${item.crew_id}`);
     }
   }
 
   function renderItem({ item }: { item: NotifItem }) {
-    const iconDef = ICON_MAP[item.type] ?? { name: "bell", color: C.textMuted, bg: C.surface };
+    const iconDef = ICON_MAP[item.type] ?? DEFAULT_ICON;
     const isUnread = new Date(item.created_at).getTime() > lastReadAt;
-    const hasPhoto = item.from_photo || item.data?.from_photo || item.data?.friend_photo;
-    const photoUrl = item.from_photo || item.data?.from_photo || item.data?.friend_photo;
+    const photoUrl = item.from_photo || item.data?.from_photo || item.data?.friend_photo || item.data?.requester_photo;
     const isFriendReq = item.type === "friend_request";
     const isCrewInvite = item.type === "crew_invite";
+    const isCrewJoinReq = item.type === "crew_join_request";
 
     return (
       <Pressable
-        style={[s.row, isUnread && { backgroundColor: C.primary + "08" }]}
+        style={[st.row, isUnread && { backgroundColor: C.primary + "08" }]}
         onPress={() => handleTap(item)}
       >
-        {hasPhoto ? (
-          <Image source={{ uri: photoUrl }} style={[s.iconCircle, { backgroundColor: iconDef.bg }]} />
+        {photoUrl ? (
+          <Image source={{ uri: photoUrl }} style={[st.iconCircle, { backgroundColor: iconDef.bg }]} />
         ) : (
-          <View style={[s.iconCircle, { backgroundColor: iconDef.bg }]}>
-            <Feather name={iconDef.name as any} size={18} color={iconDef.color} />
+          <View style={[st.iconCircle, { backgroundColor: iconDef.bg }]}>
+            <Feather name={iconDef.name} size={18} color={iconDef.color} />
           </View>
         )}
-        <View style={s.rowContent}>
-          <Text style={[s.rowBody, { color: C.text }]} numberOfLines={2}>{item.body}</Text>
-          <Text style={[s.rowTime, { color: C.textMuted }]}>{timeAgo(item.created_at)}</Text>
+        <View style={st.rowContent}>
+          <Text style={[st.rowBody, { color: C.text }]} numberOfLines={2}>{item.body}</Text>
+          <Text style={[st.rowTime, { color: C.textMuted }]}>{timeAgo(item.created_at)}</Text>
           {isFriendReq && (
-            <View style={s.actionRow}>
+            <View style={st.actionRow}>
               <Pressable
-                style={[s.actionBtn, { backgroundColor: C.primary }]}
+                style={[st.actionBtn, { backgroundColor: C.primary }]}
                 onPress={() => { acceptFriendMut.mutate(item.id); }}
               >
-                <Text style={[s.actionBtnTxt, { color: C.bg }]}>Accept</Text>
+                <Text style={[st.actionBtnTxt, { color: C.bg }]}>Accept</Text>
               </Pressable>
               <Pressable
-                style={[s.actionBtn, { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border }]}
+                style={[st.actionBtn, { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border }]}
                 onPress={() => { declineFriendMut.mutate(item.id); }}
               >
-                <Text style={[s.actionBtnTxt, { color: C.textSecondary }]}>Decline</Text>
+                <Text style={[st.actionBtnTxt, { color: C.textSecondary }]}>Decline</Text>
               </Pressable>
             </View>
           )}
-          {isCrewInvite && item.crew_id && (
-            <View style={s.actionRow}>
+          {isCrewInvite && (item.crew_id || item.data?.crew_id) && (
+            <View style={st.actionRow}>
               <Pressable
-                style={[s.actionBtn, { backgroundColor: C.primary }]}
-                onPress={() => { respondCrewInviteMut.mutate({ crewId: item.crew_id!, accept: true }); }}
+                style={[st.actionBtn, { backgroundColor: C.primary }]}
+                onPress={() => { respondCrewInviteMut.mutate({ crewId: (item.crew_id || item.data?.crew_id)!, accept: true }); }}
               >
-                <Text style={[s.actionBtnTxt, { color: C.bg }]}>Join</Text>
+                <Text style={[st.actionBtnTxt, { color: C.bg }]}>Join</Text>
               </Pressable>
               <Pressable
-                style={[s.actionBtn, { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border }]}
-                onPress={() => { respondCrewInviteMut.mutate({ crewId: item.crew_id!, accept: false }); }}
+                style={[st.actionBtn, { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border }]}
+                onPress={() => { respondCrewInviteMut.mutate({ crewId: (item.crew_id || item.data?.crew_id)!, accept: false }); }}
               >
-                <Text style={[s.actionBtnTxt, { color: C.textSecondary }]}>Decline</Text>
+                <Text style={[st.actionBtnTxt, { color: C.textSecondary }]}>Decline</Text>
+              </Pressable>
+            </View>
+          )}
+          {isCrewJoinReq && item.data?.crew_id && item.data?.requester_id && (
+            <View style={st.actionRow}>
+              <Pressable
+                style={[st.actionBtn, { backgroundColor: C.primary }]}
+                onPress={() => { respondCrewJoinReqMut.mutate({ crewId: item.data!.crew_id!, requesterId: item.data!.requester_id!, accept: true }); }}
+              >
+                <Text style={[st.actionBtnTxt, { color: C.bg }]}>Approve</Text>
+              </Pressable>
+              <Pressable
+                style={[st.actionBtn, { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border }]}
+                onPress={() => { respondCrewJoinReqMut.mutate({ crewId: item.data!.crew_id!, requesterId: item.data!.requester_id!, accept: false }); }}
+              >
+                <Text style={[st.actionBtnTxt, { color: C.textSecondary }]}>Decline</Text>
               </Pressable>
             </View>
           )}
         </View>
-        {isUnread && <View style={s.unreadDot} />}
+        {isUnread && <View style={st.unreadDot} />}
       </Pressable>
     );
   }
 
   return (
-    <View style={[s.container, { backgroundColor: C.bg }]}>
-      <View style={[s.header, { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 8) }]}>
-        <Pressable onPress={() => router.back()} style={s.backBtn}>
+    <View style={[st.container, { backgroundColor: C.bg }]}>
+      <View style={[st.header, { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 8) }]}>
+        <Pressable onPress={() => router.back()} style={st.backBtn}>
           <Feather name="arrow-left" size={22} color={C.text} />
         </Pressable>
-        <Text style={[s.headerTitle, { color: C.text }]}>Notifications</Text>
+        <Text style={[st.headerTitle, { color: C.text }]}>Notifications</Text>
         <View style={{ width: 40 }} />
       </View>
 
       {isLoading ? (
-        <View style={s.center}>
+        <View style={st.center}>
           <ActivityIndicator color={C.primary} />
         </View>
       ) : items.length === 0 ? (
-        <View style={s.center}>
+        <View style={st.center}>
           <Ionicons name="notifications-off-outline" size={48} color={C.textMuted} />
-          <Text style={[s.emptyText, { color: C.textSecondary }]}>You're all caught up</Text>
-          <Text style={[s.emptySubtext, { color: C.textMuted }]}>No new notifications</Text>
+          <Text style={[st.emptyText, { color: C.textSecondary }]}>You're all caught up</Text>
+          <Text style={[st.emptySubtext, { color: C.textMuted }]}>No new notifications</Text>
         </View>
       ) : (
         <SectionList
@@ -240,8 +298,8 @@ export default function NotificationsScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           renderSectionHeader={({ section }) => (
-            <View style={[s.sectionHeader, { backgroundColor: C.bg }]}>
-              <Text style={[s.sectionTitle, { color: C.textMuted }]}>{section.title}</Text>
+            <View style={[st.sectionHeader, { backgroundColor: C.bg }]}>
+              <Text style={[st.sectionTitle, { color: C.textMuted }]}>{section.title}</Text>
             </View>
           )}
           contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
@@ -253,7 +311,7 @@ export default function NotificationsScreen() {
   );
 }
 
-const s = StyleSheet.create({
+const st = StyleSheet.create({
   container: { flex: 1 },
   header: {
     flexDirection: "row",

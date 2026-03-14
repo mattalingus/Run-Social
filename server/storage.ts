@@ -536,6 +536,17 @@ export async function getNotifications(userId: string) {
     [userId]
   );
 
+  const crewJoinRequests = await pool.query(
+    `SELECT cm.crew_id, cm.user_id as requester_id, u.name as requester_name, u.photo_url as requester_photo,
+            c.name as crew_name, c.emoji, cm.joined_at as created_at
+     FROM crew_members cm
+     JOIN users u ON u.id = cm.user_id
+     JOIN crews c ON c.id = cm.crew_id
+     WHERE c.created_by = $1 AND cm.status = 'pending' AND cm.user_id != $1
+       AND (cm.invited_by IS NULL OR cm.invited_by = cm.user_id)`,
+    [userId]
+  );
+
   const friendAccepted = await pool.query(
     `SELECT fr.id, 'friend_accepted' as type, u.name as friend_name, u.photo_url as friend_photo, u.id as friend_id, fr.accepted_at
      FROM friends fr
@@ -619,6 +630,14 @@ export async function getNotifications(userId: string) {
       title: 'Join Request',
       body: `${r.from_name} wants to join "${r.run_title}"`,
       data: { participant_id: r.id, from_name: r.from_name, run_title: r.run_title },
+      created_at: r.created_at,
+    })),
+    ...crewJoinRequests.rows.map(r => ({
+      id: `cjr_${r.crew_id}_${r.requester_id}`,
+      type: 'crew_join_request',
+      title: 'Crew Join Request',
+      body: `${r.requester_name} wants to join ${r.emoji ?? ''} ${r.crew_name}`,
+      data: { crew_id: r.crew_id, requester_id: r.requester_id, requester_name: r.requester_name, requester_photo: r.requester_photo, crew_name: r.crew_name },
       created_at: r.created_at,
     })),
     ...eventReminders.rows.map(r => {
