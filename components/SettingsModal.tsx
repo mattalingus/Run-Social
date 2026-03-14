@@ -159,13 +159,9 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
   function handleConnectStrava() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Alert.alert(
-      stravaConnected ? "Disconnect Strava" : "Connect Strava",
-      stravaConnected
-        ? "Disconnect your Strava account from PaceUp?"
-        : "Strava sync will import your activities and track performance across both apps. Full integration coming soon!",
-      stravaConnected
-        ? [{ text: "Cancel", style: "cancel" }, { text: "Disconnect", style: "destructive", onPress: () => Alert.alert("Coming soon", "Strava disconnect will be available in the next update.") }]
-        : [{ text: "Cancel", style: "cancel" }, { text: "Connect Strava", onPress: () => Linking.openURL("https://www.strava.com") }]
+      "Strava — Coming Soon",
+      "Strava integration is coming in a future update. You'll be able to import activities and sync your training data.",
+      [{ text: "Got it" }]
     );
   }
 
@@ -232,8 +228,9 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
         return;
       }
       const resp = await apiRequest("POST", "/api/health/import", { workouts });
-      const msg = resp.imported > 0
-        ? `${resp.imported} new activit${resp.imported === 1 ? "y" : "ies"} imported!`
+      const data = await resp.json();
+      const msg = data.imported > 0
+        ? `${data.imported} new activit${data.imported === 1 ? "y" : "ies"} imported!`
         : "All activities already synced.";
       setHealthSyncMsg(msg);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -577,14 +574,14 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
               iconBg="#3A1A0A"
               icon={<FontAwesome5 name="strava" size={18} color="#FC4C02" />}
               label="Strava"
-              sublabel={stravaConnected ? "Connected" : "Import activities & routes"}
+              sublabel="Coming soon"
               right={
                 <Pressable
-                  style={[st.connectBtn, { borderColor: stravaConnected ? "#FC4C02" : C.border, backgroundColor: stravaConnected ? "#FC4C0222" : C.surface }]}
+                  style={[st.connectBtn, { borderColor: C.border, backgroundColor: C.surface, opacity: 0.5 }]}
                   onPress={handleConnectStrava}
                 >
-                  <Text style={[st.connectBtnTxt, { color: stravaConnected ? "#FC4C02" : C.textSecondary }]}>
-                    {stravaConnected ? "Connected" : "Connect"}
+                  <Text style={[st.connectBtnTxt, { color: C.textMuted }]}>
+                    Soon
                   </Text>
                 </Pressable>
               }

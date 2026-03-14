@@ -2116,7 +2116,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/health/import", requireAuth, async (req: any, res) => {
     try {
-      const userId = req.user!.id;
+      const userId = req.session.userId!;
       const { workouts } = req.body;
       if (!Array.isArray(workouts) || workouts.length === 0) {
         return res.status(400).json({ message: "No workouts provided" });
