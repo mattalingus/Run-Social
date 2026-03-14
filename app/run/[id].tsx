@@ -705,7 +705,9 @@ export default function RunDetailScreen() {
                 const msg = `Join me for ${run.title} on PaceUp!${date ? ` ${date}` : ""}${loc}`;
                 try {
                   await Share.share(Platform.OS === "ios" ? { message: msg, url: `paceup://run/${id}` } : { message: `${msg}\npaceup://run/${id}` });
-                } catch {}
+                } catch (e: any) {
+                  if (!e.message?.includes("cancel")) console.warn("Share failed:", e.message);
+                }
               }}
             >
               <Feather name="share-2" size={18} color={C.textSecondary} />
