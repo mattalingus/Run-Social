@@ -27,6 +27,7 @@ The backend is an Express.js application written in TypeScript, using `tsx` for 
     *   **Personal Achievements:** Personal mileage badges.
     *   **Ratings:** Participants can rate run hosts.
     *   **Friendships:** Bidirectional friend management with 1:1 DMs.
+    *   **Friend Discovery:** Find friends via contacts (phone hash matching with SHA-256, `lib/contactsDiscovery.ts`). Facebook friend discovery shown as "Coming soon". Accessible from profile "Find Friends" button.
     *   **Notifications:** Aggregated system for friend requests, crew invites, and run join requests.
 8.  **Event Photos:** Participants can add photos to both solo and group runs (via `expo-image-picker`). Photos shown in a horizontal scroll gallery in the run detail screen and the run-results screen. Full-screen modal viewer. Stored in object storage.
 9.  **Mile Splits:** Auto-recorded per-mile splits shown as a chart on the done screen and in run history.
@@ -50,6 +51,8 @@ The database schema includes tables for: `users`, `runs`, `run_participants`, `r
 
 Key columns: `runs.activity_type` ("run" | "ride"), `runs.is_active`, `runs.is_completed`, `runs.host_id`, `runs.location_lat/lng`. `solo_runs.step_count`, `solo_runs.move_time_seconds`, `solo_runs.elevation_gain`, `solo_runs.ai_summary`.
 
+`users.phone_hash` — SHA-256 hash of normalized phone number for contacts-based friend discovery.
+`users.facebook_id` — reserved for future Facebook friend discovery integration.
 `users.gender` ("Man" | "Woman" | "Prefer not to say") — controls buddy-finder visibility.
 `crews.current_streak_weeks`, `crews.last_run_week`, `crews.home_metro`, `crews.home_state`, `crews.last_overtake_notif_at` — for competitive crew features.
 

@@ -34,6 +34,7 @@ import { pickAndUploadImage } from "@/lib/uploadImage";
 import MileSplitsChart from "@/components/MileSplitsChart";
 import HostProfileSheet from "@/components/HostProfileSheet";
 import SettingsModal from "@/components/SettingsModal";
+import { requestContactsPermission, scanContacts, type ContactMatch } from "@/lib/contactsDiscovery";
 const APP_SHARE_URL = Platform.OS === "ios"
   ? "https://apps.apple.com/us/app/paceup-move-together/id6760092871"
   : "https://paceupapp.com";
@@ -267,6 +268,9 @@ export default function ProfileScreen() {
   const [nameError, setNameError] = useState("");
   const [nameDaysRemaining, setNameDaysRemaining] = useState<number | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [contactMatches, setContactMatches] = useState<ContactMatch[]>([]);
+  const [contactsScanning, setContactsScanning] = useState(false);
+  const [contactsScanned, setContactsScanned] = useState(false);
 
   const styles = makeStyles(C);
   const devStylesObj = makeDevStyles(C);
@@ -700,7 +704,7 @@ export default function ProfileScreen() {
           onPress={() => { setShowAddFriend(true); setFriendSearch(""); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
         >
           <Feather name="user-plus" size={18} color={C.primary} />
-          <Text style={styles.goalLabel}>{"+ Add Friends"}</Text>
+          <Text style={styles.goalLabel}>{"Find Friends"}</Text>
         </Pressable>
       </View>
 
@@ -1455,8 +1459,9 @@ export default function ProfileScreen() {
         <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <Pressable style={styles.modalOverlay} onPress={() => { setShowAddFriend(false); setFriendSearch(""); }} />
         <View style={[styles.modalSheet, styles.friendModalSheet, { paddingBottom: insets.bottom + 24 }]}>
+          <ScrollView showsVerticalScrollIndicator={false} bounces={false} keyboardShouldPersistTaps="handled">
           <View style={styles.modalTitleRow}>
-            <Text style={styles.modalTitle}>Add Friends</Text>
+            <Text style={styles.modalTitle}>Find Friends</Text>
             <Pressable onPress={() => { setShowAddFriend(false); setFriendSearch(""); }} hitSlop={12}>
               <Feather name="x" size={20} color={C.textMuted} />
             </Pressable>
@@ -1478,33 +1483,6 @@ export default function ProfileScreen() {
                 <Feather name="x" size={14} color={C.textMuted} />
               </Pressable>
             )}
-          </View>
-
-          {/* ── Invite Share ─────────────────────────────────────────────── */}
-          <View style={styles.inviteDivider}>
-            <View style={styles.inviteDivLine} />
-            <Text style={styles.inviteDivTxt}>or</Text>
-            <View style={styles.inviteDivLine} />
-          </View>
-
-          <View style={styles.inviteCard}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.inviteCardTitle}>Invite to PaceUp</Text>
-              <Text style={styles.inviteCardSub}>Share a link so friends can download the app</Text>
-            </View>
-            <Pressable
-              style={({ pressed }) => [styles.inviteShareBtn, { opacity: pressed ? 0.75 : 1 }]}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                Share.share({
-                  message: `Join me on PaceUp — discover group runs & rides! Download it here: ${APP_SHARE_URL}`,
-                  url: APP_SHARE_URL,
-                });
-              }}
-            >
-              <Feather name="share-2" size={15} color={C.bg} />
-              <Text style={styles.inviteShareBtnTxt}>Share Link</Text>
-            </Pressable>
           </View>
 
           {friendSearch.length >= 2 && searchResults.length > 0 && (
@@ -1555,6 +1533,139 @@ export default function ProfileScreen() {
             </View>
           )}
 
+          {/* ── Find from Contacts ─────────────────────────────────────── */}
+          {Platform.OS !== "web" && (
+            <>
+              <View style={styles.inviteDivider}>
+                <View style={styles.inviteDivLine} />
+                <Text style={styles.inviteDivTxt}>or</Text>
+                <View style={styles.inviteDivLine} />
+              </View>
+
+              <Pressable
+                style={({ pressed }) => [styles.contactsScanBtn, { opacity: pressed ? 0.8 : 1 }]}
+                onPress={async () => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  setContactsScanning(true);
+                  try {
+                    const granted = await requestContactsPermission();
+                    if (!granted) {
+                      Alert.alert("Contacts Access", "Please allow access to your contacts in Settings to find friends on PaceUp.");
+                      return;
+                    }
+                    const matches = await scanContacts();
+                    setContactMatches(matches);
+                    setContactsScanned(true);
+                  } catch (e: any) {
+                    Alert.alert("Error", e.message || "Could not scan contacts");
+                  } finally {
+                    setContactsScanning(false);
+                  }
+                }}
+                disabled={contactsScanning}
+              >
+                {contactsScanning ? (
+                  <ActivityIndicator size="small" color={C.primary} />
+                ) : (
+                  <Ionicons name="people" size={20} color={C.primary} />
+                )}
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.inviteCardTitle, { color: C.text }]}>Find from Contacts</Text>
+                  <Text style={styles.inviteCardSub}>
+                    {contactsScanned
+                      ? `${contactMatches.length} friend${contactMatches.length !== 1 ? "s" : ""} found on PaceUp`
+                      : "See which of your contacts are on PaceUp"}
+                  </Text>
+                </View>
+                <Feather name="chevron-right" size={18} color={C.textMuted} />
+              </Pressable>
+
+              {contactsScanned && contactMatches.length > 0 && (
+                <View style={styles.friendsSection}>
+                  <Text style={styles.friendsSectionTitle}>From Your Contacts</Text>
+                  {contactMatches.map((u) => {
+                    const isAlreadyFriend = friendIds.has(u.id);
+                    const hasSent = sentIds.has(u.id);
+                    return (
+                      <View key={u.id} style={styles.friendCard}>
+                        <Pressable
+                          style={styles.friendCardInfo}
+                          onPress={() => { setViewProfileId(u.id); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+                        >
+                          <View style={styles.friendAvatar}>
+                            {u.photo_url ? <Image source={{ uri: u.photo_url }} style={styles.friendAvatarImg} /> : <Text style={styles.friendAvatarTxt}>{u.name.charAt(0).toUpperCase()}</Text>}
+                          </View>
+                          <View style={styles.friendInfo}>
+                            <Text style={styles.friendName}>{u.name}</Text>
+                            <Text style={styles.friendStat}>
+                              {u.username ? `@${u.username}` : ""}{u.total_miles ? ` · ${toDisplayDist(u.total_miles, distUnit)}` : ""}
+                            </Text>
+                          </View>
+                        </Pressable>
+                        {isAlreadyFriend ? (
+                          <View style={styles.friendStatusBadge}><Feather name="check" size={12} color={C.primary} /><Text style={styles.friendStatusTxt}>Friends</Text></View>
+                        ) : hasSent ? (
+                          <View style={styles.friendStatusBadge}><Text style={styles.friendStatusTxt}>Sent</Text></View>
+                        ) : (
+                          <Pressable style={styles.friendAddBtn} onPress={() => sendRequestMutation.mutate(u.id)} disabled={sendRequestMutation.isPending}>
+                            <Feather name="user-plus" size={14} color={C.bg} />
+                          </Pressable>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+
+              {contactsScanned && contactMatches.length === 0 && (
+                <View style={styles.searchEmpty}>
+                  <Ionicons name="people-outline" size={28} color={C.textMuted} style={{ marginBottom: 6 }} />
+                  <Text style={styles.searchEmptyTxt}>None of your contacts are on PaceUp yet</Text>
+                  <Text style={[styles.searchEmptyTxt, { fontSize: 12, marginTop: 2 }]}>Invite them below!</Text>
+                </View>
+              )}
+            </>
+          )}
+
+          {/* ── Facebook (Coming Soon) ─────────────────────────────────── */}
+          <View style={[styles.contactsScanBtn, { opacity: 0.5, marginTop: Platform.OS === "web" ? 16 : 0 }]}>
+            <Ionicons name="logo-facebook" size={20} color="#1877F2" />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.inviteCardTitle, { color: C.text }]}>Find Facebook Friends</Text>
+              <Text style={styles.inviteCardSub}>Coming soon</Text>
+            </View>
+            <View style={{ backgroundColor: C.surface, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
+              <Text style={{ color: C.textMuted, fontSize: 11, fontFamily: "Outfit_600SemiBold" }}>Soon</Text>
+            </View>
+          </View>
+
+          {/* ── Invite Share ─────────────────────────────────────────────── */}
+          <View style={[styles.inviteDivider, { marginTop: 16 }]}>
+            <View style={styles.inviteDivLine} />
+            <Text style={styles.inviteDivTxt}>invite</Text>
+            <View style={styles.inviteDivLine} />
+          </View>
+
+          <View style={styles.inviteCard}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.inviteCardTitle}>Invite to PaceUp</Text>
+              <Text style={styles.inviteCardSub}>Share a link so friends can download the app</Text>
+            </View>
+            <Pressable
+              style={({ pressed }) => [styles.inviteShareBtn, { opacity: pressed ? 0.75 : 1 }]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                Share.share({
+                  message: `Join me on PaceUp — discover group runs & rides! Download it here: ${APP_SHARE_URL}`,
+                  url: APP_SHARE_URL,
+                });
+              }}
+            >
+              <Feather name="share-2" size={15} color={C.bg} />
+              <Text style={styles.inviteShareBtnTxt}>Share Link</Text>
+            </Pressable>
+          </View>
+          </ScrollView>
         </View>
         <HostProfileSheet hostId={viewProfileId} onClose={() => setViewProfileId(null)} />
         </KeyboardAvoidingView>
@@ -2339,6 +2450,12 @@ function makeStyles(C: ReturnType<typeof import("@/contexts/ThemeContext").useTh
     paddingHorizontal: 14, paddingVertical: 9, flexShrink: 0,
   },
   inviteShareBtnTxt: { fontFamily: "Outfit_700Bold", fontSize: 13, color: C.bg },
+
+  contactsScanBtn: {
+    flexDirection: "row" as const, alignItems: "center" as const, gap: 12,
+    backgroundColor: C.surface, borderRadius: 14, padding: 14,
+    borderWidth: 1, borderColor: C.border, marginBottom: 10,
+  },
 
   ratingWarningCard: {
     flexDirection: "row", alignItems: "flex-start", gap: 10,

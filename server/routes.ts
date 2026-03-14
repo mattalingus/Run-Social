@@ -5,6 +5,7 @@ import connectPgSimple from "connect-pg-simple";
 import { Pool } from "pg";
 import multer from "multer";
 import * as storage from "./storage";
+import { pool } from "./storage";
 import * as ai from "./ai";
 import { generateDummyRuns, clearAndReseedRuns, getRunCount } from "./seed";
 import { uploadPhotoBuffer, streamObject } from "./objectStorage";
@@ -494,6 +495,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!friendshipId || !action) return res.status(400).json({ message: "friendshipId and action required" });
       await storage.respondToFriendRequest(friendshipId, req.session.userId!, action);
       res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/users/update-phone", requireAuth, async (req, res) => {
+    try {
+      const { phoneHash } = req.body;
+      if (!phoneHash) return res.status(400).json({ message: "phoneHash required" });
+      await pool.query(`UPDATE users SET phone_hash = $1 WHERE id = $2`, [phoneHash, req.session.userId]);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/users/find-by-contacts", requireAuth, async (req, res) => {
+    try {
+      const { phoneHashes } = req.body;
+      if (!Array.isArray(phoneHashes) || phoneHashes.length === 0)
+        return res.status(400).json({ message: "phoneHashes array required" });
+      const limited = phoneHashes.slice(0, 5000);
+      const result = await pool.query(
+        `SELECT u.id, u.name, u.username, u.photo_url, u.total_miles
+         FROM users u
+         WHERE u.phone_hash = ANY($1::text[])
+           AND u.id != $2
+           AND u.id NOT IN (
+             SELECT CASE WHEN requester_id = $2 THEN addressee_id ELSE requester_id END
+             FROM friends
+             WHERE (requester_id = $2 OR addressee_id = $2)
+               AND status IN ('pending', 'accepted')
+           )`,
+        [limited, req.session.userId]
+      );
+      res.json(result.rows);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }

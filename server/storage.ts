@@ -331,6 +331,8 @@ export async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_dm_recipient ON direct_messages(recipient_id, created_at DESC);
     ALTER TABLE direct_messages ADD COLUMN IF NOT EXISTS message_type TEXT DEFAULT 'text';
     ALTER TABLE direct_messages ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT NULL;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_hash TEXT DEFAULT NULL;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_id TEXT DEFAULT NULL;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS garmin_access_token TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS garmin_token_secret TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS apple_health_connected BOOLEAN DEFAULT false;
