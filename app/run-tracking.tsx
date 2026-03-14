@@ -305,7 +305,7 @@ export default function RunTrackingScreen() {
   const { C } = useTheme();
   const t = useMemo(() => makeRunStyles(C), [C]);
   const distUnit: DistanceUnit = ((user as any)?.distance_unit ?? "miles") as DistanceUnit;
-  const { pathId } = useLocalSearchParams<{ pathId?: string }>();
+  const { pathId, recover } = useLocalSearchParams<{ pathId?: string; recover?: string }>();
 
   const [phase, setPhase] = useState<Phase>("idle");
   const [elapsed, setElapsed] = useState(0);
@@ -395,6 +395,45 @@ export default function RunTrackingScreen() {
       if (match) setSelectedPath(match);
     }
   }, [pathId, savedPaths]);
+
+  // ─── Crash recovery: restore from autosave ─────────────────────────────────
+  const recoveryDone = useRef(false);
+  useEffect(() => {
+    if (recover !== "1" || !user || recoveryDone.current) return;
+    recoveryDone.current = true;
+    (async () => {
+      try {
+        const key = `paceup_active_run_${user.id}`;
+        const raw = await AsyncStorage.getItem(key);
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        totalDistRef.current = data.distanceMi ?? 0;
+        elapsedRef.current = data.durationSeconds ?? 0;
+        routePathRef.current = data.routePath ?? [];
+        mileSplitsRef.current = data.splits ?? [];
+        elevationGainRef.current = data.elevationGainFt ?? 0;
+        setElapsed(data.durationSeconds ?? 0);
+        setDisplayDist(data.distanceMi ?? 0);
+        setRouteState(data.routePath ?? []);
+        setMileSplits(data.splits ?? []);
+        await AsyncStorage.removeItem(key);
+        const finalSplits = [...(data.splits ?? [])];
+        if (user) {
+          const draft = {
+            distanceMi: data.distanceMi ?? 0,
+            durationSeconds: data.durationSeconds ?? 0,
+            routePath: data.routePath ?? [],
+            splits: finalSplits,
+            activityType: data.activityType ?? "run",
+            elevationGainFt: data.elevationGainFt ?? 0,
+            timestamp: new Date().toISOString(),
+          };
+          AsyncStorage.setItem(`paceup_draft_run_${user.id}`, JSON.stringify(draft)).catch(() => {});
+        }
+        setPhase("done");
+      } catch {}
+    })();
+  }, [recover, user]);
 
   // ─── Audio Coach Prefs ────────────────────────────────────────────────────
 
@@ -505,6 +544,28 @@ export default function RunTrackingScreen() {
   }, [phase]);
 
   useEffect(() => { elapsedRef.current = elapsed; }, [elapsed]);
+
+  // ─── Periodic autosave (crash recovery) ───────────────────────────────────
+  const AUTOSAVE_KEY = user ? `paceup_active_run_${user.id}` : null;
+
+  useEffect(() => {
+    if ((phase !== "active" && phase !== "paused") || !AUTOSAVE_KEY) return;
+    const save = () => {
+      const data = {
+        distanceMi: totalDistRef.current,
+        durationSeconds: elapsedRef.current,
+        routePath: routePathRef.current,
+        splits: mileSplitsRef.current,
+        activityType: activityFilter,
+        elevationGainFt: elevationGainRef.current,
+        timestamp: new Date().toISOString(),
+      };
+      AsyncStorage.setItem(AUTOSAVE_KEY, JSON.stringify(data)).catch(() => {});
+    };
+    save();
+    const id = setInterval(save, 30_000);
+    return () => clearInterval(id);
+  }, [phase, AUTOSAVE_KEY, activityFilter]);
 
   // ─── Screenshot detection on done screen ──────────────────────────────────
   useEffect(() => {
@@ -832,6 +893,7 @@ export default function RunTrackingScreen() {
       };
       AsyncStorage.setItem(`paceup_draft_run_${user.id}`, JSON.stringify(draft)).catch(() => {});
     }
+    if (AUTOSAVE_KEY) AsyncStorage.removeItem(AUTOSAVE_KEY).catch(() => {});
     setPhase("done");
   }
 
@@ -862,6 +924,7 @@ export default function RunTrackingScreen() {
           if (Platform.OS !== "web") Speech.stop();
           stopWatching();
           stopPedometer();
+          if (AUTOSAVE_KEY) AsyncStorage.removeItem(AUTOSAVE_KEY).catch(() => {});
           router.back();
         },
       },

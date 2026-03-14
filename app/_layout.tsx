@@ -4,7 +4,8 @@ import { Stack, router } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import * as Notifications from "@/lib/safeNotifications";
 import React, { useEffect, useRef } from "react";
-import { Platform } from "react-native";
+import { Alert, Platform } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -85,6 +86,37 @@ function RootLayoutNav() {
     if (!user) {
       pushRegistered.current = false;
     }
+  }, [user]);
+
+  // Check for interrupted active run (crash recovery)
+  const recoveryChecked = useRef(false);
+  useEffect(() => {
+    if (!user || recoveryChecked.current) return;
+    recoveryChecked.current = true;
+    (async () => {
+      try {
+        const key = `paceup_active_run_${user.id}`;
+        const raw = await AsyncStorage.getItem(key);
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        const age = Date.now() - new Date(data.timestamp).getTime();
+        if (age > 24 * 60 * 60 * 1000) {
+          await AsyncStorage.removeItem(key);
+          return;
+        }
+        const dist = (data.distanceMi ?? 0).toFixed(2);
+        const mins = Math.floor((data.durationSeconds ?? 0) / 60);
+        const type = data.activityType === "ride" ? "ride" : data.activityType === "walk" ? "walk" : "run";
+        Alert.alert(
+          "Recover Your Last Activity?",
+          `It looks like PaceUp was closed while tracking a ${type} (${dist} mi, ${mins} min). Would you like to save it?`,
+          [
+            { text: "Discard", style: "destructive", onPress: () => AsyncStorage.removeItem(key).catch(() => {}) },
+            { text: "Recover", onPress: () => router.push("/run-tracking?recover=1") },
+          ]
+        );
+      } catch {}
+    })();
   }, [user]);
 
   // Open run when notification is tapped
