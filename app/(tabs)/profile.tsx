@@ -276,6 +276,8 @@ export default function ProfileScreen() {
   const [contactsScanned, setContactsScanned] = useState(false);
   const [fbConnecting, setFbConnecting] = useState(false);
   const [dismissedContacts, setDismissedContacts] = useState<Set<string>>(new Set());
+  const [showPhoneInput, setShowPhoneInput] = useState(false);
+  const [phoneInput, setPhoneInput] = useState("");
 
   const styles = makeStyles(C);
   const devStylesObj = makeDevStyles(C);
@@ -401,6 +403,11 @@ export default function ProfileScreen() {
       return res.json();
     },
     enabled: !!user && friendSearch.length >= 2,
+  });
+
+  const { data: fbSuggestions = [] } = useQuery<any[]>({
+    queryKey: ["/api/friends/facebook-suggestions"],
+    enabled: !!user && !!(user as any)?.facebook_id,
   });
 
   const { data: runRecords } = useQuery<{ longest_run: number | null; fastest_pace: number | null }>({
@@ -1694,6 +1701,7 @@ export default function ProfileScreen() {
           <Pressable
             style={({ pressed }) => [styles.contactsScanBtn, { opacity: pressed ? 0.8 : 1 }]}
             onPress={async () => {
+              if ((user as any)?.facebook_id) return;
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               setFbConnecting(true);
               try {
@@ -1702,11 +1710,12 @@ export default function ProfileScreen() {
                 if (data.url) {
                   await WebBrowser.openBrowserAsync(data.url);
                   qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
+                  qc.invalidateQueries({ queryKey: ["/api/friends/facebook-suggestions"] });
                   refreshUser();
                 }
               } catch (e: any) {
                 if (e.message?.includes("501") || e.message?.includes("not configured")) {
-                  Alert.alert("Coming Soon", "Facebook friend discovery will be available in a future update.");
+                  Alert.alert("Coming Soon", "Facebook friend discovery will be available once configured. Ask the app admin to add a Facebook App ID.");
                 } else {
                   Alert.alert("Error", e.message || "Could not connect Facebook");
                 }
@@ -1714,7 +1723,7 @@ export default function ProfileScreen() {
                 setFbConnecting(false);
               }
             }}
-            disabled={fbConnecting}
+            disabled={fbConnecting || !!(user as any)?.facebook_id}
           >
             {fbConnecting ? (
               <ActivityIndicator size="small" color="#1877F2" />
@@ -1733,6 +1742,105 @@ export default function ProfileScreen() {
               <Feather name="chevron-right" size={18} color={C.textMuted} />
             )}
           </Pressable>
+
+          {(user as any)?.facebook_id && fbSuggestions.length > 0 && (
+            <View style={styles.friendsSection}>
+              <Text style={styles.friendsSectionTitle}>Facebook Friends on PaceUp</Text>
+              {fbSuggestions.map((u: any) => {
+                const isAlreadyFriend = friendIds.has(u.id);
+                const hasSent = sentIds.has(u.id);
+                return (
+                  <View key={u.id} style={styles.friendCard}>
+                    <Pressable
+                      style={styles.friendCardInfo}
+                      onPress={() => { setViewProfileId(u.id); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+                    >
+                      <View style={styles.friendAvatar}>
+                        {u.photo_url ? <Image source={{ uri: u.photo_url }} style={styles.friendAvatarImg} /> : <Text style={styles.friendAvatarTxt}>{u.name.charAt(0).toUpperCase()}</Text>}
+                      </View>
+                      <View style={styles.friendInfo}>
+                        <Text style={styles.friendName}>{u.name}</Text>
+                        <Text style={styles.friendStat}>
+                          {u.username ? `@${u.username}` : ""}{u.total_miles ? ` · ${toDisplayDist(u.total_miles, distUnit)}` : ""}
+                        </Text>
+                      </View>
+                    </Pressable>
+                    {isAlreadyFriend ? (
+                      <View style={styles.friendStatusBadge}><Feather name="check" size={12} color={C.primary} /><Text style={styles.friendStatusTxt}>Friends</Text></View>
+                    ) : hasSent ? (
+                      <View style={styles.friendStatusBadge}><Text style={styles.friendStatusTxt}>Sent</Text></View>
+                    ) : (
+                      <Pressable style={styles.friendAddBtn} onPress={() => sendRequestMutation.mutate(u.id)} disabled={sendRequestMutation.isPending}>
+                        <Feather name="user-plus" size={14} color={C.bg} />
+                      </Pressable>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          {(user as any)?.facebook_id && fbSuggestions.length === 0 && (
+            <View style={[styles.searchEmpty, { marginTop: 4 }]}>
+              <Text style={styles.searchEmptyTxt}>No Facebook friends found on PaceUp yet</Text>
+            </View>
+          )}
+
+          {/* ── Add Your Phone ────────────────────────────────────────── */}
+          {Platform.OS !== "web" && (
+            <>
+              <View style={[styles.inviteDivider, { marginTop: 6 }]}>
+                <View style={styles.inviteDivLine} />
+                <Text style={styles.inviteDivTxt}>your phone</Text>
+                <View style={styles.inviteDivLine} />
+              </View>
+
+              {!showPhoneInput ? (
+                <Pressable
+                  style={({ pressed }) => [styles.contactsScanBtn, { opacity: pressed ? 0.8 : 1 }]}
+                  onPress={() => { setShowPhoneInput(true); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+                >
+                  <Feather name="phone" size={18} color={C.primary} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.inviteCardTitle, { color: C.text }]}>Add Your Phone Number</Text>
+                    <Text style={styles.inviteCardSub}>Help friends find you by your phone number</Text>
+                  </View>
+                  <Feather name="chevron-right" size={18} color={C.textMuted} />
+                </Pressable>
+              ) : (
+                <View style={styles.contactsScanBtn}>
+                  <Feather name="phone" size={18} color={C.primary} />
+                  <TextInput
+                    style={{ flex: 1, color: C.text, fontFamily: "Outfit_400Regular", fontSize: 15, padding: 0 }}
+                    value={phoneInput}
+                    onChangeText={setPhoneInput}
+                    placeholder="(555) 123-4567"
+                    placeholderTextColor={C.textMuted}
+                    keyboardType="phone-pad"
+                    autoFocus
+                  />
+                  <Pressable
+                    style={({ pressed }) => [styles.inviteShareBtn, { opacity: pressed ? 0.75 : 1, paddingHorizontal: 12, paddingVertical: 7 }]}
+                    onPress={async () => {
+                      const digits = phoneInput.replace(/\D/g, "");
+                      if (digits.length < 7) { Alert.alert("Invalid", "Please enter a valid phone number"); return; }
+                      try {
+                        const { registerMyPhone } = await import("@/lib/contactsDiscovery");
+                        await registerMyPhone(phoneInput);
+                        Alert.alert("Saved", "Your phone number has been registered for friend discovery.");
+                        setShowPhoneInput(false);
+                        setPhoneInput("");
+                      } catch (e: any) {
+                        Alert.alert("Error", e.message || "Could not save phone number");
+                      }
+                    }}
+                  >
+                    <Text style={styles.inviteShareBtnTxt}>Save</Text>
+                  </Pressable>
+                </View>
+              )}
+            </>
+          )}
 
           {/* ── Invite Share ─────────────────────────────────────────────── */}
           <View style={[styles.inviteDivider, { marginTop: 6 }]}>

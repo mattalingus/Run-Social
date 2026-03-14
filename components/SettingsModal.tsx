@@ -682,11 +682,52 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
               iconBg="#0A1A2A"
               icon={<FontAwesome5 name="facebook" size={18} color="#1877F2" />}
               label="Facebook"
-              sublabel="Coming soon"
+              sublabel={(user as any)?.facebook_id ? "Connected" : "Find friends"}
               right={
-                <Pressable style={[st.connectBtn, { borderColor: C.border, backgroundColor: C.surface, opacity: 0.5 }]} onPress={() => handleConnectSocial("Facebook")}>
-                  <Text style={[st.connectBtnTxt, { color: C.textMuted }]}>Soon</Text>
-                </Pressable>
+                (user as any)?.facebook_id ? (
+                  <Pressable
+                    style={[st.connectBtn, { borderColor: "#E74C3C44", backgroundColor: "#E74C3C11" }]}
+                    onPress={async () => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      Alert.alert("Disconnect Facebook", "Remove your Facebook connection?", [
+                        { text: "Cancel", style: "cancel" },
+                        { text: "Disconnect", style: "destructive", onPress: async () => {
+                          try {
+                            await apiRequest("DELETE", "/api/auth/facebook/disconnect");
+                            qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
+                            refreshUser();
+                          } catch {}
+                        }},
+                      ]);
+                    }}
+                  >
+                    <Text style={[st.connectBtnTxt, { color: "#E74C3C" }]}>Disconnect</Text>
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    style={[st.connectBtn, { borderColor: "#1877F244", backgroundColor: "#1877F211" }]}
+                    onPress={async () => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      try {
+                        const res = await apiRequest("GET", "/api/auth/facebook/start");
+                        const data = await res.json();
+                        if (data.url) {
+                          await WebBrowser.openBrowserAsync(data.url);
+                          qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
+                          refreshUser();
+                        }
+                      } catch (e: any) {
+                        if (e.message?.includes("501") || e.message?.includes("not configured")) {
+                          Alert.alert("Coming Soon", "Facebook integration will be available in a future update.");
+                        } else {
+                          Alert.alert("Error", e.message || "Could not connect Facebook");
+                        }
+                      }
+                    }}
+                  >
+                    <Text style={[st.connectBtnTxt, { color: "#1877F2" }]}>Connect</Text>
+                  </Pressable>
+                )
               }
             />
           </SectionCard>

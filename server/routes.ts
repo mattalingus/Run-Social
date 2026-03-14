@@ -539,17 +539,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/auth/facebook/start", requireAuth, (req, res) => {
     const appId = process.env.FACEBOOK_APP_ID;
     if (!appId) return res.status(501).json({ message: "Facebook integration not configured" });
-    const redirectUri = `${req.protocol}://${req.get("host")}/api/auth/facebook/callback`;
-    const scope = "public_profile,user_friends";
-    const state = req.session.userId;
-    const url = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scope}&state=${state}&response_type=code`;
-    res.json({ url });
+    const nonce = crypto.randomBytes(24).toString("hex");
+    (req.session as any).fbOauthState = nonce;
+    (req.session as any).fbOauthUserId = req.session.userId;
+    req.session.save(() => {
+      const redirectUri = `${req.protocol}://${req.get("host")}/api/auth/facebook/callback`;
+      const scope = "public_profile,user_friends";
+      const url = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scope}&state=${nonce}&response_type=code`;
+      res.json({ url });
+    });
   });
 
   app.get("/api/auth/facebook/callback", async (req, res) => {
     try {
       const { code, state } = req.query as { code?: string; state?: string };
       if (!code || !state) return res.status(400).send("Missing code or state");
+      const storedState = (req.session as any).fbOauthState;
+      const storedUserId = (req.session as any).fbOauthUserId;
+      if (!storedState || storedState !== state || !storedUserId) return res.status(403).send("Invalid OAuth state");
+      delete (req.session as any).fbOauthState;
+      delete (req.session as any).fbOauthUserId;
       const appId = process.env.FACEBOOK_APP_ID;
       const appSecret = process.env.FACEBOOK_APP_SECRET;
       if (!appId || !appSecret) return res.status(501).send("Facebook not configured");
@@ -560,7 +569,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const meRes = await fetch(`https://graph.facebook.com/v19.0/me?fields=id,name&access_token=${tokenData.access_token}`);
       const me = await meRes.json() as any;
       if (me.id) {
-        await pool.query(`UPDATE users SET facebook_id = $1 WHERE id = $2`, [me.id, state]);
+        await pool.query(`UPDATE users SET facebook_id = $1 WHERE id = $2`, [me.id, storedUserId]);
       }
       res.send(`<html><body><script>window.close();</script><p>Connected! You can close this window.</p></body></html>`);
     } catch (e: any) {
