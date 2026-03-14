@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   ScrollView,
+  SectionList,
   Pressable,
   TextInput,
   Alert,
@@ -688,6 +689,19 @@ export default function SoloScreen() {
     return historyRuns;
   }, [historyRuns, historyFilter]);
 
+  const historySections = useMemo(() => {
+    if (!showHistory || displayedRuns.length === 0) return [];
+    const groups: Record<string, SoloRun[]> = {};
+    const order: string[] = [];
+    for (const run of displayedRuns) {
+      const d = new Date(run.date);
+      const key = `${d.toLocaleString("en-US", { month: "long" })} ${d.getFullYear()}`;
+      if (!groups[key]) { groups[key] = []; order.push(key); }
+      groups[key].push(run);
+    }
+    return order.map((title) => ({ title, data: groups[title] }));
+  }, [displayedRuns, showHistory]);
+
   useEffect(() => {
     if (!user?.id) return;
     AsyncStorage.getItem(`paceup_ghost_solo_done_${user.id}`).then((v) => {
@@ -818,103 +832,221 @@ export default function SoloScreen() {
   const goalPct = Math.min(1, distGoal > 0 ? currentMiles / distGoal : 0);
   const periodLabel = period === "monthly" ? "This Month" : "This Year";
 
-  return (
-    <View style={[s.container, { backgroundColor: C.bg }]}>
-      <ScrollView
-        contentContainerStyle={[
-          s.scroll,
-          {
-            paddingTop: insets.top + (Platform.OS === "web" ? 67 : 16),
-            paddingBottom: insets.bottom + 120,
-          },
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* ─── Header ─────────────────────────────────────────────────── */}
-        <View style={s.headerRow}>
-          <View>
-            <Text style={s.screenTitle}>Solo</Text>
-            <Text style={s.screenSub}>Your personal {activityFilter === "ride" ? "riding" : activityFilter === "walk" ? "walking" : "running"}</Text>
-          </View>
-          <Pressable style={s.planBtn} onPress={() => setShowPlan(true)}>
-            <Feather name="plus" size={18} color={C.bg} />
-            <Text style={s.planBtnTxt}>{activityFilter === "ride" ? "Plan Ride" : activityFilter === "walk" ? "Plan Walk" : "Plan Run"}</Text>
-          </Pressable>
-        </View>
-
-        {/* ─── Activity Toggle ─────────────────────────────────────────── */}
-        <View style={s.activityToggleRow}>
+  const renderHistoryItem = useCallback(({ item: run }: { item: SoloRun }) => {
+    const badge = runBadges[run.id];
+    const label = run.title || `${toDisplayDist(run.distance_miles, distUnit)} ${run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run"}`;
+    const isExpanded = expandedRunId === run.id;
+    return (
+      <View style={s.historyCard}>
+        <View style={s.historyRow}>
           <Pressable
-            style={[s.activityPill, activityFilter === "run" && s.activityPillActive]}
-            onPress={() => { setActivityFilter("run"); Haptics.selectionAsync(); }}
+            style={({ pressed }) => [s.historyLeft, { opacity: pressed ? 0.85 : 1 }]}
+            onPress={() => run.completed && setExpandedRunId(isExpanded ? null : run.id)}
+            onLongPress={() => confirmDelete(run.id)}
           >
-            <Ionicons name="walk" size={14} color={activityFilter === "run" ? C.bg : C.textMuted} />
-            <Text style={[s.activityPillTxt, activityFilter === "run" && s.activityPillTxtActive]}>Runs</Text>
-          </Pressable>
-          <Pressable
-            style={[s.activityPill, activityFilter === "ride" && s.activityPillActive]}
-            onPress={() => { setActivityFilter("ride"); Haptics.selectionAsync(); }}
-          >
-            <Ionicons name="bicycle" size={14} color={activityFilter === "ride" ? C.bg : C.textMuted} />
-            <Text style={[s.activityPillTxt, activityFilter === "ride" && s.activityPillTxtActive]}>Rides</Text>
-          </Pressable>
-          <Pressable
-            style={[s.activityPill, activityFilter === "walk" && s.activityPillActive]}
-            onPress={() => { setActivityFilter("walk"); Haptics.selectionAsync(); }}
-          >
-            <Ionicons name="footsteps" size={14} color={activityFilter === "walk" ? C.bg : C.textMuted} />
-            <Text style={[s.activityPillTxt, activityFilter === "walk" && s.activityPillTxtActive]}>Walks</Text>
-          </Pressable>
-        </View>
-
-        {/* ─── Buddy Finder ────────────────────────────────────────────── */}
-        {buddyEligible && buddies.length > 0 && (
-          <View style={{ marginTop: 24, paddingHorizontal: 4 }}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text }}>Find a Buddy</Text>
-              <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary }}>Matches for you</Text>
+            <View style={[
+              s.historyStatus,
+              { backgroundColor: run.completed ? C.primary + "22" : run.planned ? C.blue + "22" : C.border },
+            ]}>
+              <Feather
+                name={run.completed ? "check" : run.planned ? "calendar" : "circle"}
+                size={12}
+                color={run.completed ? C.primary : run.planned ? C.blue : C.textMuted}
+              />
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingBottom: 4 }}>
-              {buddies.map((buddy) => (
-                <Pressable
-                  key={buddy.id}
-                  style={{
-                    width: 140, backgroundColor: C.surface, borderRadius: 16, padding: 12, borderWidth: 1, borderColor: C.border,
-                    alignItems: "center",
-                  }}
-                  onPress={() => router.push(`/user-profile/${buddy.id}`)}
-                >
-                  <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: C.card, marginBottom: 8, overflow: "hidden" }}>
-                    {buddy.photo_url ? (
-                      <Image source={{ uri: buddy.photo_url }} style={{ width: "100%", height: "100%" }} />
-                    ) : (
-                      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-                        <Feather name="user" size={30} color={C.textMuted} />
-                      </View>
-                    )}
+            <View style={{ flex: 1 }}>
+              <View style={s.historyTitleRow}>
+                <Text style={s.historyTitle} numberOfLines={1}>{label}</Text>
+                {(run.source === "garmin" || run.garmin_activity_id) && (
+                  <View style={[s.sourceBadge, { backgroundColor: "#009CDE22" }]}>
+                    <FontAwesome5 name="satellite-dish" size={8} color="#009CDE" />
                   </View>
-                  <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text, textAlign: "center" }} numberOfLines={1}>
-                    {buddy.name}
-                  </Text>
-                  <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary, marginBottom: 8 }} numberOfLines={1}>
-                    @{buddy.username}
-                  </Text>
-                  <View style={{ flexDirection: "row", gap: 8, marginTop: "auto" }}>
-                    <View style={{ alignItems: "center" }}>
-                      <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 10, color: C.primary }}>{buddy.avg_pace || "10:00"}</Text>
-                      <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 8, color: C.textMuted }}>PACE</Text>
-                    </View>
-                    <View style={{ width: 1, height: 16, backgroundColor: C.border }} />
-                    <View style={{ alignItems: "center" }}>
-                      <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 10, color: C.orange }}>{buddy.avg_distance || "3"}mi</Text>
-                      <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 8, color: C.textMuted }}>DIST</Text>
-                    </View>
+                )}
+                {(run.source === "apple_health" || run.apple_health_id) && (
+                  <View style={[s.sourceBadge, { backgroundColor: "#FF3B3022" }]}>
+                    <Ionicons name="heart" size={9} color="#FF3B30" />
                   </View>
-                </Pressable>
-              ))}
-            </ScrollView>
+                )}
+                {badge && (
+                  <Text style={s.historyBadge}>{RANK_EMOJI[badge.rank - 1]}</Text>
+                )}
+              </View>
+              <Text style={s.historyMeta}>
+                {formatDisplayDate(run.date)}
+                {run.pace_min_per_mile ? ` · ${toDisplayPace(run.pace_min_per_mile, distUnit)}` : ""}
+                {run.duration_seconds ? ` · ${formatDuration(run.duration_seconds)}` : ""}
+              </Text>
+            </View>
+          </Pressable>
+          <View style={s.historyRight}>
+            <Pressable
+              onPress={() => {
+                Haptics.selectionAsync();
+                starMutation.mutate(run.id);
+              }}
+              hitSlop={12}
+              style={{ padding: 4 }}
+            >
+              <Ionicons
+                name={run.is_starred ? "star" : "star-outline"}
+                size={18}
+                color={run.is_starred ? C.gold : C.textMuted}
+              />
+            </Pressable>
+            <Text style={s.historyDist}>{toDisplayDist(run.distance_miles, distUnit)}</Text>
+            {run.completed && (
+              <Pressable
+                onPress={() => setExpandedRunId(isExpanded ? null : run.id)}
+                hitSlop={8}
+              >
+                <Feather name={isExpanded ? "chevron-up" : "chevron-down"} size={14} color={C.textMuted} />
+              </Pressable>
+            )}
+          </View>
+        </View>
+        {run.route_path && run.route_path.length > 1 && Platform.OS !== "web" && (
+          <MiniRouteMap path={run.route_path} />
+        )}
+        {isExpanded && (
+          <View style={s.statsPanel}>
+            <View style={s.statRow}>
+              {run.duration_seconds != null && (
+                <View style={s.statItem}>
+                  <Feather name="clock" size={13} color={C.primary} />
+                  <Text style={s.statLabel}>Time</Text>
+                  <Text style={s.statValue}>{formatDuration(run.duration_seconds)}</Text>
+                </View>
+              )}
+              {run.pace_min_per_mile != null && (
+                <View style={s.statItem}>
+                  <Feather name="zap" size={13} color={C.primary} />
+                  <Text style={s.statLabel}>Pace</Text>
+                  <Text style={s.statValue}>{toDisplayPace(run.pace_min_per_mile, distUnit)}</Text>
+                </View>
+              )}
+              <View style={s.statItem}>
+                <Feather name="map-pin" size={13} color={C.primary} />
+                <Text style={s.statLabel}>Distance</Text>
+                <Text style={s.statValue}>{toDisplayDist(run.distance_miles, distUnit)}</Text>
+              </View>
+              {run.elevation_gain_ft != null && (
+                <View style={s.statItem}>
+                  <Feather name="trending-up" size={13} color={C.primary} />
+                  <Text style={s.statLabel}>Elevation</Text>
+                  <Text style={s.statValue}>{Math.round(run.elevation_gain_ft)} ft</Text>
+                </View>
+              )}
+            </View>
           </View>
         )}
+        {isExpanded && run.mile_splits && run.mile_splits.length > 0 && (
+          <View style={{ paddingHorizontal: 12, paddingBottom: 14 }}>
+            <MileSplitsChart splits={run.mile_splits} activityType={run.activity_type} />
+          </View>
+        )}
+        {isExpanded && run.completed && (!run.mile_splits || run.mile_splits.length === 0) && (
+          <View style={{ paddingHorizontal: 12, paddingBottom: 12, alignItems: "center" }}>
+            <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, textAlign: "center" }}>
+              {`Splits available for activities of 1+ ${unitLabel(distUnit)}`}
+            </Text>
+          </View>
+        )}
+      </View>
+    );
+  }, [expandedRunId, runBadges, distUnit, C, s]);
+
+  const renderSectionHeader = useCallback(({ section }: { section: { title: string } }) => (
+    <View style={[s.monthHeader, { backgroundColor: C.bg }]}>
+      <Text style={[s.monthHeaderTxt, { color: C.textSecondary }]}>{section.title}</Text>
+    </View>
+  ), [C, s]);
+
+  const listHeaderComponent = useMemo(() => (
+    <>
+      {/* ─── Header ─────────────────────────────────────────────────── */}
+      <View style={s.headerRow}>
+        <View>
+          <Text style={s.screenTitle}>Solo</Text>
+          <Text style={s.screenSub}>Your personal {activityFilter === "ride" ? "riding" : activityFilter === "walk" ? "walking" : "running"}</Text>
+        </View>
+        <Pressable style={s.planBtn} onPress={() => setShowPlan(true)}>
+          <Feather name="plus" size={18} color={C.bg} />
+          <Text style={s.planBtnTxt}>{activityFilter === "ride" ? "Plan Ride" : activityFilter === "walk" ? "Plan Walk" : "Plan Run"}</Text>
+        </Pressable>
+      </View>
+
+      {/* ─── Activity Toggle ─────────────────────────────────────────── */}
+      <View style={s.activityToggleRow}>
+        <Pressable
+          style={[s.activityPill, activityFilter === "run" && s.activityPillActive]}
+          onPress={() => { setActivityFilter("run"); Haptics.selectionAsync(); }}
+        >
+          <Ionicons name="walk" size={14} color={activityFilter === "run" ? C.bg : C.textMuted} />
+          <Text style={[s.activityPillTxt, activityFilter === "run" && s.activityPillTxtActive]}>Runs</Text>
+        </Pressable>
+        <Pressable
+          style={[s.activityPill, activityFilter === "ride" && s.activityPillActive]}
+          onPress={() => { setActivityFilter("ride"); Haptics.selectionAsync(); }}
+        >
+          <Ionicons name="bicycle" size={14} color={activityFilter === "ride" ? C.bg : C.textMuted} />
+          <Text style={[s.activityPillTxt, activityFilter === "ride" && s.activityPillTxtActive]}>Rides</Text>
+        </Pressable>
+        <Pressable
+          style={[s.activityPill, activityFilter === "walk" && s.activityPillActive]}
+          onPress={() => { setActivityFilter("walk"); Haptics.selectionAsync(); }}
+        >
+          <Ionicons name="footsteps" size={14} color={activityFilter === "walk" ? C.bg : C.textMuted} />
+          <Text style={[s.activityPillTxt, activityFilter === "walk" && s.activityPillTxtActive]}>Walks</Text>
+        </Pressable>
+      </View>
+
+      {buddyEligible && buddies.length > 0 && (
+        <View style={{ marginTop: 24, paddingHorizontal: 4 }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text }}>Find a Buddy</Text>
+            <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary }}>Matches for you</Text>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingBottom: 4 }}>
+            {buddies.map((buddy) => (
+              <Pressable
+                key={buddy.id}
+                style={{
+                  width: 140, backgroundColor: C.surface, borderRadius: 16, padding: 12, borderWidth: 1, borderColor: C.border,
+                  alignItems: "center",
+                }}
+                onPress={() => router.push(`/user-profile/${buddy.id}`)}
+              >
+                <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: C.card, marginBottom: 8, overflow: "hidden" }}>
+                  {buddy.photo_url ? (
+                    <Image source={{ uri: buddy.photo_url }} style={{ width: "100%", height: "100%" }} />
+                  ) : (
+                    <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+                      <Feather name="user" size={30} color={C.textMuted} />
+                    </View>
+                  )}
+                </View>
+                <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text, textAlign: "center" }} numberOfLines={1}>
+                  {buddy.name}
+                </Text>
+                <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary, marginBottom: 8 }} numberOfLines={1}>
+                  @{buddy.username}
+                </Text>
+                <View style={{ flexDirection: "row", gap: 8, marginTop: "auto" }}>
+                  <View style={{ alignItems: "center" }}>
+                    <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 10, color: C.primary }}>{buddy.avg_pace || "10:00"}</Text>
+                    <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 8, color: C.textMuted }}>PACE</Text>
+                  </View>
+                  <View style={{ width: 1, height: 16, backgroundColor: C.border }} />
+                  <View style={{ alignItems: "center" }}>
+                    <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 10, color: C.orange }}>{buddy.avg_distance || "3"}mi</Text>
+                    <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 8, color: C.textMuted }}>DIST</Text>
+                  </View>
+                </View>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
         {/* ─── Goal Card ──────────────────────────────────────────────── */}
         <View style={s.goalCard}>
@@ -1107,230 +1239,130 @@ export default function SoloScreen() {
           </View>
         )}
 
-        {/* ─── Run / Ride History ──────────────────────────────────────── */}
-        <View style={[s.section, { marginTop: 5 }]}>
-          <Pressable
-            style={s.historyHeaderRow}
-            onPress={() => { setShowHistory((v) => !v); Haptics.selectionAsync(); }}
-          >
-            <Text style={[s.sectionTitle, { marginBottom: 0 }]}>{activityFilter === "ride" ? "Ride History" : activityFilter === "walk" ? "Walk History" : "Run History"}</Text>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              {historyRuns.length > 0 && (
-                <View style={s.historyCountBadge}>
-                  <Text style={s.historyCountTxt}>{historyRuns.length}</Text>
-                </View>
-              )}
-              <Feather name={showHistory ? "chevron-up" : "chevron-down"} size={16} color={C.textMuted} />
-            </View>
-          </Pressable>
+      <View style={[s.section, { marginTop: 5 }]}>
+        <Pressable
+          style={s.historyHeaderRow}
+          onPress={() => { setShowHistory((v) => !v); Haptics.selectionAsync(); }}
+        >
+          <Text style={[s.sectionTitle, { marginBottom: 0 }]}>{activityFilter === "ride" ? "Ride History" : activityFilter === "walk" ? "Walk History" : "Run History"}</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            {historyRuns.length > 0 && (
+              <View style={s.historyCountBadge}>
+                <Text style={s.historyCountTxt}>{historyRuns.length}</Text>
+              </View>
+            )}
+            <Feather name={showHistory ? "chevron-up" : "chevron-down"} size={16} color={C.textMuted} />
+          </View>
+        </Pressable>
 
-          {showHistory && isLoading ? (
-            <ActivityIndicator color={C.primary} style={{ marginTop: 20 }} />
-          ) : showHistory && historyRuns.length === 0 ? (
-            <View style={s.emptyCard}>
-              {!ghostSoloDone && (
-                <View style={s.ghostHistoryCard}>
-                  <View style={s.historyRow}>
-                    <View style={s.historyLeft}>
-                      <View style={[s.historyStatus, { backgroundColor: C.primary + "22" }]}>
-                        <Feather name="check" size={12} color={C.primary + "80"} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={s.ghostHistoryTitle}>
-                          {activityFilter === "ride" ? "Morning 14.0mi Ride" : activityFilter === "walk" ? "Morning 2.5mi Walk" : "Morning 3.1mi Run"}
-                        </Text>
-                        <Text style={s.ghostHistoryMeta}>
-                          {activityFilter === "ride" ? "Today · 18.2 mph · 46:12" : activityFilter === "walk" ? "Today · 3.2 mph · 52:10" : "Today · 9:23/mi · 28:43"}
-                        </Text>
-                      </View>
+        {showHistory && isLoading && (
+          <ActivityIndicator color={C.primary} style={{ marginTop: 20 }} />
+        )}
+        {showHistory && !isLoading && historyRuns.length === 0 && (
+          <View style={s.emptyCard}>
+            {!ghostSoloDone && (
+              <View style={s.ghostHistoryCard}>
+                <View style={s.historyRow}>
+                  <View style={s.historyLeft}>
+                    <View style={[s.historyStatus, { backgroundColor: C.primary + "22" }]}>
+                      <Feather name="check" size={12} color={C.primary + "80"} />
                     </View>
-                    <Text style={s.ghostHistoryDist}>
-                      {activityFilter === "ride" ? "14.0" : activityFilter === "walk" ? "2.5" : "3.1"}
-                    </Text>
-                  </View>
-                  <Svg width="100%" height={44} viewBox="0 0 160 44" style={{ marginTop: 8, marginBottom: 4 }}>
-                    <SvgPolyline
-                      points="8,36 22,18 38,28 54,10 70,22 86,8 102,20 118,12 134,24 150,8"
-                      fill="none"
-                      stroke={C.primary + "50"}
-                      strokeWidth={8}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    <SvgPolyline
-                      points="8,36 22,18 38,28 54,10 70,22 86,8 102,20 118,12 134,24 150,8"
-                      fill="none"
-                      stroke={C.primary + "90"}
-                      strokeWidth={2}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </Svg>
-                  <View style={s.ghostTipRow}>
-                    <Feather name="info" size={10} color={C.textMuted} />
-                    <Text style={s.ghostHistoryTip}>Your runs save here — every route, pace, and split</Text>
-                  </View>
-                </View>
-              )}
-              <Pressable
-                style={s.emptyCtaBtn}
-                onPress={() => router.push("/run-tracking")}
-              >
-                <Text style={s.emptyCtaBtnText}>{activityFilter === "ride" ? "Track New Ride" : activityFilter === "walk" ? "Track New Walk" : "Track New Run"}</Text>
-              </Pressable>
-            </View>
-          ) : showHistory ? (
-            <>
-              {/* Filter chips */}
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4, paddingHorizontal: 2 }} style={{ marginBottom: 10 }}>
-                {(["all", "favorites", "longest", "fastest"] as const).map((f) => {
-                  const labels = { all: "All", favorites: "Favorites", longest: "Longest", fastest: "Fastest" };
-                  const active = historyFilter === f;
-                  return (
-                    <Pressable
-                      key={f}
-                      style={[s.historyFilterChip, active && s.historyFilterChipActive]}
-                      onPress={() => { setHistoryFilter(f); Haptics.selectionAsync(); }}
-                    >
-                      <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: active ? C.primary : C.textSecondary }}>{labels[f]}</Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-              {displayedRuns.length === 0 ? (
-                <View style={{ padding: 16, alignItems: "center" }}>
-                  <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textMuted, textAlign: "center" }}>
-                    {historyFilter === "favorites" ? "No starred runs yet — tap ★ to save a favourite" : "No runs to show"}
-                  </Text>
-                </View>
-              ) : displayedRuns.map((run) => {
-                const badge = runBadges[run.id];
-                const label = run.title || `${toDisplayDist(run.distance_miles, distUnit)} ${run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run"}`;
-                const isExpanded = expandedRunId === run.id;
-                return (
-                <View key={run.id} style={s.historyCard}>
-                  <View style={s.historyRow}>
-                    {/* Left: tappable expand/delete area */}
-                    <Pressable
-                      style={({ pressed }) => [s.historyLeft, { opacity: pressed ? 0.85 : 1 }]}
-                      onPress={() => run.completed && setExpandedRunId(isExpanded ? null : run.id)}
-                      onLongPress={() => confirmDelete(run.id)}
-                    >
-                      <View style={[
-                        s.historyStatus,
-                        { backgroundColor: run.completed ? C.primary + "22" : run.planned ? C.blue + "22" : C.border },
-                      ]}>
-                        <Feather
-                          name={run.completed ? "check" : run.planned ? "calendar" : "circle"}
-                          size={12}
-                          color={run.completed ? C.primary : run.planned ? C.blue : C.textMuted}
-                        />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <View style={s.historyTitleRow}>
-                          <Text style={s.historyTitle} numberOfLines={1}>{label}</Text>
-                          {(run.source === "garmin" || run.garmin_activity_id) && (
-                            <View style={[s.sourceBadge, { backgroundColor: "#009CDE22" }]}>
-                              <FontAwesome5 name="satellite-dish" size={8} color="#009CDE" />
-                            </View>
-                          )}
-                          {(run.source === "apple_health" || run.apple_health_id) && (
-                            <View style={[s.sourceBadge, { backgroundColor: "#FF3B3022" }]}>
-                              <Ionicons name="heart" size={9} color="#FF3B30" />
-                            </View>
-                          )}
-                          {badge && (
-                            <Text style={s.historyBadge}>{RANK_EMOJI[badge.rank - 1]}</Text>
-                          )}
-                        </View>
-                        <Text style={s.historyMeta}>
-                          {formatDisplayDate(run.date)}
-                          {run.pace_min_per_mile ? ` · ${toDisplayPace(run.pace_min_per_mile, distUnit)}` : ""}
-                          {run.duration_seconds ? ` · ${formatDuration(run.duration_seconds)}` : ""}
-                        </Text>
-                      </View>
-                    </Pressable>
-                    {/* Right: star + distance + chevron — outside the expand Pressable */}
-                    <View style={s.historyRight}>
-                      <Pressable
-                        onPress={() => {
-                          Haptics.selectionAsync();
-                          starMutation.mutate(run.id);
-                        }}
-                        hitSlop={12}
-                        style={{ padding: 4 }}
-                      >
-                        <Ionicons
-                          name={run.is_starred ? "star" : "star-outline"}
-                          size={18}
-                          color={run.is_starred ? C.gold : C.textMuted}
-                        />
-                      </Pressable>
-                      <Text style={s.historyDist}>{toDisplayDist(run.distance_miles, distUnit)}</Text>
-                      {run.completed && (
-                        <Pressable
-                          onPress={() => setExpandedRunId(isExpanded ? null : run.id)}
-                          hitSlop={8}
-                        >
-                          <Feather name={isExpanded ? "chevron-up" : "chevron-down"} size={14} color={C.textMuted} />
-                        </Pressable>
-                      )}
-                    </View>
-                  </View>
-                  {run.route_path && run.route_path.length > 1 && Platform.OS !== "web" && (
-                    <MiniRouteMap path={run.route_path} />
-                  )}
-                  {isExpanded && (
-                    <View style={s.statsPanel}>
-                      <View style={s.statRow}>
-                        {run.duration_seconds != null && (
-                          <View style={s.statItem}>
-                            <Feather name="clock" size={13} color={C.primary} />
-                            <Text style={s.statLabel}>Time</Text>
-                            <Text style={s.statValue}>{formatDuration(run.duration_seconds)}</Text>
-                          </View>
-                        )}
-                        {run.pace_min_per_mile != null && (
-                          <View style={s.statItem}>
-                            <Feather name="zap" size={13} color={C.primary} />
-                            <Text style={s.statLabel}>Pace</Text>
-                            <Text style={s.statValue}>{toDisplayPace(run.pace_min_per_mile, distUnit)}</Text>
-                          </View>
-                        )}
-                        <View style={s.statItem}>
-                          <Feather name="map-pin" size={13} color={C.primary} />
-                          <Text style={s.statLabel}>Distance</Text>
-                          <Text style={s.statValue}>{toDisplayDist(run.distance_miles, distUnit)}</Text>
-                        </View>
-                        {run.elevation_gain_ft != null && (
-                          <View style={s.statItem}>
-                            <Feather name="trending-up" size={13} color={C.primary} />
-                            <Text style={s.statLabel}>Elevation</Text>
-                            <Text style={s.statValue}>{Math.round(run.elevation_gain_ft)} ft</Text>
-                          </View>
-                        )}
-                      </View>
-                    </View>
-                  )}
-                  {isExpanded && run.mile_splits && run.mile_splits.length > 0 && (
-                    <View style={{ paddingHorizontal: 12, paddingBottom: 14 }}>
-                      <MileSplitsChart splits={run.mile_splits} activityType={run.activity_type} />
-                    </View>
-                  )}
-                  {isExpanded && run.completed && (!run.mile_splits || run.mile_splits.length === 0) && (
-                    <View style={{ paddingHorizontal: 12, paddingBottom: 12, alignItems: "center" }}>
-                      <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, textAlign: "center" }}>
-                        {`Splits available for activities of 1+ ${unitLabel(distUnit)}`}
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.ghostHistoryTitle}>
+                        {activityFilter === "ride" ? "Morning 14.0mi Ride" : activityFilter === "walk" ? "Morning 2.5mi Walk" : "Morning 3.1mi Run"}
+                      </Text>
+                      <Text style={s.ghostHistoryMeta}>
+                        {activityFilter === "ride" ? "Today · 18.2 mph · 46:12" : activityFilter === "walk" ? "Today · 3.2 mph · 52:10" : "Today · 9:23/mi · 28:43"}
                       </Text>
                     </View>
-                  )}
+                  </View>
+                  <Text style={s.ghostHistoryDist}>
+                    {activityFilter === "ride" ? "14.0" : activityFilter === "walk" ? "2.5" : "3.1"}
+                  </Text>
                 </View>
-              );
-            })}
-            </>
-          ) : null}
-        </View>
-      </ScrollView>
+                <Svg width="100%" height={44} viewBox="0 0 160 44" style={{ marginTop: 8, marginBottom: 4 }}>
+                  <SvgPolyline
+                    points="8,36 22,18 38,28 54,10 70,22 86,8 102,20 118,12 134,24 150,8"
+                    fill="none"
+                    stroke={C.primary + "50"}
+                    strokeWidth={8}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <SvgPolyline
+                    points="8,36 22,18 38,28 54,10 70,22 86,8 102,20 118,12 134,24 150,8"
+                    fill="none"
+                    stroke={C.primary + "90"}
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </Svg>
+                <View style={s.ghostTipRow}>
+                  <Feather name="info" size={10} color={C.textMuted} />
+                  <Text style={s.ghostHistoryTip}>Your runs save here — every route, pace, and split</Text>
+                </View>
+              </View>
+            )}
+            <Pressable
+              style={s.emptyCtaBtn}
+              onPress={() => router.push("/run-tracking")}
+            >
+              <Text style={s.emptyCtaBtnText}>{activityFilter === "ride" ? "Track New Ride" : activityFilter === "walk" ? "Track New Walk" : "Track New Run"}</Text>
+            </Pressable>
+          </View>
+        )}
+        {showHistory && !isLoading && historyRuns.length > 0 && (
+          <>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4, paddingHorizontal: 2 }} style={{ marginBottom: 10 }}>
+              {(["all", "favorites", "longest", "fastest"] as const).map((f) => {
+                const labels = { all: "All", favorites: "Favorites", longest: "Longest", fastest: "Fastest" };
+                const active = historyFilter === f;
+                return (
+                  <Pressable
+                    key={f}
+                    style={[s.historyFilterChip, active && s.historyFilterChipActive]}
+                    onPress={() => { setHistoryFilter(f); Haptics.selectionAsync(); }}
+                  >
+                    <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: active ? C.primary : C.textSecondary }}>{labels[f]}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+            {displayedRuns.length === 0 && (
+              <View style={{ padding: 16, alignItems: "center" }}>
+                <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textMuted, textAlign: "center" }}>
+                  {historyFilter === "favorites" ? "No starred runs yet — tap ★ to save a favourite" : "No runs to show"}
+                </Text>
+              </View>
+            )}
+          </>
+        )}
+      </View>
+    </>
+  ), [activityFilter, C, s, buddyEligible, buddies, goalPct, distGoal, currentMiles, currentPace, paceGoal, period, distUnit, scheduledRuns, filteredSavedPaths, rankings, historyRuns, showHistory, isLoading, ghostSoloDone, historyFilter, displayedRuns]);
+
+  return (
+    <View style={[s.container, { backgroundColor: C.bg }]}>
+      <SectionList
+        sections={historySections}
+        keyExtractor={(item) => item.id}
+        renderItem={renderHistoryItem}
+        renderSectionHeader={renderSectionHeader}
+        ListHeaderComponent={listHeaderComponent}
+        contentContainerStyle={[
+          s.scroll,
+          {
+            paddingTop: insets.top + (Platform.OS === "web" ? 67 : 16),
+            paddingBottom: insets.bottom + 120,
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
+        stickySectionHeadersEnabled={false}
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        windowSize={7}
+      />
 
       {/* ─── Edit Goals Modal ─────────────────────────────────────────── */}
       <Modal visible={showGoals} transparent animationType="slide" onRequestClose={() => setShowGoals(false)}>
@@ -1798,6 +1830,8 @@ export default function SoloScreen() {
 function makeStyles(C: ColorScheme) { return StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   scroll: { paddingHorizontal: 16 },
+  monthHeader: { paddingTop: 14, paddingBottom: 6, paddingHorizontal: 2 },
+  monthHeaderTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, textTransform: "uppercase", letterSpacing: 0.5 },
 
   headerRow: {
     flexDirection: "row",
