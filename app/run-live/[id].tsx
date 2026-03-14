@@ -156,9 +156,9 @@ export default function RunLiveScreen() {
   // ── Start Solo (leave group → go solo) ───────────────────────────────────
 
   function handleStartSolo() {
-    const type = run?.activity_type === "ride" ? "ride" : "run";
+    const type = run?.activity_type === "ride" ? "ride" : run?.activity_type === "walk" ? "walk" : "run";
     Alert.alert(
-      `Start Solo ${type === "ride" ? "Ride" : "Run"}`,
+      `Start Solo ${type === "ride" ? "Ride" : type === "walk" ? "Walk" : "Run"}`,
       `Leave this group event and start a solo ${type} instead?`,
       [
         { text: "Stay", style: "cancel" },
@@ -180,7 +180,7 @@ export default function RunLiveScreen() {
     if (Platform.OS !== "web") {
       const perm = await Location.requestForegroundPermissionsAsync();
       if (!perm.granted) {
-        const type = run?.activity_type === "ride" ? "ride" : "run";
+        const type = run?.activity_type === "ride" ? "ride" : run?.activity_type === "walk" ? "walk" : "run";
         Alert.alert("Location Required", `Enable location access to track your ${type}.`);
         return;
       }
@@ -201,9 +201,9 @@ export default function RunLiveScreen() {
   // ── Finish tracking ───────────────────────────────────────────────────────
 
   function handleFinishRun() {
-    const type = run?.activity_type === "ride" ? "ride" : "run";
+    const type = run?.activity_type === "ride" ? "ride" : run?.activity_type === "walk" ? "walk" : "run";
     Alert.alert(
-      `Finish ${type === "ride" ? "Ride" : "Run"}`,
+      `Finish ${type === "ride" ? "Ride" : type === "walk" ? "Walk" : "Run"}`,
       `End your ${type} and see the results?`,
       [
         { text: "Keep Going", style: "cancel" },
@@ -336,7 +336,7 @@ export default function RunLiveScreen() {
             <View style={s.liveDot} />
             <Text style={s.livePillText}>LIVE</Text>
           </View>
-          <Text style={s.headerTitle}>{run?.title ?? (run?.activity_type === "ride" ? "Live Ride" : "Live Run")}</Text>
+          <Text style={s.headerTitle}>{run?.title ?? (run?.activity_type === "ride" ? "Live Ride" : run?.activity_type === "walk" ? "Live Walk" : "Live Run")}</Text>
         </View>
         <View style={s.runnerCount}>
           <Feather name="users" size={14} color={C.primary} />
@@ -526,7 +526,7 @@ export default function RunLiveScreen() {
             {phase === "idle" && isHost && (
               <Pressable style={({ pressed }) => [s.startBtn, { opacity: pressed ? 0.85 : 1 }]} onPress={handleStartTracking}>
                 <Feather name="play" size={20} color={C.bg} />
-                <Text style={s.startBtnText}>{run?.activity_type === "ride" ? "Start Ride" : "Start Run"}</Text>
+                <Text style={s.startBtnText}>{run?.activity_type === "ride" ? "Start Ride" : run?.activity_type === "walk" ? "Start Walk" : "Start Run"}</Text>
               </Pressable>
             )}
             {phase === "idle" && !!run && !isHost && (
@@ -550,7 +550,7 @@ export default function RunLiveScreen() {
                   >
                     <Feather name="user" size={14} color={C.textSecondary} />
                     <Text style={s.startSoloBtnText}>
-                      {run?.activity_type === "ride" ? "Start Solo Ride" : "Start Solo Run"}
+                      {run?.activity_type === "ride" ? "Start Solo Ride" : run?.activity_type === "walk" ? "Start Solo Walk" : "Start Solo Run"}
                     </Text>
                   </Pressable>
                 )}
@@ -559,13 +559,13 @@ export default function RunLiveScreen() {
             {phase === "active" && (
               <Pressable style={({ pressed }) => [s.finishBtn, { opacity: pressed ? 0.85 : 1 }]} onPress={handleFinishRun}>
                 <Feather name="flag" size={20} color="#fff" />
-                <Text style={s.finishBtnText}>{run?.activity_type === "ride" ? "Finish My Ride" : "Finish My Run"}</Text>
+                <Text style={s.finishBtnText}>{run?.activity_type === "ride" ? "Finish My Ride" : run?.activity_type === "walk" ? "Finish My Walk" : "Finish My Run"}</Text>
               </Pressable>
             )}
             {phase === "finishing" && (
               <View style={s.savingRow}>
                 <ActivityIndicator color={C.primary} />
-                <Text style={s.savingText}>Saving your {run?.activity_type === "ride" ? "ride" : "run"}…</Text>
+                <Text style={s.savingText}>Saving your {run?.activity_type === "ride" ? "ride" : run?.activity_type === "walk" ? "walk" : "run"}…</Text>
               </View>
             )}
           </View>

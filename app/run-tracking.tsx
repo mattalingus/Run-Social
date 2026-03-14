@@ -524,7 +524,7 @@ export default function RunTrackingScreen() {
             ? `${Math.floor(pace)}:${Math.round((pace - Math.floor(pace)) * 60).toString().padStart(2, "0")}/mi`
             : "";
           Share.share({
-            message: `Just finished a ${dist.toFixed(2)} mile ${activityFilter}${paceStr ? ` at ${paceStr} pace` : ""}! ${activityFilter === "ride" ? "🚴" : "🏃"} Tracked on PaceUp.`,
+            message: `Just finished a ${dist.toFixed(2)} mile ${activityFilter}${paceStr ? ` at ${paceStr} pace` : ""}! ${activityFilter === "ride" ? "🚴" : activityFilter === "walk" ? "🚶" : "🏃"} Tracked on PaceUp.`,
           }).catch(() => {});
         });
       } catch (_) {}
@@ -549,8 +549,8 @@ export default function RunTrackingScreen() {
     const maxAccuracy = Platform.OS === "web" ? 100 : 40;
     if (accuracy != null && accuracy > maxAccuracy) return;
 
-    // Vehicle detection: run > 12 m/s (~27 mph), ride > 22 m/s (~50 mph)
-    const vehicleThreshold = activityFilter === "ride" ? 22 : 12;
+    // Vehicle detection: walk > 4 m/s (~9 mph), run > 12 m/s (~27 mph), ride > 22 m/s (~50 mph)
+    const vehicleThreshold = activityFilter === "ride" ? 22 : activityFilter === "walk" ? 4 : 12;
     if (speed != null && speed > 0 && speed > vehicleThreshold) {
       setIsDriving(true);
       return;
@@ -656,7 +656,7 @@ export default function RunTrackingScreen() {
         distanceInterval: 5,
         showsBackgroundLocationIndicator: true,
         foregroundService: {
-          notificationTitle: `PaceUp is tracking your ${activityFilter === "ride" ? "ride" : "run"}`,
+          notificationTitle: `PaceUp is tracking your ${activityFilter === "ride" ? "ride" : activityFilter === "walk" ? "walk" : "run"}`,
           notificationBody: "Your route is being recorded",
           notificationColor: "#00D97E",
         },
@@ -836,7 +836,7 @@ export default function RunTrackingScreen() {
   }
 
   function handleFinish() {
-    const type = activityFilter === "ride" ? "Ride" : "Run";
+    const type = activityFilter === "ride" ? "Ride" : activityFilter === "walk" ? "Walk" : "Run";
     Alert.alert(
       `Finish ${type}?`,
       `Ready to wrap up this ${type.toLowerCase()}?`,
@@ -853,7 +853,7 @@ export default function RunTrackingScreen() {
       router.back();
       return;
     }
-    Alert.alert(`Discard ${activityFilter === "ride" ? "Ride" : "Run"}`, `Discard this ${activityFilter === "ride" ? "ride" : "run"} and go back?`, [
+    Alert.alert(`Discard ${activityFilter === "ride" ? "Ride" : activityFilter === "walk" ? "Walk" : "Run"}`, `Discard this ${activityFilter === "ride" ? "ride" : activityFilter === "walk" ? "walk" : "run"} and go back?`, [
       { text: "Keep Going", style: "cancel" },
       {
         text: "Discard",
@@ -877,7 +877,7 @@ export default function RunTrackingScreen() {
       const moveSecs = moveTimeRef.current > 0 ? Math.round(moveTimeRef.current) : null;
       const steps = activityFilter === "run" && stepCountRef.current > 0 ? stepCountRef.current : null;
       const res = await apiRequest("POST", "/api/solo-runs", {
-        title: `${toDisplayDist(distance, distUnit)} solo ${activityFilter === "ride" ? "ride" : "run"}`,
+        title: `${toDisplayDist(distance, distUnit)} solo ${activityFilter === "ride" ? "ride" : activityFilter === "walk" ? "walk" : "run"}`,
         date: new Date().toISOString(),
         distanceMiles: Math.max(distance, 0.001),
         paceMinPerMile: pace,
@@ -980,7 +980,7 @@ export default function RunTrackingScreen() {
           },
         ],
         "plain-text",
-        `${toDisplayDist(totalDistRef.current, distUnit)} ${activityFilter === "ride" ? "Ride" : "Run"}`
+        `${toDisplayDist(totalDistRef.current, distUnit)} ${activityFilter === "ride" ? "Ride" : activityFilter === "walk" ? "Walk" : "Run"}`
       );
       return;
     }
@@ -1069,7 +1069,7 @@ export default function RunTrackingScreen() {
           ]}
           showsVerticalScrollIndicator={false}
         >
-          <Text style={t.summaryTitle}>{activityFilter === "ride" ? "Ride Complete" : "Run Complete"}</Text>
+          <Text style={t.summaryTitle}>{activityFilter === "ride" ? "Ride Complete" : activityFilter === "walk" ? "Walk Complete" : "Run Complete"}</Text>
 
           {/* Editable run title */}
           {savedRunId ? (
@@ -1081,7 +1081,7 @@ export default function RunTrackingScreen() {
                 onBlur={() => saveTitleIfChanged(runTitle)}
                 onSubmitEditing={() => saveTitleIfChanged(runTitle)}
                 returnKeyType="done"
-                placeholder={activityFilter === "ride" ? "Name this ride…" : "Name this run…"}
+                placeholder={activityFilter === "ride" ? "Name this ride…" : activityFilter === "walk" ? "Name this walk…" : "Name this run…"}
                 placeholderTextColor={C.textMuted}
                 selectTextOnFocus
                 maxLength={80}
@@ -1102,7 +1102,7 @@ export default function RunTrackingScreen() {
             );
             const isDistance = (prTiers.distanceTier ?? 99) <= (prTiers.paceTier ?? 99);
             const color = tier === 1 ? "#FFB800" : tier === 2 ? "#C0C0C0" : "#CD7F32";
-            const actLabel = activityFilter === "ride" ? "Ride" : "Run";
+            const actLabel = activityFilter === "ride" ? "Ride" : activityFilter === "walk" ? "Walk" : "Run";
             const label = tier === 1
               ? (isDistance ? `New Distance PR!` : "New Pace PR!")
               : tier === 2
@@ -1187,7 +1187,7 @@ export default function RunTrackingScreen() {
                 onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowShare(true); }}
               >
                 <Feather name="share-2" size={16} color={C.primary} />
-                <Text style={t.shareBtnTxt}>{activityFilter === "ride" ? "Share Ride" : "Share Run"}</Text>
+                <Text style={t.shareBtnTxt}>{activityFilter === "ride" ? "Share Ride" : activityFilter === "walk" ? "Share Walk" : "Share Run"}</Text>
               </Pressable>
 
               {/* ─── Photo section ─────────────────────────────────────── */}
@@ -1263,7 +1263,7 @@ export default function RunTrackingScreen() {
                       <Pressable
                         style={t.publishBtn}
                         onPress={() => {
-                          setPublishName(`${toDisplayDist(totalDistRef.current, distUnit)} ${activityFilter === "ride" ? "Ride" : "Run"}`);
+                          setPublishName(`${toDisplayDist(totalDistRef.current, distUnit)} ${activityFilter === "ride" ? "Ride" : activityFilter === "walk" ? "Walk" : "Run"}`);
                           setShowPublishForm(true);
                         }}
                       >
@@ -1310,7 +1310,7 @@ export default function RunTrackingScreen() {
                 {saving ? (
                   <ActivityIndicator color={C.bg} />
                 ) : (
-                  <Text style={t.saveBtnTxt}>{activityFilter === "ride" ? "Save Ride" : "Save Run"}</Text>
+                  <Text style={t.saveBtnTxt}>{activityFilter === "ride" ? "Save Ride" : activityFilter === "walk" ? "Save Walk" : "Save Run"}</Text>
                 )}
               </Pressable>
 
@@ -1470,7 +1470,7 @@ export default function RunTrackingScreen() {
               },
             ]} />
             <Text style={t.statusTxt}>
-              {phase === "idle" ? "Ready" : phase === "active" ? (activityFilter === "ride" ? "Riding" : "Running") : "Paused"}
+              {phase === "idle" ? "Ready" : phase === "active" ? (activityFilter === "ride" ? "Riding" : activityFilter === "walk" ? "Walking" : "Running") : "Paused"}
             </Text>
           </View>
         )}
@@ -1509,7 +1509,7 @@ export default function RunTrackingScreen() {
               onPress={handleStart}
             >
               <Ionicons name="play" size={26} color={C.bg} />
-              <Text style={t.startBtnTxt}>{activityFilter === "ride" ? "Start Ride" : "Start Run"}</Text>
+              <Text style={t.startBtnTxt}>{activityFilter === "ride" ? "Start Ride" : activityFilter === "walk" ? "Start Walk" : "Start Run"}</Text>
             </Pressable>
           )}
 

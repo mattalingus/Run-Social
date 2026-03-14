@@ -89,13 +89,22 @@ const RUN_STYLE_CATEGORIES_RIDE = [
   { label: "Time of Day", options: ["Morning Ride", "Sunrise Ride", "Sunset Ride", "Lunch Ride", "Night Ride"] },
   { label: "Terrain",     options: ["Trail", "Road", "Park Loop"] },
 ];
+const RUN_STYLE_CATEGORIES_WALK = [
+  { label: "Effort",      options: ["Easy Pace", "Beginner Friendly", "No-Drop", "Recovery", "Long Walk", "Social Walk", "Power Walk", "Intervals"] },
+  { label: "Social",      options: ["Talkative", "Headphones OK", "Motivational", "Social After"] },
+  { label: "Community",   options: ["Women", "Men", "Co-Ed", "Young Adult", "College", "Seniors", "All Ages", "Stroller Friendly", "Dog Friendly", "Middle Aged"] },
+  { label: "Time of Day", options: ["Morning Walk", "Sunrise Walk", "Sunset Walk", "Lunch Walk", "Night Walk"] },
+  { label: "Terrain",     options: ["Trail", "Road", "Park Loop"] },
+];
 
 const TAG_CATEGORY_ORDER: string[] = [
-  "Easy Pace", "Beginner Friendly", "No-Drop", "Recovery", "Long Run", "Long Ride", "PR Chaser", "Tempo", "Intervals",
+  "Easy Pace", "Beginner Friendly", "No-Drop", "Recovery", "Long Run", "Long Ride", "Long Walk", "PR Chaser", "Tempo", "Intervals", "Power Walk", "Social Walk",
   "Talkative", "Headphones OK", "Motivational", "Social After",
   "Women", "Men", "Co-Ed", "Young Adult", "College", "Seniors", "All Ages", "Middle Aged",
   "Dog Friendly", "Stroller Friendly", "Walk-Run", "Walk-Ride", "Run & Coffee", "Ride & Coffee",
-  "Morning Run", "Morning Ride", "Sunrise Run", "Sunrise Ride", "Sunset Run", "Sunset Ride", "Lunch Run", "Lunch Ride", "Night Run", "Night Ride",
+  "Morning Run", "Morning Ride", "Morning Walk", "Sunrise Run", "Sunrise Ride", "Sunrise Walk",
+  "Sunset Run", "Sunset Ride", "Sunset Walk", "Lunch Run", "Lunch Ride", "Lunch Walk",
+  "Night Run", "Night Ride", "Night Walk",
   "Trail", "Road", "Park Loop",
 ];
 
@@ -401,7 +410,7 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
 
           {/* ── B. Distance (Run length) ────────────────────────────────── */}
           <View style={fm.section}>
-            <Text style={fm.sectionTitle}>{activityFilter === "ride" ? "Ride Length" : "Run Length"}</Text>
+            <Text style={fm.sectionTitle}>{activityFilter === "ride" ? "Ride Length" : activityFilter === "walk" ? "Walk Length" : "Run Length"}</Text>
             <View style={fm.distRow}>
               <View style={fm.distField}>
                 <Text style={fm.distLabel}>Min (mi)</Text>
@@ -498,7 +507,7 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
           {/* ── D. Host Style ────────────────────────────────────────────── */}
           <View style={fm.section}>
             <Text style={fm.sectionTitle}>Host Style</Text>
-            {(activityFilter === "ride" ? RUN_STYLE_CATEGORIES_RIDE : RUN_STYLE_CATEGORIES_RUN).map((cat) => (
+            {(activityFilter === "ride" ? RUN_STYLE_CATEGORIES_RIDE : activityFilter === "walk" ? RUN_STYLE_CATEGORIES_WALK : RUN_STYLE_CATEGORIES_RUN).map((cat) => (
               <View key={cat.label} style={{ marginTop: 14 }}>
                 <Text style={fm.catLabel}>{cat.label}</Text>
                 <View style={[fm.styleGrid, { marginTop: 8 }]}>
@@ -887,7 +896,7 @@ function RunCard({
                 <View style={s.metaItem}>
                   <Feather name="calendar" size={11} color={C.textMuted} />
                   <Text style={s.metaText}>
-                    {run.plan_count} {parseInt(run.plan_count ?? "0") === 1 ? "person" : "people"} planning to {run.activity_type === "ride" ? "ride" : "run"}
+                    {run.plan_count} {parseInt(run.plan_count ?? "0") === 1 ? "person" : "people"} planning to {run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run"}
                   </Text>
                 </View>
               )}
@@ -929,7 +938,7 @@ function MiniRunCard({
   run: any;
   variant: "planned" | "saved";
   width: "100%" | number;
-  activityFilter: "run" | "ride";
+  activityFilter: "run" | "ride" | "walk";
   onPress: () => void;
   onRemove: () => void;
 }) {
@@ -985,7 +994,7 @@ function MiniRunCard({
           <>
             <View style={s.plannedCardHeader}>
               <View style={s.plannedDot} />
-              <Text style={s.plannedLabel} numberOfLines={1}>{activityFilter === "ride" ? "Riding" : "Running"}</Text>
+              <Text style={s.plannedLabel} numberOfLines={1}>{activityFilter === "ride" ? "Riding" : activityFilter === "walk" ? "Walking" : "Running"}</Text>
               <Pressable hitSlop={10} onPress={(e) => { e.stopPropagation?.(); onRemove(); }}>
                 <Ionicons name="calendar" size={14} color={C.primary} />
               </Pressable>
@@ -1165,7 +1174,7 @@ export default function DiscoverScreen() {
   const [isGeocodingPin, setIsGeocodingPin] = useState(false);
   const [hAmPm, setHAmPm] = useState<"AM" | "PM">("AM");
   const [hStrict, setHStrict] = useState(false);
-  const [hActivityType, setHActivityType] = useState<"run" | "ride">("run");
+  const [hActivityType, setHActivityType] = useState<"run" | "ride" | "walk">("run");
   const [hCrewId, setHCrewId] = useState<string | null>(null);
   const [hSavedPathId, setHSavedPathId] = useState<string | null>(null);
   const [hSavedPathName, setHSavedPathName] = useState<string | null>(null);
@@ -1266,7 +1275,7 @@ export default function DiscoverScreen() {
 
   function stepMinPace(dir: 1 | -1) {
     const next = Math.round((hMinPace + dir * PACE_STEP_30S) * 10) / 10;
-    const floor = hActivityType === "ride" ? 2 : 4;
+    const floor = hActivityType === "ride" ? 2 : hActivityType === "walk" ? 2 : 4;
     setHMinPace(Math.max(floor, Math.min(hMaxPace - PACE_STEP_30S, next)));
     Haptics.selectionAsync();
   }
@@ -1732,7 +1741,7 @@ export default function DiscoverScreen() {
             style={s.searchInput}
             value={search}
             onChangeText={handleSearch}
-            placeholder={activityFilter === "ride" ? "Search rides, hosts, locations..." : "Search runs, hosts, locations..."}
+            placeholder={activityFilter === "ride" ? "Search rides, hosts, locations..." : activityFilter === "walk" ? "Search walks, hosts, locations..." : "Search runs, hosts, locations..."}
             placeholderTextColor={C.textMuted}
           />
           {search.length > 0 && (
@@ -1757,6 +1766,13 @@ export default function DiscoverScreen() {
           >
             <Ionicons name="bicycle" size={13} color={activityFilter === "ride" ? C.bg : C.textMuted} />
             <Text style={[s.activityPillTxt, activityFilter === "ride" && s.activityPillTxtActive]}>Rides</Text>
+          </Pressable>
+          <Pressable
+            style={[s.activityPill, activityFilter === "walk" && s.activityPillActive]}
+            onPress={() => { setActivityFilter("walk"); Haptics.selectionAsync(); }}
+          >
+            <Ionicons name="footsteps" size={13} color={activityFilter === "walk" ? C.bg : C.textMuted} />
+            <Text style={[s.activityPillTxt, activityFilter === "walk" && s.activityPillTxtActive]}>Walks</Text>
           </Pressable>
           <Pressable
             style={[s.filterToggleBtn, isFiltered && s.hBtnActive]}
@@ -1797,18 +1813,18 @@ export default function DiscoverScreen() {
                   {/* ── Left: Planning to ── */}
                   {(!ghostPlannedDone || filteredPlanned.length > 0) && (
                     <View style={s.sideCol}>
-                      <Text style={s.savedSectionTitle}>{activityFilter === "ride" ? "Planning to Ride" : "Planning to Run"}</Text>
+                      <Text style={s.savedSectionTitle}>{activityFilter === "ride" ? "Planning to Ride" : activityFilter === "walk" ? "Planning to Walk" : "Planning to Run"}</Text>
                       {filteredPlanned.length === 0 ? (
                         <View style={s.ghostPlannedCard}>
                           <View style={s.plannedCardHeader}>
                             <View style={[s.plannedDot, { backgroundColor: C.textMuted }]} />
-                            <Text style={s.ghostPlannedLabel}>{activityFilter === "ride" ? "Planning to ride" : "Planning to run"}</Text>
+                            <Text style={s.ghostPlannedLabel}>{activityFilter === "ride" ? "Planning to ride" : activityFilter === "walk" ? "Planning to walk" : "Planning to run"}</Text>
                             <Ionicons name="calendar-outline" size={14} color={C.textMuted} />
                           </View>
                           <View style={{ flexDirection: "row", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
                             <Text style={s.ghostPlannedTitle}>Tap</Text>
                             <Ionicons name="calendar-outline" size={14} color={C.textMuted} />
-                            <Text style={s.ghostPlannedTitle}>{activityFilter === "ride" ? "on any ride" : "on any event"}</Text>
+                            <Text style={s.ghostPlannedTitle}>{activityFilter === "ride" ? "on any ride" : activityFilter === "walk" ? "on any walk" : "on any event"}</Text>
                           </View>
                           <View style={s.savedCardMeta}>
                             <Feather name="map-pin" size={11} color={C.textMuted} />
@@ -1850,7 +1866,7 @@ export default function DiscoverScreen() {
                   {/* ── Right: Saved ── */}
                   {(!ghostBookmarkDone || sortedBookmarkedRuns.length > 0) && (
                     <View style={s.sideCol}>
-                      <Text style={s.savedSectionTitle}>{activityFilter === "ride" ? "Saved Rides" : "Saved Runs"}</Text>
+                      <Text style={s.savedSectionTitle}>{activityFilter === "ride" ? "Saved Rides" : activityFilter === "walk" ? "Saved Walks" : "Saved Runs"}</Text>
                       {sortedBookmarkedRuns.length === 0 ? (
                         <View style={s.ghostSavedCard}>
                           <View style={s.savedCardTop}>
@@ -1907,10 +1923,10 @@ export default function DiscoverScreen() {
             {isFallback && (
               <View style={s.fallbackBanner}>
                 <Feather name="info" size={13} color={C.textMuted} />
-                <Text style={s.fallbackBannerTxt}>No exact matches — showing all upcoming {activityFilter === "ride" ? "rides" : "events"}</Text>
+                <Text style={s.fallbackBannerTxt}>No exact matches — showing all upcoming {activityFilter === "ride" ? "rides" : activityFilter === "walk" ? "walks" : "events"}</Text>
               </View>
             )}
-            <Text style={s.nearbyLabel}>{isFallback ? (activityFilter === "ride" ? "All Upcoming Rides" : "All Upcoming Events") : (activityFilter === "ride" ? "Upcoming Rides Nearby" : "Upcoming Runs Nearby")}</Text>
+            <Text style={s.nearbyLabel}>{isFallback ? (activityFilter === "ride" ? "All Upcoming Rides" : activityFilter === "walk" ? "All Upcoming Walks" : "All Upcoming Events") : (activityFilter === "ride" ? "Upcoming Rides Nearby" : activityFilter === "walk" ? "Upcoming Walks Nearby" : "Upcoming Runs Nearby")}</Text>
             <Pressable
               style={s.viewOnMapBtn}
               onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); goToMap(); }}
@@ -1948,7 +1964,7 @@ export default function DiscoverScreen() {
             search || isFiltered ? (
               <View style={s.empty}>
                 <Ionicons name={activityFilter === "ride" ? "bicycle-outline" : "walk-outline"} size={44} color={C.textMuted} />
-                <Text style={s.emptyTitle}>{activityFilter === "ride" ? "No rides found" : "No runs found"}</Text>
+                <Text style={s.emptyTitle}>{activityFilter === "ride" ? "No rides found" : activityFilter === "walk" ? "No walks found" : "No runs found"}</Text>
                 <Text style={s.emptySub}>Try adjusting your filters</Text>
                 {isFiltered && (
                   <Pressable style={s.clearFiltersBtn} onPress={resetFilters}>
@@ -1990,7 +2006,7 @@ export default function DiscoverScreen() {
                   onPress={() => { if (user) setShowHostModal(true); else router.push("/login" as any); }}
                 >
                   <Feather name="plus" size={16} color={C.bg} />
-                  <Text style={s.hostCtaBtnTxt}>Host a {activityFilter === "ride" ? "Ride" : "Run"}</Text>
+                  <Text style={s.hostCtaBtnTxt}>Host a {activityFilter === "ride" ? "Ride" : activityFilter === "walk" ? "Walk" : "Run"}</Text>
                 </Pressable>
 
                 <Text style={s.communityFallback}>Be the first to create a run — others will follow.</Text>
@@ -2052,7 +2068,7 @@ export default function DiscoverScreen() {
               {communityRuns.filter((cr: any) => cr.activity_type === activityFilter).length > 0 && (
                 <View style={s.communitySection}>
                   <Text style={s.communitySectionLabel}>
-                    {activityFilter === "ride" ? "Recent Rides" : "Recent Runs"}
+                    {activityFilter === "ride" ? "Recent Rides" : activityFilter === "walk" ? "Recent Walks" : "Recent Runs"}
                   </Text>
                   <ScrollView
                     horizontal
@@ -2068,7 +2084,7 @@ export default function DiscoverScreen() {
                         />
                         <Text style={s.communityTitle} numberOfLines={1}>{cr.title}</Text>
                         <Text style={s.communityMeta}>
-                          {cr.participant_count > 0 ? `${cr.participant_count} ${cr.activity_type === "ride" ? "rode" : "ran"} this` : "Completed"}{cr.location_name ? ` · ${cr.location_name}` : ""}
+                          {cr.participant_count > 0 ? `${cr.participant_count} ${cr.activity_type === "ride" ? "rode" : cr.activity_type === "walk" ? "walked" : "ran"} this` : "Completed"}{cr.location_name ? ` · ${cr.location_name}` : ""}
                         </Text>
                         <Text style={s.communityTime}>{cr.completed_at ? formatDaysAgo(cr.completed_at) : ""}</Text>
                       </View>
@@ -2444,7 +2460,7 @@ export default function DiscoverScreen() {
               </Pressable>
             )}
             <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 17, color: C.text }}>
-              {hostPage === "location" ? "Drop a Pin" : hostPage === "routePicker" ? "Saved Paths" : hActivityType === "ride" ? "Host a Ride" : "Host a Run"}
+              {hostPage === "location" ? "Drop a Pin" : hostPage === "routePicker" ? "Saved Paths" : hActivityType === "ride" ? "Host a Ride" : hActivityType === "walk" ? "Host a Walk" : "Host a Run"}
             </Text>
             {hostPage === "location" ? (
               <Pressable
@@ -2632,17 +2648,24 @@ export default function DiscoverScreen() {
                 onPress={() => { setHActivityType("ride"); Haptics.selectionAsync(); }}
               >
                 <Ionicons name="bicycle" size={14} color={hActivityType === "ride" ? C.bg : C.textMuted} />
-                <Text style={[s.activityPillTxt, hActivityType === "ride" && s.activityPillTxtActive]}>Bike Ride</Text>
+                <Text style={[s.activityPillTxt, hActivityType === "ride" && s.activityPillTxtActive]}>Ride</Text>
+              </Pressable>
+              <Pressable
+                style={[s.activityPill, hActivityType === "walk" && s.activityPillActive, { flex: 1 }]}
+                onPress={() => { setHActivityType("walk"); Haptics.selectionAsync(); }}
+              >
+                <Ionicons name="footsteps" size={14} color={hActivityType === "walk" ? C.bg : C.textMuted} />
+                <Text style={[s.activityPillTxt, hActivityType === "walk" && s.activityPillTxtActive]}>Walk</Text>
               </Pressable>
             </View>
 
             {/* Title */}
-            <Text style={s.hLabel}>{hActivityType === "ride" ? "Ride Title *" : "Run Title *"}</Text>
+            <Text style={s.hLabel}>{hActivityType === "ride" ? "Ride Title *" : hActivityType === "walk" ? "Walk Title *" : "Run Title *"}</Text>
             <TextInput
               style={s.hInput}
               value={hTitle}
               onChangeText={setHTitle}
-              placeholder={hActivityType === "ride" ? "e.g. Sunday Morning Group Ride" : "e.g. Morning 5K in the Park"}
+              placeholder={hActivityType === "ride" ? "e.g. Sunday Morning Group Ride" : hActivityType === "walk" ? "e.g. Morning Walk Around the Park" : "e.g. Morning 5K in the Park"}
               placeholderTextColor={C.textMuted}
               maxLength={60}
             />
@@ -2772,7 +2795,7 @@ export default function DiscoverScreen() {
             </View>
 
             {/* Max Runners */}
-            <Text style={s.hLabel}>{hActivityType === "ride" ? "Max Riders" : "Max Runners"}</Text>
+            <Text style={s.hLabel}>{hActivityType === "ride" ? "Max Riders" : hActivityType === "walk" ? "Max Walkers" : "Max Runners"}</Text>
             <View style={s.hStepper}>
               <Pressable
                 style={[s.hStepBtn, hMaxParticipants <= 1 && hMaxParticipants !== 0 && { opacity: 0.4 }]}
@@ -2826,7 +2849,7 @@ export default function DiscoverScreen() {
             </View>
 
             {/* Pace Range */}
-            <Text style={s.hLabel}>{hActivityType === "ride" ? "Pace Range For Riders (Min/Mile)" : "Pace Range For Runners (Min/Mile)"}</Text>
+            <Text style={s.hLabel}>{hActivityType === "ride" ? "Pace Range For Riders (Min/Mile)" : hActivityType === "walk" ? "Pace Range For Walkers (Min/Mile)" : "Pace Range For Runners (Min/Mile)"}</Text>
             <View style={{ gap: 8 }}>
               <View style={s.hPaceRow}>
                 <Text style={s.hPaceLabel}>Slowest</Text>
@@ -2863,7 +2886,7 @@ export default function DiscoverScreen() {
               <Text style={s.hLabel}>Host Style</Text>
               <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted }}>(select all that apply)</Text>
             </View>
-            {(hActivityType === "ride" ? RUN_STYLE_CATEGORIES_RIDE : RUN_STYLE_CATEGORIES_RUN).map(function(cat) {
+            {(hActivityType === "ride" ? RUN_STYLE_CATEGORIES_RIDE : hActivityType === "walk" ? RUN_STYLE_CATEGORIES_WALK : RUN_STYLE_CATEGORIES_RUN).map(function(cat) {
               return (
                 <View key={cat.label} style={{ marginTop: 14 }}>
                   <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 11, color: "#3D6B50", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 8 }}>{cat.label}</Text>
@@ -2900,7 +2923,7 @@ export default function DiscoverScreen() {
         <View style={[s.modalSheet, { paddingBottom: insets.bottom + 24 }]}>
           <View style={s.sheetHandle} />
           <View style={s.sheetHeader}>
-            <Text style={s.sheetTitle}>{activityFilter === "ride" ? "Ride Host Guidelines" : "Run Host Guidelines"}</Text>
+            <Text style={s.sheetTitle}>{activityFilter === "ride" ? "Ride Host Guidelines" : activityFilter === "walk" ? "Walk Host Guidelines" : "Run Host Guidelines"}</Text>
             <Pressable style={s.sheetHeaderBtn} onPress={() => setShowRulesModal(false)}>
               <Feather name="x" size={18} color={C.textSecondary} />
             </Pressable>
@@ -2910,6 +2933,8 @@ export default function DiscoverScreen() {
             <Text style={s.rulesIntro}>
               {activityFilter === "ride"
                 ? "By hosting a ride on PaceUp, you agree to uphold these community standards. Every rider deserves a safe and welcoming experience."
+                : activityFilter === "walk"
+                ? "By hosting a walk on PaceUp, you agree to uphold these community standards. Every walker deserves a safe and welcoming experience."
                 : "By hosting a run on PaceUp, you agree to uphold these community standards. Every runner deserves a safe and welcoming experience."}
             </Text>
 
@@ -2920,6 +2945,13 @@ export default function DiscoverScreen() {
               { icon: "shield" as const,      title: "Prioritize safety",            body: "Choose safe routes. Call out hazards, watch for traffic, and look after the wellbeing of all riders." },
               { icon: "users" as const,       title: "Ride together",                body: "Wait at intersections and regroup regularly. A great host makes sure everyone arrives, not just the front." },
               { icon: "x-circle" as const,    title: "Cancel responsibly",           body: "If you can't make it, cancel your ride well in advance so riders can adjust their plans." },
+            ] : activityFilter === "walk" ? [
+              { icon: "heart" as const,      title: "Be kind and respectful",       body: "Treat every walker with courtesy. No one should feel unwelcome or judged on your walk." },
+              { icon: "clock" as const,       title: "Be on time",                   body: "Start and finish as scheduled. If something comes up, notify your group as early as possible." },
+              { icon: "target" as const,      title: "Set honest expectations",      body: "List accurate pace and distance ranges. Don't leave walkers behind who joined based on your stated criteria." },
+              { icon: "shield" as const,      title: "Prioritize safety",            body: "Choose safe routes. Watch out for traffic, uneven terrain, and the wellbeing of all participants." },
+              { icon: "users" as const,       title: "Walk together",                body: "Check in on slower walkers. A great host makes sure everyone finishes, not just those at the front." },
+              { icon: "x-circle" as const,    title: "Cancel responsibly",           body: "If you can't make it, cancel your walk well in advance so participants can adjust their plans." },
             ] : [
               { icon: "heart" as const,      title: "Be kind and respectful",       body: "Treat every participant with courtesy. No runner should feel unwelcome or judged." },
               { icon: "clock" as const,       title: "Be on time",                   body: "Start and finish as scheduled. If something comes up, notify your group as early as possible." },

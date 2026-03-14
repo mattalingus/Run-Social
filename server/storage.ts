@@ -613,11 +613,11 @@ export async function getNotifications(userId: string) {
       const diffH = Math.floor(diffMs / 3600000);
       const diffM = Math.floor((diffMs % 3600000) / 60000);
       const timeStr = diffH > 0 ? `${diffH}h ${diffM}m` : `${diffM}m`;
-      const actLabel = r.activity_type === 'ride' ? 'ride' : 'run';
+      const actLabel = r.activity_type === 'ride' ? 'ride' : r.activity_type === 'walk' ? 'walk' : 'run';
       return {
         id: `er_${r.id}`,
         type: 'event_reminder',
-        title: `Upcoming ${actLabel === 'ride' ? 'Ride' : 'Run'}`,
+        title: `Upcoming ${actLabel === 'ride' ? 'Ride' : actLabel === 'walk' ? 'Walk' : 'Run'}`,
         body: `"${r.title}" with ${r.host_name} starts in ${timeStr}${r.location_name ? ` · ${r.location_name}` : ''}`,
         data: { run_id: r.id, host_name: r.host_name, location_name: r.location_name, date: r.date, activity_type: r.activity_type },
         created_at: r.date,
@@ -632,11 +632,11 @@ export async function getNotifications(userId: string) {
       created_at: r.accepted_at,
     })),
     ...friendRunPosted.rows.map(r => {
-      const actLabel = r.activity_type === 'ride' ? 'ride' : 'run';
+      const actLabel = r.activity_type === 'ride' ? 'ride' : r.activity_type === 'walk' ? 'walk' : 'run';
       return {
         id: `frp_${r.run_id}`,
         type: 'friend_run_posted',
-        title: `Friend Posted a ${actLabel === 'ride' ? 'Ride' : 'Run'}`,
+        title: `Friend Posted a ${actLabel === 'ride' ? 'Ride' : actLabel === 'walk' ? 'Walk' : 'Run'}`,
         body: `${r.friend_name} posted "${r.title}"`,
         data: { run_id: r.run_id, friend_id: r.friend_id, friend_name: r.friend_name, friend_photo: r.friend_photo, activity_type: r.activity_type },
         created_at: r.created_at,
@@ -814,7 +814,7 @@ export async function createRun(data: {
   const inviteToken = data.privacy === "private"
     ? Math.random().toString(36).substring(2, 10).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase()
     : null;
-  const activityType = data.activityType === "ride" ? "ride" : "run";
+  const activityType = data.activityType === "ride" ? "ride" : data.activityType === "walk" ? "walk" : "run";
   const paceGroupsJson = data.paceGroups && data.paceGroups.length > 0 ? JSON.stringify(data.paceGroups) : null;
   const result = await pool.query(
     `INSERT INTO runs (host_id, title, description, privacy, date, location_lat, location_lng, location_name, min_distance, max_distance, min_pace, max_pace, tags, max_participants, invite_token, invite_password, is_strict, run_style, activity_type, crew_id, saved_path_id, pace_groups)

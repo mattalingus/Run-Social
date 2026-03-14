@@ -52,6 +52,13 @@ const RUN_STYLE_CATEGORIES_RIDE = [
   { label: "Time of Day", options: ["Morning Ride", "Sunrise Ride", "Sunset Ride", "Lunch Ride", "Night Ride"] },
   { label: "Terrain",     options: ["Trail", "Road", "Park Loop"] },
 ];
+const RUN_STYLE_CATEGORIES_WALK = [
+  { label: "Effort",      options: ["Easy Pace", "Beginner Friendly", "No-Drop", "Recovery", "Long Walk", "Social Walk", "Power Walk", "Intervals"] },
+  { label: "Social",      options: ["Talkative", "Headphones OK", "Motivational", "Social After"] },
+  { label: "Community",   options: ["Women", "Men", "Co-Ed", "Young Adult", "College", "Seniors", "All Ages", "Stroller Friendly", "Dog Friendly", "Middle Aged"] },
+  { label: "Time of Day", options: ["Morning Walk", "Sunrise Walk", "Sunset Walk", "Lunch Walk", "Night Walk"] },
+  { label: "Terrain",     options: ["Trail", "Road", "Park Loop"] },
+];
 const PRIVACY_OPTIONS = [
   { value: "public",  label: "Public",       icon: "globe",   desc: "Anyone can join" },
   { value: "friends", label: "Friends Only",  icon: "users",   desc: "Your friends see this" },
@@ -108,8 +115,8 @@ export default function CreateRunScreen() {
   const qc = useQueryClient();
   const params = useLocalSearchParams<{ pathLat?: string; pathLng?: string; pathName?: string; pathDistance?: string; activityType?: string; crewId?: string; crewName?: string }>();
 
-  const [activityType, setActivityType] = useState<"run" | "ride">(params.activityType === "ride" ? "ride" : "run");
-  const [title, setTitle] = useState(params.pathName ? `${params.activityType === "ride" ? "Ride on" : "Run on"} ${params.pathName}` : "");
+  const [activityType, setActivityType] = useState<"run" | "ride" | "walk">(params.activityType === "ride" ? "ride" : params.activityType === "walk" ? "walk" : "run");
+  const [title, setTitle] = useState(params.pathName ? `${params.activityType === "ride" ? "Ride on" : params.activityType === "walk" ? "Walk on" : "Run on"} ${params.pathName}` : "");
   const [description, setDescription] = useState("");
   const [privacy, setPrivacy] = useState("public");
   const [date, setDate] = useState("");
@@ -314,8 +321,8 @@ export default function CreateRunScreen() {
         setInviteModal({ token: run.invite_token, title: run.title });
       } else {
         Alert.alert(
-          activityType === "ride" ? "Ride Created!" : "Run Created!",
-          activityType === "ride" ? "Your ride is now live on the map." : "Your run is now live on the map.",
+          activityType === "ride" ? "Ride Created!" : activityType === "walk" ? "Walk Created!" : "Run Created!",
+          activityType === "ride" ? "Your ride is now live on the map." : activityType === "walk" ? "Your walk is now live on the map." : "Your run is now live on the map.",
           [{ text: "Great!", onPress: () => router.back() }]
         );
       }
@@ -337,7 +344,7 @@ export default function CreateRunScreen() {
         <Pressable onPress={() => router.back()} style={styles.cancelBtn}>
           <Feather name="x" size={20} color={C.textSecondary} />
         </Pressable>
-        <Text style={styles.headerTitle}>{activityType === "ride" ? "Host a Ride" : "Host a Run"}</Text>
+        <Text style={styles.headerTitle}>{activityType === "ride" ? "Host a Ride" : activityType === "walk" ? "Host a Walk" : "Host a Run"}</Text>
         <Pressable
           style={({ pressed }) => [styles.createBtn, { opacity: (pressed || createMutation.isPending || (privacy === "crew" && !selectedCrewId && !params.crewId)) ? 0.5 : 1 }]}
           onPress={() => createMutation.mutate()}
@@ -380,7 +387,14 @@ export default function CreateRunScreen() {
               onPress={() => { setActivityType("ride"); Haptics.selectionAsync(); }}
             >
               <Ionicons name="bicycle" size={14} color={activityType === "ride" ? C.bg : C.textMuted} />
-              <Text style={[styles.activityPillTxt, activityType === "ride" && styles.activityPillTxtActive]}>Bike Ride</Text>
+              <Text style={[styles.activityPillTxt, activityType === "ride" && styles.activityPillTxtActive]}>Ride</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.activityPill, activityType === "walk" && styles.activityPillActive]}
+              onPress={() => { setActivityType("walk"); Haptics.selectionAsync(); }}
+            >
+              <Ionicons name="footsteps" size={14} color={activityType === "walk" ? C.bg : C.textMuted} />
+              <Text style={[styles.activityPillTxt, activityType === "walk" && styles.activityPillTxtActive]}>Walk</Text>
             </Pressable>
           </View>
         </View>
@@ -439,12 +453,12 @@ export default function CreateRunScreen() {
 
         {/* 3. Title */}
         <View style={styles.field}>
-          <Text style={styles.label}>{activityType === "ride" ? "Ride Title *" : "Run Title *"}</Text>
+          <Text style={styles.label}>{activityType === "ride" ? "Ride Title *" : activityType === "walk" ? "Walk Title *" : "Run Title *"}</Text>
           <TextInput
             style={styles.input}
             value={title}
             onChangeText={setTitle}
-            placeholder={activityType === "ride" ? "e.g. Sunday Morning Group Ride" : "e.g. Morning 5K in the Park"}
+            placeholder={activityType === "ride" ? "e.g. Sunday Morning Group Ride" : activityType === "walk" ? "e.g. Morning Walk Around the Park" : "e.g. Morning 5K in the Park"}
             placeholderTextColor={C.textMuted}
             maxLength={60}
           />
@@ -682,7 +696,7 @@ export default function CreateRunScreen() {
         {!isCrew && (
           <View style={styles.field}>
             <Text style={styles.label}>Host Style</Text>
-            {(activityType === "ride" ? RUN_STYLE_CATEGORIES_RIDE : RUN_STYLE_CATEGORIES_RUN).map(function(cat) {
+            {(activityType === "ride" ? RUN_STYLE_CATEGORIES_RIDE : activityType === "walk" ? RUN_STYLE_CATEGORIES_WALK : RUN_STYLE_CATEGORIES_RUN).map(function(cat) {
               return (
                 <View key={cat.label} style={{ marginTop: 14 }}>
                   <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 11, color: "#3D6B50", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 8 }}>{cat.label}</Text>
@@ -823,7 +837,7 @@ export default function CreateRunScreen() {
                 <Feather name="check-circle" size={26} color={C.primary} />
               </View>
               <Text style={styles.crewSuccessTitle}>
-                {crewSuccessModal.crewName}'s {activityType === "ride" ? "Ride" : "Run"} Created!
+                {crewSuccessModal.crewName}'s {activityType === "ride" ? "Ride" : activityType === "walk" ? "Walk" : "Run"} Created!
               </Text>
               <Text style={styles.crewSuccessSub}>Crew members will be notified.</Text>
 

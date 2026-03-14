@@ -521,7 +521,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (!run || !participant) return;
           storage.getUserById(participant.user_id).then((requester) => {
             if (!requester?.push_token) return;
-            const actLabel = run.activity_type === "ride" ? "ride" : "run";
+            const actLabel = run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run";
             if (action === "approve") {
               sendPushNotification(requester.push_token, `You're in! 🎉`, `Your request to join "${run.title}" was approved`, { runId });
             } else {
@@ -574,7 +574,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const runDate = new Date(run.date);
           const dayStr = runDate.toLocaleDateString('en-US', { weekday: 'long' });
           const timeStr = runDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-          const actLabel = run.activity_type === "ride" ? "ride" : "run";
+          const actLabel = run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run";
           const promptMsg = `📅 ${run.title} scheduled for ${dayStr} at ${timeStr}. Who's joining this ${actLabel}?`;
           storage.createCrewMessage(
             run.crew_id!,
@@ -589,7 +589,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         storage.getCrewMemberPushTokensFiltered(run.crew_id, 'notif_crew_activity').then((tokens) => {
           if (tokens.length) {
-            const actLabel = run.activity_type === "ride" ? "ride" : "run";
+            const actLabel = run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run";
             sendPushNotification(
               tokens,
               `New crew ${actLabel} scheduled 🏃`,
@@ -605,7 +605,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             sendPushNotification(
               tokens,
               "New activity from a friend 🏃",
-              `${run.host_name} just posted a ${privacy} ${run.activity_type === "ride" ? "ride" : "run"} — "${run.title}"`,
+              `${run.host_name} just posted a ${privacy} ${run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run"} — "${run.title}"`,
               { runId: run.id }
             );
           }
@@ -890,7 +890,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const planner = await storage.getUserById(req.session.userId!);
             sendPushNotification(
               host!.push_token,
-              `Someone plans to ${run.activity_type === "ride" ? "ride" : "run"} with you 📅`,
+              `Someone plans to ${run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run"} with you 📅`,
               `${planner?.name ?? "Someone"} is planning to join "${run.title}"`,
               { runId: run.id }
             );
@@ -999,7 +999,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (userWantsNotif(host, 'run_reminders')) {
           sendPushNotification(
             host!.push_token,
-            `Someone joined your ${run.activity_type === "ride" ? "ride" : "run"} 🎉`,
+            `Someone joined your ${run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run"} 🎉`,
             `${user.name} joined "${run.title}"`,
             { runId: run.id }
           );
@@ -1045,7 +1045,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (host && userWantsNotif(host, 'run_reminders')) {
             sendPushNotification(
               host.push_token,
-              `Join request for your full ${run.activity_type === "ride" ? "ride" : "run"}`,
+              `Join request for your full ${run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run"}`,
               `${user.name} wants to join "${run.title}"`,
               { runId: run.id }
             );
@@ -1306,7 +1306,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         planned: !!planned,
         notes,
         routePath: Array.isArray(routePath) ? routePath : null,
-        activityType: activityType === "ride" ? "ride" : "run",
+        activityType: activityType === "ride" ? "ride" : activityType === "walk" ? "walk" : "run",
         savedPathId: savedPathId || null,
         mileSplits: Array.isArray(mileSplits) && mileSplits.length > 0 ? mileSplits : null,
         elevationGainFt: elevationGainFt != null ? parseFloat(elevationGainFt) : null,
@@ -1405,7 +1405,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const run = await storage.startGroupRun(req.params.id, req.session.userId!);
       res.json(run);
-      const verb = run.activity_type === "ride" ? "Ride" : "Run";
+      const verb = run.activity_type === "ride" ? "Ride" : run.activity_type === "walk" ? "Walk" : "Run";
       storage.getRunParticipantTokensFiltered(req.params.id, "notif_run_reminders").then((tokens) => {
         if (!tokens.length) return;
         sendPushNotification(
@@ -2097,9 +2097,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const durationSec = act.durationInSeconds ?? act.timerDuration ?? null;
         const avgPaceSecPerMeter = durationSec && distMeters > 0 ? durationSec / distMeters : null;
         const paceMinPerMile = avgPaceSecPerMeter ? (avgPaceSecPerMeter * 1609.34) / 60 : null;
-        const actType = (act.activityType ?? "").toLowerCase().includes("cycl") ? "ride" : "run";
+        const actTypeLower = (act.activityType ?? "").toLowerCase();
+        const actType = actTypeLower.includes("cycl") ? "ride" : actTypeLower.includes("walk") || actTypeLower.includes("hik") ? "walk" : "run";
+        const actTypeLabel = actType === "ride" ? "Garmin Ride" : actType === "walk" ? "Garmin Walk" : "Garmin Run";
         const wasNew = await storage.saveGarminActivity(req.session.userId!, garminId, {
-          title: act.activityName ?? (actType === "ride" ? "Garmin Ride" : "Garmin Run"),
+          title: act.activityName ?? actTypeLabel,
           date: new Date((act.startTimeInSeconds ?? Math.floor(Date.now() / 1000)) * 1000),
           distanceMiles: distMiles,
           paceMinPerMile,

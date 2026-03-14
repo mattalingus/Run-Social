@@ -249,12 +249,12 @@ export default function ProfileScreen() {
   const [uploadingPin, setUploadingPin] = useState(false);
   const [topRunsModal, setTopRunsModal] = useState<"longest" | "fastest" | null>(null);
   const [showSoloHistory, setShowSoloHistory] = useState(false);
-  const [historyActivityFilter, setHistoryActivityFilter] = useState<"run" | "ride">("run");
+  const [historyActivityFilter, setHistoryActivityFilter] = useState<"run" | "ride" | "walk">("run");
   const [historyTypeFilter, setHistoryTypeFilter] = useState<"all" | HistoryEventType>("all");
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
   const [showFavorites, setShowFavorites] = useState(false);
   const [expandedFavId, setExpandedFavId] = useState<string | null>(null);
-  const [favActivityFilter, setFavActivityFilter] = useState<"run" | "ride">("run");
+  const [favActivityFilter, setFavActivityFilter] = useState<"run" | "ride" | "walk">("run");
   const [friendSearch, setFriendSearch] = useState("");
   const [showAddFriend, setShowAddFriend] = useState(false);
   const [viewProfileId, setViewProfileId] = useState<string | null>(null);
@@ -842,6 +842,13 @@ export default function ProfileScreen() {
           <Ionicons name="bicycle" size={14} color={profileActivity === "ride" ? C.primary : C.textMuted} />
           <Text style={[styles.actToggleTxt, profileActivity === "ride" && styles.actToggleTxtActive]}>Rides</Text>
         </Pressable>
+        <Pressable
+          style={[styles.actToggleBtn, profileActivity === "walk" && styles.actToggleBtnActive]}
+          onPress={() => { setProfileActivity("walk"); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+        >
+          <Ionicons name="footsteps" size={14} color={profileActivity === "walk" ? C.primary : C.textMuted} />
+          <Text style={[styles.actToggleTxt, profileActivity === "walk" && styles.actToggleTxtActive]}>Walks</Text>
+        </Pressable>
       </View>
 
       {/* ── Stats Grid ────────────────────────────────────────────────────── */}
@@ -856,7 +863,7 @@ export default function ProfileScreen() {
         </View>
         <View style={styles.statCard}>
           <Text style={styles.statNum}>{actStats.count}</Text>
-          <Text style={styles.statName}>{profileActivity === "ride" ? "Rides Done" : "Runs Done"}</Text>
+          <Text style={styles.statName}>{profileActivity === "ride" ? "Rides Done" : profileActivity === "walk" ? "Walks Done" : "Runs Done"}</Text>
         </View>
         <View style={styles.statCard}>
           <Text style={styles.statNum}>{user.hosted_runs}</Text>
@@ -878,7 +885,7 @@ export default function ProfileScreen() {
           <Text style={styles.statNum}>
             {computedTopRuns.longest[0]?.dist != null ? toDisplayDist(computedTopRuns.longest[0].dist, distUnit) : "—"}
           </Text>
-          <Text style={styles.statName}>{profileActivity === "ride" ? "Longest Ride" : "Longest Run"}</Text>
+          <Text style={styles.statName}>{profileActivity === "ride" ? "Longest Ride" : profileActivity === "walk" ? "Longest Walk" : "Longest Run"}</Text>
           <Feather name="chevron-right" size={10} color={C.textMuted} style={{ marginTop: 2 }} />
         </Pressable>
         <Pressable
@@ -915,9 +922,9 @@ export default function ProfileScreen() {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }}
       >
-        <Ionicons name={profileActivity === "ride" ? "bicycle-outline" : "walk-outline"} size={16} color={C.primary} />
+        <Ionicons name={profileActivity === "ride" ? "bicycle-outline" : profileActivity === "walk" ? "footsteps-outline" : "walk-outline"} size={16} color={C.primary} />
         <Text style={styles.viewPastBtnTxt}>
-          {profileActivity === "ride" ? "View Past Rides" : "View Past Runs"}
+          {profileActivity === "ride" ? "View Past Rides" : profileActivity === "walk" ? "View Past Walks" : "View Past Runs"}
         </Text>
         <Feather name="chevron-right" size={16} color={C.primary} />
       </Pressable>
@@ -929,7 +936,7 @@ export default function ProfileScreen() {
         </View>
         <View style={styles.statsRow}>
           <View style={styles.statsItem}>
-            <Ionicons name={profileActivity === "ride" ? "bicycle" : "walk"} size={16} color={C.orange} />
+            <Ionicons name={profileActivity === "ride" ? "bicycle" : profileActivity === "walk" ? "footsteps" : "walk"} size={16} color={C.orange} />
             <View>
               <Text style={styles.statsVal}>
                 {actStats.avgPace != null
@@ -1053,7 +1060,7 @@ export default function ProfileScreen() {
       >
         <Ionicons name="star" size={16} color={C.gold} />
         <Text style={[styles.viewPastBtnTxt, { color: C.gold }]}>
-          {profileActivity === "ride" ? "View Favorite Rides" : "View Favorite Runs"}
+          {profileActivity === "ride" ? "View Favorite Rides" : profileActivity === "walk" ? "View Favorite Walks" : "View Favorite Runs"}
         </Text>
         {starredRuns.filter((r) => (r.activity_type ?? "run") === profileActivity).length > 0 && (
           <View style={[styles.histEventBadge, { backgroundColor: C.gold + "22", marginRight: 4 }]}>
@@ -1067,7 +1074,7 @@ export default function ProfileScreen() {
 
       {/* ── Run / Ride Schedule ───────────────────────────────────────────── */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{profileActivity === "ride" ? "Ride Schedule" : "Run Schedule"}</Text>
+        <Text style={styles.sectionTitle}>{profileActivity === "ride" ? "Ride Schedule" : profileActivity === "walk" ? "Walk Schedule" : "Run Schedule"}</Text>
         {runsLoading ? (
           <ActivityIndicator color={C.primary} />
         ) : (() => {
@@ -1085,7 +1092,7 @@ export default function ProfileScreen() {
             <View style={styles.emptyHistory}>
               <Ionicons name={profileActivity === "ride" ? "bicycle-outline" : "walk-outline"} size={36} color={C.textMuted} />
               <Text style={styles.emptyHistoryText}>
-                {profileActivity === "ride" ? "No upcoming rides" : "No upcoming runs"}
+                {profileActivity === "ride" ? "No upcoming rides" : profileActivity === "walk" ? "No upcoming walks" : "No upcoming runs"}
               </Text>
             </View>
           );
@@ -1565,22 +1572,22 @@ export default function ProfileScreen() {
             </Pressable>
           </View>
 
-          {/* Activity toggle: Runs / Rides */}
+          {/* Activity toggle: Runs / Rides / Walks */}
           <View style={[styles.histToggleRow, { paddingHorizontal: 0 }]}>
-            {(["run", "ride"] as const).map((act) => (
+            {(["run", "ride", "walk"] as const).map((act) => (
               <Pressable
                 key={act}
                 style={[styles.histToggleChip, historyActivityFilter === act && styles.histToggleChipActive]}
                 onPress={() => { Haptics.selectionAsync(); setHistoryActivityFilter(act); }}
               >
                 <Ionicons
-                  name={act === "ride" ? "bicycle-outline" : "walk-outline"}
+                  name={act === "ride" ? "bicycle-outline" : act === "walk" ? "footsteps-outline" : "walk-outline"}
                   size={13}
                   color={historyActivityFilter === act ? C.bg : C.textSecondary}
                   style={{ marginRight: 4 }}
                 />
                 <Text style={[styles.histToggleChipTxt, historyActivityFilter === act && styles.histToggleChipTxtActive]}>
-                  {act === "ride" ? "Rides" : "Runs"}
+                  {act === "ride" ? "Rides" : act === "walk" ? "Walks" : "Runs"}
                 </Text>
               </Pressable>
             ))}
@@ -1618,7 +1625,7 @@ export default function ProfileScreen() {
                 <View style={styles.emptyState}>
                   <Ionicons name={historyActivityFilter === "ride" ? "bicycle-outline" : "walk-outline"} size={32} color={C.textMuted} />
                   <Text style={styles.emptyStateTxt}>
-                    No {historyTypeFilter === "all" ? "" : historyTypeFilter + " "}{historyActivityFilter === "ride" ? "rides" : "runs"} yet
+                    No {historyTypeFilter === "all" ? "" : historyTypeFilter + " "}{historyActivityFilter === "ride" ? "rides" : historyActivityFilter === "walk" ? "walks" : "runs"} yet
                   </Text>
                 </View>
               );
@@ -1629,7 +1636,7 @@ export default function ProfileScreen() {
                 {filtered.map((run) => {
                   const isSolo = run.type === "solo";
                   const typeColor = TYPE_COLORS[run.type];
-                  const label = run.title || `${toDisplayDist(run.distance_miles, distUnit)} ${run.activity_type === "ride" ? "ride" : "run"}`;
+                  const label = run.title || `${toDisplayDist(run.distance_miles, distUnit)} ${run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run"}`;
                   const histKey = `${run.type}-${run.id}`;
                   const isExpanded = expandedHistoryId === histKey;
                   return (
@@ -1758,22 +1765,22 @@ export default function ProfileScreen() {
             </Pressable>
           </View>
 
-          {/* Runs / Rides toggle — full width */}
+          {/* Runs / Rides / Walks toggle — full width */}
           <View style={[styles.histToggleRow, { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12 }]}>
-            {(["run", "ride"] as const).map((act) => (
+            {(["run", "ride", "walk"] as const).map((act) => (
               <Pressable
                 key={act}
                 style={[styles.histToggleChip, { paddingVertical: 10 }, favActivityFilter === act && styles.histToggleChipActive]}
                 onPress={() => { Haptics.selectionAsync(); setFavActivityFilter(act); setExpandedFavId(null); }}
               >
                 <Ionicons
-                  name={act === "ride" ? "bicycle-outline" : "walk-outline"}
+                  name={act === "ride" ? "bicycle-outline" : act === "walk" ? "footsteps-outline" : "walk-outline"}
                   size={15}
                   color={favActivityFilter === act ? C.bg : C.textSecondary}
                   style={{ marginRight: 6 }}
                 />
                 <Text style={[styles.histToggleChipTxt, { fontSize: 14 }, favActivityFilter === act && styles.histToggleChipTxtActive]}>
-                  {act === "ride" ? "Rides" : "Runs"}
+                  {act === "ride" ? "Rides" : act === "walk" ? "Walks" : "Runs"}
                 </Text>
               </Pressable>
             ))}
@@ -1789,6 +1796,8 @@ export default function ProfileScreen() {
                   <Text style={styles.emptyStateTxt}>
                     {favActivityFilter === "ride"
                       ? "Star rides in your history to save them here"
+                      : favActivityFilter === "walk"
+                      ? "Star walks in your history to save them here"
                       : "Star runs in your history to save them here"}
                   </Text>
                 </View>
@@ -1798,7 +1807,7 @@ export default function ProfileScreen() {
               <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 2, paddingBottom: 20 }}>
                 {favs.map((run) => {
                   const isExpanded = expandedFavId === run.id;
-                  const label = run.title || `${toDisplayDist(run.distance_miles, distUnit)} ${run.activity_type === "ride" ? "ride" : "run"}`;
+                  const label = run.title || `${toDisplayDist(run.distance_miles, distUnit)} ${run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run"}`;
                   return (
                     <View key={run.id} style={[styles.soloHistCard, { marginBottom: 10 }]}>
                       {/* Main row */}
@@ -1912,8 +1921,8 @@ export default function ProfileScreen() {
             <View style={styles.modalTitleRow}>
               <Text style={styles.modalTitle}>
                 {topRunsModal === "longest"
-                  ? (profileActivity === "ride" ? "Top 5 Longest Rides" : "Top 5 Longest Runs")
-                  : (profileActivity === "ride" ? "Top 5 Fastest Rides" : "Top 5 Fastest Runs")}
+                  ? (profileActivity === "ride" ? "Top 5 Longest Rides" : profileActivity === "walk" ? "Top 5 Longest Walks" : "Top 5 Longest Runs")
+                  : (profileActivity === "ride" ? "Top 5 Fastest Rides" : profileActivity === "walk" ? "Top 5 Fastest Walks" : "Top 5 Fastest Runs")}
               </Text>
               <Pressable onPress={() => setTopRunsModal(null)} hitSlop={12}>
                 <Feather name="x" size={20} color={C.textMuted} />
@@ -1930,7 +1939,7 @@ export default function ProfileScreen() {
                   <View style={styles.emptyState}>
                     <Feather name="activity" size={32} color={C.textMuted} />
                     <Text style={styles.emptyStateTxt}>
-                      {profileActivity === "ride" ? "No completed rides yet" : "No completed runs yet"}
+                      {profileActivity === "ride" ? "No completed rides yet" : profileActivity === "walk" ? "No completed walks yet" : "No completed runs yet"}
                     </Text>
                   </View>
                 );
@@ -1943,7 +1952,7 @@ export default function ProfileScreen() {
                   </View>
                   <View style={styles.topRunInfo}>
                     <Text style={styles.topRunTitle} numberOfLines={1}>
-                      {run.title || (run.run_type === "solo" ? (profileActivity === "ride" ? "Solo ride" : "Solo run") : (profileActivity === "ride" ? "Group ride" : "Group run"))}
+                      {run.title || (run.run_type === "solo" ? (profileActivity === "ride" ? "Solo ride" : profileActivity === "walk" ? "Solo walk" : "Solo run") : (profileActivity === "ride" ? "Group ride" : profileActivity === "walk" ? "Group walk" : "Group run"))}
                     </Text>
                     <Text style={styles.topRunMeta}>
                       {run.date ? fmtDate(run.date) : ""}

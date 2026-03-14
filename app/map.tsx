@@ -439,7 +439,7 @@ export default function MapScreen() {
     const now = Date.now();
     const result: Array<{ icon: string; lib: "feather" | "ion"; text: string; color: string }> = [];
 
-    const label = activityFilter === "ride" ? "ride" : "run";
+    const label = activityFilter === "ride" ? "ride" : activityFilter === "walk" ? "walk" : "run";
     result.push({ icon: "map-pin", lib: "feather", text: `${visibleRuns.length} ${label}${visibleRuns.length !== 1 ? "s" : ""} on map`, color: C.primary });
 
     const upcoming = visibleRuns
@@ -824,7 +824,7 @@ export default function MapScreen() {
                 style={({ pressed }) => [s.joinBtn, { opacity: pressed ? 0.85 : 1 }]}
                 onPress={() => { closeCard(); router.push(`/run/${selectedRun.id}`); }}
               >
-                <Text style={s.joinTxt}>{selectedRun.activity_type === "ride" ? "View Ride" : "View Run"}</Text>
+                <Text style={s.joinTxt}>{selectedRun.activity_type === "ride" ? "View Ride" : selectedRun.activity_type === "walk" ? "View Walk" : "View Run"}</Text>
                 <Feather name="arrow-right" size={16} color={C.bg} />
               </Pressable>
             </>

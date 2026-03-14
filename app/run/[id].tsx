@@ -345,7 +345,7 @@ export default function RunDetailScreen() {
     if (Platform.OS === "web") return;
     if (liveTracking.phase !== "idle" || liveTracking.runId === id) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    Alert.alert(run.activity_type === "ride" ? "Ride started — let's go!" : "Run started — let's go!");
+    Alert.alert(run.activity_type === "ride" ? "Ride started — let's go!" : run.activity_type === "walk" ? "Walk started — let's go!" : "Run started — let's go!");
     liveTracking.startTracking(id, (run.activity_type ?? "run") as "run" | "ride");
     liveTracking.minimize();
   }, [isLive]);
@@ -428,7 +428,7 @@ export default function RunDetailScreen() {
   }
 
   function handleCancelRun() {
-    const label = run?.activity_type === "ride" ? "ride" : "run";
+    const label = run?.activity_type === "ride" ? "ride" : run?.activity_type === "walk" ? "walk" : "run";
     Alert.alert(
       "Cancel Run",
       `Are you sure you want to cancel this ${label}? All participants will be notified and the event will be removed.`,
@@ -506,9 +506,9 @@ export default function RunDetailScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       qc.invalidateQueries({ queryKey: ["/api/runs", id, "participants"] });
       qc.invalidateQueries({ queryKey: ["/api/runs"] });
-      Alert.alert("You're in! 🎉", `You've been added to the live count.\n\nNow tap "Join Live ${run?.activity_type === "ride" ? "Ride" : "Run"}" to check in with your host and let them know you're ready.`);
+      Alert.alert("You're in! 🎉", `You've been added to the live count.\n\nNow tap "Join Live ${run?.activity_type === "ride" ? "Ride" : run?.activity_type === "walk" ? "Walk" : "Run"}" to check in with your host and let them know you're ready.`);
     } catch (e: any) {
-      Alert.alert("Can't Join", e.message || `Unable to join ${run?.activity_type === "ride" ? "ride" : "run"}`);
+      Alert.alert("Can't Join", e.message || `Unable to join ${run?.activity_type === "ride" ? "ride" : run?.activity_type === "walk" ? "walk" : "run"}`);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setJoining(false);
@@ -538,7 +538,7 @@ export default function RunDetailScreen() {
   }
 
   async function handleLeave() {
-    Alert.alert(`Leave ${run?.activity_type === "ride" ? "Ride" : "Run"}`, `Are you sure you want to leave this ${run?.activity_type === "ride" ? "ride" : "run"}?`, [
+    Alert.alert(`Leave ${run?.activity_type === "ride" ? "Ride" : run?.activity_type === "walk" ? "Walk" : "Run"}`, `Are you sure you want to leave this ${run?.activity_type === "ride" ? "ride" : run?.activity_type === "walk" ? "walk" : "run"}?`, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Leave",
@@ -821,7 +821,7 @@ export default function RunDetailScreen() {
               return (
                 <View style={[styles.eligibilityRow, { backgroundColor: C.primaryMuted, borderColor: C.primary + "44" }]}>
                   <Feather name="check-circle" size={14} color={C.primary} />
-                  <Text style={[styles.eligibilityText, { color: C.primary }]}>No history yet — you can still join this {run.activity_type === "ride" ? "ride" : "run"}</Text>
+                  <Text style={[styles.eligibilityText, { color: C.primary }]}>No history yet — you can still join this {run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run"}</Text>
                 </View>
               );
             }
@@ -907,14 +907,14 @@ export default function RunDetailScreen() {
 
         {run.description ? (
           <View style={styles.descCard}>
-            <Text style={styles.descTitle}>{run.activity_type === "ride" ? "About this ride" : "About this run"}</Text>
+            <Text style={styles.descTitle}>{run.activity_type === "ride" ? "About this ride" : run.activity_type === "walk" ? "About this walk" : "About this run"}</Text>
             <Text style={styles.descText}>{run.description}</Text>
           </View>
         ) : null}
 
         {run.run_style && (
           <View style={styles.tagsSection}>
-            <Text style={styles.sectionTitle}>{run.activity_type === "ride" ? "Ride Style" : "Run Style"}</Text>
+            <Text style={styles.sectionTitle}>{run.activity_type === "ride" ? "Ride Style" : run.activity_type === "walk" ? "Walk Style" : "Run Style"}</Text>
             <View style={styles.runStyleBadgeRow}>
               <View style={styles.runStyleBadge}>
                 <Feather name="activity" size={14} color={C.bg} />
@@ -1174,7 +1174,7 @@ export default function RunDetailScreen() {
                   {cancelling ? <ActivityIndicator size="small" color={C.danger} /> : (
                     <>
                       <Feather name="x-circle" size={15} color={C.danger} />
-                      <Text style={styles.hostMgmtDangerTxt}>Cancel {run?.activity_type === "ride" ? "Ride" : "Run"}</Text>
+                      <Text style={styles.hostMgmtDangerTxt}>Cancel {run?.activity_type === "ride" ? "Ride" : run?.activity_type === "walk" ? "Walk" : "Run"}</Text>
                     </>
                   )}
                 </Pressable>
@@ -1188,8 +1188,8 @@ export default function RunDetailScreen() {
               <Feather name={isLive ? "radio" : "play-circle"} size={18} color={C.text} />
               <Text style={styles.liveBtnText}>
                 {isLive
-                  ? (run?.activity_type === "ride" ? "Ready to Ride" : "Ready to Run")
-                  : (run?.activity_type === "ride" ? "Host Ride" : "Host Run")}
+                  ? (run?.activity_type === "ride" ? "Ready to Ride" : run?.activity_type === "walk" ? "Ready to Walk" : "Ready to Run")
+                  : (run?.activity_type === "ride" ? "Host Ride" : run?.activity_type === "walk" ? "Host Walk" : "Host Run")}
               </Text>
             </Pressable>
           </>
@@ -1200,7 +1200,7 @@ export default function RunDetailScreen() {
             onPress={() => router.push(`/run-live/${id}`)}
           >
             <View style={styles.liveDot} />
-            <Text style={styles.liveBtnText}>{run?.activity_type === "ride" ? "Join Live Ride" : "Join Live Run"}</Text>
+            <Text style={styles.liveBtnText}>{run?.activity_type === "ride" ? "Join Live Ride" : run?.activity_type === "walk" ? "Join Live Walk" : "Join Live Run"}</Text>
           </Pressable>
         )}
         {!isHost && !isLive && isParticipant && !run.is_completed && (isRunStartingSoon || proximityTriggered) && (
@@ -1213,7 +1213,7 @@ export default function RunDetailScreen() {
           <View style={styles.youreGoingBanner}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
               <Feather name="check-circle" size={15} color={C.primary} />
-              <Text style={styles.youreGoingText}>You're going{run?.activity_type === "ride" ? " for a ride" : " for a run"}</Text>
+              <Text style={styles.youreGoingText}>You're going{run?.activity_type === "ride" ? " for a ride" : run?.activity_type === "walk" ? " for a walk" : " for a run"}</Text>
             </View>
             <Pressable onPress={handleLeave} hitSlop={10}>
               <Text style={styles.youreGoingLeave}>Leave</Text>
@@ -1276,7 +1276,7 @@ export default function RunDetailScreen() {
                   color={isPlanned ? C.primary : C.text}
                 />
                 <Text style={isPlanned ? [styles.planBtnText, styles.planBtnTextActive] : styles.primaryBtnText}>
-                  {isPlanned ? "I'm Not Coming" : run?.activity_type === "ride" ? "I Plan To Ride" : "I Plan To Run"}
+                  {isPlanned ? "I'm Not Coming" : run?.activity_type === "ride" ? "I Plan To Ride" : run?.activity_type === "walk" ? "I Plan To Walk" : "I Plan To Run"}
                 </Text>
               </>
             )}
@@ -1288,7 +1288,7 @@ export default function RunDetailScreen() {
             <View style={{ flex: 1 }}>
               <Text style={styles.joinedText}>You've arrived — you're in the live count</Text>
               <Text style={styles.joinedHint}>
-                Tap {run?.activity_type === "ride" ? "Join Live Ride" : "Join Live Run"} above to check in with your host
+                Tap {run?.activity_type === "ride" ? "Join Live Ride" : run?.activity_type === "walk" ? "Join Live Walk" : "Join Live Run"} above to check in with your host
               </Text>
             </View>
           </View>
@@ -1313,7 +1313,7 @@ export default function RunDetailScreen() {
                 <>
                   <View style={styles.frHeader}>
                     <Text style={styles.frTitle}>
-                      {run?.activity_type === "ride" ? "How Riding Works" : "How Running Works"}
+                      {run?.activity_type === "ride" ? "How Riding Works" : run?.activity_type === "walk" ? "How Walking Works" : "How Running Works"}
                     </Text>
                     <Pressable onPress={() => setShowPlanInfoModal(false)} hitSlop={12}>
                       <Feather name="x" size={18} color={C.textSecondary} />
@@ -1440,7 +1440,7 @@ export default function RunDetailScreen() {
                         color={C.text}
                       />
                       <Text style={styles.primaryBtnText}>
-                        {run?.activity_type === "ride" ? "I'm In, Let's Ride!" : "I'm In, Let's Run!"}
+                        {run?.activity_type === "ride" ? "I'm In, Let's Ride!" : run?.activity_type === "walk" ? "I'm In, Let's Walk!" : "I'm In, Let's Run!"}
                       </Text>
                     </Pressable>
                   </View>
@@ -1459,7 +1459,7 @@ export default function RunDetailScreen() {
             <View style={[styles.frSheet, { paddingBottom: insets.bottom + 24 }]}>
               <View style={styles.frHandle} />
               <View style={styles.frHeader}>
-                <Text style={styles.frTitle}>{run?.activity_type === "ride" ? "Before You Ride" : "Before You Run"}</Text>
+                <Text style={styles.frTitle}>{run?.activity_type === "ride" ? "Before You Ride" : run?.activity_type === "walk" ? "Before You Walk" : "Before You Run"}</Text>
                 <Pressable onPress={() => setShowRulesModal(false)}>
                   <Feather name="x" size={18} color={C.textSecondary} />
                 </Pressable>
@@ -1470,8 +1470,8 @@ export default function RunDetailScreen() {
                   : `A quick reminder before you join the group.`}
               </Text>
               {[
-                { icon: "smile" as const,      title: "Have fun",   body: run?.activity_type === "ride" ? "Riding with others is a great time. Enjoy the pace, the people, and the miles." : "Running with others is a great time. Enjoy the pace, the people, and the miles." },
-                { icon: "heart" as const,      title: "Be kind",    body: run?.activity_type === "ride" ? "Cheer each other on. Every rider is working hard — support your group." : "Cheer each other on. Every runner is working hard — support your group." },
+                { icon: "smile" as const,      title: "Have fun",   body: run?.activity_type === "ride" ? "Riding with others is a great time. Enjoy the pace, the people, and the miles." : run?.activity_type === "walk" ? "Walking with others is a great time. Enjoy the pace, the people, and the miles." : "Running with others is a great time. Enjoy the pace, the people, and the miles." },
+                { icon: "heart" as const,      title: "Be kind",    body: run?.activity_type === "ride" ? "Cheer each other on. Every rider is working hard — support your group." : run?.activity_type === "walk" ? "Cheer each other on. Every walker is working hard — support your group." : "Cheer each other on. Every runner is working hard — support your group." },
                 { icon: "trending-up" as const, title: "Keep up",   body: "Do your best to match the group's pace. If you fall behind, it's okay — just keep moving." },
               ].map((item) => (
                 <View key={item.title} style={styles.frRuleRow}>
@@ -1720,7 +1720,7 @@ export default function RunDetailScreen() {
         >
           <Animated.View style={[styles.livePillDot, { opacity: pillPulse }]} />
           <Text style={styles.livePillLabel}>
-            {liveTracking.activityType === "ride" ? "Back to Live Ride" : "Back to Live Run"}
+            {liveTracking.activityType === "ride" ? "Back to Live Ride" : liveTracking.activityType === "walk" ? "Back to Live Walk" : "Back to Live Run"}
           </Text>
           <Text style={styles.livePillDist}>{liveTracking.displayDist.toFixed(2)} mi</Text>
           <Feather name="chevron-right" size={16} color={C.primary} />

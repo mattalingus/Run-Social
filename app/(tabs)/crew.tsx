@@ -1208,7 +1208,7 @@ function CrewDetailSheet({
                   ) : null}
                 </View>
 
-                {/* Runs / Rides toggle */}
+                {/* Runs / Rides / Walks toggle */}
                 <View style={s.detailToggleRow}>
                   <TouchableOpacity
                     style={[s.detailToggleBtn, activityFilter === "run" && s.detailToggleBtnActive]}
@@ -1223,6 +1223,13 @@ function CrewDetailSheet({
                   >
                     <Ionicons name="bicycle" size={14} color={activityFilter === "ride" ? C.bg : C.textMuted} />
                     <Text style={[s.detailToggleTxt, activityFilter === "ride" && s.detailToggleTxtActive]}>Rides</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[s.detailToggleBtn, activityFilter === "walk" && s.detailToggleBtnActive]}
+                    onPress={() => setActivityFilter("walk")}
+                  >
+                    <Ionicons name="footsteps" size={14} color={activityFilter === "walk" ? C.bg : C.textMuted} />
+                    <Text style={[s.detailToggleTxt, activityFilter === "walk" && s.detailToggleTxtActive]}>Walks</Text>
                   </TouchableOpacity>
                 </View>
 
@@ -1276,7 +1283,7 @@ function CrewDetailSheet({
                 <View style={[s.detailSection, { paddingBottom: 5 }]}>
                   <View style={s.detailSectionHeader}>
                     <Text style={s.detailSectionTitle}>
-                      Upcoming {activityFilter === "ride" ? "Rides" : "Runs"}
+                      Upcoming {activityFilter === "ride" ? "Rides" : activityFilter === "walk" ? "Walks" : "Runs"}
                     </Text>
                     {filteredRuns.length > 5 && (
                       <TouchableOpacity onPress={() => setEventsExpanded((x) => !x)}>
@@ -1289,12 +1296,12 @@ function CrewDetailSheet({
                   {filteredRuns.length === 0 ? (
                     <View style={s.emptyRuns}>
                       <Ionicons
-                        name={activityFilter === "ride" ? "bicycle-outline" : "walk-outline"}
+                        name={activityFilter === "ride" ? "bicycle-outline" : activityFilter === "walk" ? "footsteps-outline" : "walk-outline"}
                         size={28}
                         color={C.textMuted}
                       />
                       <Text style={s.emptyRunsTxt}>
-                        No upcoming {activityFilter === "ride" ? "rides" : "runs"} from your crew
+                        No upcoming {activityFilter === "ride" ? "rides" : activityFilter === "walk" ? "walks" : "runs"} from your crew
                       </Text>
                     </View>
                   ) : (
@@ -1312,12 +1319,12 @@ function CrewDetailSheet({
                         <View style={s.eventCardTop}>
                           <View style={s.eventActivityPill}>
                             <Ionicons
-                              name={run.activity_type === "ride" ? "bicycle-outline" : "walk-outline"}
+                              name={run.activity_type === "ride" ? "bicycle-outline" : run.activity_type === "walk" ? "footsteps-outline" : "walk-outline"}
                               size={13}
                               color={C.primary}
                             />
                             <Text style={s.eventActivityTxt}>
-                              {run.activity_type === "ride" ? "Ride" : "Run"}
+                              {run.activity_type === "ride" ? "Ride" : run.activity_type === "walk" ? "Walk" : "Run"}
                             </Text>
                           </View>
                           <Ionicons name="chevron-forward" size={14} color={C.textMuted} />
@@ -1362,12 +1369,12 @@ function CrewDetailSheet({
                   testID="schedule-crew-run-btn"
                 >
                   <Ionicons
-                    name={activityFilter === "ride" ? "bicycle-outline" : "walk-outline"}
+                    name={activityFilter === "ride" ? "bicycle-outline" : activityFilter === "walk" ? "footsteps-outline" : "walk-outline"}
                     size={16}
                     color={C.primary}
                   />
                   <Text style={s.scheduleBtnTxt}>
-                    Schedule a {activityFilter === "ride" ? "Ride" : "Run"}
+                    Schedule a {activityFilter === "ride" ? "Ride" : activityFilter === "walk" ? "Walk" : "Run"}
                   </Text>
                 </TouchableOpacity>
 
@@ -1628,7 +1635,7 @@ function CrewDetailSheet({
                 {crewHistory.filter((r) => (r.activity_type ?? "run") === activityFilter).length > 0 && (
                   <View style={s.detailSection}>
                     <Text style={s.detailSectionTitle}>
-                      Past {activityFilter === "ride" ? "Rides" : "Runs"}
+                      Past {activityFilter === "ride" ? "Rides" : activityFilter === "walk" ? "Walks" : "Runs"}
                     </Text>
                     {crewHistory
                       .filter((r) => (r.activity_type ?? "run") === activityFilter)
@@ -1643,7 +1650,7 @@ function CrewDetailSheet({
                           }}
                         >
                           <Ionicons
-                            name={run.activity_type === "ride" ? "bicycle-outline" : "walk-outline"}
+                            name={run.activity_type === "ride" ? "bicycle-outline" : run.activity_type === "walk" ? "footsteps-outline" : "walk-outline"}
                             size={15}
                             color={C.textMuted}
                             style={{ marginRight: 10, marginTop: 2 }}
@@ -1912,7 +1919,7 @@ function RankingsModal({ visible, onClose, myCrewIds, myCrewId }: { visible: boo
   const { user: authUser } = useAuth();
   const distUnit: DistanceUnit = ((authUser as any)?.distance_unit ?? "miles") as DistanceUnit;
   const insets = useSafeAreaInsets();
-  const [activityType, setActivityType] = useState<"run" | "ride">("run");
+  const [activityType, setActivityType] = useState<"run" | "ride" | "walk">("run");
   const [period, setPeriod] = useState<"week" | "month" | "all">("all");
   const [rankingTab, setRankingTab] = useState<"national" | "state" | "metro">("national");
 

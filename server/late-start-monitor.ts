@@ -34,7 +34,7 @@ async function checkLateStarts(): Promise<void> {
         [ids]
       );
       for (const run of result.rows) {
-        const type = run.activity_type === "ride" ? "ride" : "run";
+        const type = run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run";
         if (
           run.host_push_token &&
           run.notifications_enabled !== false &&
