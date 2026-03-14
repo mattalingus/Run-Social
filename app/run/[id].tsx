@@ -13,6 +13,7 @@ import {
   Modal,
   Linking,
   Animated,
+  Share,
 } from "react-native";
 import MapView, { Polyline } from "react-native-maps";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
@@ -694,6 +695,21 @@ export default function RunDetailScreen() {
                 />
               </Pressable>
             )}
+            <Pressable
+              style={styles.bookmarkBtn}
+              hitSlop={8}
+              onPress={async () => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                const date = run.scheduled_date ? new Date(run.scheduled_date).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }) : "";
+                const loc = run.location_name ? ` at ${run.location_name}` : "";
+                const msg = `Join me on PaceUp! ${run.title}${date ? ` — ${date}` : ""}${loc}`;
+                try {
+                  await Share.share(Platform.OS === "ios" ? { message: msg, url: `paceup://run/${id}` } : { message: `${msg}\npaceup://run/${id}` });
+                } catch {}
+              }}
+            >
+              <Feather name="share-2" size={18} color={C.textSecondary} />
+            </Pressable>
           </View>
         </View>
 
