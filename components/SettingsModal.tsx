@@ -667,10 +667,10 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
               iconBg="#2A0A1A"
               icon={<FontAwesome5 name="instagram" size={18} color="#E1306C" />}
               label="Instagram"
-              sublabel="Share activities to Stories"
+              sublabel="Coming soon"
               right={
-                <Pressable style={[st.connectBtn, { borderColor: C.border, backgroundColor: C.surface }]} onPress={() => handleConnectSocial("Instagram")}>
-                  <Text style={[st.connectBtnTxt, { color: C.textSecondary }]}>Connect</Text>
+                <Pressable style={[st.connectBtn, { borderColor: C.border, backgroundColor: C.surface, opacity: 0.5 }]} onPress={() => handleConnectSocial("Instagram")}>
+                  <Text style={[st.connectBtnTxt, { color: C.textMuted }]}>Soon</Text>
                 </Pressable>
               }
             />
@@ -682,10 +682,10 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
               iconBg="#0A1A2A"
               icon={<FontAwesome5 name="facebook" size={18} color="#1877F2" />}
               label="Facebook"
-              sublabel="Share runs with your friends"
+              sublabel="Coming soon"
               right={
-                <Pressable style={[st.connectBtn, { borderColor: C.border, backgroundColor: C.surface }]} onPress={() => handleConnectSocial("Facebook")}>
-                  <Text style={[st.connectBtnTxt, { color: C.textSecondary }]}>Connect</Text>
+                <Pressable style={[st.connectBtn, { borderColor: C.border, backgroundColor: C.surface, opacity: 0.5 }]} onPress={() => handleConnectSocial("Facebook")}>
+                  <Text style={[st.connectBtnTxt, { color: C.textMuted }]}>Soon</Text>
                 </Pressable>
               }
             />
@@ -697,10 +697,10 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
               iconBg="#0A0A0A"
               icon={<FontAwesome5 name="twitter" size={17} color={C.text} />}
               label="X (Twitter)"
-              sublabel="Post your achievements"
+              sublabel="Coming soon"
               right={
-                <Pressable style={[st.connectBtn, { borderColor: C.border, backgroundColor: C.surface }]} onPress={() => handleConnectSocial("X (Twitter)")}>
-                  <Text style={[st.connectBtnTxt, { color: C.textSecondary }]}>Connect</Text>
+                <Pressable style={[st.connectBtn, { borderColor: C.border, backgroundColor: C.surface, opacity: 0.5 }]} onPress={() => handleConnectSocial("X (Twitter)")}>
+                  <Text style={[st.connectBtnTxt, { color: C.textMuted }]}>Soon</Text>
                 </Pressable>
               }
             />
@@ -712,10 +712,10 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
               iconBg="#0A0A0F"
               icon={<FontAwesome5 name="tiktok" size={17} color={C.text} />}
               label="TikTok"
-              sublabel="Share activity highlights"
+              sublabel="Coming soon"
               right={
-                <Pressable style={[st.connectBtn, { borderColor: C.border, backgroundColor: C.surface }]} onPress={() => handleConnectSocial("TikTok")}>
-                  <Text style={[st.connectBtnTxt, { color: C.textSecondary }]}>Connect</Text>
+                <Pressable style={[st.connectBtn, { borderColor: C.border, backgroundColor: C.surface, opacity: 0.5 }]} onPress={() => handleConnectSocial("TikTok")}>
+                  <Text style={[st.connectBtnTxt, { color: C.textMuted }]}>Soon</Text>
                 </Pressable>
               }
             />
