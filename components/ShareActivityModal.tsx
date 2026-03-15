@@ -5,7 +5,6 @@ import {
   StyleSheet,
   Modal,
   Pressable,
-  TextInput,
   ScrollView,
   ActivityIndicator,
   Platform,
@@ -89,12 +88,9 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
   const { C } = useTheme();
   const cardRef = useRef<View>(null);
 
-  const [caption, setCaption] = useState("");
   const [backgroundPhoto, setBackgroundPhoto] = useState<string | null>(null);
   const [collageMode, setCollageMode] = useState(false);
   const [activeAction, setActiveAction] = useState<ActiveAction>(null);
-  const [captionFont, setCaptionFont] = useState<"Outfit_700Bold" | "PlayfairDisplay_700Bold" | "DancingScript_700Bold">("Outfit_700Bold");
-  const [captionSize, setCaptionSize] = useState<20 | 32 | 46>(32);
   const [transparentMode, setTransparentMode] = useState(true);
   const [layoutIndex, setLayoutIndex] = useState(0);
   const [isCapturing, setIsCapturing] = useState(false);
@@ -103,7 +99,6 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
   const themeSurface = C.surface;
   const themeText = C.text;
   const themeTextSec = C.textSecondary;
-  const themeTextMuted = C.textMuted;
   const themeBorder = C.border;
 
   const isGroupRun = (runData.participantCount ?? 1) > 1;
@@ -418,11 +413,11 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
 
   const cardProps: ShareCardProps = {
     ...runData,
-    caption,
+    caption: "",
     backgroundPhoto: transparentMode ? null : backgroundPhoto,
     collagePhotos: collageMode && !transparentMode ? eventPhotos : undefined,
-    captionFont,
-    captionSize,
+    captionFont: "Outfit_700Bold",
+    captionSize: 32,
     transparentMode,
     layoutIndex,
   };
@@ -451,7 +446,7 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
           keyboardShouldPersistTaps="handled"
         >
           {/* ── Card preview ─────────────────────────────────────────────── */}
-          <Pressable onPress={handleCardTap} style={st.cardWrapper}>
+          <Pressable onPress={handleCardTap} style={[st.cardWrapper, st.cardScale]}>
             {!transparentMode && <View style={st.cardGlow} />}
             {transparentMode && <CheckerboardBg />}
             <ShareCard ref={cardRef} {...cardProps} hideDots={isCapturing} />
@@ -487,16 +482,20 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
 
             {/* Background Photo — second option */}
             <Pressable
-              style={({ pressed }) => [st.photoBtn, { backgroundColor: themeSurface, borderColor: themeBorder }, backgroundPhoto && st.photoBtnActive, { opacity: pressed ? 0.7 : (collageMode || transparentMode ? 0.4 : 1) }]}
+              style={({ pressed }) => [st.photoBtn, { backgroundColor: themeSurface, borderColor: themeBorder }, backgroundPhoto && st.photoBtnActive, { opacity: pressed ? 0.7 : (collageMode ? 0.4 : 1) }]}
               onPress={() => {
-                if (collageMode || transparentMode) return;
+                if (collageMode) return;
+                if (transparentMode) {
+                  setTransparentMode(false);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }
                 if (backgroundPhoto) {
                   handleRemovePhoto();
                 } else {
                   handlePickPhoto();
                 }
               }}
-              disabled={collageMode || transparentMode}
+              disabled={collageMode}
             >
               <Ionicons
                 name={backgroundPhoto ? "image" : "image-outline"}
@@ -535,76 +534,6 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
               </Pressable>
             )}
           </View>
-
-          {/* ── Caption input ─────────────────────────────────────────────── */}
-          <View style={[st.captionWrap, { backgroundColor: themeSurface, borderColor: themeBorder }]}>
-            <TextInput
-              style={[st.captionInput, { fontFamily: captionFont, fontStyle: captionFont === "DancingScript_700Bold" ? "normal" : "italic", color: themeText }]}
-              placeholder="Add a caption…"
-              placeholderTextColor={themeTextMuted}
-              value={caption}
-              onChangeText={setCaption}
-              multiline
-              maxLength={160}
-              returnKeyType="done"
-            />
-            {caption.length > 0 && (
-              <Text style={[st.captionCount, { color: themeTextMuted }]}>{160 - caption.length}</Text>
-            )}
-          </View>
-
-          {/* ── Font + Size pickers ─────────────────────────────────────── */}
-          {caption.length > 0 && (
-            <>
-              {/* Font style row */}
-              <View style={st.fontPickerRow}>
-                {(
-                  [
-                    { key: "Outfit_700Bold", label: "Aa" },
-                    { key: "PlayfairDisplay_700Bold", label: "Aa" },
-                    { key: "DancingScript_700Bold", label: "Aa" },
-                  ] as const
-                ).map(({ key, label }) => {
-                  const active = captionFont === key;
-                  return (
-                    <Pressable
-                      key={key}
-                      style={[st.fontPill, { backgroundColor: themeSurface, borderColor: themeBorder }, active && st.fontPillActive]}
-                      onPress={() => { setCaptionFont(key); Haptics.selectionAsync(); }}
-                    >
-                      <Text style={[st.fontPillTxt, { fontFamily: key, color: themeTextSec }, active && st.fontPillTxtActive]}>
-                        {label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              {/* Size row */}
-              <View style={st.fontPickerRow}>
-                {(
-                  [
-                    { size: 20 as const, label: "S", display: 15 },
-                    { size: 32 as const, label: "M", display: 20 },
-                    { size: 46 as const, label: "L", display: 26 },
-                  ]
-                ).map(({ size, label, display }) => {
-                  const active = captionSize === size;
-                  return (
-                    <Pressable
-                      key={size}
-                      style={[st.fontPill, { backgroundColor: themeSurface, borderColor: themeBorder }, active && st.fontPillActive]}
-                      onPress={() => { setCaptionSize(size); Haptics.selectionAsync(); }}
-                    >
-                      <Text style={[st.fontPillTxt, { fontSize: display, fontFamily: captionFont, color: themeTextSec }, active && st.fontPillTxtActive]}>
-                        {label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </>
-          )}
 
           {/* ── Social platform buttons ──────────────────────────────────── */}
           <View style={st.socialRow}>
@@ -718,9 +647,9 @@ const st = StyleSheet.create({
   // Card
   content: {
     paddingHorizontal: 20,
-    paddingTop: 24,
+    paddingTop: 16,
     alignItems: "center",
-    gap: 20,
+    gap: 18,
   },
   cardWrapper: {
     position: "relative",
@@ -730,6 +659,10 @@ const st = StyleSheet.create({
     shadowOpacity: 0.10,
     shadowRadius: 12,
     elevation: 6,
+  },
+  cardScale: {
+    transform: [{ scale: 0.77 }],
+    marginVertical: -74,
   },
   cardGlow: {
     ...StyleSheet.absoluteFillObject,
@@ -765,31 +698,6 @@ const st = StyleSheet.create({
     color: TEXT_SEC,
   },
 
-  // Caption
-  captionWrap: {
-    width: "100%",
-    backgroundColor: SURFACE,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: BORDER,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    minHeight: 56,
-  },
-  captionInput: {
-    fontFamily: "Outfit_400Regular",
-    fontSize: 14,
-    color: TEXT,
-    lineHeight: 20,
-  },
-  captionCount: {
-    fontFamily: "Outfit_400Regular",
-    fontSize: 11,
-    color: TEXT_MUTED,
-    textAlign: "right",
-    marginTop: 4,
-  },
-
   // Actions
   actionsRow: {
     flexDirection: "row",
@@ -815,35 +723,6 @@ const st = StyleSheet.create({
     fontFamily: "Outfit_600SemiBold",
     fontSize: 12,
     color: TEXT_SEC,
-  },
-
-  // Font picker
-  fontPickerRow: {
-    flexDirection: "row",
-    gap: 10,
-    width: "100%",
-    justifyContent: "center",
-  },
-  fontPill: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: SURFACE,
-    borderWidth: 1.5,
-    borderColor: BORDER,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  fontPillActive: {
-    borderColor: PRIMARY,
-    backgroundColor: PRIMARY + "18",
-  },
-  fontPillTxt: {
-    fontSize: 18,
-    color: TEXT_SEC,
-  },
-  fontPillTxtActive: {
-    color: PRIMARY,
   },
 
   // Social platform row
