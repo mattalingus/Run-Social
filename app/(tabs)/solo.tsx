@@ -33,6 +33,7 @@ import MAP_STYLE from "@/lib/mapStyle";
 import MapView, { Polyline } from "react-native-maps";
 import Svg, { Polyline as SvgPolyline, Circle as SvgCircle } from "react-native-svg";
 import MileSplitsChart from "@/components/MileSplitsChart";
+import ShareActivityModal, { ShareRunData } from "@/components/ShareActivityModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -547,6 +548,7 @@ export default function SoloScreen() {
   const [showGoals, setShowGoals] = useState(false);
   const [showPlan, setShowPlan] = useState(false);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
+  const [shareRunData, setShareRunData] = useState<ShareRunData | null>(null);
   const [showHistory, setShowHistory] = useState(true);
   const [historyFilter, setHistoryFilter] = useState<"all" | "favorites" | "longest" | "fastest">("all");
   const [selectedScheduled, setSelectedScheduled] = useState<SoloRun | null>(null);
@@ -963,9 +965,27 @@ export default function SoloScreen() {
             </Text>
           </View>
         )}
+        {isExpanded && run.completed && (
+          <Pressable
+            style={({ pressed }) => [s.shareActivityBtn, { opacity: pressed ? 0.75 : 1 }]}
+            onPress={() => {
+              Haptics.selectionAsync();
+              setShareRunData({
+                distanceMi: run.distance_miles,
+                paceMinPerMile: run.pace_min_per_mile,
+                durationSeconds: run.duration_seconds,
+                routePath: run.route_path ?? undefined,
+                activityType: run.activity_type,
+              });
+            }}
+          >
+            <Feather name="share-2" size={14} color={C.primary} />
+            <Text style={s.shareActivityBtnTxt}>Share Activity</Text>
+          </Pressable>
+        )}
       </View>
     );
-  }, [expandedRunId, runBadges, distUnit, C, s]);
+  }, [expandedRunId, runBadges, distUnit, C, s, setShareRunData]);
 
   const renderSectionHeader = useCallback(({ section }: { section: { title: string } }) => (
     <View style={[s.monthHeader, { backgroundColor: C.bg }]}>
@@ -1382,6 +1402,15 @@ export default function SoloScreen() {
         maxToRenderPerBatch={10}
         windowSize={7}
       />
+
+      {/* ─── Share Activity Modal ─────────────────────────────────────── */}
+      {shareRunData && (
+        <ShareActivityModal
+          visible={!!shareRunData}
+          onClose={() => setShareRunData(null)}
+          runData={shareRunData}
+        />
+      )}
 
       {/* ─── Edit Goals Modal ─────────────────────────────────────────── */}
       <Modal visible={showGoals} transparent animationType="slide" onRequestClose={() => setShowGoals(false)}>
@@ -1851,6 +1880,13 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   scroll: { paddingHorizontal: 16 },
   monthHeader: { paddingTop: 14, paddingBottom: 6, paddingHorizontal: 2 },
   monthHeaderTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, textTransform: "uppercase", letterSpacing: 0.5 },
+  shareActivityBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    marginHorizontal: 12, marginBottom: 12, paddingVertical: 9,
+    borderRadius: 10, borderWidth: 1, borderColor: C.primary + "40",
+    backgroundColor: C.primary + "12",
+  },
+  shareActivityBtnTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.primary },
 
   headerRow: {
     flexDirection: "row",

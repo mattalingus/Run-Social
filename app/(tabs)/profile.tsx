@@ -25,6 +25,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest } from "@/lib/query-client";
 import { useTheme } from "@/contexts/ThemeContext";
+import ShareActivityModal, { ShareRunData } from "@/components/ShareActivityModal";
 import { darkColors as C } from "@/constants/colors";
 import { MARKER_ICONS } from "@/constants/markerIcons";
 import { ACHIEVEMENTS, type AchievementDef } from "@/constants/achievements";
@@ -255,6 +256,7 @@ export default function ProfileScreen() {
   const [historyActivityFilter, setHistoryActivityFilter] = useState<"run" | "ride" | "walk">("run");
   const [historyTypeFilter, setHistoryTypeFilter] = useState<"all" | HistoryEventType>("all");
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
+  const [shareRunData, setShareRunData] = useState<ShareRunData | null>(null);
   const [showFavorites, setShowFavorites] = useState(false);
   const [expandedFavId, setExpandedFavId] = useState<string | null>(null);
   const [favActivityFilter, setFavActivityFilter] = useState<"run" | "ride" | "walk">("run");
@@ -2047,6 +2049,22 @@ export default function ProfileScreen() {
                           {run.mile_splits && run.mile_splits.length > 0 && (
                             <MileSplitsChart splits={run.mile_splits} activityType={run.activity_type} />
                           )}
+                          <Pressable
+                            style={({ pressed }) => [styles.shareActivityBtn, { opacity: pressed ? 0.75 : 1 }]}
+                            onPress={() => {
+                              Haptics.selectionAsync();
+                              setShareRunData({
+                                distanceMi: run.distance_miles,
+                                paceMinPerMile: run.pace_min_per_mile,
+                                durationSeconds: run.duration_seconds,
+                                routePath: run.route_path ?? undefined,
+                                activityType: run.activity_type,
+                              });
+                            }}
+                          >
+                            <Feather name="share-2" size={14} color={C.primary} />
+                            <Text style={styles.shareActivityBtnTxt}>Share Activity</Text>
+                          </Pressable>
                         </View>
                       )}
 
@@ -2059,6 +2077,23 @@ export default function ProfileScreen() {
                               {run.duration_seconds ? `  ·  Duration: ${formatDurationSolo(run.duration_seconds)}` : ""}
                             </Text>
                           )}
+                          <Pressable
+                            style={({ pressed }) => [styles.shareActivityBtn, { opacity: pressed ? 0.75 : 1, marginTop: 8 }]}
+                            onPress={() => {
+                              Haptics.selectionAsync();
+                              setShareRunData({
+                                distanceMi: run.my_final_distance ?? run.distance_miles,
+                                paceMinPerMile: run.my_final_pace ?? run.pace_min_per_mile,
+                                durationSeconds: run.duration_seconds,
+                                routePath: run.route_path ?? undefined,
+                                activityType: run.activity_type,
+                                eventTitle: run.title ?? undefined,
+                              });
+                            }}
+                          >
+                            <Feather name="share-2" size={14} color={C.primary} />
+                            <Text style={styles.shareActivityBtnTxt}>Share Activity</Text>
+                          </Pressable>
                         </View>
                       )}
                     </View>
@@ -2218,11 +2253,29 @@ export default function ProfileScreen() {
                         </View>
                       )}
                       {isExpanded && (!run.mile_splits || run.mile_splits.length === 0) && (
-                        <View style={{ paddingHorizontal: 12, paddingBottom: 12, alignItems: "center" }}>
+                        <View style={{ paddingHorizontal: 12, paddingBottom: 4, alignItems: "center" }}>
                           <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, textAlign: "center" }}>
                             {`Splits available for activities of 1+ ${unitLabel(distUnit)}`}
                           </Text>
                         </View>
+                      )}
+                      {isExpanded && (
+                        <Pressable
+                          style={({ pressed }) => [styles.shareActivityBtn, { opacity: pressed ? 0.75 : 1 }]}
+                          onPress={() => {
+                            Haptics.selectionAsync();
+                            setShareRunData({
+                              distanceMi: run.distance_miles,
+                              paceMinPerMile: run.pace_min_per_mile,
+                              durationSeconds: run.duration_seconds,
+                              routePath: run.route_path ?? undefined,
+                              activityType: run.activity_type,
+                            });
+                          }}
+                        >
+                          <Feather name="share-2" size={14} color={C.primary} />
+                          <Text style={styles.shareActivityBtnTxt}>Share Activity</Text>
+                        </Pressable>
                       )}
                     </View>
                   );
@@ -2299,6 +2352,14 @@ export default function ProfileScreen() {
             })()}
           </View>
         </Modal>
+      )}
+
+      {shareRunData && (
+        <ShareActivityModal
+          visible={!!shareRunData}
+          onClose={() => setShareRunData(null)}
+          runData={shareRunData}
+        />
       )}
 
     </ScrollView>
@@ -2715,6 +2776,13 @@ function makeStyles(C: ReturnType<typeof import("@/contexts/ThemeContext").useTh
   soloStatItem: { alignItems: "center", gap: 3, flex: 1 },
   soloStatLabel: { fontFamily: "Outfit_400Regular", fontSize: 10, color: C.textMuted, textTransform: "uppercase", letterSpacing: 0.5 },
   soloStatValue: { fontFamily: "Outfit_700Bold", fontSize: 13, color: C.text },
+  shareActivityBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    marginHorizontal: 12, marginTop: 10, marginBottom: 4, paddingVertical: 9,
+    borderRadius: 10, borderWidth: 1, borderColor: C.primary + "40",
+    backgroundColor: C.primary + "12",
+  },
+  shareActivityBtnTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.primary },
 
   histToggleRow: {
     flexDirection: "row", gap: 8, paddingHorizontal: 20, paddingBottom: 10,
