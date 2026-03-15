@@ -428,7 +428,7 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
         >
           {/* ── Card preview ─────────────────────────────────────────────── */}
           <Pressable onPress={handleCardTap} style={st.cardWrapper}>
-            <View style={st.cardGlow} />
+            {!transparentMode && <View style={st.cardGlow} />}
             {transparentMode && <CheckerboardBg />}
             <ShareCard ref={cardRef} {...cardProps} />
           </Pressable>
