@@ -8,6 +8,7 @@ import * as storage from "./storage";
 import { pool } from "./storage";
 import * as ai from "./ai";
 import { generateDummyRuns, clearAndReseedRuns, getRunCount } from "./seed";
+import { seedCommunityPaths } from "./seed-paths";
 import { uploadPhotoBuffer, streamObject } from "./objectStorage";
 import { sendPushNotification, userWantsNotif } from "./notifications";
 import crypto from "crypto";
@@ -58,6 +59,8 @@ function requireAuth(req: Request, res: Response, next: Function) {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   await storage.initDb();
+
+  await seedCommunityPaths();
 
   if (process.env.NODE_ENV !== "production") {
     const runCount = await getRunCount();
