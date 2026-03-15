@@ -893,6 +893,24 @@ export default function SoloScreen() {
             </View>
           </Pressable>
           <View style={s.historyRight}>
+            {run.completed && (
+              <Pressable
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  setShareRunData({
+                    distanceMi: run.distance_miles,
+                    paceMinPerMile: run.pace_min_per_mile,
+                    durationSeconds: run.duration_seconds,
+                    routePath: run.route_path ?? undefined,
+                    activityType: run.activity_type,
+                  });
+                }}
+                hitSlop={10}
+                style={{ padding: 4 }}
+              >
+                <Feather name="share-2" size={16} color={C.textMuted} />
+              </Pressable>
+            )}
             <Pressable
               onPress={() => {
                 Haptics.selectionAsync();
@@ -965,27 +983,9 @@ export default function SoloScreen() {
             </Text>
           </View>
         )}
-        {isExpanded && run.completed && (
-          <Pressable
-            style={({ pressed }) => [s.shareActivityBtn, { opacity: pressed ? 0.75 : 1 }]}
-            onPress={() => {
-              Haptics.selectionAsync();
-              setShareRunData({
-                distanceMi: run.distance_miles,
-                paceMinPerMile: run.pace_min_per_mile,
-                durationSeconds: run.duration_seconds,
-                routePath: run.route_path ?? undefined,
-                activityType: run.activity_type,
-              });
-            }}
-          >
-            <Feather name="share-2" size={14} color={C.primary} />
-            <Text style={s.shareActivityBtnTxt}>Share Activity</Text>
-          </Pressable>
-        )}
       </View>
     );
-  }, [expandedRunId, runBadges, distUnit, C, s, setShareRunData]);
+  }, [expandedRunId, runBadges, distUnit, C, s, setShareRunData, starMutation]);
 
   const renderSectionHeader = useCallback(({ section }: { section: { title: string } }) => (
     <View style={[s.monthHeader, { backgroundColor: C.bg }]}>
@@ -1389,6 +1389,7 @@ export default function SoloScreen() {
         renderItem={renderHistoryItem}
         renderSectionHeader={renderSectionHeader}
         ListHeaderComponent={listHeaderComponent}
+        extraData={expandedRunId}
         contentContainerStyle={[
           s.scroll,
           {
