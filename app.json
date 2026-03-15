@@ -24,7 +24,7 @@
     },
     "ios": {
       "supportsTablet": false,
-      "buildNumber": "16",
+      "buildNumber": "17",
       "bundleIdentifier": "com.paceup",
       "infoPlist": {
         "NSCameraUsageDescription": "PaceUp uses your camera to add photos to your runs and rides.",

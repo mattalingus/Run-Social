@@ -23,6 +23,11 @@ import * as FileSystem from "expo-file-system/legacy";
 import { captureRef } from "react-native-view-shot";
 import { LinearGradient } from "expo-linear-gradient";
 
+let RNShare: any = null;
+try {
+  RNShare = require("react-native-share").default;
+} catch {}
+
 import ShareCard, { ShareCardProps } from "./ShareCard";
 import { useTheme } from "@/contexts/ThemeContext";
 
@@ -226,8 +231,27 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
         return;
       }
       const canOpen = await Linking.canOpenURL("instagram-stories://share");
-      if (canOpen) {
-        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      if (!canOpen) {
+        Alert.alert("Instagram Not Found", "Instagram is not installed on this device.", [
+          { text: "Share Anyway", onPress: () => fallbackShare(uri) },
+          { text: "Cancel", style: "cancel" },
+        ]);
+        return;
+      }
+
+      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+
+      if (transparentMode && RNShare) {
+        await saveToLibraryQuietly(uri);
+        await RNShare.shareSingle({
+          social: RNShare.Social?.INSTAGRAM_STORIES ?? "instagramstories",
+          stickerImage: `data:image/png;base64,${base64}`,
+          backgroundBottomColor: "#000000",
+          backgroundTopColor: "#000000",
+          appId: "com.paceup",
+        });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
         await Clipboard.setImageAsync(base64);
         await saveToLibraryQuietly(uri);
         try {
@@ -237,11 +261,6 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
         }
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Alert.alert("Ready to Share", "Your activity card has been copied. Paste it into your Instagram Story.");
-      } else {
-        Alert.alert("Instagram Not Found", "Instagram is not installed on this device.", [
-          { text: "Share Anyway", onPress: () => fallbackShare(uri) },
-          { text: "Cancel", style: "cancel" },
-        ]);
       }
     } catch (e: any) {
       if (!e.message?.includes("cancel")) {
@@ -251,7 +270,7 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
     } finally {
       setActiveAction(null);
     }
-  }, [captureCard, fallbackShare, saveToLibraryQuietly]);
+  }, [captureCard, fallbackShare, saveToLibraryQuietly, transparentMode]);
 
   const shareToSnapchat = useCallback(async () => {
     setActiveAction("share");
