@@ -60,6 +60,23 @@ const TEXT_MUTED = "#4A6957";
 const BORDER = "#182B1F";
 const GOLD = "#FFB800";
 
+const CheckerboardBg = React.memo(function CheckerboardBg() {
+  const TILE = 20;
+  const cols = Math.ceil(360 / TILE);
+  const rows = Math.ceil(640 / TILE);
+  return (
+    <View style={{ position: "absolute", width: 360, height: 640, borderRadius: 20, overflow: "hidden" }}>
+      {Array.from({ length: rows }, (_, r) => (
+        <View key={r} style={{ flexDirection: "row", height: TILE }}>
+          {Array.from({ length: cols }, (_, c) => (
+            <View key={c} style={{ width: TILE, height: TILE, backgroundColor: (r + c) % 2 === 0 ? "#1C1C1C" : "#2A2A2A" }} />
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+});
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ShareActivityModal({ visible, onClose, runData, eventPhotos = [] }: Props) {
@@ -331,11 +348,11 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
   // ─── Action button helper ──────────────────────────────────────────────────
 
   const handleCardTap = useCallback(() => {
-    if (!backgroundPhoto && !collageMode && !transparentMode) {
+    if (!collageMode && !transparentMode) {
       setLayoutIndex((prev) => (prev + 1) % 4);
       Haptics.selectionAsync();
     }
-  }, [backgroundPhoto, collageMode, transparentMode]);
+  }, [collageMode, transparentMode]);
 
   function ActionBtn({
     action,
@@ -412,6 +429,7 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
           {/* ── Card preview ─────────────────────────────────────────────── */}
           <Pressable onPress={handleCardTap} style={st.cardWrapper}>
             <View style={st.cardGlow} />
+            {transparentMode && <CheckerboardBg />}
             <ShareCard ref={cardRef} {...cardProps} />
           </Pressable>
 

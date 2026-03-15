@@ -4,37 +4,31 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import Svg, { Polyline, Circle } from "react-native-svg";
 import { LinearGradient } from "expo-linear-gradient";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
 const CARD_W = 360;
 const CARD_H = 640;
-const ROUTE_H = 210;
 const PRIMARY = "#00D97E";
 const GOLD = "#FFB800";
 const BG = "#050C09";
-const SURFACE = "#0D1510";
 const CARD_BG = "#0A1410";
-const TEXT = "#F0FFF4";
+const TEXT_CLR = "#F0FFF4";
 const TEXT_SEC = "#8FAF97";
 const TEXT_MUTED = "#4A6957";
 const BORDER = "#182B1F";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 function formatPace(pace: number | null | undefined): string {
   if (!pace || pace <= 0) return "--:--";
   const m = Math.floor(pace);
-  const s = Math.round((pace - m) * 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
+  const sec = Math.round((pace - m) * 60);
+  return `${m}:${sec.toString().padStart(2, "0")}`;
 }
 
 function formatDuration(seconds: number | null | undefined): string {
   if (!seconds || seconds <= 0) return "--:--";
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  if (h > 0) return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-  return `${m}:${s.toString().padStart(2, "0")}`;
+  const sec = Math.floor(seconds % 60);
+  if (h > 0) return `${h}:${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
+  return `${m}:${sec.toString().padStart(2, "0")}`;
 }
 
 function formatDist(mi: number): string {
@@ -42,12 +36,11 @@ function formatDist(mi: number): string {
   return mi.toFixed(2);
 }
 
-// Normalize GPS coords to SVG viewport
 function normalizePath(
   coords: { latitude: number; longitude: number }[],
   width: number,
   height: number,
-  padding = 16
+  padding = 28
 ): string {
   if (coords.length < 2) return "";
   const lats = coords.map((c) => c.latitude);
@@ -78,7 +71,7 @@ function getEndPoints(
   coords: { latitude: number; longitude: number }[],
   width: number,
   height: number,
-  padding = 16
+  padding = 28
 ): { startX: number; startY: number; endX: number; endY: number } | null {
   if (coords.length < 2) return null;
   const lats = coords.map((c) => c.latitude);
@@ -106,8 +99,6 @@ function getEndPoints(
   };
 }
 
-// ─── Props ────────────────────────────────────────────────────────────────────
-
 export interface ShareCardProps {
   distanceMi: number;
   paceMinPerMile?: number | null;
@@ -126,16 +117,10 @@ export interface ShareCardProps {
   layoutIndex?: number;
 }
 
-// ─── Collage background — adapts to photo count ───────────────────────────────
-
 function CollageBackground({ photos }: { photos: string[] }) {
   const count = Math.min(photos.length, 6);
   const shown = photos.slice(0, count);
-
-  if (count === 1) {
-    return <Image source={{ uri: shown[0] }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />;
-  }
-
+  if (count === 1) return <Image source={{ uri: shown[0] }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />;
   if (count === 2) {
     return (
       <View style={[StyleSheet.absoluteFillObject, { flexDirection: "row" }]}>
@@ -147,7 +132,6 @@ function CollageBackground({ photos }: { photos: string[] }) {
       </View>
     );
   }
-
   if (count === 3) {
     return (
       <View style={[StyleSheet.absoluteFillObject, { flexDirection: "column" }]}>
@@ -164,7 +148,6 @@ function CollageBackground({ photos }: { photos: string[] }) {
       </View>
     );
   }
-
   if (count === 4) {
     return (
       <View style={[StyleSheet.absoluteFillObject, { flexDirection: "column" }]}>
@@ -185,7 +168,6 @@ function CollageBackground({ photos }: { photos: string[] }) {
       </View>
     );
   }
-
   if (count === 5) {
     return (
       <View style={[StyleSheet.absoluteFillObject, { flexDirection: "row" }]}>
@@ -206,8 +188,6 @@ function CollageBackground({ photos }: { photos: string[] }) {
       </View>
     );
   }
-
-  // 6+ photos → 3×2 grid
   return (
     <View style={[StyleSheet.absoluteFillObject, { flexDirection: "column" }]}>
       <View style={{ flex: 1, flexDirection: "row" }}>
@@ -228,14 +208,45 @@ function CollageBackground({ photos }: { photos: string[] }) {
   );
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
-
 function ordinal(n: number): string {
   if (n === 1) return "1st";
   if (n === 2) return "2nd";
   if (n === 3) return "3rd";
   return `${n}th`;
 }
+
+const RouteSvg = ({
+  points,
+  w,
+  h,
+  color = PRIMARY,
+  strokeW = 2.5,
+  showDots = true,
+  coords,
+}: {
+  points: string;
+  w: number;
+  h: number;
+  color?: string;
+  strokeW?: number;
+  showDots?: boolean;
+  coords?: { latitude: number; longitude: number }[];
+}) => {
+  if (!points) return null;
+  const ep = coords ? getEndPoints(coords, w, h) : null;
+  return (
+    <Svg width={w} height={h} style={StyleSheet.absoluteFillObject}>
+      <Polyline points={points} fill="none" stroke={color} strokeWidth={strokeW} strokeLinecap="round" strokeLinejoin="round" />
+      {showDots && ep && <Circle cx={ep.startX} cy={ep.startY} r={4} fill="#FFFFFF" />}
+      {showDots && ep && (
+        <>
+          <Circle cx={ep.endX} cy={ep.endY} r={6} fill={color + "55"} />
+          <Circle cx={ep.endX} cy={ep.endY} r={3.5} fill={color} />
+        </>
+      )}
+    </Svg>
+  );
+};
 
 const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
   {
@@ -265,337 +276,259 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
   const actLabel = isRide ? "Ride" : isWalk ? "Walk" : "Run";
   const actParticipants = isRide ? "Riders" : isWalk ? "Walkers" : "Runners";
 
-  const svgPointsFull = hasRoute ? normalizePath(routePath, CARD_W, CARD_H) : "";
+  const svgFull = hasRoute ? normalizePath(routePath, CARD_W, CARD_H) : "";
 
-  // ── Shared sub-components ──────────────────────────────────────────────────
-  const HeaderRow = (
-    <View style={s.headerRow}>
-      <Text style={s.logo}>PaceUp</Text>
-      <View style={s.actPill}>
-        <Ionicons name={actIcon} size={11} color={PRIMARY} style={{ marginRight: 4 }} />
-        <Text style={s.actPillTxt}>{actLabel}</Text>
+  const OverlayHeader = ({ white = false }: { white?: boolean }) => (
+    <View style={st.overlayHeader}>
+      <Text style={[st.logo, white && { color: "#FFFFFF" }]}>PaceUp</Text>
+      <View style={[st.actPill, white && { backgroundColor: "rgba(255,255,255,0.15)", borderColor: "rgba(255,255,255,0.3)" }]}>
+        <Ionicons name={actIcon} size={11} color={white ? "#FFFFFF" : PRIMARY} style={{ marginRight: 4 }} />
+        <Text style={[st.actPillTxt, white && { color: "#FFFFFF" }]}>{actLabel}</Text>
       </View>
     </View>
   );
 
-  const FooterStrip = (
-    <View style={s.footer}>
-      <View style={s.footerLine} />
-      <View style={s.footerRow}>
-        <Text style={s.footerLogo}>PaceUp</Text>
-        <Text style={s.footerSep}>·</Text>
-        <Text style={s.footerTagline}>Run Together</Text>
+  const OverlayFooter = ({ white = false }: { white?: boolean }) => (
+    <View style={st.overlayFooter}>
+      <View style={[st.footerLine, white && { backgroundColor: "rgba(255,255,255,0.3)" }]} />
+      <View style={st.footerRow}>
+        <Text style={[st.footerLogo, white && { color: "rgba(255,255,255,0.6)" }]}>PaceUp</Text>
+        <Text style={[st.footerSep, white && { color: "rgba(255,255,255,0.3)" }]}>·</Text>
+        <Text style={[st.footerTagline, white && { color: "rgba(255,255,255,0.4)" }]}>Run Together</Text>
       </View>
     </View>
   );
 
-  // ── PHOTO MODE ─────────────────────────────────────────────────────────────
-  if (backgroundPhoto) {
+  const OverlayGroupBadges = ({ white = false }: { white?: boolean }) => {
+    if (!isGroup) return null;
     return (
-      <View ref={ref} style={s.card}>
-        {/* Full-bleed photo */}
-        <Image source={{ uri: backgroundPhoto }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-
-        {/* Route SVG overlay — vibrant, spans full card */}
-        {hasRoute && (
-          <Svg width={CARD_W} height={CARD_H} style={StyleSheet.absoluteFillObject}>
-            {/* Glow underlay */}
-            <Polyline
-              points={svgPointsFull}
-              fill="none"
-              stroke={PRIMARY + "50"}
-              strokeWidth={10}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            {/* Main vibrant line */}
-            <Polyline
-              points={svgPointsFull}
-              fill="none"
-              stroke={PRIMARY}
-              strokeWidth={3}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </Svg>
-        )}
-
-        {/* Top gradient scrim — protects header readability */}
-        <LinearGradient
-          colors={["rgba(0,0,0,0.72)", "transparent"]}
-          style={s.topScrim}
-        />
-
-        {/* Bottom gradient scrim — protects stats + caption */}
-        <LinearGradient
-          colors={["transparent", "rgba(0,0,0,0.88)"]}
-          style={s.bottomScrim}
-        />
-
-        {/* Header overlaid at top */}
-        <View style={s.photoHeaderRow}>
-          <Text style={s.logo}>PaceUp</Text>
-          <View style={s.actPill}>
-            <Ionicons name={actIcon} size={11} color={PRIMARY} style={{ marginRight: 4 }} />
-            <Text style={s.actPillTxt}>{actLabel}</Text>
-          </View>
+      <View style={st.overlayGroupRow}>
+        <View style={[st.groupPill, white && { backgroundColor: "rgba(255,255,255,0.12)", borderColor: "rgba(255,255,255,0.25)" }]}>
+          <Ionicons name="people" size={13} color={white ? "#FFFFFF" : GOLD} style={{ marginRight: 5 }} />
+          <Text style={[st.groupPillTxt, white && { color: "#FFFFFF" }]}>{participantCount} {actParticipants}</Text>
         </View>
-
-        {/* Bottom content block */}
-        <View style={s.photoBottomBlock}>
-          {/* Group badges */}
-          {isGroup && (
-            <View style={[s.groupRow, { paddingHorizontal: 22, paddingBottom: 8 }]}>
-              <View style={s.groupPill}>
-                <Ionicons name="people" size={13} color={GOLD} style={{ marginRight: 5 }} />
-                <Text style={s.groupPillTxt}>{participantCount} {actParticipants}</Text>
-              </View>
-              {finishRank != null && (
-                <View style={s.rankPill}>
-                  <Ionicons name="trophy" size={11} color={PRIMARY} style={{ marginRight: 4 }} />
-                  <Text style={s.rankPillTxt}>{ordinal(finishRank)}</Text>
-                </View>
-              )}
-            </View>
-          )}
-
-          {/* Caption overlaid */}
-          {!!caption && (
-            <Text style={[s.photoCaption, { fontFamily: captionFont, fontSize: captionSize, lineHeight: captionSize * 1.2 }]} numberOfLines={3}>
-              {caption}
-            </Text>
-          )}
-
-          {/* Stats row — white text */}
-          <View style={s.photoStatsRow}>
-            <View style={[s.statBlock, { flex: 1.4 }]}>
-              <Text style={s.photoStatBig}>{formatDist(distanceMi)}</Text>
-              <Text style={s.photoStatUnit}>miles</Text>
-            </View>
-            <View style={s.photoStatDivider} />
-            <View style={s.statBlock}>
-              <Text style={s.photoStatMid}>{formatPace(paceMinPerMile)}</Text>
-              <Text style={s.photoStatUnit}>min/mi</Text>
-            </View>
-            <View style={s.photoStatDivider} />
-            <View style={s.statBlock}>
-              <Text style={s.photoStatMid}>{formatDuration(durationSeconds)}</Text>
-              <Text style={s.photoStatUnit}>time</Text>
-            </View>
-          </View>
-
-          {FooterStrip}
-        </View>
-      </View>
-    );
-  }
-
-  // ── COLLAGE MODE ───────────────────────────────────────────────────────────
-  if (collagePhotos && collagePhotos.length > 0) {
-    return (
-      <View ref={ref} style={s.card}>
-        <CollageBackground photos={collagePhotos} />
-
-        {hasRoute && (
-          <Svg width={CARD_W} height={CARD_H} style={StyleSheet.absoluteFillObject}>
-            <Polyline points={svgPointsFull} fill="none" stroke={PRIMARY + "50"} strokeWidth={10} strokeLinecap="round" strokeLinejoin="round" />
-            <Polyline points={svgPointsFull} fill="none" stroke={PRIMARY} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
-          </Svg>
-        )}
-
-        <LinearGradient colors={["rgba(0,0,0,0.72)", "transparent"]} style={s.topScrim} />
-        <LinearGradient colors={["transparent", "rgba(0,0,0,0.88)"]} style={s.bottomScrim} />
-
-        <View style={s.photoHeaderRow}>
-          <Text style={s.logo}>PaceUp</Text>
-          <View style={s.actPill}>
-            <Ionicons name={actIcon} size={11} color={PRIMARY} style={{ marginRight: 4 }} />
-            <Text style={s.actPillTxt}>{actLabel}</Text>
-          </View>
-        </View>
-
-        <View style={s.photoBottomBlock}>
-          {isGroup && (
-            <View style={[s.groupRow, { paddingHorizontal: 22, paddingBottom: 8 }]}>
-              <View style={s.groupPill}>
-                <Ionicons name="people" size={13} color={GOLD} style={{ marginRight: 5 }} />
-                <Text style={s.groupPillTxt}>{participantCount} {actParticipants}</Text>
-              </View>
-              {finishRank != null && (
-                <View style={s.rankPill}>
-                  <Ionicons name="trophy" size={11} color={PRIMARY} style={{ marginRight: 4 }} />
-                  <Text style={s.rankPillTxt}>{ordinal(finishRank)}</Text>
-                </View>
-              )}
-            </View>
-          )}
-          {!!caption && (
-            <Text style={[s.photoCaption, { fontFamily: captionFont, fontSize: captionSize, lineHeight: captionSize * 1.2 }]} numberOfLines={3}>
-              {caption}
-            </Text>
-          )}
-          <View style={s.photoStatsRow}>
-            <View style={[s.statBlock, { flex: 1.4 }]}>
-              <Text style={s.photoStatBig}>{formatDist(distanceMi)}</Text>
-              <Text style={s.photoStatUnit}>miles</Text>
-            </View>
-            <View style={s.photoStatDivider} />
-            <View style={s.statBlock}>
-              <Text style={s.photoStatMid}>{formatPace(paceMinPerMile)}</Text>
-              <Text style={s.photoStatUnit}>min/mi</Text>
-            </View>
-            <View style={s.photoStatDivider} />
-            <View style={s.statBlock}>
-              <Text style={s.photoStatMid}>{formatDuration(durationSeconds)}</Text>
-              <Text style={s.photoStatUnit}>time</Text>
-            </View>
-          </View>
-          {FooterStrip}
-        </View>
-      </View>
-    );
-  }
-
-  const RoutePanel = (panelHeight: number, showBadge = true) => {
-    const pts = hasRoute ? normalizePath(routePath, CARD_W, panelHeight) : "";
-    const ep = hasRoute ? getEndPoints(routePath, CARD_W, panelHeight) : null;
-    return (
-      <View style={[s.routePanel, { height: panelHeight }]}>
-        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: transparentMode ? "transparent" : CARD_BG }]} />
-        {!transparentMode && (
-          <View style={[StyleSheet.absoluteFillObject, s.gridContainer]}>
-            {[0.25, 0.5, 0.75].map((f) => (
-              <View key={f} style={[s.gridLine, { top: `${f * 100}%` as any }]} />
-            ))}
-            {[0.25, 0.5, 0.75].map((f) => (
-              <View key={f} style={[s.gridLineV, { left: `${f * 100}%` as any }]} />
-            ))}
+        {finishRank != null && (
+          <View style={[st.rankPill, white && { backgroundColor: "rgba(255,255,255,0.12)", borderColor: "rgba(255,255,255,0.25)" }]}>
+            <Ionicons name="trophy" size={11} color={white ? "#FFFFFF" : PRIMARY} style={{ marginRight: 4 }} />
+            <Text style={[st.rankPillTxt, white && { color: "#FFFFFF" }]}>{ordinal(finishRank)}</Text>
           </View>
         )}
-        {hasRoute ? (
-          <Svg width={CARD_W} height={panelHeight} style={s.svg}>
-            <Polyline points={pts} fill="none" stroke={PRIMARY + "40"} strokeWidth={8} strokeLinecap="round" strokeLinejoin="round" />
-            <Polyline points={pts} fill="none" stroke={PRIMARY} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
-            {ep && <Circle cx={ep.startX} cy={ep.startY} r={5} fill="#FFFFFF" />}
-            {ep && <><Circle cx={ep.endX} cy={ep.endY} r={7} fill={PRIMARY + "55"} /><Circle cx={ep.endX} cy={ep.endY} r={4} fill={PRIMARY} /></>}
-          </Svg>
-        ) : (
-          <View style={s.noRoutePlaceholder}>
-            <Feather name="map" size={28} color={transparentMode ? "#FFFFFF66" : TEXT_MUTED} />
-            <Text style={[s.noRouteTxt, transparentMode && { color: "#FFFFFF99" }]}>No GPS route</Text>
-          </View>
-        )}
-        {showBadge && !transparentMode && (
-          <View style={s.routeBadge}>
-            <Feather name="map-pin" size={9} color={PRIMARY} style={{ marginRight: 3 }} />
-            <Text style={s.routeBadgeTxt}>GPS Route</Text>
-          </View>
-        )}
+        {eventTitle && <Text style={[st.eventTitle, white && { color: "rgba(255,255,255,0.7)" }]} numberOfLines={1}>{eventTitle}</Text>}
       </View>
     );
   };
 
-  const StatsRow = (big = true) => (
-    <View style={s.statsRow}>
-      <View style={[s.statBlock, { flex: 1.4 }]}>
-        <Text style={[big ? s.statBig : s.statMid, transparentMode && { color: "#FFFFFF" }]}>{formatDist(distanceMi)}</Text>
-        <Text style={[s.statUnit, transparentMode && { color: "#FFFFFF99" }]}>miles</Text>
-      </View>
-      <View style={[s.statDivider, transparentMode && { backgroundColor: "#FFFFFF33" }]} />
-      <View style={s.statBlock}>
-        <Text style={[s.statMid, transparentMode && { color: "#FFFFFF" }]}>{formatPace(paceMinPerMile)}</Text>
-        <Text style={[s.statUnit, transparentMode && { color: "#FFFFFF99" }]}>min/mi</Text>
-      </View>
-      <View style={[s.statDivider, transparentMode && { backgroundColor: "#FFFFFF33" }]} />
-      <View style={s.statBlock}>
-        <Text style={[s.statMid, transparentMode && { color: "#FFFFFF" }]}>{formatDuration(durationSeconds)}</Text>
-        <Text style={[s.statUnit, transparentMode && { color: "#FFFFFF99" }]}>time</Text>
-      </View>
-    </View>
-  );
+  const OverlayCaption = ({ white = false }: { white?: boolean }) => {
+    if (!caption) return null;
+    return (
+      <Text
+        style={[st.overlayCaption, { fontFamily: captionFont, fontSize: captionSize, lineHeight: captionSize * 1.2 }, white && { color: "rgba(255,255,255,0.85)" }]}
+        numberOfLines={3}
+      >
+        {caption}
+      </Text>
+    );
+  };
 
   const LayoutDots = (
-    <View style={s.layoutDots}>
+    <View style={st.layoutDots}>
       {[0, 1, 2, 3].map((i) => (
-        <View key={i} style={[s.layoutDot, layoutIndex === i && s.layoutDotActive]} />
+        <View key={i} style={[st.layoutDot, layoutIndex === i && st.layoutDotActive]} />
       ))}
     </View>
   );
 
-  const GroupBadges = isGroup ? (
-    <View style={s.groupRow}>
-      <View style={s.groupPill}>
-        <Ionicons name="people" size={13} color={GOLD} style={{ marginRight: 5 }} />
-        <Text style={s.groupPillTxt}>{participantCount} {actParticipants}</Text>
-      </View>
-      {finishRank != null && (
-        <View style={s.rankPill}>
-          <Ionicons name="trophy" size={11} color={PRIMARY} style={{ marginRight: 4 }} />
-          <Text style={s.rankPillTxt}>{ordinal(finishRank)}</Text>
-        </View>
-      )}
-      {eventTitle && <Text style={s.eventTitle} numberOfLines={1}>{eventTitle}</Text>}
+  const NoRouteOverlay = ({ white = false }: { white?: boolean }) => (
+    <View style={st.noRouteCenter}>
+      <Feather name="map" size={32} color={white ? "rgba(255,255,255,0.25)" : TEXT_MUTED + "66"} />
     </View>
-  ) : null;
+  );
 
-  const CaptionBlock = !!caption ? (
-    <View style={s.captionArea}>
-      <Text style={[s.captionTxt, { fontFamily: captionFont }, transparentMode && { color: "#FFFFFFCC" }]}>{caption}</Text>
-    </View>
-  ) : null;
+  const renderPhotoOverlayLayout = (white: boolean) => {
+    if (layoutIndex === 1) {
+      return (
+        <>
+          <OverlayHeader white={white} />
+          <View style={st.centerBlock}>
+            <Text style={st.heroDistWhite}>{formatDist(distanceMi)}</Text>
+            <Text style={st.heroUnitWhite}>miles</Text>
+            <View style={st.heroPaceTimeRow}>
+              <Text style={st.heroSmallValWhite}>{formatPace(paceMinPerMile)}</Text>
+              <Text style={st.heroSmallLabelWhite}>/mi</Text>
+              <View style={st.heroSmallDivider} />
+              <Text style={st.heroSmallValWhite}>{formatDuration(durationSeconds)}</Text>
+              <Text style={st.heroSmallLabelWhite}>time</Text>
+            </View>
+          </View>
+          {OverlayGroupBadges({ white })}
+          <OverlayCaption white={white} />
+          <View style={st.bottomBlock}>
+            <OverlayFooter white={white} />
+          </View>
+        </>
+      );
+    }
+
+    if (layoutIndex === 2) {
+      return (
+        <>
+          <OverlayHeader white={white} />
+          <View style={st.bottomBlock}>
+            {OverlayGroupBadges({ white })}
+            <OverlayCaption white={white} />
+            <View style={st.frostedPillWrap}>
+              <View style={st.frostedPill}>
+                <Text style={st.frostedPillTxt}>
+                  {formatDist(distanceMi)} mi  ·  {formatPace(paceMinPerMile)} /mi  ·  {formatDuration(durationSeconds)}
+                </Text>
+              </View>
+            </View>
+            <OverlayFooter white={white} />
+          </View>
+        </>
+      );
+    }
+
+    if (layoutIndex === 3) {
+      return (
+        <>
+          <OverlayHeader white={white} />
+          <View style={st.bottomBlock}>
+            {OverlayGroupBadges({ white })}
+            <OverlayCaption white={white} />
+            <View style={st.leftStatsCol}>
+              <View style={st.leftStatRow}>
+                <Text style={st.leftStatLabel}>Distance</Text>
+                <Text style={st.leftStatVal}>{formatDist(distanceMi)} <Text style={st.leftStatUnit}>mi</Text></Text>
+              </View>
+              <View style={st.leftStatRow}>
+                <Text style={st.leftStatLabel}>Pace</Text>
+                <Text style={st.leftStatVal}>{formatPace(paceMinPerMile)} <Text style={st.leftStatUnit}>/mi</Text></Text>
+              </View>
+              <View style={st.leftStatRow}>
+                <Text style={st.leftStatLabel}>Time</Text>
+                <Text style={st.leftStatVal}>{formatDuration(durationSeconds)}</Text>
+              </View>
+            </View>
+            <OverlayFooter white={white} />
+          </View>
+        </>
+      );
+    }
+
+    return (
+      <>
+        <OverlayHeader white={white} />
+        <View style={st.bottomBlock}>
+          {OverlayGroupBadges({ white })}
+          <OverlayCaption white={white} />
+          <View style={st.statsRowBottom}>
+            <View style={[st.statBlock, { flex: 1.4 }]}>
+              <Text style={st.statBigWhite}>{formatDist(distanceMi)}</Text>
+              <Text style={st.statUnitWhite}>miles</Text>
+            </View>
+            <View style={st.statDividerWhite} />
+            <View style={st.statBlock}>
+              <Text style={st.statMidWhite}>{formatPace(paceMinPerMile)}</Text>
+              <Text style={st.statUnitWhite}>min/mi</Text>
+            </View>
+            <View style={st.statDividerWhite} />
+            <View style={st.statBlock}>
+              <Text style={st.statMidWhite}>{formatDuration(durationSeconds)}</Text>
+              <Text style={st.statUnitWhite}>time</Text>
+            </View>
+          </View>
+          <OverlayFooter white={white} />
+        </View>
+      </>
+    );
+  };
+
+  if (backgroundPhoto) {
+    return (
+      <View ref={ref} style={st.card}>
+        <Image source={{ uri: backgroundPhoto }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+        {hasRoute && <RouteSvg points={svgFull} w={CARD_W} h={CARD_H} color="#FFFFFF" strokeW={2} showDots={false} coords={routePath} />}
+        <LinearGradient colors={["rgba(0,0,0,0.65)", "transparent"]} style={st.topScrim} />
+        <LinearGradient colors={["transparent", "rgba(0,0,0,0.85)"]} style={st.bottomScrim} />
+        {renderPhotoOverlayLayout(true)}
+        {LayoutDots}
+      </View>
+    );
+  }
+
+  if (collagePhotos && collagePhotos.length > 0) {
+    return (
+      <View ref={ref} style={st.card}>
+        <CollageBackground photos={collagePhotos} />
+        {hasRoute && <RouteSvg points={svgFull} w={CARD_W} h={CARD_H} color="#FFFFFF" strokeW={2} showDots={false} coords={routePath} />}
+        <LinearGradient colors={["rgba(0,0,0,0.65)", "transparent"]} style={st.topScrim} />
+        <LinearGradient colors={["transparent", "rgba(0,0,0,0.85)"]} style={st.bottomScrim} />
+        {renderPhotoOverlayLayout(true)}
+        {LayoutDots}
+      </View>
+    );
+  }
 
   if (transparentMode) {
     return (
-      <View ref={ref} style={[s.card, { backgroundColor: "transparent" }]}>
-        {RoutePanel(CARD_H - 100, false)}
-        <View style={{ position: "absolute", bottom: 16, left: 0, right: 0 }}>
-          <View style={s.statsRow}>
-            <View style={[s.statBlock, { flex: 1.4 }]}>
-              <Text style={[s.statBig, { color: "#FFFFFF" }]}>{formatDist(distanceMi)}</Text>
-              <Text style={[s.statUnit, { color: "#FFFFFF99" }]}>miles</Text>
+      <View ref={ref} style={[st.card, { backgroundColor: "transparent" }]}>
+        {hasRoute ? (
+          <RouteSvg points={svgFull} w={CARD_W} h={CARD_H} color="#FFFFFF" strokeW={2.5} showDots={true} coords={routePath} />
+        ) : (
+          <NoRouteOverlay white />
+        )}
+        <View style={st.bottomBlock}>
+          <View style={st.statsRowBottom}>
+            <View style={[st.statBlock, { flex: 1.4 }]}>
+              <Text style={st.statBigWhite}>{formatDist(distanceMi)}</Text>
+              <Text style={st.statUnitWhite}>miles</Text>
             </View>
-            <View style={[s.statDivider, { backgroundColor: "#FFFFFF33" }]} />
-            <View style={s.statBlock}>
-              <Text style={[s.statMid, { color: "#FFFFFF" }]}>{formatPace(paceMinPerMile)}</Text>
-              <Text style={[s.statUnit, { color: "#FFFFFF99" }]}>min/mi</Text>
+            <View style={st.statDividerWhite} />
+            <View style={st.statBlock}>
+              <Text style={st.statMidWhite}>{formatPace(paceMinPerMile)}</Text>
+              <Text style={st.statUnitWhite}>min/mi</Text>
             </View>
-            <View style={[s.statDivider, { backgroundColor: "#FFFFFF33" }]} />
-            <View style={s.statBlock}>
-              <Text style={[s.statMid, { color: "#FFFFFF" }]}>{formatDuration(durationSeconds)}</Text>
-              <Text style={[s.statUnit, { color: "#FFFFFF99" }]}>time</Text>
+            <View style={st.statDividerWhite} />
+            <View style={st.statBlock}>
+              <Text style={st.statMidWhite}>{formatDuration(durationSeconds)}</Text>
+              <Text style={st.statUnitWhite}>time</Text>
             </View>
           </View>
+          <OverlayFooter white />
         </View>
       </View>
     );
   }
 
-  // ── STANDARD MODE — 4 tappable layouts ──────────────────────────────────────
-
   if (layoutIndex === 1) {
     return (
-      <View ref={ref} style={s.card}>
-        {HeaderRow}
-        <View style={s.heroBlock}>
-          <Text style={s.heroDist}>{formatDist(distanceMi)}</Text>
-          <Text style={s.heroUnit}>miles</Text>
-        </View>
-        {RoutePanel(220, true)}
-        <View style={s.heroSmallStats}>
-          <View style={s.heroSmallStat}>
-            <Text style={s.heroSmallVal}>{formatPace(paceMinPerMile)}</Text>
-            <Text style={s.heroSmallLabel}>min/mi</Text>
+      <View ref={ref} style={st.card}>
+        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: CARD_BG }]} />
+        {hasRoute ? (
+          <RouteSvg points={svgFull} w={CARD_W} h={CARD_H} color={PRIMARY + "30"} strokeW={2} showDots={true} coords={routePath} />
+        ) : (
+          <NoRouteOverlay />
+        )}
+        <LinearGradient colors={["rgba(5,12,9,0.6)", "transparent"]} style={st.topScrimShort} />
+        <LinearGradient colors={["transparent", "rgba(5,12,9,0.8)"]} style={st.bottomScrimTall} />
+        <OverlayHeader />
+        <View style={st.centerBlock}>
+          <Text style={st.heroDist}>{formatDist(distanceMi)}</Text>
+          <Text style={st.heroUnit}>miles</Text>
+          <View style={st.heroPaceTimeRow}>
+            <Text style={st.heroSmallVal}>{formatPace(paceMinPerMile)}</Text>
+            <Text style={st.heroSmallLabel}>/mi</Text>
+            <View style={[st.heroSmallDivider, { backgroundColor: TEXT_MUTED }]} />
+            <Text style={st.heroSmallVal}>{formatDuration(durationSeconds)}</Text>
+            <Text style={st.heroSmallLabel}>time</Text>
           </View>
-          <View style={[s.statDivider, { height: 28 }]} />
-          <View style={s.heroSmallStat}>
-            <Text style={s.heroSmallVal}>{formatDuration(durationSeconds)}</Text>
-            <Text style={s.heroSmallLabel}>time</Text>
-          </View>
         </View>
-        {GroupBadges}
-        {CaptionBlock}
-        <View style={{ flex: 1 }} />
-        {FooterStrip}
+        {OverlayGroupBadges({})}
+        <OverlayCaption />
+        <View style={st.bottomBlock}>
+          <OverlayFooter />
+        </View>
         {LayoutDots}
       </View>
     );
@@ -603,17 +536,28 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
 
   if (layoutIndex === 2) {
     return (
-      <View ref={ref} style={s.card}>
-        {HeaderRow}
-        {RoutePanel(CARD_H - 130, false)}
-        <View style={s.frostedPillWrap}>
-          <View style={s.frostedPill}>
-            <Text style={s.frostedPillTxt}>
-              {formatDist(distanceMi)} mi  ·  {formatPace(paceMinPerMile)} /mi  ·  {formatDuration(durationSeconds)}
-            </Text>
+      <View ref={ref} style={st.card}>
+        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: CARD_BG }]} />
+        {hasRoute ? (
+          <RouteSvg points={svgFull} w={CARD_W} h={CARD_H} color={PRIMARY + "30"} strokeW={2} showDots={true} coords={routePath} />
+        ) : (
+          <NoRouteOverlay />
+        )}
+        <LinearGradient colors={["rgba(5,12,9,0.6)", "transparent"]} style={st.topScrimShort} />
+        <LinearGradient colors={["transparent", "rgba(5,12,9,0.7)"]} style={st.bottomScrimTall} />
+        <OverlayHeader />
+        <View style={st.bottomBlock}>
+          {OverlayGroupBadges({})}
+          <OverlayCaption />
+          <View style={st.frostedPillWrap}>
+            <View style={[st.frostedPill, { backgroundColor: "rgba(0,0,0,0.55)" }]}>
+              <Text style={st.frostedPillTxt}>
+                {formatDist(distanceMi)} mi  ·  {formatPace(paceMinPerMile)} /mi  ·  {formatDuration(durationSeconds)}
+              </Text>
+            </View>
           </View>
+          <OverlayFooter />
         </View>
-        {FooterStrip}
         {LayoutDots}
       </View>
     );
@@ -621,30 +565,72 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
 
   if (layoutIndex === 3) {
     return (
-      <View ref={ref} style={s.card}>
-        {HeaderRow}
-        {StatsRow(true)}
-        <View style={s.divider} />
-        {GroupBadges}
-        {CaptionBlock}
-        {RoutePanel(CARD_H - (isGroup ? 260 : caption ? 240 : 200), true)}
-        {FooterStrip}
+      <View ref={ref} style={st.card}>
+        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: CARD_BG }]} />
+        {hasRoute ? (
+          <RouteSvg points={svgFull} w={CARD_W} h={CARD_H} color={PRIMARY + "30"} strokeW={2} showDots={true} coords={routePath} />
+        ) : (
+          <NoRouteOverlay />
+        )}
+        <LinearGradient colors={["rgba(5,12,9,0.6)", "transparent"]} style={st.topScrimShort} />
+        <LinearGradient colors={["transparent", "rgba(5,12,9,0.85)"]} style={st.bottomScrimTall} />
+        <OverlayHeader />
+        <View style={st.bottomBlock}>
+          {OverlayGroupBadges({})}
+          <OverlayCaption />
+          <View style={st.leftStatsCol}>
+            <View style={st.leftStatRow}>
+              <Text style={[st.leftStatLabel, { color: TEXT_MUTED }]}>Distance</Text>
+              <Text style={[st.leftStatVal, { color: TEXT_CLR }]}>{formatDist(distanceMi)} <Text style={[st.leftStatUnit, { color: TEXT_MUTED }]}>mi</Text></Text>
+            </View>
+            <View style={st.leftStatRow}>
+              <Text style={[st.leftStatLabel, { color: TEXT_MUTED }]}>Pace</Text>
+              <Text style={[st.leftStatVal, { color: TEXT_CLR }]}>{formatPace(paceMinPerMile)} <Text style={[st.leftStatUnit, { color: TEXT_MUTED }]}>/mi</Text></Text>
+            </View>
+            <View style={st.leftStatRow}>
+              <Text style={[st.leftStatLabel, { color: TEXT_MUTED }]}>Time</Text>
+              <Text style={[st.leftStatVal, { color: TEXT_CLR }]}>{formatDuration(durationSeconds)}</Text>
+            </View>
+          </View>
+          <OverlayFooter />
+        </View>
         {LayoutDots}
       </View>
     );
   }
 
-  // Layout 0 (default): route top, stats bottom
   return (
-    <View ref={ref} style={s.card}>
-      {HeaderRow}
-      {RoutePanel(ROUTE_H, true)}
-      {StatsRow(true)}
-      <View style={s.divider} />
-      {GroupBadges}
-      {CaptionBlock}
-      <View style={{ flex: 1 }} />
-      {FooterStrip}
+    <View ref={ref} style={st.card}>
+      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: CARD_BG }]} />
+      {hasRoute ? (
+        <RouteSvg points={svgFull} w={CARD_W} h={CARD_H} color={PRIMARY + "30"} strokeW={2} showDots={true} coords={routePath} />
+      ) : (
+        <NoRouteOverlay />
+      )}
+      <LinearGradient colors={["rgba(5,12,9,0.6)", "transparent"]} style={st.topScrimShort} />
+      <LinearGradient colors={["transparent", "rgba(5,12,9,0.85)"]} style={st.bottomScrimTall} />
+      <OverlayHeader />
+      <View style={st.bottomBlock}>
+        {OverlayGroupBadges({})}
+        <OverlayCaption />
+        <View style={st.statsRowBottom}>
+          <View style={[st.statBlock, { flex: 1.4 }]}>
+            <Text style={st.statBigGreen}>{formatDist(distanceMi)}</Text>
+            <Text style={[st.statUnitDark]}>miles</Text>
+          </View>
+          <View style={st.statDividerDark} />
+          <View style={st.statBlock}>
+            <Text style={st.statMidLight}>{formatPace(paceMinPerMile)}</Text>
+            <Text style={st.statUnitDark}>min/mi</Text>
+          </View>
+          <View style={st.statDividerDark} />
+          <View style={st.statBlock}>
+            <Text style={st.statMidLight}>{formatDuration(durationSeconds)}</Text>
+            <Text style={st.statUnitDark}>time</Text>
+          </View>
+        </View>
+        <OverlayFooter />
+      </View>
       {LayoutDots}
     </View>
   );
@@ -652,26 +638,27 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
 
 export default ShareCard;
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
-const s = StyleSheet.create({
+const st = StyleSheet.create({
   card: {
     width: CARD_W,
     height: CARD_H,
     backgroundColor: BG,
     borderRadius: 20,
     overflow: "hidden",
-    flexDirection: "column",
   },
 
-  // Header
-  headerRow: {
+  overlayHeader: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 22,
     paddingTop: 22,
     paddingBottom: 14,
+    zIndex: 10,
   },
   logo: {
     fontFamily: "Outfit_700Bold",
@@ -696,124 +683,280 @@ const s = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
-  // Route panel
-  routePanel: {
-    width: CARD_W,
-    height: ROUTE_H,
-    overflow: "hidden",
-    position: "relative",
+  overlayFooter: {
+    paddingHorizontal: 0,
+    paddingBottom: 0,
   },
-  photoOverlay: {
-    backgroundColor: "rgba(0,0,0,0.42)",
+  footerLine: {
+    height: 2,
+    backgroundColor: PRIMARY,
   },
-  gridContainer: {
-    position: "absolute",
-  },
-  gridLine: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    height: 1,
-    backgroundColor: "#FFFFFF08",
-  },
-  gridLineV: {
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    width: 1,
-    backgroundColor: "#FFFFFF08",
-  },
-  svg: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-  },
-  noRoutePlaceholder: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    borderWidth: 1,
-    borderColor: BORDER,
-    borderStyle: "dashed",
-    margin: 20,
-    borderRadius: 12,
-  },
-  noRouteTxt: {
-    fontFamily: "Outfit_400Regular",
-    fontSize: 12,
-    color: TEXT_MUTED,
-  },
-  routeBadge: {
-    position: "absolute",
-    bottom: 10,
-    left: 14,
+  footerRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: BG + "CC",
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
   },
-  routeBadgeTxt: {
-    fontFamily: "Outfit_600SemiBold",
-    fontSize: 9,
+  footerLogo: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 11,
     color: PRIMARY,
+    letterSpacing: 2,
+  },
+  footerSep: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 11,
+    color: TEXT_MUTED,
+  },
+  footerTagline: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 11,
+    color: TEXT_MUTED,
     letterSpacing: 0.3,
   },
 
-  // Stats
-  statsRow: {
+  topScrim: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 140,
+    zIndex: 5,
+  },
+  bottomScrim: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 280,
+    zIndex: 5,
+  },
+  topScrimShort: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 100,
+    zIndex: 5,
+  },
+  bottomScrimTall: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 320,
+    zIndex: 5,
+  },
+
+  bottomBlock: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+  },
+  centerBlock: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10,
+  },
+
+  noRouteCenter: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  statsRowBottom: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 22,
-    paddingVertical: 20,
+    paddingVertical: 16,
   },
   statBlock: {
     flex: 1,
     alignItems: "center",
     gap: 3,
   },
-  statBig: {
+  statBigGreen: {
     fontFamily: "Outfit_700Bold",
-    fontSize: 38,
+    fontSize: 34,
     color: PRIMARY,
     letterSpacing: -1,
-    lineHeight: 42,
+    lineHeight: 38,
   },
-  statMid: {
+  statMidLight: {
     fontFamily: "Outfit_700Bold",
-    fontSize: 22,
-    color: TEXT,
+    fontSize: 20,
+    color: TEXT_CLR,
     letterSpacing: -0.5,
   },
-  statUnit: {
+  statUnitDark: {
     fontFamily: "Outfit_400Regular",
-    fontSize: 11,
+    fontSize: 10,
     color: TEXT_MUTED,
     letterSpacing: 0.3,
-    textTransform: "uppercase",
+    textTransform: "uppercase" as const,
   },
-  statDivider: {
+  statDividerDark: {
     width: 1,
-    height: 44,
+    height: 40,
     backgroundColor: BORDER,
   },
-
-  // Divider
-  divider: {
-    marginHorizontal: 22,
-    height: 1,
-    backgroundColor: BORDER,
+  statBigWhite: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 34,
+    color: "#FFFFFF",
+    letterSpacing: -1,
+    lineHeight: 38,
+  },
+  statMidWhite: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 20,
+    color: "#FFFFFF",
+    letterSpacing: -0.5,
+  },
+  statUnitWhite: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 10,
+    color: "rgba(255,255,255,0.55)",
+    letterSpacing: 0.3,
+    textTransform: "uppercase" as const,
+  },
+  statDividerWhite: {
+    width: 1,
+    height: 40,
+    backgroundColor: "rgba(255,255,255,0.2)",
   },
 
-  // Group
-  groupRow: {
+  heroDist: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 64,
+    color: PRIMARY,
+    letterSpacing: -2,
+    lineHeight: 68,
+  },
+  heroUnit: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 14,
+    color: TEXT_MUTED,
+    letterSpacing: 1,
+    textTransform: "uppercase" as const,
+    marginTop: 2,
+  },
+  heroDistWhite: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 64,
+    color: "#FFFFFF",
+    letterSpacing: -2,
+    lineHeight: 68,
+  },
+  heroUnitWhite: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 14,
+    color: "rgba(255,255,255,0.55)",
+    letterSpacing: 1,
+    textTransform: "uppercase" as const,
+    marginTop: 2,
+  },
+  heroPaceTimeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 12,
+  },
+  heroSmallVal: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 18,
+    color: TEXT_CLR,
+  },
+  heroSmallLabel: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 12,
+    color: TEXT_MUTED,
+  },
+  heroSmallValWhite: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 18,
+    color: "#FFFFFF",
+  },
+  heroSmallLabelWhite: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 12,
+    color: "rgba(255,255,255,0.5)",
+  },
+  heroSmallDivider: {
+    width: 1,
+    height: 16,
+    backgroundColor: "rgba(255,255,255,0.25)",
+    marginHorizontal: 4,
+  },
+
+  frostedPillWrap: {
+    alignItems: "center",
+    paddingVertical: 12,
+  },
+  frostedPill: {
+    backgroundColor: "rgba(0,0,0,0.65)",
+    borderRadius: 24,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+  },
+  frostedPillTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 14,
+    color: "#FFFFFF",
+    letterSpacing: 0.3,
+  },
+
+  leftStatsCol: {
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  leftStatRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+  },
+  leftStatLabel: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 13,
+    color: "rgba(255,255,255,0.5)",
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.5,
+  },
+  leftStatVal: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 22,
+    color: "#FFFFFF",
+    letterSpacing: -0.5,
+  },
+  leftStatUnit: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 13,
+    color: "rgba(255,255,255,0.45)",
+  },
+
+  overlayGroupRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     paddingHorizontal: 22,
-    paddingTop: 14,
+    paddingTop: 8,
+    paddingBottom: 4,
     flexWrap: "wrap",
   },
   groupPill: {
@@ -852,52 +995,15 @@ const s = StyleSheet.create({
     color: TEXT_SEC,
     flex: 1,
   },
-
-  // Caption
-  captionArea: {
-    paddingHorizontal: 22,
-    paddingTop: 14,
-  },
-  captionTxt: {
+  overlayCaption: {
     fontFamily: "Outfit_400Regular",
     fontSize: 14,
     color: TEXT_SEC,
     fontStyle: "italic",
     lineHeight: 20,
-  },
-
-  // Footer
-  footer: {
-    paddingHorizontal: 0,
-    paddingBottom: 0,
-  },
-  footerLine: {
-    height: 2,
-    backgroundColor: PRIMARY,
-  },
-  footerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 10,
-  },
-  footerLogo: {
-    fontFamily: "Outfit_700Bold",
-    fontSize: 11,
-    color: PRIMARY,
-    letterSpacing: 2,
-  },
-  footerSep: {
-    fontFamily: "Outfit_400Regular",
-    fontSize: 11,
-    color: TEXT_MUTED,
-  },
-  footerTagline: {
-    fontFamily: "Outfit_400Regular",
-    fontSize: 11,
-    color: TEXT_MUTED,
-    letterSpacing: 0.3,
+    paddingHorizontal: 22,
+    paddingTop: 6,
+    paddingBottom: 4,
   },
 
   layoutDots: {
@@ -907,6 +1013,7 @@ const s = StyleSheet.create({
     transform: [{ translateY: -20 }],
     gap: 6,
     alignItems: "center",
+    zIndex: 20,
   },
   layoutDot: {
     width: 5,
@@ -919,142 +1026,5 @@ const s = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-  },
-  heroBlock: {
-    alignItems: "center",
-    paddingTop: 8,
-    paddingBottom: 4,
-  },
-  heroDist: {
-    fontFamily: "Outfit_700Bold",
-    fontSize: 64,
-    color: PRIMARY,
-    letterSpacing: -2,
-    lineHeight: 68,
-  },
-  heroUnit: {
-    fontFamily: "Outfit_400Regular",
-    fontSize: 14,
-    color: TEXT_MUTED,
-    letterSpacing: 1,
-    textTransform: "uppercase",
-  },
-  heroSmallStats: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 20,
-    paddingVertical: 12,
-    paddingHorizontal: 22,
-  },
-  heroSmallStat: {
-    alignItems: "center",
-    gap: 2,
-  },
-  heroSmallVal: {
-    fontFamily: "Outfit_700Bold",
-    fontSize: 18,
-    color: TEXT,
-  },
-  heroSmallLabel: {
-    fontFamily: "Outfit_400Regular",
-    fontSize: 10,
-    color: TEXT_MUTED,
-    letterSpacing: 0.3,
-    textTransform: "uppercase",
-  },
-  frostedPillWrap: {
-    position: "absolute",
-    bottom: 50,
-    left: 0,
-    right: 0,
-    alignItems: "center",
-  },
-  frostedPill: {
-    backgroundColor: "rgba(0,0,0,0.65)",
-    borderRadius: 24,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-  },
-  frostedPillTxt: {
-    fontFamily: "Outfit_600SemiBold",
-    fontSize: 14,
-    color: "#FFFFFF",
-    letterSpacing: 0.3,
-  },
-
-  // Photo-mode styles
-  topScrim: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 140,
-  },
-  bottomScrim: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 240,
-  },
-  photoHeaderRow: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 22,
-    paddingTop: 22,
-    paddingBottom: 14,
-  },
-  photoBottomBlock: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-  },
-  photoCaption: {
-    fontSize: 17,
-    fontStyle: "italic",
-    color: "#FFFFFF",
-    paddingHorizontal: 22,
-    paddingBottom: 10,
-    lineHeight: 24,
-  },
-  photoStatsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 22,
-    paddingVertical: 16,
-  },
-  photoStatBig: {
-    fontFamily: "Outfit_700Bold",
-    fontSize: 34,
-    color: "#FFFFFF",
-    letterSpacing: -1,
-    lineHeight: 38,
-  },
-  photoStatMid: {
-    fontFamily: "Outfit_700Bold",
-    fontSize: 20,
-    color: "#FFFFFF",
-    letterSpacing: -0.5,
-  },
-  photoStatUnit: {
-    fontFamily: "Outfit_400Regular",
-    fontSize: 10,
-    color: "rgba(255,255,255,0.55)",
-    letterSpacing: 0.3,
-    textTransform: "uppercase",
-  },
-  photoStatDivider: {
-    width: 1,
-    height: 44,
-    backgroundColor: "rgba(255,255,255,0.2)",
   },
 });
