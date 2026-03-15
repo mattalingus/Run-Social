@@ -475,7 +475,7 @@ export default function RunTrackingScreen() {
     try {
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
-        interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
+        interruptionModeIOS: duck ? InterruptionModeIOS.DuckOthers : InterruptionModeIOS.MixWithOthers,
         playsInSilentModeIOS: true,
         staysActiveInBackground: true,
         interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
