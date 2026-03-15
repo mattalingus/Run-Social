@@ -115,6 +115,7 @@ export interface ShareCardProps {
   captionSize?: number;
   transparentMode?: boolean;
   layoutIndex?: number;
+  hideDots?: boolean;
 }
 
 function CollageBackground({ photos }: { photos: string[] }) {
@@ -268,6 +269,7 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
     captionSize = 32,
     transparentMode = false,
     layoutIndex = 0,
+    hideDots = false,
   },
   ref
 ) {
@@ -341,7 +343,7 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
     );
   };
 
-  const LayoutDots = (
+  const LayoutDots = hideDots ? null : (
     <View style={st.layoutDots}>
       {[0, 1, 2, 3].map((i) => (
         <View key={i} style={[st.layoutDot, layoutIndex === i && st.layoutDotActive]} />

@@ -92,6 +92,7 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
   const [captionSize, setCaptionSize] = useState<20 | 32 | 46>(32);
   const [transparentMode, setTransparentMode] = useState(true);
   const [layoutIndex, setLayoutIndex] = useState(0);
+  const [isCapturing, setIsCapturing] = useState(false);
 
   const themeBg = C.bg;
   const themeSurface = C.surface;
@@ -108,6 +109,8 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
   const captureCard = useCallback(async (): Promise<string | null> => {
     if (!cardRef.current) return null;
     try {
+      setIsCapturing(true);
+      await new Promise((r) => setTimeout(r, 50));
       const uri = await captureRef(cardRef, {
         format: transparentMode ? "png" : "jpg",
         quality: 0.95,
@@ -117,6 +120,8 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
     } catch (e: any) {
       Alert.alert("Capture failed", e.message || "Could not capture the card");
       return null;
+    } finally {
+      setIsCapturing(false);
     }
   }, [transparentMode]);
 
@@ -430,7 +435,7 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
           <Pressable onPress={handleCardTap} style={st.cardWrapper}>
             {!transparentMode && <View style={st.cardGlow} />}
             {transparentMode && <CheckerboardBg />}
-            <ShareCard ref={cardRef} {...cardProps} />
+            <ShareCard ref={cardRef} {...cardProps} hideDots={isCapturing} />
           </Pressable>
 
           {/* ── Photo background controls ─────────────────────────────────── */}
