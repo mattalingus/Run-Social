@@ -451,11 +451,18 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
     );
   };
 
+  const photoRouteOverlay = hasRoute && (() => {
+    if (layoutIndex === 0) return <RouteSvg points={svgSmallLg} w={ROUTE_SM_LG} h={ROUTE_SM_LG} color="rgba(255,255,255,0.55)" strokeW={2} showDots={false} coords={routePath} posStyle={{ position: "absolute", bottom: 60, alignSelf: "center" }} />;
+    if (layoutIndex === 1) return <RouteSvg points={svgLeft} w={ROUTE_LEFT_W} h={CARD_H} color="rgba(255,255,255,0.45)" strokeW={2} showDots={false} coords={routePath} posStyle={{ position: "absolute", top: 0, left: 0 }} />;
+    if (layoutIndex === 2) return <RouteSvg points={svgTop} w={CARD_W} h={ROUTE_TOP_H} color="rgba(255,255,255,0.55)" strokeW={2.5} showDots={false} coords={routePath} posStyle={{ position: "absolute", top: 0, left: 0 }} />;
+    return <RouteSvg points={svgFull} w={CARD_W} h={CARD_H} color="rgba(255,255,255,0.35)" strokeW={2} showDots={false} coords={routePath} />;
+  })();
+
   if (backgroundPhoto) {
     return (
       <View ref={ref} style={st.card}>
         <Image source={{ uri: backgroundPhoto }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-        {hasRoute && <RouteSvg points={svgFull} w={CARD_W} h={CARD_H} color="#FFFFFF" strokeW={2} showDots={false} coords={routePath} />}
+        {photoRouteOverlay}
         <LinearGradient colors={["rgba(0,0,0,0.65)", "transparent"]} style={st.topScrim} />
         <LinearGradient colors={["transparent", "rgba(0,0,0,0.85)"]} style={st.bottomScrim} />
         {renderPhotoOverlayLayout(true)}
@@ -468,7 +475,7 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
     return (
       <View ref={ref} style={st.card}>
         <CollageBackground photos={collagePhotos} />
-        {hasRoute && <RouteSvg points={svgFull} w={CARD_W} h={CARD_H} color="#FFFFFF" strokeW={2} showDots={false} coords={routePath} />}
+        {photoRouteOverlay}
         <LinearGradient colors={["rgba(0,0,0,0.65)", "transparent"]} style={st.topScrim} />
         <LinearGradient colors={["transparent", "rgba(0,0,0,0.85)"]} style={st.bottomScrim} />
         {renderPhotoOverlayLayout(true)}

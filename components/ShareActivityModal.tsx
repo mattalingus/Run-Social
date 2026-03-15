@@ -225,19 +225,10 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
         await fallbackShare(uri);
         return;
       }
-      const canOpen = await Linking.canOpenURL("instagram-stories://share");
-      if (!canOpen) {
-        Alert.alert("Instagram Not Found", "Instagram is not installed on this device.", [
-          { text: "Share Anyway", onPress: () => fallbackShare(uri) },
-          { text: "Cancel", style: "cancel" },
-        ]);
-        return;
-      }
-
       const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      await saveToLibraryQuietly(uri);
 
       if (transparentMode && RNShare) {
-        await saveToLibraryQuietly(uri);
         await RNShare.shareSingle({
           social: RNShare.Social?.INSTAGRAM_STORIES ?? "instagramstories",
           stickerImage: `data:image/png;base64,${base64}`,
@@ -245,22 +236,26 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
           backgroundTopColor: "#000000",
           appId: "com.paceup",
         });
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } else {
         await Clipboard.setImageAsync(base64);
-        await saveToLibraryQuietly(uri);
-        try {
-          await Linking.openURL("instagram-stories://share");
-        } catch {
-          await Linking.openURL("instagram://camera");
+        let opened = false;
+        try { await Linking.openURL("instagram-stories://share"); opened = true; } catch {}
+        if (!opened) {
+          try { await Linking.openURL("instagram://camera"); opened = true; } catch {}
         }
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert("Ready to Share", "Your activity card has been copied. Paste it into your Instagram Story.");
+        if (!opened) {
+          Alert.alert("Instagram not found", "Install Instagram to share directly.", [
+            { text: "Share via…", onPress: () => fallbackShare(uri) },
+            { text: "OK", style: "cancel" },
+          ]);
+          return;
+        }
       }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e: any) {
       if (!e.message?.includes("cancel")) {
-        const uri = await captureCard();
-        await fallbackShare(uri);
+        const uri2 = await captureCard();
+        await fallbackShare(uri2);
       }
     } finally {
       setActiveAction(null);
