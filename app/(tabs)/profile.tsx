@@ -2001,6 +2001,23 @@ export default function ProfileScreen() {
                           </View>
                         </View>
                         <View style={[styles.soloHistRight, { flexDirection: "row", alignItems: "center", gap: 6 }]}>
+                          <Pressable
+                            onPress={() => {
+                              Haptics.selectionAsync();
+                              setShareRunData({
+                                distanceMi: isSolo ? run.distance_miles : (run.my_final_distance ?? run.distance_miles),
+                                paceMinPerMile: isSolo ? run.pace_min_per_mile : (run.my_final_pace ?? run.pace_min_per_mile),
+                                durationSeconds: run.duration_seconds,
+                                routePath: run.route_path ?? undefined,
+                                activityType: run.activity_type,
+                                eventTitle: !isSolo ? (run.title ?? undefined) : undefined,
+                              });
+                            }}
+                            hitSlop={10}
+                            style={{ padding: 4 }}
+                          >
+                            <Feather name="share-2" size={16} color={C.textMuted} />
+                          </Pressable>
                           <View style={{ alignItems: "flex-end" }}>
                             <Text style={styles.soloHistDist}>{toDisplayDist(run.distance_miles, distUnit).split(" ")[0]}</Text>
                             <Text style={styles.soloHistDistUnit}>{unitLabel(distUnit)}</Text>

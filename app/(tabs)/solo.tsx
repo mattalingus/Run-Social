@@ -937,7 +937,9 @@ export default function SoloScreen() {
           </View>
         </View>
         {run.route_path && run.route_path.length > 1 && Platform.OS !== "web" && (
-          <MiniRouteMap path={run.route_path} />
+          <View style={{ marginTop: 12 }}>
+            <MiniRouteMap path={run.route_path} />
+          </View>
         )}
         {isExpanded && (
           <View style={s.statsPanel}>
