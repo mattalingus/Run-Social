@@ -284,6 +284,8 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
   const svgTop = hasRoute ? normalizePath(routePath, CARD_W, ROUTE_TOP_H, 24) : "";
   const ROUTE_SM = 180;
   const svgSmall = hasRoute ? normalizePath(routePath, ROUTE_SM, ROUTE_SM, 16) : "";
+  const ROUTE_SM_LG = 216;
+  const svgSmallLg = hasRoute ? normalizePath(routePath, ROUTE_SM_LG, ROUTE_SM_LG, 16) : "";
   const ROUTE_LEFT_W = 170;
   const svgLeft = hasRoute ? normalizePath(routePath, ROUTE_LEFT_W, CARD_H, 20) : "";
 
@@ -354,7 +356,7 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
   );
 
   const renderPhotoOverlayLayout = (white: boolean) => {
-    if (layoutIndex === 1) {
+    if (layoutIndex === 0) {
       return (
         <>
           <OverlayHeader white={white} />
@@ -376,27 +378,7 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
       );
     }
 
-    if (layoutIndex === 2) {
-      return (
-        <>
-          <OverlayHeader white={white} />
-          <View style={st.bottomBlock}>
-            {OverlayGroupBadges({ white })}
-            <OverlayCaption white={white} />
-            <View style={st.frostedPillWrap}>
-              <View style={st.frostedPill}>
-                <Text style={st.frostedPillTxt}>
-                  {formatDist(distanceMi)} mi  ·  {formatPace(paceMinPerMile)} /mi  ·  {formatDuration(durationSeconds)}
-                </Text>
-              </View>
-            </View>
-            <OverlayFooter white={white} />
-          </View>
-        </>
-      );
-    }
-
-    if (layoutIndex === 3) {
+    if (layoutIndex === 1) {
       return (
         <>
           <OverlayHeader white={white} />
@@ -420,25 +402,45 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
       );
     }
 
+    if (layoutIndex === 2) {
+      return (
+        <>
+          <OverlayHeader white={white} />
+          <View style={st.bottomBlock}>
+            {OverlayGroupBadges({ white })}
+            <OverlayCaption white={white} />
+            <View style={st.statsRowBottom}>
+              <View style={[st.statBlock, { flex: 1.4 }]}>
+                <Text style={st.statBigWhite}>{formatDist(distanceMi)}</Text>
+                <Text style={st.statUnitWhite}>mi</Text>
+              </View>
+              <View style={st.statDividerWhite} />
+              <View style={st.statBlock}>
+                <Text style={st.statMidWhite}>{formatPace(paceMinPerMile)}</Text>
+                <Text style={st.statUnitWhite}>/mi</Text>
+              </View>
+              <View style={st.statDividerWhite} />
+              <View style={st.statBlock}>
+                <Text style={st.statMidWhite}>{formatDuration(durationSeconds)}</Text>
+              </View>
+            </View>
+            <OverlayFooter white={white} />
+          </View>
+        </>
+      );
+    }
+
     return (
       <>
         <OverlayHeader white={white} />
         <View style={st.bottomBlock}>
           {OverlayGroupBadges({ white })}
           <OverlayCaption white={white} />
-          <View style={st.statsRowBottom}>
-            <View style={[st.statBlock, { flex: 1.4 }]}>
-              <Text style={st.statBigWhite}>{formatDist(distanceMi)}</Text>
-              <Text style={st.statUnitWhite}>mi</Text>
-            </View>
-            <View style={st.statDividerWhite} />
-            <View style={st.statBlock}>
-              <Text style={st.statMidWhite}>{formatPace(paceMinPerMile)}</Text>
-              <Text style={st.statUnitWhite}>/mi</Text>
-            </View>
-            <View style={st.statDividerWhite} />
-            <View style={st.statBlock}>
-              <Text style={st.statMidWhite}>{formatDuration(durationSeconds)}</Text>
+          <View style={st.frostedPillWrap}>
+            <View style={st.frostedPill}>
+              <Text style={st.frostedPillTxt}>
+                {formatDist(distanceMi)} mi  ·  {formatPace(paceMinPerMile)} /mi  ·  {formatDuration(durationSeconds)}
+              </Text>
             </View>
           </View>
           <OverlayFooter white={white} />
@@ -474,12 +476,12 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
   }
 
   if (transparentMode) {
-    if (layoutIndex === 1) {
+    if (layoutIndex === 0) {
       return (
         <View ref={ref} style={[st.card, { backgroundColor: "transparent" }]}>
           {hasRoute ? (
-            <RouteSvg points={svgSmall} w={ROUTE_SM} h={ROUTE_SM} color="#FFFFFF" strokeW={2} showDots={true} coords={routePath}
-              posStyle={{ position: "absolute", bottom: 80, right: 10 }} />
+            <RouteSvg points={svgSmallLg} w={ROUTE_SM_LG} h={ROUTE_SM_LG} color="#FFFFFF" strokeW={2} showDots={true} coords={routePath}
+              posStyle={{ position: "absolute", bottom: 60, alignSelf: "center" }} />
           ) : <NoRouteOverlay white />}
           <View style={st.centerBlock}>
             <Text style={st.watermarkAboveDist}>PACEUP</Text>
@@ -495,35 +497,7 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
         </View>
       );
     }
-    if (layoutIndex === 2) {
-      return (
-        <View ref={ref} style={[st.card, { backgroundColor: "transparent" }]}>
-          {hasRoute ? (
-            <RouteSvg points={svgFull} w={CARD_W} h={CARD_H} color="rgba(255,255,255,0.25)" strokeW={1.5} showDots={true} coords={routePath} />
-          ) : <NoRouteOverlay white />}
-          <View style={st.bottomBlock}>
-            <View style={st.stackedStatsBlock}>
-              <Text style={[st.watermarkAboveStack, { color: "rgba(255,255,255,0.45)" }]}>PACEUP</Text>
-              <View style={st.stackedStatRow}>
-                <Text style={[st.stackedStatVal, { color: "#FFFFFF" }]}>{formatDist(distanceMi)}</Text>
-                <Text style={[st.stackedStatUnit, { color: "rgba(255,255,255,0.5)" }]}>mi</Text>
-              </View>
-              <View style={[st.stackedDivider, { backgroundColor: "rgba(255,255,255,0.15)" }]} />
-              <View style={st.stackedStatRow}>
-                <Text style={[st.stackedStatVal, { color: "#FFFFFF" }]}>{formatPace(paceMinPerMile)}</Text>
-                <Text style={[st.stackedStatUnit, { color: "rgba(255,255,255,0.5)" }]}>/mi</Text>
-              </View>
-              <View style={[st.stackedDivider, { backgroundColor: "rgba(255,255,255,0.15)" }]} />
-              <View style={st.stackedStatRow}>
-                <Text style={[st.stackedStatVal, { color: "#FFFFFF" }]}>{formatDuration(durationSeconds)}</Text>
-              </View>
-            </View>
-          </View>
-          {LayoutDots}
-        </View>
-      );
-    }
-    if (layoutIndex === 3) {
+    if (layoutIndex === 1) {
       return (
         <View ref={ref} style={[st.card, { backgroundColor: "transparent" }]}>
           {hasRoute ? (
@@ -552,27 +526,55 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
         </View>
       );
     }
+    if (layoutIndex === 2) {
+      return (
+        <View ref={ref} style={[st.card, { backgroundColor: "transparent" }]}>
+          {hasRoute ? (
+            <RouteSvg points={svgTop} w={CARD_W} h={ROUTE_TOP_H} color="#FFFFFF" strokeW={2.5} showDots={true} coords={routePath}
+              posStyle={{ position: "absolute", top: 0, left: 0 }} />
+          ) : <NoRouteOverlay white />}
+          <View style={st.bottomBlock}>
+            <Text style={[st.watermarkCentered, { color: "rgba(255,255,255,0.5)" }]}>PACEUP</Text>
+            <View style={st.statsRowBottom}>
+              <View style={[st.statBlock, { flex: 1.4 }]}>
+                <Text style={st.statBigWhite}>{formatDist(distanceMi)}</Text>
+                <Text style={st.statUnitWhite}>mi</Text>
+              </View>
+              <View style={st.statDividerWhite} />
+              <View style={st.statBlock}>
+                <Text style={st.statMidWhite}>{formatPace(paceMinPerMile)}</Text>
+                <Text style={st.statUnitWhite}>/mi</Text>
+              </View>
+              <View style={st.statDividerWhite} />
+              <View style={st.statBlock}>
+                <Text style={st.statMidWhite}>{formatDuration(durationSeconds)}</Text>
+              </View>
+            </View>
+          </View>
+          {LayoutDots}
+        </View>
+      );
+    }
     return (
       <View ref={ref} style={[st.card, { backgroundColor: "transparent" }]}>
         {hasRoute ? (
-          <RouteSvg points={svgTop} w={CARD_W} h={ROUTE_TOP_H} color="#FFFFFF" strokeW={2.5} showDots={true} coords={routePath}
-            posStyle={{ position: "absolute", top: 0, left: 0 }} />
+          <RouteSvg points={svgFull} w={CARD_W} h={CARD_H} color="rgba(255,255,255,0.25)" strokeW={1.5} showDots={true} coords={routePath} />
         ) : <NoRouteOverlay white />}
         <View style={st.bottomBlock}>
-          <Text style={[st.watermarkCentered, { color: "rgba(255,255,255,0.5)" }]}>PACEUP</Text>
-          <View style={st.statsRowBottom}>
-            <View style={[st.statBlock, { flex: 1.4 }]}>
-              <Text style={st.statBigWhite}>{formatDist(distanceMi)}</Text>
-              <Text style={st.statUnitWhite}>mi</Text>
+          <View style={st.stackedStatsBlock}>
+            <Text style={[st.watermarkAboveStack, { color: "rgba(255,255,255,0.45)" }]}>PACEUP</Text>
+            <View style={st.stackedStatRow}>
+              <Text style={[st.stackedStatVal, { color: "#FFFFFF" }]}>{formatDist(distanceMi)}</Text>
+              <Text style={[st.stackedStatUnit, { color: "rgba(255,255,255,0.5)" }]}>mi</Text>
             </View>
-            <View style={st.statDividerWhite} />
-            <View style={st.statBlock}>
-              <Text style={st.statMidWhite}>{formatPace(paceMinPerMile)}</Text>
-              <Text style={st.statUnitWhite}>/mi</Text>
+            <View style={[st.stackedDivider, { backgroundColor: "rgba(255,255,255,0.15)" }]} />
+            <View style={st.stackedStatRow}>
+              <Text style={[st.stackedStatVal, { color: "#FFFFFF" }]}>{formatPace(paceMinPerMile)}</Text>
+              <Text style={[st.stackedStatUnit, { color: "rgba(255,255,255,0.5)" }]}>/mi</Text>
             </View>
-            <View style={st.statDividerWhite} />
-            <View style={st.statBlock}>
-              <Text style={st.statMidWhite}>{formatDuration(durationSeconds)}</Text>
+            <View style={[st.stackedDivider, { backgroundColor: "rgba(255,255,255,0.15)" }]} />
+            <View style={st.stackedStatRow}>
+              <Text style={[st.stackedStatVal, { color: "#FFFFFF" }]}>{formatDuration(durationSeconds)}</Text>
             </View>
           </View>
         </View>
@@ -581,21 +583,21 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
     );
   }
 
-  {/* Layout 1: Big hero distance centered, small route bottom-right corner */}
-  if (layoutIndex === 1) {
+  {/* Layout 0 (1st): Hero distance centered, large route centered at bottom */}
+  if (layoutIndex === 0) {
     return (
       <View ref={ref} style={st.card}>
         <View style={[StyleSheet.absoluteFillObject, { backgroundColor: CARD_BG }]} />
         {hasRoute ? (
           <RouteSvg
-            points={svgSmall}
-            w={ROUTE_SM}
-            h={ROUTE_SM}
+            points={svgSmallLg}
+            w={ROUTE_SM_LG}
+            h={ROUTE_SM_LG}
             color={PRIMARY + "40"}
             strokeW={2}
             showDots={true}
             coords={routePath}
-            posStyle={{ position: "absolute", bottom: 80, right: 10 }}
+            posStyle={{ position: "absolute", bottom: 60, alignSelf: "center" }}
           />
         ) : (
           <NoRouteOverlay />
@@ -618,44 +620,8 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
     );
   }
 
-  {/* Layout 2: Full card route (lighter), stacked stats + PaceUp above distance */}
-  if (layoutIndex === 2) {
-    return (
-      <View ref={ref} style={st.card}>
-        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: CARD_BG }]} />
-        {hasRoute ? (
-          <RouteSvg points={svgFull} w={CARD_W} h={CARD_H} color={PRIMARY + "18"} strokeW={1.5} showDots={true} coords={routePath} />
-        ) : (
-          <NoRouteOverlay />
-        )}
-        <OverlayHeader />
-        <View style={st.bottomBlock}>
-          {OverlayGroupBadges({})}
-          <OverlayCaption />
-          <View style={st.stackedStatsBlock}>
-            <Text style={st.watermarkAboveStack}>PACEUP</Text>
-            <View style={st.stackedStatRow}>
-              <Text style={st.stackedStatVal}>{formatDist(distanceMi)}</Text>
-              <Text style={st.stackedStatUnit}>mi</Text>
-            </View>
-            <View style={st.stackedDivider} />
-            <View style={st.stackedStatRow}>
-              <Text style={st.stackedStatVal}>{formatPace(paceMinPerMile)}</Text>
-              <Text style={st.stackedStatUnit}>/mi</Text>
-            </View>
-            <View style={st.stackedDivider} />
-            <View style={st.stackedStatRow}>
-              <Text style={st.stackedStatVal}>{formatDuration(durationSeconds)}</Text>
-            </View>
-          </View>
-        </View>
-        {LayoutDots}
-      </View>
-    );
-  }
-
-  {/* Layout 3: Route on left half, stats column on right half */}
-  if (layoutIndex === 3) {
+  {/* Layout 1 (2nd): Route on left half, stats column on right half */}
+  if (layoutIndex === 1) {
     return (
       <View ref={ref} style={st.card}>
         <View style={[StyleSheet.absoluteFillObject, { backgroundColor: CARD_BG }]} />
@@ -699,21 +665,57 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
     );
   }
 
-  {/* Layout 0 (default): Route fills top ~60%, PaceUp centered above stats row */}
+  {/* Layout 2 (3rd): Route fills top ~60%, PaceUp centered above stats row */}
+  if (layoutIndex === 2) {
+    return (
+      <View ref={ref} style={st.card}>
+        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: CARD_BG }]} />
+        {hasRoute ? (
+          <RouteSvg
+            points={svgTop}
+            w={CARD_W}
+            h={ROUTE_TOP_H}
+            color={PRIMARY + "30"}
+            strokeW={2}
+            showDots={true}
+            coords={routePath}
+            posStyle={{ position: "absolute", top: 0, left: 0 }}
+          />
+        ) : (
+          <NoRouteOverlay />
+        )}
+        <OverlayHeader />
+        <View style={st.bottomBlock}>
+          {OverlayGroupBadges({})}
+          <OverlayCaption />
+          <Text style={st.watermarkCentered}>PACEUP</Text>
+          <View style={st.statsRowBottom}>
+            <View style={[st.statBlock, { flex: 1.4 }]}>
+              <Text style={st.statBigGreen}>{formatDist(distanceMi)}</Text>
+              <Text style={st.statUnitDark}>mi</Text>
+            </View>
+            <View style={st.statDividerDark} />
+            <View style={st.statBlock}>
+              <Text style={st.statMidLight}>{formatPace(paceMinPerMile)}</Text>
+              <Text style={st.statUnitDark}>/mi</Text>
+            </View>
+            <View style={st.statDividerDark} />
+            <View style={st.statBlock}>
+              <Text style={st.statMidLight}>{formatDuration(durationSeconds)}</Text>
+            </View>
+          </View>
+        </View>
+        {LayoutDots}
+      </View>
+    );
+  }
+
+  {/* Layout 3 (4th, default): Full card route (lighter), stacked stats */}
   return (
     <View ref={ref} style={st.card}>
       <View style={[StyleSheet.absoluteFillObject, { backgroundColor: CARD_BG }]} />
       {hasRoute ? (
-        <RouteSvg
-          points={svgTop}
-          w={CARD_W}
-          h={ROUTE_TOP_H}
-          color={PRIMARY + "30"}
-          strokeW={2}
-          showDots={true}
-          coords={routePath}
-          posStyle={{ position: "absolute", top: 0, left: 0 }}
-        />
+        <RouteSvg points={svgFull} w={CARD_W} h={CARD_H} color={PRIMARY + "18"} strokeW={1.5} showDots={true} coords={routePath} />
       ) : (
         <NoRouteOverlay />
       )}
@@ -721,20 +723,20 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
       <View style={st.bottomBlock}>
         {OverlayGroupBadges({})}
         <OverlayCaption />
-        <Text style={st.watermarkCentered}>PACEUP</Text>
-        <View style={st.statsRowBottom}>
-          <View style={[st.statBlock, { flex: 1.4 }]}>
-            <Text style={st.statBigGreen}>{formatDist(distanceMi)}</Text>
-            <Text style={st.statUnitDark}>mi</Text>
+        <View style={st.stackedStatsBlock}>
+          <Text style={st.watermarkAboveStack}>PACEUP</Text>
+          <View style={st.stackedStatRow}>
+            <Text style={st.stackedStatVal}>{formatDist(distanceMi)}</Text>
+            <Text style={st.stackedStatUnit}>mi</Text>
           </View>
-          <View style={st.statDividerDark} />
-          <View style={st.statBlock}>
-            <Text style={st.statMidLight}>{formatPace(paceMinPerMile)}</Text>
-            <Text style={st.statUnitDark}>/mi</Text>
+          <View style={st.stackedDivider} />
+          <View style={st.stackedStatRow}>
+            <Text style={st.stackedStatVal}>{formatPace(paceMinPerMile)}</Text>
+            <Text style={st.stackedStatUnit}>/mi</Text>
           </View>
-          <View style={st.statDividerDark} />
-          <View style={st.statBlock}>
-            <Text style={st.statMidLight}>{formatDuration(durationSeconds)}</Text>
+          <View style={st.stackedDivider} />
+          <View style={st.stackedStatRow}>
+            <Text style={st.stackedStatVal}>{formatDuration(durationSeconds)}</Text>
           </View>
         </View>
       </View>
