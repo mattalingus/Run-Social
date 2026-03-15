@@ -90,7 +90,7 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
   const [activeAction, setActiveAction] = useState<ActiveAction>(null);
   const [captionFont, setCaptionFont] = useState<"Outfit_700Bold" | "PlayfairDisplay_700Bold" | "DancingScript_700Bold">("Outfit_700Bold");
   const [captionSize, setCaptionSize] = useState<20 | 32 | 46>(32);
-  const [transparentMode, setTransparentMode] = useState(false);
+  const [transparentMode, setTransparentMode] = useState(true);
   const [layoutIndex, setLayoutIndex] = useState(0);
 
   const themeBg = C.bg;
@@ -435,6 +435,33 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
 
           {/* ── Photo background controls ─────────────────────────────────── */}
           <View style={st.photoRow}>
+            {/* Transparent — first / default option */}
+            <Pressable
+              style={({ pressed }) => [
+                st.photoBtn,
+                { backgroundColor: themeSurface, borderColor: themeBorder },
+                transparentMode && st.photoBtnActive,
+                { opacity: pressed ? 0.7 : (backgroundPhoto || collageMode ? 0.4 : 1) },
+              ]}
+              onPress={() => {
+                if (backgroundPhoto || collageMode) return;
+                setTransparentMode((prev) => !prev);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              disabled={!!backgroundPhoto || collageMode}
+            >
+              <Ionicons
+                name={transparentMode ? "layers" : "layers-outline"}
+                size={15}
+                color={transparentMode ? PRIMARY : themeTextSec}
+                style={{ marginRight: 6 }}
+              />
+              <Text style={[st.photoBtnTxt, { color: themeTextSec }, transparentMode && { color: PRIMARY }]}>
+                Transparent
+              </Text>
+            </Pressable>
+
+            {/* Background Photo — second option */}
             <Pressable
               style={({ pressed }) => [st.photoBtn, { backgroundColor: themeSurface, borderColor: themeBorder }, backgroundPhoto && st.photoBtnActive, { opacity: pressed ? 0.7 : (collageMode || transparentMode ? 0.4 : 1) }]}
               onPress={() => {
@@ -454,7 +481,7 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
                 style={{ marginRight: 6 }}
               />
               <Text style={[st.photoBtnTxt, { color: themeTextSec }, backgroundPhoto && { color: PRIMARY }]}>
-                {backgroundPhoto ? "Remove Photo" : "Background Photo"}
+                {backgroundPhoto ? "Remove Photo" : "Add Photo"}
               </Text>
             </Pressable>
 
@@ -483,31 +510,6 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
                 </Text>
               </Pressable>
             )}
-
-            <Pressable
-              style={({ pressed }) => [
-                st.photoBtn,
-                { backgroundColor: themeSurface, borderColor: themeBorder },
-                transparentMode && st.photoBtnActive,
-                { opacity: pressed ? 0.7 : (backgroundPhoto || collageMode ? 0.4 : 1) },
-              ]}
-              onPress={() => {
-                if (backgroundPhoto || collageMode) return;
-                setTransparentMode((prev) => !prev);
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }}
-              disabled={!!backgroundPhoto || collageMode}
-            >
-              <Ionicons
-                name={transparentMode ? "layers" : "layers-outline"}
-                size={15}
-                color={transparentMode ? PRIMARY : themeTextSec}
-                style={{ marginRight: 6 }}
-              />
-              <Text style={[st.photoBtnTxt, { color: themeTextSec }, transparentMode && { color: PRIMARY }]}>
-                Transparent
-              </Text>
-            </Pressable>
           </View>
 
           {/* ── Caption input ─────────────────────────────────────────────── */}

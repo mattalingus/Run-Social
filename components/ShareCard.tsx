@@ -474,14 +474,92 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
   }
 
   if (transparentMode) {
+    if (layoutIndex === 1) {
+      return (
+        <View ref={ref} style={[st.card, { backgroundColor: "transparent" }]}>
+          {hasRoute ? (
+            <RouteSvg points={svgSmall} w={ROUTE_SM} h={ROUTE_SM} color="#FFFFFF" strokeW={2} showDots={true} coords={routePath}
+              posStyle={{ position: "absolute", bottom: 80, right: 10 }} />
+          ) : <NoRouteOverlay white />}
+          <View style={st.centerBlock}>
+            <Text style={st.watermarkAboveDist}>PACEUP</Text>
+            <Text style={st.heroDistWhite}>{formatDist(distanceMi)}</Text>
+            <View style={[st.heroPaceTimeRow, { marginTop: 8 }]}>
+              <Text style={st.heroSmallValWhite}>{formatPace(paceMinPerMile)}</Text>
+              <Text style={st.heroSmallLabelWhite}>/mi</Text>
+              <View style={st.heroSmallDivider} />
+              <Text style={st.heroSmallValWhite}>{formatDuration(durationSeconds)}</Text>
+            </View>
+          </View>
+          {LayoutDots}
+        </View>
+      );
+    }
+    if (layoutIndex === 2) {
+      return (
+        <View ref={ref} style={[st.card, { backgroundColor: "transparent" }]}>
+          {hasRoute ? (
+            <RouteSvg points={svgFull} w={CARD_W} h={CARD_H} color="rgba(255,255,255,0.25)" strokeW={1.5} showDots={true} coords={routePath} />
+          ) : <NoRouteOverlay white />}
+          <View style={st.bottomBlock}>
+            <View style={st.stackedStatsBlock}>
+              <Text style={[st.watermarkAboveStack, { color: "rgba(255,255,255,0.45)" }]}>PACEUP</Text>
+              <View style={st.stackedStatRow}>
+                <Text style={[st.stackedStatVal, { color: "#FFFFFF" }]}>{formatDist(distanceMi)}</Text>
+                <Text style={[st.stackedStatUnit, { color: "rgba(255,255,255,0.5)" }]}>mi</Text>
+              </View>
+              <View style={[st.stackedDivider, { backgroundColor: "rgba(255,255,255,0.15)" }]} />
+              <View style={st.stackedStatRow}>
+                <Text style={[st.stackedStatVal, { color: "#FFFFFF" }]}>{formatPace(paceMinPerMile)}</Text>
+                <Text style={[st.stackedStatUnit, { color: "rgba(255,255,255,0.5)" }]}>/mi</Text>
+              </View>
+              <View style={[st.stackedDivider, { backgroundColor: "rgba(255,255,255,0.15)" }]} />
+              <View style={st.stackedStatRow}>
+                <Text style={[st.stackedStatVal, { color: "#FFFFFF" }]}>{formatDuration(durationSeconds)}</Text>
+              </View>
+            </View>
+          </View>
+          {LayoutDots}
+        </View>
+      );
+    }
+    if (layoutIndex === 3) {
+      return (
+        <View ref={ref} style={[st.card, { backgroundColor: "transparent" }]}>
+          {hasRoute ? (
+            <RouteSvg points={svgLeft} w={ROUTE_LEFT_W} h={CARD_H} color="rgba(255,255,255,0.35)" strokeW={2} showDots={true} coords={routePath}
+              posStyle={{ position: "absolute", top: 0, left: 0 }} />
+          ) : <NoRouteOverlay white />}
+          <View style={st.rightStatsBlock}>
+            <View style={st.rightStatsCol}>
+              <Text style={[st.watermarkRightSide, { color: "rgba(255,255,255,0.45)" }]}>PACEUP</Text>
+              <View style={st.rightStatItem}>
+                <Text style={[st.rightStatVal, { color: "#FFFFFF" }]}>{formatDist(distanceMi)}</Text>
+                <Text style={[st.rightStatUnit, { color: "rgba(255,255,255,0.5)" }]}>mi</Text>
+              </View>
+              <View style={[st.rightStatDivider, { backgroundColor: "rgba(255,255,255,0.15)" }]} />
+              <View style={st.rightStatItem}>
+                <Text style={[st.rightStatVal, { color: "#FFFFFF" }]}>{formatPace(paceMinPerMile)}</Text>
+                <Text style={[st.rightStatUnit, { color: "rgba(255,255,255,0.5)" }]}>/mi</Text>
+              </View>
+              <View style={[st.rightStatDivider, { backgroundColor: "rgba(255,255,255,0.15)" }]} />
+              <View style={st.rightStatItem}>
+                <Text style={[st.rightStatVal, { color: "#FFFFFF" }]}>{formatDuration(durationSeconds)}</Text>
+              </View>
+            </View>
+          </View>
+          {LayoutDots}
+        </View>
+      );
+    }
     return (
       <View ref={ref} style={[st.card, { backgroundColor: "transparent" }]}>
         {hasRoute ? (
-          <RouteSvg points={svgFull} w={CARD_W} h={CARD_H} color="#FFFFFF" strokeW={2.5} showDots={true} coords={routePath} />
-        ) : (
-          <NoRouteOverlay white />
-        )}
+          <RouteSvg points={svgTop} w={CARD_W} h={ROUTE_TOP_H} color="#FFFFFF" strokeW={2.5} showDots={true} coords={routePath}
+            posStyle={{ position: "absolute", top: 0, left: 0 }} />
+        ) : <NoRouteOverlay white />}
         <View style={st.bottomBlock}>
+          <Text style={[st.watermarkCentered, { color: "rgba(255,255,255,0.5)" }]}>PACEUP</Text>
           <View style={st.statsRowBottom}>
             <View style={[st.statBlock, { flex: 1.4 }]}>
               <Text style={st.statBigWhite}>{formatDist(distanceMi)}</Text>

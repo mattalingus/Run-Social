@@ -2004,6 +2004,7 @@ export default function ProfileScreen() {
                           <Pressable
                             onPress={() => {
                               Haptics.selectionAsync();
+                              setShowSoloHistory(false);
                               setShareRunData({
                                 distanceMi: isSolo ? run.distance_miles : (run.my_final_distance ?? run.distance_miles),
                                 paceMinPerMile: isSolo ? run.pace_min_per_mile : (run.my_final_pace ?? run.pace_min_per_mile),
@@ -2070,6 +2071,7 @@ export default function ProfileScreen() {
                             style={({ pressed }) => [styles.shareActivityBtn, { opacity: pressed ? 0.75 : 1 }]}
                             onPress={() => {
                               Haptics.selectionAsync();
+                              setShowSoloHistory(false);
                               setShareRunData({
                                 distanceMi: run.distance_miles,
                                 paceMinPerMile: run.pace_min_per_mile,
@@ -2098,6 +2100,7 @@ export default function ProfileScreen() {
                             style={({ pressed }) => [styles.shareActivityBtn, { opacity: pressed ? 0.75 : 1, marginTop: 8 }]}
                             onPress={() => {
                               Haptics.selectionAsync();
+                              setShowSoloHistory(false);
                               setShareRunData({
                                 distanceMi: run.my_final_distance ?? run.distance_miles,
                                 paceMinPerMile: run.my_final_pace ?? run.pace_min_per_mile,
@@ -2281,6 +2284,7 @@ export default function ProfileScreen() {
                           style={({ pressed }) => [styles.shareActivityBtn, { opacity: pressed ? 0.75 : 1 }]}
                           onPress={() => {
                             Haptics.selectionAsync();
+                            setShowFavorites(false);
                             setShareRunData({
                               distanceMi: run.distance_miles,
                               paceMinPerMile: run.pace_min_per_mile,
