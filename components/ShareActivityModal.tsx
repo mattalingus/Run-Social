@@ -348,11 +348,11 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
   // ─── Action button helper ──────────────────────────────────────────────────
 
   const handleCardTap = useCallback(() => {
-    if (!collageMode && !transparentMode) {
+    if (!collageMode) {
       setLayoutIndex((prev) => (prev + 1) % 4);
       Haptics.selectionAsync();
     }
-  }, [collageMode, transparentMode]);
+  }, [collageMode]);
 
   function ActionBtn({
     action,

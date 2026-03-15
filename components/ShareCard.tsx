@@ -236,14 +236,15 @@ const RouteSvg = ({
 }) => {
   if (!points) return null;
   const ep = coords ? getEndPoints(coords, w, h) : null;
+  const baseColor = color.length > 7 ? color.slice(0, 7) : color;
   return (
     <Svg width={w} height={h} style={posStyle || StyleSheet.absoluteFillObject}>
       <Polyline points={points} fill="none" stroke={color} strokeWidth={strokeW} strokeLinecap="round" strokeLinejoin="round" />
       {showDots && ep && <Circle cx={ep.startX} cy={ep.startY} r={4} fill="#FFFFFF" />}
       {showDots && ep && (
         <>
-          <Circle cx={ep.endX} cy={ep.endY} r={6} fill={color + "55"} />
-          <Circle cx={ep.endX} cy={ep.endY} r={3.5} fill={color} />
+          <Circle cx={ep.endX} cy={ep.endY} r={6} fill={baseColor + "55"} />
+          <Circle cx={ep.endX} cy={ep.endY} r={3.5} fill={baseColor} />
         </>
       )}
     </Svg>
@@ -496,8 +497,8 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
               <Text style={st.statMidWhite}>{formatDuration(durationSeconds)}</Text>
             </View>
           </View>
-          <OverlayFooter white />
         </View>
+        {LayoutDots}
       </View>
     );
   }
@@ -516,13 +517,14 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
             strokeW={2}
             showDots={true}
             coords={routePath}
-            posStyle={{ position: "absolute", bottom: 60, right: 10 }}
+            posStyle={{ position: "absolute", bottom: 80, right: 10 }}
           />
         ) : (
           <NoRouteOverlay />
         )}
         <OverlayHeader />
         <View style={st.centerBlock}>
+          <Text style={st.watermarkAboveDist}>PACEUP</Text>
           <Text style={st.heroDist}>{formatDist(distanceMi)}</Text>
           <View style={[st.heroPaceTimeRow, { marginTop: 8 }]}>
             <Text style={st.heroSmallVal}>{formatPace(paceMinPerMile)}</Text>
@@ -533,15 +535,12 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
         </View>
         {OverlayGroupBadges({})}
         <OverlayCaption />
-        <View style={st.bottomBlock}>
-          <OverlayFooter />
-        </View>
         {LayoutDots}
       </View>
     );
   }
 
-  {/* Layout 2: Full card route (lighter), frosted pill near center-bottom */}
+  {/* Layout 2: Full card route (lighter), stacked stats + PaceUp above distance */}
   if (layoutIndex === 2) {
     return (
       <View ref={ref} style={st.card}>
@@ -552,19 +551,25 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
           <NoRouteOverlay />
         )}
         <OverlayHeader />
-        <View style={st.centerPillBlock}>
+        <View style={st.bottomBlock}>
           {OverlayGroupBadges({})}
           <OverlayCaption />
-          <View style={st.frostedPillWrap}>
-            <View style={[st.frostedPill, { backgroundColor: "rgba(0,0,0,0.55)" }]}>
-              <Text style={st.frostedPillTxt}>
-                {formatDist(distanceMi)} mi  ·  {formatPace(paceMinPerMile)} /mi  ·  {formatDuration(durationSeconds)}
-              </Text>
+          <View style={st.stackedStatsBlock}>
+            <Text style={st.watermarkAboveStack}>PACEUP</Text>
+            <View style={st.stackedStatRow}>
+              <Text style={st.stackedStatVal}>{formatDist(distanceMi)}</Text>
+              <Text style={st.stackedStatUnit}>mi</Text>
+            </View>
+            <View style={st.stackedDivider} />
+            <View style={st.stackedStatRow}>
+              <Text style={st.stackedStatVal}>{formatPace(paceMinPerMile)}</Text>
+              <Text style={st.stackedStatUnit}>/mi</Text>
+            </View>
+            <View style={st.stackedDivider} />
+            <View style={st.stackedStatRow}>
+              <Text style={st.stackedStatVal}>{formatDuration(durationSeconds)}</Text>
             </View>
           </View>
-        </View>
-        <View style={st.bottomBlock}>
-          <OverlayFooter />
         </View>
         {LayoutDots}
       </View>
@@ -595,30 +600,28 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
           {OverlayGroupBadges({})}
           <OverlayCaption />
           <View style={st.rightStatsCol}>
+            <Text style={st.watermarkRightSide}>PACEUP</Text>
             <View style={st.rightStatItem}>
               <Text style={st.rightStatVal}>{formatDist(distanceMi)}</Text>
               <Text style={st.rightStatUnit}>mi</Text>
             </View>
-            <View style={[st.rightStatDivider]} />
+            <View style={st.rightStatDivider} />
             <View style={st.rightStatItem}>
               <Text style={st.rightStatVal}>{formatPace(paceMinPerMile)}</Text>
               <Text style={st.rightStatUnit}>/mi</Text>
             </View>
-            <View style={[st.rightStatDivider]} />
+            <View style={st.rightStatDivider} />
             <View style={st.rightStatItem}>
               <Text style={st.rightStatVal}>{formatDuration(durationSeconds)}</Text>
             </View>
           </View>
-        </View>
-        <View style={st.bottomBlock}>
-          <OverlayFooter />
         </View>
         {LayoutDots}
       </View>
     );
   }
 
-  {/* Layout 0 (default): Route fills top ~60%, stats row at bottom */}
+  {/* Layout 0 (default): Route fills top ~60%, PaceUp centered above stats row */}
   return (
     <View ref={ref} style={st.card}>
       <View style={[StyleSheet.absoluteFillObject, { backgroundColor: CARD_BG }]} />
@@ -636,11 +639,11 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
       ) : (
         <NoRouteOverlay />
       )}
-      <LinearGradient colors={["transparent", BG]} style={{ position: "absolute", top: ROUTE_TOP_H - 80, left: 0, right: 0, height: 80, zIndex: 2 }} />
       <OverlayHeader />
       <View style={st.bottomBlock}>
         {OverlayGroupBadges({})}
         <OverlayCaption />
+        <Text style={st.watermarkCentered}>PACEUP</Text>
         <View style={st.statsRowBottom}>
           <View style={[st.statBlock, { flex: 1.4 }]}>
             <Text style={st.statBigGreen}>{formatDist(distanceMi)}</Text>
@@ -656,7 +659,6 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
             <Text style={st.statMidLight}>{formatDuration(durationSeconds)}</Text>
           </View>
         </View>
-        <OverlayFooter />
       </View>
       {LayoutDots}
     </View>
@@ -777,14 +779,6 @@ const st = StyleSheet.create({
     justifyContent: "center",
     zIndex: 10,
   },
-  centerPillBlock: {
-    position: "absolute",
-    bottom: 60,
-    left: 0,
-    right: 0,
-    alignItems: "center",
-    zIndex: 10,
-  },
 
   noRouteCenter: {
     position: "absolute",
@@ -801,6 +795,7 @@ const st = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 22,
     paddingVertical: 16,
+    paddingBottom: 22,
   },
   statBlock: {
     flex: 1,
@@ -951,14 +946,14 @@ const st = StyleSheet.create({
     position: "absolute",
     right: 0,
     top: 80,
-    bottom: 50,
-    width: 180,
+    bottom: 30,
+    width: 185,
     justifyContent: "center",
     paddingRight: 22,
     zIndex: 10,
   },
   rightStatsCol: {
-    gap: 16,
+    gap: 14,
     paddingTop: 8,
   },
   rightStatItem: {
@@ -981,6 +976,67 @@ const st = StyleSheet.create({
     width: 40,
     height: 1,
     backgroundColor: BORDER,
+  },
+
+  stackedStatsBlock: {
+    paddingHorizontal: 22,
+    paddingTop: 4,
+    paddingBottom: 24,
+    gap: 0,
+  },
+  stackedStatRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 5,
+    paddingVertical: 6,
+  },
+  stackedStatVal: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 28,
+    color: TEXT_CLR,
+    letterSpacing: -0.5,
+  },
+  stackedStatUnit: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 14,
+    color: TEXT_MUTED,
+  },
+  stackedDivider: {
+    height: 1,
+    backgroundColor: BORDER,
+    marginHorizontal: 0,
+  },
+
+  watermarkCentered: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 11,
+    color: "rgba(255,255,255,0.5)",
+    letterSpacing: 5,
+    textAlign: "center",
+    paddingTop: 6,
+    paddingBottom: 2,
+  },
+  watermarkAboveDist: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 10,
+    color: "rgba(255,255,255,0.45)",
+    letterSpacing: 4,
+    textAlign: "center",
+    marginBottom: 6,
+  },
+  watermarkAboveStack: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 10,
+    color: "rgba(255,255,255,0.45)",
+    letterSpacing: 4,
+    marginBottom: 8,
+  },
+  watermarkRightSide: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 10,
+    color: "rgba(255,255,255,0.45)",
+    letterSpacing: 4,
+    marginBottom: 10,
   },
 
   overlayGroupRow: {
