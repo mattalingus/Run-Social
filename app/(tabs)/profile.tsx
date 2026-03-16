@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import {
   View,
   Text,
@@ -232,7 +233,7 @@ interface SoloRunItem {
   mile_splits?: Array<{ label: string; paceMinPerMile: number; isPartial: boolean }> | null;
 }
 
-export default function ProfileScreen() {
+function ProfileScreenInner() {
   const insets = useSafeAreaInsets();
   const { user, logout, refreshUser } = useAuth();
   const qc = useQueryClient();
@@ -637,7 +638,7 @@ export default function ProfileScreen() {
             <Image source={{ uri: user.photo_url }} style={styles.avatarPhoto} />
           ) : (
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{user.name.charAt(0).toUpperCase()}</Text>
+              <Text style={styles.avatarText}>{user.name?.charAt(0)?.toUpperCase() ?? "?"}</Text>
             </View>
           )}
           <View style={styles.cameraBadge}>
@@ -660,13 +661,13 @@ export default function ProfileScreen() {
               } else {
                 setNameDaysRemaining(null);
               }
-              setEditNameValue(user.name);
+              setEditNameValue(user.name ?? "");
               setNameError("");
               setShowEditName(true);
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             }}
           >
-            <Text style={styles.profileName}>{user.name}</Text>
+            <Text style={styles.profileName}>{user.name ?? "User"}</Text>
             <Feather name="edit-2" size={13} color={C.textMuted} style={{ marginTop: 2 }} />
           </Pressable>
           <Text style={styles.profileEmail}>{user.email}</Text>
@@ -896,13 +897,13 @@ export default function ProfileScreen() {
           <Text style={styles.statName}>{profileActivity === "ride" ? "Rides Done" : profileActivity === "walk" ? "Walks Done" : "Runs Done"}</Text>
         </View>
         <View style={styles.statCard}>
-          <Text style={styles.statNum}>{user.hosted_runs}</Text>
+          <Text style={styles.statNum}>{user.hosted_runs ?? 0}</Text>
           <Text style={styles.statName}>Hosted</Text>
         </View>
-        {user.avg_rating > 0 && (
+        {(user.avg_rating ?? 0) > 0 && (
           <View style={styles.statCard}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
-              <Text style={[styles.statNum, { color: C.gold }]}>{user.avg_rating.toFixed(1)}</Text>
+              <Text style={[styles.statNum, { color: C.gold }]}>{(user.avg_rating ?? 0).toFixed(1)}</Text>
               <Feather name="lock" size={10} color={C.gold} />
             </View>
             <Text style={styles.statName}>Host Rating</Text>
@@ -931,11 +932,11 @@ export default function ProfileScreen() {
       </View>
 
       {/* ── Host Rating Warning ──────────────────────────────────────────────── */}
-      {user.avg_rating > 0 && user.avg_rating < 4.0 && user.rating_count >= 1 && (
-        <View style={[styles.ratingWarningCard, { borderColor: user.avg_rating < 3.5 ? "#FF6B3522" : "#FFB80022" }]}>
-          <Feather name="alert-circle" size={14} color={user.avg_rating < 3.5 ? "#FF6B35" : C.gold} />
-          <Text style={[styles.ratingWarningText, { color: user.avg_rating < 3.5 ? "#FF6B35" : C.gold }]}>
-            {user.avg_rating < 3.5
+      {(user.avg_rating ?? 0) > 0 && (user.avg_rating ?? 0) < 4.0 && (user.rating_count ?? 0) >= 1 && (
+        <View style={[styles.ratingWarningCard, { borderColor: (user.avg_rating ?? 0) < 3.5 ? "#FF6B3522" : "#FFB80022" }]}>
+          <Feather name="alert-circle" size={14} color={(user.avg_rating ?? 0) < 3.5 ? "#FF6B35" : C.gold} />
+          <Text style={[styles.ratingWarningText, { color: (user.avg_rating ?? 0) < 3.5 ? "#FF6B35" : C.gold }]}>
+            {(user.avg_rating ?? 0) < 3.5
               ? "Your host rating is below the 3.5 minimum — you cannot create new runs until it recovers."
               : "Your host rating is approaching the minimum threshold. Keep it above 3.5 to continue hosting."}
           </Text>
@@ -1026,7 +1027,7 @@ export default function ProfileScreen() {
               ) : user.photo_url ? (
                 <Image source={{ uri: user.photo_url }} style={styles.markerPhoto} />
               ) : (
-                <Text style={styles.markerInitial}>{user.name.charAt(0).toUpperCase()}</Text>
+                <Text style={styles.markerInitial}>{user.name?.charAt(0)?.toUpperCase() ?? "?"}</Text>
               )}
             </View>
             <View style={{ flex: 1 }}>
@@ -1063,9 +1064,9 @@ export default function ProfileScreen() {
             <Text style={styles.goalLabel}>This Month</Text>
             <Text style={styles.goalValues}>{toDisplayDist(actStats.monthMiles, distUnit)} / {toDisplayDist(user.monthly_goal ?? 50, distUnit)}</Text>
           </View>
-          <ProgressBar value={actStats.monthMiles} total={user.monthly_goal} />
+          <ProgressBar value={actStats.monthMiles} total={user.monthly_goal ?? 50} />
           <Text style={styles.goalRemain}>
-            {toDisplayDist(Math.max(0, user.monthly_goal - actStats.monthMiles), distUnit)} remaining
+            {toDisplayDist(Math.max(0, (user.monthly_goal ?? 50) - actStats.monthMiles), distUnit)} remaining
           </Text>
         </View>
         <View style={[styles.goalCard, { marginTop: 10 }]}>
@@ -1073,9 +1074,9 @@ export default function ProfileScreen() {
             <Text style={styles.goalLabel}>This Year</Text>
             <Text style={styles.goalValues}>{toDisplayDist(actStats.yearMiles, distUnit)} / {toDisplayDist(user.yearly_goal ?? 500, distUnit)}</Text>
           </View>
-          <ProgressBar value={actStats.yearMiles} total={user.yearly_goal} color={C.blue} />
+          <ProgressBar value={actStats.yearMiles} total={user.yearly_goal ?? 500} color={C.blue} />
           <Text style={styles.goalRemain}>
-            {toDisplayDist(Math.max(0, user.yearly_goal - actStats.yearMiles), distUnit)} remaining
+            {toDisplayDist(Math.max(0, (user.yearly_goal ?? 500) - actStats.yearMiles), distUnit)} remaining
           </Text>
         </View>
       </View>
@@ -1377,7 +1378,7 @@ export default function ProfileScreen() {
               {user?.photo_url ? (
                 <Image source={{ uri: user.photo_url }} style={styles.iconProfileThumb} />
               ) : (
-                <Text style={styles.iconInitial}>{user?.name.charAt(0).toUpperCase()}</Text>
+                <Text style={styles.iconInitial}>{user?.name?.charAt(0)?.toUpperCase() ?? "?"}</Text>
               )}
               <Text style={styles.iconLabel}>{user?.photo_url ? "Profile" : "Initial"}</Text>
             </Pressable>
@@ -1421,7 +1422,7 @@ export default function ProfileScreen() {
               {incomingRequests.map((req: any) => (
                 <View key={req.friendship_id} style={styles.friendCard}>
                   <View style={styles.friendAvatar}>
-                    {req.photo_url ? <Image source={{ uri: req.photo_url }} style={styles.friendAvatarImg} /> : <Text style={styles.friendAvatarTxt}>{req.name.charAt(0).toUpperCase()}</Text>}
+                    {req.photo_url ? <Image source={{ uri: req.photo_url }} style={styles.friendAvatarImg} /> : <Text style={styles.friendAvatarTxt}>{req.name?.charAt(0)?.toUpperCase() ?? "?"}</Text>}
                   </View>
                   <View style={styles.friendInfo}>
                     <Text style={styles.friendName}>{req.name}</Text>
@@ -1450,7 +1451,7 @@ export default function ProfileScreen() {
                     onPress={() => { setViewProfileId(f.id); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
                   >
                     <View style={styles.friendAvatar}>
-                      {f.photo_url ? <Image source={{ uri: f.photo_url }} style={styles.friendAvatarImg} /> : <Text style={styles.friendAvatarTxt}>{f.name.charAt(0).toUpperCase()}</Text>}
+                      {f.photo_url ? <Image source={{ uri: f.photo_url }} style={styles.friendAvatarImg} /> : <Text style={styles.friendAvatarTxt}>{f.name?.charAt(0)?.toUpperCase() ?? "?"}</Text>}
                     </View>
                     <View style={styles.friendInfo}>
                       <Text style={styles.friendName}>{f.name}</Text>
@@ -1527,7 +1528,7 @@ export default function ProfileScreen() {
                       onPress={() => { setViewProfileId(u.id); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
                     >
                       <View style={styles.friendAvatar}>
-                        {u.photo_url ? <Image source={{ uri: u.photo_url }} style={styles.friendAvatarImg} /> : <Text style={styles.friendAvatarTxt}>{u.name.charAt(0).toUpperCase()}</Text>}
+                        {u.photo_url ? <Image source={{ uri: u.photo_url }} style={styles.friendAvatarImg} /> : <Text style={styles.friendAvatarTxt}>{u.name?.charAt(0)?.toUpperCase() ?? "?"}</Text>}
                       </View>
                       <View style={styles.friendInfo}>
                         <Text style={styles.friendName}>{u.name}</Text>
@@ -1623,7 +1624,7 @@ export default function ProfileScreen() {
                           onPress={() => { setViewProfileId(u.id); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
                         >
                           <View style={styles.friendAvatar}>
-                            {u.photo_url ? <Image source={{ uri: u.photo_url }} style={styles.friendAvatarImg} /> : <Text style={styles.friendAvatarTxt}>{u.name.charAt(0).toUpperCase()}</Text>}
+                            {u.photo_url ? <Image source={{ uri: u.photo_url }} style={styles.friendAvatarImg} /> : <Text style={styles.friendAvatarTxt}>{u.name?.charAt(0)?.toUpperCase() ?? "?"}</Text>}
                           </View>
                           <View style={styles.friendInfo}>
                             <Text style={styles.friendName}>{u.name}</Text>
@@ -1678,7 +1679,7 @@ export default function ProfileScreen() {
                     <View key={`nm-${idx}`} style={styles.friendCard}>
                       <View style={styles.friendCardInfo}>
                         <View style={[styles.friendAvatar, { backgroundColor: C.border }]}>
-                          <Text style={styles.friendAvatarTxt}>{c.name.charAt(0).toUpperCase()}</Text>
+                          <Text style={styles.friendAvatarTxt}>{c.name?.charAt(0)?.toUpperCase() ?? "?"}</Text>
                         </View>
                         <View style={styles.friendInfo}>
                           <Text style={styles.friendName}>{c.name}</Text>
@@ -1772,7 +1773,7 @@ export default function ProfileScreen() {
                       onPress={() => { setViewProfileId(u.id); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
                     >
                       <View style={styles.friendAvatar}>
-                        {u.photo_url ? <Image source={{ uri: u.photo_url }} style={styles.friendAvatarImg} /> : <Text style={styles.friendAvatarTxt}>{u.name.charAt(0).toUpperCase()}</Text>}
+                        {u.photo_url ? <Image source={{ uri: u.photo_url }} style={styles.friendAvatarImg} /> : <Text style={styles.friendAvatarTxt}>{u.name?.charAt(0)?.toUpperCase() ?? "?"}</Text>}
                       </View>
                       <View style={styles.friendInfo}>
                         <Text style={styles.friendName}>{u.name}</Text>
@@ -2865,3 +2866,11 @@ function makeDevStyles(C: ReturnType<typeof import("@/contexts/ThemeContext").us
   devClose: { alignItems: "center", paddingVertical: 8 },
   devCloseText: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textMuted },
 }); }
+
+export default function ProfileScreen() {
+  return (
+    <ErrorBoundary>
+      <ProfileScreenInner />
+    </ErrorBoundary>
+  );
+}
