@@ -837,12 +837,10 @@ export async function createPasswordResetToken(userId: string): Promise<string> 
 
 export async function consumePasswordResetToken(token: string): Promise<string | null> {
   const res = await pool.query(
-    `SELECT user_id FROM password_reset_tokens WHERE token = $1 AND used_at IS NULL AND expires_at > NOW()`,
+    `UPDATE password_reset_tokens SET used_at = NOW() WHERE token = $1 AND used_at IS NULL AND expires_at > NOW() RETURNING user_id`,
     [token]
   );
-  if (!res.rows[0]) return null;
-  await pool.query(`UPDATE password_reset_tokens SET used_at = NOW() WHERE token = $1`, [token]);
-  return res.rows[0].user_id;
+  return res.rows[0]?.user_id ?? null;
 }
 
 export async function updateUserPassword(userId: string, newPassword: string) {

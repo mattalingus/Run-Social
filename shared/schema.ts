@@ -8,6 +8,7 @@ import {
   real,
   timestamp,
   pgEnum,
+  serial,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -107,9 +108,19 @@ export const insertRunSchema = createInsertSchema(runs).omit({
   isCompleted: true,
 });
 
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  token: varchar("token").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").default(sql`NOW()`),
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type Run = typeof runs.$inferSelect;
 export type RunParticipant = typeof runParticipants.$inferSelect;
 export type HostRating = typeof hostRatings.$inferSelect;
 export type Achievement = typeof achievements.$inferSelect;
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
