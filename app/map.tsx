@@ -841,83 +841,71 @@ export default function MapScreen() {
 
       </View>{/* ── end mapCard ──────────────────────────────────────────────── */}
 
-      {/* ─── Split bottom strip: Events (left) + Paths (right) — fixed height, always rendered */}
-      <View style={[s.splitStrip, { height: 144 + insets.bottom, paddingBottom: insets.bottom + 4 }]}>
-        {!selectedRun && !selectedCommunityPath && (visibleRuns.length > 0 || visiblePaths.length > 0) && (<>
-          {/* Events column — always on the left */}
-          <View style={[s.splitCol, visiblePaths.length > 0 && s.splitColBorder]}>
-            {visibleRuns.length > 0 && <>
-              <Text style={s.splitLabel}>Events</Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ gap: 8, paddingRight: 4 }}
-              >
-                {visibleRuns.map((run) => (
-                  <Pressable
-                    key={run.id}
-                    style={({ pressed }) => [s.miniCard, { opacity: pressed ? 0.8 : 1 }]}
-                    onPress={() => openCard(run)}
-                  >
-                    {run.host_marker_icon ? (
-                      <View style={s.miniAvatar}>
-                        <Text style={{ fontSize: 18 }}>{run.host_marker_icon}</Text>
-                      </View>
-                    ) : resolveImgUrl(run.crew_photo_url) || run.host_photo ? (
-                      <Image source={{ uri: resolveImgUrl(run.crew_photo_url) || run.host_photo! }} style={s.miniAvatarImg} />
-                    ) : (
-                      <View style={s.miniAvatar}>
-                        <Text style={s.miniAvatarTxt}>{run.host_name?.charAt(0).toUpperCase()}</Text>
-                      </View>
-                    )}
-                    <View style={{ flex: 1, gap: 3 }}>
-                      <View style={s.miniStatRow}>
-                        <Feather name="map" size={10} color={C.primary} />
-                        <Text style={s.miniStatTxt}>{toDisplayDist(run.min_distance, distUnit)}</Text>
-                      </View>
-                      <View style={s.miniStatRow}>
-                        <Feather name="zap" size={10} color="#F4C542" />
-                        <Text style={[s.miniStatTxt, { color: "#F4C542" }]}>{toDisplayPace(run.min_pace, distUnit)}</Text>
-                      </View>
-                      <View style={s.miniStatRow}>
-                        <Feather name="users" size={10} color={C.textSecondary} />
-                        <Text style={[s.miniStatTxt, { color: C.textSecondary }]}>
-                          {run.crew_id ? `${run.participant_count} going` : `${run.participant_count}/${run.max_participants}`}
-                        </Text>
-                      </View>
-                    </View>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </>}
-          </View>
+      {/* ─── Split bottom strip: Events (left) + Paths (right) + Insights — fixed height */}
+      <View style={[s.splitStrip, { paddingBottom: insets.bottom + 4 }]}>
 
-          {/* Paths column — always on the right */}
-          <View style={s.splitCol}>
-            {visiblePaths.length > 0 && <>
-              <Text style={s.splitLabel}>Paths</Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ gap: 8, paddingRight: 4 }}
-              >
-                {visiblePaths.map((path) => (
-                  <Pressable
-                    key={path.id}
-                    style={({ pressed }) => [s.pathMiniCard, { opacity: pressed ? 0.8 : 1 }]}
-                    onPress={() => openPathCard(path)}
-                  >
-                    <View style={s.pathMiniIcon}>
-                      <Feather name="map" size={14} color={C.primary} />
-                    </View>
-                    <Text style={s.pathMiniName} numberOfLines={2}>{path.name}</Text>
-                    <Text style={s.pathMiniDist}>{toDisplayDist(path.distance_miles ?? 0, distUnit)}</Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </>}
+        {/* Cards row */}
+        {!selectedRun && !selectedCommunityPath && (visibleRuns.length > 0 || visiblePaths.length > 0) && (
+          <View style={s.splitRow}>
+            {/* Events column — always on the left */}
+            <View style={[s.splitCol, visiblePaths.length > 0 && s.splitColBorder]}>
+              {visibleRuns.length > 0 && <>
+                <Text style={s.splitLabel}>Events</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 4 }}>
+                  {visibleRuns.map((run) => (
+                    <Pressable key={run.id} style={({ pressed }) => [s.miniCard, { opacity: pressed ? 0.8 : 1 }]} onPress={() => openCard(run)}>
+                      {run.host_marker_icon ? (
+                        <View style={s.miniAvatar}><Text style={{ fontSize: 18 }}>{run.host_marker_icon}</Text></View>
+                      ) : resolveImgUrl(run.crew_photo_url) || run.host_photo ? (
+                        <Image source={{ uri: resolveImgUrl(run.crew_photo_url) || run.host_photo! }} style={s.miniAvatarImg} />
+                      ) : (
+                        <View style={s.miniAvatar}><Text style={s.miniAvatarTxt}>{run.host_name?.charAt(0).toUpperCase()}</Text></View>
+                      )}
+                      <View style={{ flex: 1, gap: 3 }}>
+                        <View style={s.miniStatRow}><Feather name="map" size={10} color={C.primary} /><Text style={s.miniStatTxt}>{toDisplayDist(run.min_distance, distUnit)}</Text></View>
+                        <View style={s.miniStatRow}><Feather name="zap" size={10} color="#F4C542" /><Text style={[s.miniStatTxt, { color: "#F4C542" }]}>{toDisplayPace(run.min_pace, distUnit)}</Text></View>
+                        <View style={s.miniStatRow}><Feather name="users" size={10} color={C.textSecondary} /><Text style={[s.miniStatTxt, { color: C.textSecondary }]}>{run.crew_id ? `${run.participant_count} going` : `${run.participant_count}/${run.max_participants}`}</Text></View>
+                      </View>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </>}
+            </View>
+
+            {/* Paths column — always on the right */}
+            <View style={s.splitCol}>
+              {visiblePaths.length > 0 && <>
+                <Text style={s.splitLabel}>Paths</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 4 }}>
+                  {visiblePaths.map((path) => (
+                    <Pressable key={path.id} style={({ pressed }) => [s.pathMiniCard, { opacity: pressed ? 0.8 : 1 }]} onPress={() => openPathCard(path)}>
+                      <View style={s.pathMiniIcon}><Feather name="map" size={14} color={C.primary} /></View>
+                      <Text style={s.pathMiniName} numberOfLines={2}>{path.name}</Text>
+                      <Text style={s.pathMiniDist}>{toDisplayDist(path.distance_miles ?? 0, distUnit)}</Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </>}
+            </View>
           </View>
-        </>)}
+        )}
+
+        {/* Insights row */}
+        <View style={s.insightArea}>
+          {insights.length > 0 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.insightScroll}>
+              {insights.map((item, i) => (
+                <View key={i} style={s.insightPill}>
+                  {item.lib === "ion"
+                    ? <Ionicons name={item.icon as any} size={12} color={item.color} />
+                    : <Feather name={item.icon as any} size={12} color={item.color} />}
+                  <Text style={[s.insightTxt, { color: item.color }]}>{item.text}</Text>
+                </View>
+              ))}
+            </ScrollView>
+          )}
+        </View>
+
       </View>
 
       {/* ─── Filter sheet ────────────────────────────────────────────────── */}
@@ -1211,12 +1199,15 @@ function makeSStyles(C: ColorScheme) { return StyleSheet.create({
 
   miniStrip: { height: 86, justifyContent: "center" },
   splitStrip: {
-    flexDirection: "row",
+    flexDirection: "column",
     backgroundColor: C.card,
     borderTopWidth: 1,
     borderTopColor: C.border,
-    paddingTop: 8,
+  },
+  splitRow: {
+    flexDirection: "row",
     height: 86,
+    paddingTop: 8,
   },
   splitCol: {
     flex: 1,
