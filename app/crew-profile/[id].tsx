@@ -25,10 +25,10 @@ interface Crew {
   description?: string;
   emoji: string;
   image_url?: string;
-  member_count: number;
+  member_count?: number;
   run_style?: string;
   tags?: string[];
-  created_by_name: string;
+  created_by_name?: string;
 }
 
 function resolveImgUrl(url: string | null | undefined): string | null {

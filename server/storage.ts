@@ -3274,8 +3274,16 @@ export async function respondToCrewJoinRequest(crewId: string, requesterId: stri
 }
 
 export async function getCrewById(crewId: string) {
-  const crew = await pool.query(`SELECT * FROM crews WHERE id = $1`, [crewId]);
+  const crew = await pool.query(
+    `SELECT c.*, u.name AS created_by_name,
+       (SELECT COUNT(*) FROM crew_members WHERE crew_id = c.id AND status = 'member') AS member_count
+     FROM crews c
+     LEFT JOIN users u ON u.id = c.created_by
+     WHERE c.id = $1`,
+    [crewId]
+  );
   if (!crew.rows[0]) return null;
+  const row = crew.rows[0];
   const members = await pool.query(
     `SELECT cm.*, u.name, u.photo_url, u.avg_pace, u.hosted_runs FROM crew_members cm
      JOIN users u ON u.id = cm.user_id
@@ -3283,7 +3291,7 @@ export async function getCrewById(crewId: string) {
      ORDER BY cm.joined_at ASC`,
     [crewId]
   );
-  return { ...crew.rows[0], members: members.rows };
+  return { ...row, member_count: parseInt(row.member_count ?? "0"), members: members.rows };
 }
 
 export async function getCrewInvites(userId: string) {
