@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
   ScrollView,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -19,6 +19,7 @@ import C from "@/constants/colors";
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
+  const { resetSuccess } = useLocalSearchParams<{ resetSuccess?: string }>();
   const { login } = useAuth();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -61,6 +62,13 @@ export default function LoginScreen() {
         </View>
 
         <View style={styles.form}>
+          {resetSuccess === "1" ? (
+            <View style={[styles.errorBanner, { backgroundColor: C.primary + "18", borderColor: C.primary + "30" }]}>
+              <Feather name="check-circle" size={14} color={C.primary} />
+              <Text style={[styles.errorText, { color: C.primary }]}>Password reset successfully. Sign in with your new password.</Text>
+            </View>
+          ) : null}
+
           {error ? (
             <View style={styles.errorBanner}>
               <Feather name="alert-circle" size={14} color={C.danger} />

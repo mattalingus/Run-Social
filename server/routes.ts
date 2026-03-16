@@ -2,7 +2,6 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
-import { Pool } from "pg";
 import multer from "multer";
 import nodemailer from "nodemailer";
 import * as storage from "./storage";
@@ -51,7 +50,6 @@ declare module "express-session" {
 }
 
 const PgStore = connectPgSimple(session);
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 function requireAuth(req: Request, res: Response, next: Function) {
   if (!req.session.userId) return res.status(401).json({ message: "Unauthorized" });

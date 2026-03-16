@@ -825,8 +825,7 @@ export async function verifyPassword(plain: string, hashed: string) {
 }
 
 export async function createPasswordResetToken(userId: string): Promise<string> {
-  const crypto = await import("crypto");
-  const token = crypto.randomBytes(32).toString("hex");
+  const token = randomBytes(32).toString("hex");
   const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
   await pool.query(
     `INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)`,

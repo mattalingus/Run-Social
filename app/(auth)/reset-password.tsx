@@ -81,7 +81,7 @@ export default function ResetPasswordScreen() {
             <Text style={styles.doneTitle}>All Set!</Text>
             <Pressable
               style={styles.primaryBtn}
-              onPress={() => router.replace("/(auth)/login")}
+              onPress={() => router.replace({ pathname: "/(auth)/login", params: { resetSuccess: "1" } })}
             >
               <Text style={styles.primaryBtnText}>Go to Login</Text>
             </Pressable>
