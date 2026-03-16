@@ -399,6 +399,10 @@ export default function MapScreen() {
   const { data: communityPathsData = [] } = useQuery<CommunityPath[]>({
     queryKey: ["/api/community-paths"],
     staleTime: 300_000,
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/community-paths");
+      return res.json();
+    },
   });
 
   const communityPaths = useMemo(() => {
@@ -837,9 +841,9 @@ export default function MapScreen() {
 
       </View>{/* ── end mapCard ──────────────────────────────────────────────── */}
 
-      {/* ─── Split bottom strip: Events (left) + Paths (right) */}
-      {!selectedRun && !selectedCommunityPath && (visibleRuns.length > 0 || visiblePaths.length > 0) && (
-        <View style={[s.splitStrip, { paddingBottom: insets.bottom + 4 }]}>
+      {/* ─── Split bottom strip: Events (left) + Paths (right) — fixed height, always rendered */}
+      <View style={[s.splitStrip, { paddingBottom: insets.bottom + 4 }]}>
+        {!selectedRun && !selectedCommunityPath && (visibleRuns.length > 0 || visiblePaths.length > 0) && (<>
           {/* Events column */}
           {visibleRuns.length > 0 && (
             <View style={[s.splitCol, visiblePaths.length > 0 && s.splitColBorder]}>
@@ -913,8 +917,8 @@ export default function MapScreen() {
               </ScrollView>
             </View>
           )}
-        </View>
-      )}
+        </>)}
+      </View>
 
       {/* ─── Filter sheet ────────────────────────────────────────────────── */}
       <Modal visible={showFilter} transparent animationType="slide" onRequestClose={() => setShowFilter(false)}>
@@ -1212,7 +1216,7 @@ function makeSStyles(C: ColorScheme) { return StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: C.border,
     paddingTop: 8,
-    minHeight: 100,
+    height: 106,
   },
   splitCol: {
     flex: 1,
