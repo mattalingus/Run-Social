@@ -338,7 +338,6 @@ export default function MapScreen() {
   const params = useLocalSearchParams<{ styles?: string }>();
 
   const [userLoc, setUserLoc] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [mapMode, setMapMode] = useState<"runs" | "paths">("runs");
   const [locatedOnce, setLocatedOnce] = useState(false);
   const [selectedRun, setSelectedRun] = useState<Run | null>(null);
   const [selectedCommunityPath, setSelectedCommunityPath] = useState<CommunityPath | null>(null);
@@ -563,41 +562,15 @@ export default function MapScreen() {
             <Text style={s.backTxt}>Discover</Text>
           </Pressable>
 
-          {/* Mode Toggle */}
-          <View style={s.modeToggle}>
-            <Pressable
-              style={[s.modePill, mapMode === "runs" && s.modePillActive]}
-              onPress={() => {
-                setMapMode("runs");
-                if (selectedCommunityPath) closePathCard();
-              }}
-            >
-              <Feather name="list" size={12} color={mapMode === "runs" ? "#FFF" : C.textMuted} />
-              <Text style={[s.modePillText, mapMode === "runs" && s.modePillTextActive]}>Runs</Text>
-            </Pressable>
-            <Pressable
-              style={[s.modePill, mapMode === "paths" && s.modePillActive]}
-              onPress={() => {
-                setMapMode("paths");
-                if (selectedRun) closeCard();
-              }}
-            >
-              <Feather name="map" size={12} color={mapMode === "paths" ? "#FFF" : C.textMuted} />
-              <Text style={[s.modePillText, mapMode === "paths" && s.modePillTextActive]}>Paths</Text>
-            </Pressable>
-          </View>
-
           <View style={s.headerRight}>
             {isFetching && <ActivityIndicator size="small" color={C.primary} style={{ marginRight: 6 }} />}
-            {mapMode === "runs" && (
-              <Pressable
-                style={[s.filterBtn, isFiltered && s.filterBtnActive]}
-                onPress={() => { setDraft({ ...applied }); setShowFilter(true); }}
-              >
-                <Feather name="sliders" size={16} color={isFiltered ? C.primary : C.textSecondary} />
-                {isFiltered && <View style={s.filterDot} />}
-              </Pressable>
-            )}
+            <Pressable
+              style={[s.filterBtn, isFiltered && s.filterBtnActive]}
+              onPress={() => { setDraft({ ...applied }); setShowFilter(true); }}
+            >
+              <Feather name="sliders" size={16} color={isFiltered ? C.primary : C.textSecondary} />
+              {isFiltered && <View style={s.filterDot} />}
+            </Pressable>
           </View>
         </View>
       </View>
@@ -627,24 +600,20 @@ export default function MapScreen() {
           onRegionChangeComplete={onRegionChange}
           onPress={() => { if (selectedRun) closeCard(); if (selectedCommunityPath) closePathCard(); }}
         >
-          {mapMode === "paths" && (
-            <>
-              {communityPaths.map((path) => (
-                <Polyline
-                  key={path.id}
-                  coordinates={path.route_path}
-                  strokeColor={selectedCommunityPath?.id === path.id ? C.primary : "#00D97E"}
-                  strokeWidth={4}
-                  tappable
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    openPathCard(path);
-                  }}
-                />
-              ))}
-            </>
-          )}
-          {mapMode === "runs" && visibleRuns.map((run) => (
+          {communityPaths.map((path) => (
+            <Polyline
+              key={path.id}
+              coordinates={path.route_path}
+              strokeColor={selectedCommunityPath?.id === path.id ? C.primary : "rgba(0,217,126,0.55)"}
+              strokeWidth={selectedCommunityPath?.id === path.id ? 5 : 3}
+              tappable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                openPathCard(path);
+              }}
+            />
+          ))}
+          {visibleRuns.map((run) => (
             <RunMarker
               key={run.id}
               run={run}
@@ -659,20 +628,9 @@ export default function MapScreen() {
         <View style={s.mapDim} pointerEvents="none" />
 
 
-        {/* ─── Empty State (inside map card) ────────────────────────────────── */}
-        {mapMode === "paths" && communityPaths.length === 0 && (
-          <View style={s.emptyState}>
-            <View style={s.emptyCircle}>
-              <Feather name="map" size={32} color={C.textMuted} />
-            </View>
-            <Text style={s.emptyTitle}>No community routes here yet</Text>
-            <Text style={s.emptySub}>Finish an activity and publish your first!</Text>
-          </View>
-        )}
-
         {/* ─── Sidebar (inside map card) ────────────────────────────────── */}
         <View style={s.sideBar}>
-          {mapMode === "paths" && communityPaths.length > 0 && (
+          {communityPaths.length > 0 && (
             <View style={s.routeCountChip}>
               <Text style={s.routeCountTxt}>{communityPaths.length} routes</Text>
             </View>
@@ -880,7 +838,7 @@ export default function MapScreen() {
 
       {/* ─── Mini run cards strip — always reserves space so map never resizes */}
       <View style={s.miniStrip}>
-        {mapMode === "runs" && !selectedRun && !selectedCommunityPath && visibleRuns.length > 0 && (
+        {!selectedRun && !selectedCommunityPath && visibleRuns.length > 0 && (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -929,7 +887,7 @@ export default function MapScreen() {
 
       {/* ─── Insights strip (below map card, fixed height so map never jumps) */}
       <View style={[s.insightArea, { marginBottom: insets.bottom + 4 }]}>
-        {mapMode === "runs" && insights.length > 0 && (
+        {insights.length > 0 && (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
