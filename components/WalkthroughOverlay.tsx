@@ -12,9 +12,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router, type Href } from "expo-router";
 import { useWalkthrough } from "@/contexts/WalkthroughContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { WALKTHROUGH_STEPS } from "@/lib/walkthroughConfig";
 
-const { height: SCREEN_H } = Dimensions.get("window");
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
 const TAB_ROUTES: Record<string, Href> = {
   discover: "/(tabs)" as Href,
@@ -25,33 +26,28 @@ const TAB_ROUTES: Record<string, Href> = {
 
 export default function WalkthroughOverlay() {
   const { isActive, currentStep, totalSteps, nextStep, skipWalkthrough, currentStepConfig } = useWalkthrough();
+  const { C } = useTheme();
   const insets = useSafeAreaInsets();
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(20)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
   const prevTabRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!isActive || !currentStepConfig) return;
+    if (isActive && currentStepConfig) {
+      const targetTab = currentStepConfig.tab;
+      const route = TAB_ROUTES[targetTab];
+      if (route && prevTabRef.current !== targetTab) {
+        prevTabRef.current = targetTab;
+        router.replace(route);
+      }
 
-    const targetTab = currentStepConfig.tab;
-    // Profile tab navigation crashes on iOS due to a hidden messages tab in between.
-    // Skip programmatic navigation for profile steps — the cards appear in place and
-    // the user navigates to the Profile tab themselves.
-    const canNav = targetTab !== "profile";
-    const route = TAB_ROUTES[targetTab];
-    const needsNav = canNav && route && prevTabRef.current !== targetTab;
-
-    if (needsNav) {
-      prevTabRef.current = targetTab;
-      router.navigate(route);
+      fadeAnim.setValue(0);
+      slideAnim.setValue(30);
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(slideAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
+      ]).start();
     }
-
-    fadeAnim.setValue(0);
-    slideAnim.setValue(20);
-    Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 280, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 280, useNativeDriver: true }),
-    ]).start();
   }, [isActive, currentStep, currentStepConfig]);
 
   useEffect(() => {
@@ -62,12 +58,13 @@ export default function WalkthroughOverlay() {
 
   if (!isActive || !currentStepConfig) return null;
 
+  const isFirst = currentStep === 0;
   const isLast = currentStep === totalSteps - 1;
   const isFullScreen = currentStepConfig.isFullScreen;
 
   if (isFullScreen) {
     return (
-      <View style={[styles.overlay, { backgroundColor: "rgba(0,0,0,0.92)" }]}>
+      <View style={[styles.fullOverlay, { backgroundColor: "rgba(0,0,0,0.92)" }]}>
         <Animated.View style={[styles.welcomeCard, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
           <View style={styles.welcomeIconWrap}>
             <Ionicons name="fitness" size={48} color="#00D97E" />
@@ -90,7 +87,8 @@ export default function WalkthroughOverlay() {
   const positionStyle = getTooltipPosition(currentStepConfig.tooltipPosition, insets);
 
   return (
-    <View style={styles.overlay} pointerEvents="box-none">
+    <View style={styles.fullOverlay} pointerEvents="box-none">
+      <Pressable style={styles.dimBg} onPress={nextStep} />
       <Animated.View
         style={[
           styles.tooltipCard,
@@ -98,15 +96,9 @@ export default function WalkthroughOverlay() {
           { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
         ]}
       >
-        {currentStepConfig.tab === "profile" && (
-          <View style={styles.tabHint}>
-            <Ionicons name="person-outline" size={13} color="#00D97E" />
-            <Text style={styles.tabHintTxt}>Tap Profile tab to explore</Text>
-          </View>
-        )}
         <View style={styles.tooltipHeader}>
           <Text style={styles.tooltipTitle}>{currentStepConfig.title}</Text>
-          <Text style={styles.stepIndicator}>{currentStep + 1} / {totalSteps}</Text>
+          <Text style={styles.stepIndicator}>{currentStep + 1} of {totalSteps}</Text>
         </View>
         <Text style={styles.tooltipDesc}>{currentStepConfig.description}</Text>
 
@@ -138,22 +130,27 @@ export default function WalkthroughOverlay() {
 }
 
 function getTooltipPosition(position: string, insets: { top: number; bottom: number }) {
-  const webOffset = Platform.OS === "web" ? 67 : 0;
+  const webTop = Platform.OS === "web" ? 67 : 0;
   switch (position) {
-    case "bottom":
-      return { top: insets.top + webOffset + 80 };
     case "top":
+      return { top: insets.top + webTop + 80 };
+    case "bottom":
+      return { bottom: insets.bottom + 120 };
     case "center":
     default:
-      return { bottom: insets.bottom + 100 };
+      return { top: SCREEN_H * 0.3 };
   }
 }
 
 const styles = StyleSheet.create({
-  overlay: {
+  fullOverlay: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 9999,
     elevation: 9999,
+  },
+  dimBg: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.65)",
   },
   welcomeCard: {
     flex: 1,
@@ -218,34 +215,18 @@ const styles = StyleSheet.create({
   },
   tooltipCard: {
     position: "absolute",
-    left: 16,
-    right: 16,
+    left: 20,
+    right: 20,
     backgroundColor: "#132019",
     borderRadius: 20,
     padding: 20,
     borderWidth: 1,
     borderColor: "#00D97E33",
-    shadowColor: "#000",
-    shadowOpacity: 0.5,
+    shadowColor: "#00D97E",
+    shadowOpacity: 0.15,
     shadowRadius: 20,
-    shadowOffset: { width: 0, height: 6 },
+    shadowOffset: { width: 0, height: 4 },
     elevation: 20,
-  },
-  tabHint: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: "rgba(0,217,126,0.12)",
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    marginBottom: 10,
-    alignSelf: "flex-start",
-  },
-  tabHintTxt: {
-    fontFamily: "Outfit_600SemiBold",
-    fontSize: 12,
-    color: "#00D97E",
   },
   tooltipHeader: {
     flexDirection: "row",
@@ -282,7 +263,7 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "#1E3328",
+    backgroundColor: "#182B1F",
   },
   dotActive: {
     width: 18,

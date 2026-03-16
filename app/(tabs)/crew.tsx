@@ -2449,7 +2449,7 @@ export default function CrewScreen() {
   const { user: currentUser } = useAuth();
   const [ghostCrewDone, setGhostCrewDone] = useState(true);
 
-  const { isActive: walkthroughActive } = useWalkthrough();
+  const { isActive: walkthroughActive, currentStepConfig } = useWalkthrough();
   const { data: crewsRaw = [], isLoading } = useQuery<Crew[]>({
     queryKey: ["/api/crews"],
   });
@@ -2459,6 +2459,18 @@ export default function CrewScreen() {
     }
     return crewsRaw;
   }, [walkthroughActive, crewsRaw]);
+
+  const wtOpenedCrewRef = useRef(false);
+  useEffect(() => {
+    if (walkthroughActive && currentStepConfig?.id === "crew-chat" && crews.length > 0 && !selectedCrew) {
+      setSelectedCrew(crews[0]);
+      wtOpenedCrewRef.current = true;
+    }
+    if (walkthroughActive && currentStepConfig?.id !== "crew-chat" && wtOpenedCrewRef.current && selectedCrew) {
+      setSelectedCrew(null);
+      wtOpenedCrewRef.current = false;
+    }
+  }, [walkthroughActive, currentStepConfig, crews, selectedCrew]);
 
   useEffect(() => {
     if (!currentUser?.id) return;
