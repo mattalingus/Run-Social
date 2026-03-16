@@ -34,6 +34,7 @@ import MapView, { Polyline } from "react-native-maps";
 import Svg, { Polyline as SvgPolyline, Circle as SvgCircle } from "react-native-svg";
 import MileSplitsChart from "@/components/MileSplitsChart";
 import ShareActivityModal, { ShareRunData } from "@/components/ShareActivityModal";
+import WalkthroughPulse from "@/components/WalkthroughPulse";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1164,6 +1165,7 @@ export default function SoloScreen() {
         </View>
 
         {/* ─── Run Solo CTA ────────────────────────────────────────────── */}
+        <WalkthroughPulse stepId="solo-intro" style={{ borderRadius: 16 }}>
         <Pressable
           style={({ pressed }) => [s.runSoloBtn, { opacity: pressed ? 0.88 : 1 }]}
           onPress={() => router.push("/run-tracking" as any)}
@@ -1171,6 +1173,7 @@ export default function SoloScreen() {
           <Ionicons name="play-circle" size={22} color={C.bg} />
           <Text style={s.runSoloBtnTxt}>{activityFilter === "ride" ? "Ride Solo" : activityFilter === "walk" ? "Walk Solo" : "Run Solo"}</Text>
         </Pressable>
+        </WalkthroughPulse>
 
         {/* ─── Scheduled Runs ──────────────────────────────────────────── */}
         {scheduledRuns.length > 0 && (
@@ -1274,6 +1277,7 @@ export default function SoloScreen() {
         )}
 
       <View style={[s.section, { marginTop: 5 }]}>
+        <WalkthroughPulse stepId="solo-history" style={{ borderRadius: 14 }}>
         <Pressable
           style={s.historyHeaderRow}
           onPress={() => { setShowHistory((v) => !v); Haptics.selectionAsync(); }}
@@ -1288,6 +1292,7 @@ export default function SoloScreen() {
             <Feather name={showHistory ? "chevron-up" : "chevron-down"} size={16} color={C.textMuted} />
           </View>
         </Pressable>
+        </WalkthroughPulse>
 
         {showHistory && isLoading && (
           <ActivityIndicator color={C.primary} style={{ marginTop: 20 }} />

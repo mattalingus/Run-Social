@@ -98,6 +98,14 @@ Key columns: `runs.activity_type` ("run" | "ride"), `runs.is_active`, `runs.is_c
 - `GET /api/crews/:id/achievements` — crew milestone badges + stats
 - `POST /api/solo-runs` — saves solo run, returns `prTiers` for PR banner
 
+### Onboarding Walkthrough
+- Full 16-step tap-through onboarding walkthrough for new users (`contexts/WalkthroughContext.tsx`, `components/WalkthroughOverlay.tsx`)
+- Auto-triggers on first login; persisted via AsyncStorage (`@paceup_walkthrough_completed`)
+- Step 1 is a full-screen branded welcome card; steps 2-16 are tooltip overlays with semi-transparent backdrop
+- Each step auto-navigates to the correct tab (Discover/Solo/Crew/Profile) via `router.replace`
+- Skip available at every step; Done button on final step
+- Step config defined in `lib/walkthroughConfig.ts`; mock data stubs in `lib/walkthroughMockData.ts`
+
 ### Recent Bug Fixes (Session March 2026)
 - `app/(tabs)/index.tsx`: `Run` interface now includes `is_completed: boolean` and `plan_count: string`; `notifications` query typed as `any[]`
 - `app/run-live/[id].tsx`: Moved `liveState` useQuery declaration above the `useEffect` that depends on it (fixes TDZ/used-before-declaration runtime error)

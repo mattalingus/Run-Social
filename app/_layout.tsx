@@ -16,7 +16,9 @@ import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
 import { LiveTrackingProvider } from "@/contexts/LiveTrackingContext";
 import { NotificationBannerProvider } from "@/contexts/NotificationBannerContext";
 import { PurchasesProvider } from "@/contexts/PurchasesContext";
+import { WalkthroughProvider } from "@/contexts/WalkthroughContext";
 import NotificationBanner from "@/components/NotificationBanner";
+import WalkthroughOverlay from "@/components/WalkthroughOverlay";
 import { StatusBar } from "expo-status-bar";
 import {
   useFonts,
@@ -187,6 +189,7 @@ function RootLayoutNav() {
         />
       </Stack>
       {user && <NotificationBanner />}
+      {user && <WalkthroughOverlay />}
     </>
   );
 }
@@ -201,11 +204,13 @@ export default function RootLayout() {
               <NotificationBannerProvider>
                 <ActivityProvider>
                   <LiveTrackingProvider>
-                    <GestureHandlerRootView style={{ flex: 1 }}>
-                      <KeyboardProvider>
-                        <RootLayoutNav />
-                      </KeyboardProvider>
-                    </GestureHandlerRootView>
+                    <WalkthroughProvider>
+                      <GestureHandlerRootView style={{ flex: 1 }}>
+                        <KeyboardProvider>
+                          <RootLayoutNav />
+                        </KeyboardProvider>
+                      </GestureHandlerRootView>
+                    </WalkthroughProvider>
                   </LiveTrackingProvider>
                 </ActivityProvider>
               </NotificationBannerProvider>

@@ -29,6 +29,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useWalkthrough } from "@/contexts/WalkthroughContext";
+import WalkthroughPulse from "@/components/WalkthroughPulse";
+import { MOCK_CREW } from "@/lib/walkthroughMockData";
 import { usePurchases } from "@/contexts/PurchasesContext";
 import { darkColors, type ColorScheme } from "@/constants/colors";
 import { toDisplayPace, toDisplayDist, unitLabel, type DistanceUnit } from "@/lib/units";
@@ -917,31 +920,33 @@ function CrewDetailSheet({
   const [roleSheetMember, setRoleSheetMember] = useState<{ user_id: string; name: string; role: string } | null>(null);
   const qc = useQueryClient();
 
+  const isMockCrew = crew?.id?.startsWith("walkthrough-mock-") ?? false;
+
   const { data: detail, isLoading: detailLoading } = useQuery<CrewDetail>({
     queryKey: ["/api/crews", crew?.id],
-    enabled: !!crew?.id,
+    enabled: !!crew?.id && !isMockCrew,
   });
 
   const { data: crewRuns = [] } = useQuery<Run[]>({
     queryKey: ["/api/crews", crew?.id, "runs"],
-    enabled: !!crew?.id,
+    enabled: !!crew?.id && !isMockCrew,
   });
 
   const { data: crewHistory = [] } = useQuery<CrewHistoryRun[]>({
     queryKey: ["/api/crews", crew?.id, "history"],
-    enabled: !!crew?.id,
+    enabled: !!crew?.id && !isMockCrew,
   });
 
   const { data: crewAchievementsData } = useQuery<{ achievements: any[]; stats: { totalMiles: number; totalEvents: number; totalMembers: number } }>({
     queryKey: ["/api/crews", crew?.id, "achievements"],
-    enabled: !!crew?.id,
+    enabled: !!crew?.id && !isMockCrew,
   });
 
   const isCreatorLocal = crew?.created_by === currentUserId;
 
   const { data: joinRequests = [], refetch: refetchRequests } = useQuery<JoinRequest[]>({
     queryKey: ["/api/crews", crew?.id, "join-requests"],
-    enabled: !!crew?.id && isCreatorLocal,
+    enabled: !!crew?.id && isCreatorLocal && !isMockCrew,
   });
 
   const respondMutation = useMutation({
@@ -1099,8 +1104,8 @@ function CrewDetailSheet({
 
   const { data: crewMessages = [], refetch: refetchMessages } = useQuery<any[]>({
     queryKey: ["/api/crews", crew?.id, "messages"],
-    enabled: !!crew?.id,
-    refetchInterval: 5000,
+    enabled: !!crew?.id && !isMockCrew,
+    refetchInterval: isMockCrew ? false : 5000,
   });
 
   const [chatInput, setChatInput] = useState("");
@@ -1418,12 +1423,14 @@ function CrewDetailSheet({
                   style={s.detailSection}
                   onLayout={(e) => { chatSectionY.current = e.nativeEvent.layout.y; }}
                 >
+                  <WalkthroughPulse stepId="crew-chat" style={{ borderRadius: 12 }}>
                   <View style={s.detailSectionHeader}>
                     <Text style={s.detailSectionTitle}>Crew Chat</Text>
                     {isMuted && (
                       <Ionicons name="notifications-off-outline" size={14} color={C.textMuted} />
                     )}
                   </View>
+                  </WalkthroughPulse>
 
                   {/* Messages scroll area */}
                   <View style={s.inlineChatBox}>
@@ -2442,9 +2449,28 @@ export default function CrewScreen() {
   const { user: currentUser } = useAuth();
   const [ghostCrewDone, setGhostCrewDone] = useState(true);
 
-  const { data: crews = [], isLoading } = useQuery<Crew[]>({
+  const { isActive: walkthroughActive, currentStepConfig } = useWalkthrough();
+  const { data: crewsRaw = [], isLoading } = useQuery<Crew[]>({
     queryKey: ["/api/crews"],
   });
+  const crews = useMemo(() => {
+    if (walkthroughActive && crewsRaw.length === 0) {
+      return [MOCK_CREW as Crew];
+    }
+    return crewsRaw;
+  }, [walkthroughActive, crewsRaw]);
+
+  const wtOpenedCrewRef = useRef(false);
+  useEffect(() => {
+    if (walkthroughActive && currentStepConfig?.id === "crew-chat" && crews.length > 0 && !selectedCrew) {
+      setSelectedCrew(crews[0]);
+      wtOpenedCrewRef.current = true;
+    }
+    if (walkthroughActive && currentStepConfig?.id !== "crew-chat" && wtOpenedCrewRef.current && selectedCrew) {
+      setSelectedCrew(null);
+      wtOpenedCrewRef.current = false;
+    }
+  }, [walkthroughActive, currentStepConfig, crews, selectedCrew]);
 
   useEffect(() => {
     if (!currentUser?.id) return;
@@ -2523,8 +2549,9 @@ export default function CrewScreen() {
 
       {/* Create A Crew CTA — only when user already has crews */}
       {crews.length > 0 && (
+        <WalkthroughPulse stepId="crew-cta" style={{ borderRadius: 16, marginHorizontal: 20 }}>
         <TouchableOpacity
-          style={s.createCrewBtn}
+          style={[s.createCrewBtn, { marginHorizontal: 0 }]}
           onPress={() => setShowCreate(true)}
           testID="open-create-crew"
           activeOpacity={0.88}
@@ -2532,6 +2559,7 @@ export default function CrewScreen() {
           <Ionicons name="people" size={20} color={C.bg} />
           <Text style={s.createCrewBtnTxt}>Create A Crew</Text>
         </TouchableOpacity>
+        </WalkthroughPulse>
       )}
 
       {/* Search bar */}
@@ -2639,8 +2667,14 @@ export default function CrewScreen() {
               )}
             </>
           )}
-          renderItem={({ item }) => (
-            <CrewCard crew={item} onPress={() => setSelectedCrew(item)} />
+          renderItem={({ item, index }) => (
+            index === 0 ? (
+              <WalkthroughPulse stepId="crew-intro" style={{ borderRadius: 16 }}>
+                <CrewCard crew={item} onPress={() => setSelectedCrew(item)} />
+              </WalkthroughPulse>
+            ) : (
+              <CrewCard crew={item} onPress={() => setSelectedCrew(item)} />
+            )
           )}
           ListEmptyComponent={() =>
             isLoading ? (
@@ -2690,6 +2724,7 @@ export default function CrewScreen() {
           }
           ListFooterComponent={() => (
             crews.length > 0 ? (
+              <WalkthroughPulse stepId="rankings" style={{ borderRadius: 16 }}>
               <TouchableOpacity
                 style={[s.rankingsBtn, { borderColor: C.primary + "55" }]}
                 onPress={() => setShowRankings(true)}
@@ -2700,6 +2735,7 @@ export default function CrewScreen() {
                 <Text style={[s.rankingsBtnTxt, { color: C.primary }]}>National Rankings</Text>
                 <Ionicons name="chevron-forward" size={16} color={C.primary + "99"} />
               </TouchableOpacity>
+              </WalkthroughPulse>
             ) : null
           )}
           scrollEnabled={!!(crews.length > 0 || invites.length > 0)}

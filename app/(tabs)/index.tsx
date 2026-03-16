@@ -37,6 +37,9 @@ import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { onOpenNotifications } from "@/contexts/NotificationBannerContext";
 import WebFAB from "@/components/WebFAB";
+import { useWalkthrough } from "@/contexts/WalkthroughContext";
+import WalkthroughPulse from "@/components/WalkthroughPulse";
+import { MOCK_EVENT } from "@/lib/walkthroughMockData";
 
 function formatDaysAgo(dateStr: string): string {
   const d = new Date(dateStr);
@@ -737,6 +740,7 @@ function RunCard({
   onBookmark,
   isFriend,
   isCrew,
+  walkthroughActive,
 }: {
   run: Run;
   onPress: () => void;
@@ -744,6 +748,7 @@ function RunCard({
   isBookmarked?: boolean;
   onBookmark?: () => void;
   isFriend?: boolean;
+  walkthroughActive?: boolean;
   isCrew?: boolean;
 }) {
   const { C } = useTheme();
@@ -835,6 +840,7 @@ function RunCard({
                     </View>
                   )}
                   {onBookmark && (
+                    <WalkthroughPulse stepId="bookmark" style={{ borderRadius: 8 }}>
                     <Pressable onPress={(e) => { e.stopPropagation?.(); onBookmark(); }} hitSlop={8} style={s.cardBookmarkBtn}>
                       <Ionicons
                         name={isBookmarked ? "bookmark" : "bookmark-outline"}
@@ -842,6 +848,7 @@ function RunCard({
                         color={isBookmarked ? C.primary : C.textMuted}
                       />
                     </Pressable>
+                    </WalkthroughPulse>
                   )}
                 </View>
               </View>
@@ -936,6 +943,18 @@ function RunCard({
               </ScrollView>
             )}
           </View>
+
+          {walkthroughActive && (
+            <WalkthroughPulse stepId="planning-to-come" style={{ borderRadius: 12 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: C.surface, borderRadius: 12, marginTop: 8 }}>
+                <Ionicons name="calendar-outline" size={16} color={C.primary} />
+                <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.text, flex: 1 }}>
+                  {run.activity_type === "ride" ? "I Plan To Ride" : run.activity_type === "walk" ? "I Plan To Walk" : "I Plan To Run"}
+                </Text>
+                <Feather name="chevron-right" size={14} color={C.primary} />
+              </View>
+            </WalkthroughPulse>
+          )}
 
         </View>
       </View>
@@ -1665,8 +1684,15 @@ export default function DiscoverScreen() {
     [runs, activityFilter]
   );
 
+  const { isActive: walkthroughActive } = useWalkthrough();
   const isFallback = sorted.length === 0 && fallbackRuns.length > 0 && !isLoading && !search;
-  const displayList = isFallback ? fallbackRuns : sorted;
+  const displayListRaw = isFallback ? fallbackRuns : sorted;
+  const displayList = useMemo(() => {
+    if (walkthroughActive && displayListRaw.length === 0) {
+      return [MOCK_EVENT as Run];
+    }
+    return displayListRaw;
+  }, [walkthroughActive, displayListRaw]);
 
   // Reset to 5 whenever the user changes search/filters/activity
   useEffect(() => { setVisibleCount(5); }, [search, applied, activityFilter]);
@@ -1771,6 +1797,7 @@ export default function DiscoverScreen() {
         </View>
 
         {/* Activity toggle + filter */}
+        <WalkthroughPulse stepId="activity-toggle" style={{ borderRadius: 20 }}>
         <View style={s.activityToggleRow}>
           <Pressable
             style={[s.activityPill, activityFilter === "run" && s.activityPillActive]}
@@ -1802,6 +1829,7 @@ export default function DiscoverScreen() {
             {isFiltered && <View style={s.dot} />}
           </Pressable>
         </View>
+        </WalkthroughPulse>
       </View>
 
       {/* ── List ───────────────────────────────────────────────────────────── */}
@@ -1946,6 +1974,7 @@ export default function DiscoverScreen() {
               </View>
             )}
             <Text style={s.nearbyLabel}>{isFallback ? (activityFilter === "ride" ? "All Upcoming Rides" : activityFilter === "walk" ? "All Upcoming Walks" : "All Upcoming Events") : (activityFilter === "ride" ? "Upcoming Rides Nearby" : activityFilter === "walk" ? "Upcoming Walks Nearby" : "Upcoming Runs Nearby")}</Text>
+            <WalkthroughPulse stepId="map-view" style={{ borderRadius: 16 }}>
             <Pressable
               style={s.viewOnMapBtn}
               onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); goToMap(); }}
@@ -1954,16 +1983,19 @@ export default function DiscoverScreen() {
               <Text style={s.viewOnMapBtnTxt}>MAP VIEW</Text>
               <Feather name="chevron-right" size={15} color={C.bg} />
             </Pressable>
+            </WalkthroughPulse>
             </View>
           }
-          renderItem={({ item }) => (
+          renderItem={({ item, index }) => (
             <View>
+              <WalkthroughPulse stepId={index === 0 ? "event-cards" : ""} style={{ borderRadius: 16 }}>
               <RunCard
                 run={item}
                 distanceMi={userLocation ? distanceMap[item.id] : undefined}
                 isBookmarked={bookmarkedIds.has(item.id)}
                 isFriend={friendIdSet.has(item.host_id)}
                 isCrew={!!item.crew_id}
+                walkthroughActive={walkthroughActive}
                 onBookmark={user ? () => bookmarkMutation.mutate(item.id) : undefined}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -1974,6 +2006,7 @@ export default function DiscoverScreen() {
                   }
                 }}
               />
+              </WalkthroughPulse>
               {item.is_active && !item.is_completed && expandedLiveId === item.id && (
                 <LiveCardExpansion runId={item.id} />
               )}

@@ -38,6 +38,7 @@ import SettingsModal from "@/components/SettingsModal";
 import * as WebBrowser from "expo-web-browser";
 import { Linking } from "react-native";
 import { requestContactsPermission, scanContacts, type ContactMatch, type NonMemberContact, type ContactScanResult } from "@/lib/contactsDiscovery";
+import WalkthroughPulse from "@/components/WalkthroughPulse";
 const APP_SHARE_URL = Platform.OS === "ios"
   ? "https://apps.apple.com/us/app/paceup-move-together/id6760092871"
   : "https://paceupapp.com";
@@ -624,6 +625,7 @@ export default function ProfileScreen() {
       showsVerticalScrollIndicator={false}
     >
       {/* ── Profile Header ────────────────────────────────────────────────── */}
+      <WalkthroughPulse stepId="profile-intro" style={{ borderRadius: 16 }}>
       <View style={styles.profileHeader}>
         <Pressable
           style={styles.avatarWrap}
@@ -699,8 +701,10 @@ export default function ProfileScreen() {
           </Pressable>
         </View>
       </View>
+      </WalkthroughPulse>
 
       {/* ── Friends Quick-Access Row ───────────────────────────────────────── */}
+      <WalkthroughPulse stepId="friends" style={{ borderRadius: 16 }}>
       <View style={styles.statsGrid}>
         <Pressable
           style={({ pressed }) => [styles.statCard, { opacity: pressed ? 0.8 : 1 }]}
@@ -727,8 +731,10 @@ export default function ProfileScreen() {
           <Text style={styles.goalLabel}>{"Find Friends"}</Text>
         </Pressable>
       </View>
+      </WalkthroughPulse>
 
       {/* ── Achievements Card ─────────────────────────────────────────────── */}
+      <WalkthroughPulse stepId="achievements" style={{ borderRadius: 16 }}>
       <View style={styles.achOuterCard}>
         <Pressable
           style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
@@ -1040,8 +1046,10 @@ export default function ProfileScreen() {
             <Feather name="chevron-right" size={18} color={C.textMuted} />
           </Pressable>
         </View>
+      </WalkthroughPulse>
 
       {/* ── Mileage Goals ─────────────────────────────────────────────────── */}
+      <WalkthroughPulse stepId="goals" style={{ borderRadius: 16 }}>
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Mileage Goals</Text>
@@ -1071,7 +1079,7 @@ export default function ProfileScreen() {
           </Text>
         </View>
       </View>
-
+      </WalkthroughPulse>
 
       {/* ── Favorite Runs/Rides ───────────────────────────────────────────── */}
       <Pressable
