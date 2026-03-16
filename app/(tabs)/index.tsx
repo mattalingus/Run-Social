@@ -904,7 +904,7 @@ function RunCard({
               {run.crew_id && !run.user_is_crew_member ? (
                 <Pressable
                   style={s.joinCrewCta}
-                  onPress={(e) => { e.stopPropagation?.(); router.push(`/run/${run.id}`); }}
+                  onPress={(e) => { e.stopPropagation?.(); router.push(`/crew-profile/${run.crew_id}`); }}
                 >
                   <Ionicons name="shield-outline" size={12} color={C.primary} />
                   <Text style={s.joinCrewCtaTxt}>Join crew to participate</Text>
