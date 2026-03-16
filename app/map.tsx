@@ -396,20 +396,9 @@ export default function MapScreen() {
 
   const friendIdSet = useMemo(() => new Set(friends.map((f) => f.id)), [friends]);
 
-  const communityPathsUrl = useMemo(() => {
-    if (!bounds) return "/api/community-paths";
-    const p = new URLSearchParams();
-    p.set("swLat", bounds.swLat.toString());
-    p.set("neLat", bounds.neLat.toString());
-    p.set("swLng", bounds.swLng.toString());
-    p.set("neLng", bounds.neLng.toString());
-    return `/api/community-paths?${p.toString()}`;
-  }, [bounds]);
-
   const { data: communityPathsData = [] } = useQuery<CommunityPath[]>({
-    queryKey: [communityPathsUrl],
-    staleTime: 120_000,
-    placeholderData: (prev) => prev,
+    queryKey: ["/api/community-paths"],
+    staleTime: 300_000,
   });
 
   const communityPaths = useMemo(() => {
@@ -418,6 +407,18 @@ export default function MapScreen() {
       route_path: typeof path.route_path === "string" ? JSON.parse(path.route_path) : path.route_path
     }));
   }, [communityPathsData]);
+
+  const visiblePaths = useMemo(() => {
+    if (!bounds) return communityPaths;
+    return communityPaths.filter((path) => {
+      const pts: Array<{ latitude: number; longitude: number }> = path.route_path;
+      if (!pts || pts.length === 0) return false;
+      return pts.some(
+        (pt) => pt.latitude >= bounds.swLat && pt.latitude <= bounds.neLat &&
+                 pt.longitude >= bounds.swLng && pt.longitude <= bounds.neLng
+      );
+    });
+  }, [communityPaths, bounds]);
 
   // Only runs/rides matching the activity filter and visible in the map viewport
   const visibleRuns = useMemo(() => {
@@ -604,7 +605,7 @@ export default function MapScreen() {
             <Polyline
               key={path.id}
               coordinates={path.route_path}
-              strokeColor={selectedCommunityPath?.id === path.id ? C.primary : "rgba(0,217,126,0.55)"}
+              strokeColor={selectedCommunityPath?.id === path.id ? "#FFFFFF" : "#00D97E"}
               strokeWidth={selectedCommunityPath?.id === path.id ? 5 : 3}
               tappable
               onPress={() => {
@@ -630,9 +631,9 @@ export default function MapScreen() {
 
         {/* ─── Sidebar (inside map card) ────────────────────────────────── */}
         <View style={s.sideBar}>
-          {communityPaths.length > 0 && (
+          {visiblePaths.length > 0 && (
             <View style={s.routeCountChip}>
-              <Text style={s.routeCountTxt}>{communityPaths.length} routes</Text>
+              <Text style={s.routeCountTxt}>{visiblePaths.length} route{visiblePaths.length !== 1 ? "s" : ""}</Text>
             </View>
           )}
           {userLoc && (
@@ -836,74 +837,84 @@ export default function MapScreen() {
 
       </View>{/* ── end mapCard ──────────────────────────────────────────────── */}
 
-      {/* ─── Mini run cards strip — always reserves space so map never resizes */}
-      <View style={s.miniStrip}>
-        {!selectedRun && !selectedCommunityPath && visibleRuns.length > 0 && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 12, gap: 8, alignItems: "center" }}
-          >
-            {visibleRuns.map((run) => (
-              <Pressable
-                key={run.id}
-                style={({ pressed }) => [s.miniCard, { opacity: pressed ? 0.8 : 1 }]}
-                onPress={() => openCard(run)}
+      {/* ─── Split bottom strip: Events (left) + Paths (right) */}
+      {!selectedRun && !selectedCommunityPath && (visibleRuns.length > 0 || visiblePaths.length > 0) && (
+        <View style={[s.splitStrip, { paddingBottom: insets.bottom + 4 }]}>
+          {/* Events column */}
+          {visibleRuns.length > 0 && (
+            <View style={[s.splitCol, visiblePaths.length > 0 && s.splitColBorder]}>
+              <Text style={s.splitLabel}>Events</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 8, paddingRight: 4 }}
               >
-                {run.host_marker_icon ? (
-                  <View style={s.miniAvatar}>
-                    <Text style={{ fontSize: 18 }}>{run.host_marker_icon}</Text>
-                  </View>
-                ) : resolveImgUrl(run.crew_photo_url) || run.host_photo ? (
-                  <Image source={{ uri: resolveImgUrl(run.crew_photo_url) || run.host_photo! }} style={s.miniAvatarImg} />
-                ) : (
-                  <View style={s.miniAvatar}>
-                    <Text style={s.miniAvatarTxt}>{run.host_name?.charAt(0).toUpperCase()}</Text>
-                  </View>
-                )}
-                <View style={{ flex: 1, gap: 3 }}>
-                  <View style={s.miniStatRow}>
-                    <Feather name="map" size={10} color={C.primary} />
-                    <Text style={s.miniStatTxt}>{toDisplayDist(run.min_distance, distUnit)}</Text>
-                  </View>
-                  <View style={s.miniStatRow}>
-                    <Feather name="zap" size={10} color="#F4C542" />
-                    <Text style={[s.miniStatTxt, { color: "#F4C542" }]}>{toDisplayPace(run.min_pace, distUnit)}</Text>
-                  </View>
-                  <View style={s.miniStatRow}>
-                    <Feather name="users" size={10} color={C.textSecondary} />
-                    <Text style={[s.miniStatTxt, { color: C.textSecondary }]}>
-                      {run.crew_id
-                        ? `${run.participant_count} going`
-                        : `${run.participant_count}/${run.max_participants}`}
-                    </Text>
-                  </View>
-                </View>
-              </Pressable>
-            ))}
-          </ScrollView>
-        )}
-      </View>
+                {visibleRuns.map((run) => (
+                  <Pressable
+                    key={run.id}
+                    style={({ pressed }) => [s.miniCard, { opacity: pressed ? 0.8 : 1 }]}
+                    onPress={() => openCard(run)}
+                  >
+                    {run.host_marker_icon ? (
+                      <View style={s.miniAvatar}>
+                        <Text style={{ fontSize: 18 }}>{run.host_marker_icon}</Text>
+                      </View>
+                    ) : resolveImgUrl(run.crew_photo_url) || run.host_photo ? (
+                      <Image source={{ uri: resolveImgUrl(run.crew_photo_url) || run.host_photo! }} style={s.miniAvatarImg} />
+                    ) : (
+                      <View style={s.miniAvatar}>
+                        <Text style={s.miniAvatarTxt}>{run.host_name?.charAt(0).toUpperCase()}</Text>
+                      </View>
+                    )}
+                    <View style={{ flex: 1, gap: 3 }}>
+                      <View style={s.miniStatRow}>
+                        <Feather name="map" size={10} color={C.primary} />
+                        <Text style={s.miniStatTxt}>{toDisplayDist(run.min_distance, distUnit)}</Text>
+                      </View>
+                      <View style={s.miniStatRow}>
+                        <Feather name="zap" size={10} color="#F4C542" />
+                        <Text style={[s.miniStatTxt, { color: "#F4C542" }]}>{toDisplayPace(run.min_pace, distUnit)}</Text>
+                      </View>
+                      <View style={s.miniStatRow}>
+                        <Feather name="users" size={10} color={C.textSecondary} />
+                        <Text style={[s.miniStatTxt, { color: C.textSecondary }]}>
+                          {run.crew_id ? `${run.participant_count} going` : `${run.participant_count}/${run.max_participants}`}
+                        </Text>
+                      </View>
+                    </View>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          )}
 
-      {/* ─── Insights strip (below map card, fixed height so map never jumps) */}
-      <View style={[s.insightArea, { marginBottom: insets.bottom + 4 }]}>
-        {insights.length > 0 && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={s.insightScroll}
-          >
-            {insights.map((item, i) => (
-              <View key={i} style={s.insightPill}>
-                {item.lib === "ion"
-                  ? <Ionicons name={item.icon as any} size={12} color={item.color} />
-                  : <Feather name={item.icon as any} size={12} color={item.color} />}
-                <Text style={[s.insightTxt, { color: item.color }]}>{item.text}</Text>
-              </View>
-            ))}
-          </ScrollView>
-        )}
-      </View>
+          {/* Paths column */}
+          {visiblePaths.length > 0 && (
+            <View style={s.splitCol}>
+              <Text style={s.splitLabel}>Paths</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 8, paddingRight: 4 }}
+              >
+                {visiblePaths.map((path) => (
+                  <Pressable
+                    key={path.id}
+                    style={({ pressed }) => [s.pathMiniCard, { opacity: pressed ? 0.8 : 1 }]}
+                    onPress={() => openPathCard(path)}
+                  >
+                    <View style={s.pathMiniIcon}>
+                      <Feather name="map" size={14} color={C.primary} />
+                    </View>
+                    <Text style={s.pathMiniName} numberOfLines={2}>{path.name}</Text>
+                    <Text style={s.pathMiniDist}>{toDisplayDist(path.distance_miles ?? 0, distUnit)}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+        </View>
+      )}
 
       {/* ─── Filter sheet ────────────────────────────────────────────────── */}
       <Modal visible={showFilter} transparent animationType="slide" onRequestClose={() => setShowFilter(false)}>
@@ -1195,6 +1206,63 @@ function makeSStyles(C: ColorScheme) { return StyleSheet.create({
   applyTxt: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.bg },
 
   miniStrip: { height: 86, justifyContent: "center" },
+  splitStrip: {
+    flexDirection: "row",
+    backgroundColor: C.card,
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+    paddingTop: 8,
+    minHeight: 100,
+  },
+  splitCol: {
+    flex: 1,
+    paddingHorizontal: 10,
+    gap: 6,
+    overflow: "hidden",
+  },
+  splitColBorder: {
+    borderRightWidth: 1,
+    borderRightColor: C.border,
+  },
+  splitLabel: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 11,
+    color: C.textMuted,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  pathMiniCard: {
+    width: 120,
+    backgroundColor: C.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 4,
+    height: 70,
+    justifyContent: "center",
+  },
+  pathMiniIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: C.primary + "22",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 2,
+  },
+  pathMiniName: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 11,
+    color: C.text,
+    lineHeight: 14,
+  },
+  pathMiniDist: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 10,
+    color: C.primary,
+  },
   miniCard: {
     flexDirection: "row",
     alignItems: "center",
