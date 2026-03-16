@@ -149,12 +149,6 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="messages"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
         name="profile"
         options={{
           title: "Profile",
@@ -164,6 +158,12 @@ export default function TabLayout() {
               {unreadNotifCount > 0 && <View style={styles.redDot} />}
             </View>
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="messages"
+        options={{
+          href: null,
         }}
       />
     </Tabs>
