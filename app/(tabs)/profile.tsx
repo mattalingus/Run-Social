@@ -153,8 +153,9 @@ function formatDurationSolo(seconds: number) {
 
 type RoutePoint = { latitude: number; longitude: number };
 
-function ProfileMiniRouteMap({ path }: { path: RoutePoint[] }) {
+function ProfileMiniRouteMap({ path }: { path: RoutePoint[] | null | undefined }) {
   if (Platform.OS === "web") return null;
+  if (!path || path.length < 2) return null;
   const lats = path.map((p) => p.latitude);
   const lngs = path.map((p) => p.longitude);
   const minLat = Math.min(...lats);
