@@ -7,6 +7,7 @@ import {
   Animated,
   Dimensions,
   Platform,
+  InteractionManager,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -31,14 +32,26 @@ export default function WalkthroughOverlay() {
   const prevTabRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (isActive && currentStepConfig) {
-      const targetTab = currentStepConfig.tab;
-      const route = TAB_ROUTES[targetTab];
-      if (route && prevTabRef.current !== targetTab) {
-        prevTabRef.current = targetTab;
-        router.replace(route);
-      }
+    if (!isActive || !currentStepConfig) return;
 
+    const targetTab = currentStepConfig.tab;
+    const route = TAB_ROUTES[targetTab];
+    const needsNav = route && prevTabRef.current !== targetTab;
+
+    if (needsNav) {
+      prevTabRef.current = targetTab;
+      // Navigate first, defer animation until after the tab transition settles
+      router.navigate(route);
+      fadeAnim.setValue(0);
+      slideAnim.setValue(20);
+      const task = InteractionManager.runAfterInteractions(() => {
+        Animated.parallel([
+          Animated.timing(fadeAnim, { toValue: 1, duration: 280, useNativeDriver: true }),
+          Animated.timing(slideAnim, { toValue: 0, duration: 280, useNativeDriver: true }),
+        ]).start();
+      });
+      return () => task.cancel();
+    } else {
       fadeAnim.setValue(0);
       slideAnim.setValue(20);
       Animated.parallel([
