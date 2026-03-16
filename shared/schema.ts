@@ -8,7 +8,6 @@ import {
   real,
   timestamp,
   pgEnum,
-  serial,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -109,12 +108,11 @@ export const insertRunSchema = createInsertSchema(runs).omit({
 });
 
 export const passwordResetTokens = pgTable("password_reset_tokens", {
-  id: serial("id").primaryKey(),
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull(),
-  token: varchar("token").notNull(),
+  token: varchar("token").notNull().unique(),
   expiresAt: timestamp("expires_at").notNull(),
   usedAt: timestamp("used_at"),
-  createdAt: timestamp("created_at").default(sql`NOW()`),
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
