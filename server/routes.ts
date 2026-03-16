@@ -60,8 +60,6 @@ function requireAuth(req: Request, res: Response, next: Function) {
 export async function registerRoutes(app: Express): Promise<Server> {
   await storage.initDb();
 
-  await seedCommunityPaths();
-
   if (process.env.NODE_ENV !== "production") {
     const runCount = await getRunCount();
     if (runCount === 0) {

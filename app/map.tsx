@@ -842,11 +842,11 @@ export default function MapScreen() {
       </View>{/* ── end mapCard ──────────────────────────────────────────────── */}
 
       {/* ─── Split bottom strip: Events (left) + Paths (right) — fixed height, always rendered */}
-      <View style={[s.splitStrip, { paddingBottom: insets.bottom + 4 }]}>
+      <View style={s.splitStrip}>
         {!selectedRun && !selectedCommunityPath && (visibleRuns.length > 0 || visiblePaths.length > 0) && (<>
-          {/* Events column */}
-          {visibleRuns.length > 0 && (
-            <View style={[s.splitCol, visiblePaths.length > 0 && s.splitColBorder]}>
+          {/* Events column — always on the left */}
+          <View style={[s.splitCol, visiblePaths.length > 0 && s.splitColBorder]}>
+            {visibleRuns.length > 0 && <>
               <Text style={s.splitLabel}>Events</Text>
               <ScrollView
                 horizontal
@@ -889,12 +889,12 @@ export default function MapScreen() {
                   </Pressable>
                 ))}
               </ScrollView>
-            </View>
-          )}
+            </>}
+          </View>
 
-          {/* Paths column */}
-          {visiblePaths.length > 0 && (
-            <View style={s.splitCol}>
+          {/* Paths column — always on the right */}
+          <View style={s.splitCol}>
+            {visiblePaths.length > 0 && <>
               <Text style={s.splitLabel}>Paths</Text>
               <ScrollView
                 horizontal
@@ -915,8 +915,8 @@ export default function MapScreen() {
                   </Pressable>
                 ))}
               </ScrollView>
-            </View>
-          )}
+            </>}
+          </View>
         </>)}
       </View>
 
@@ -1216,7 +1216,7 @@ function makeSStyles(C: ColorScheme) { return StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: C.border,
     paddingTop: 8,
-    height: 106,
+    height: 86,
   },
   splitCol: {
     flex: 1,
