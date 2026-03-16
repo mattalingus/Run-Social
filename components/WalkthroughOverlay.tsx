@@ -7,15 +7,15 @@ import {
   Animated,
   Dimensions,
   Platform,
+  Modal,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router, type Href } from "expo-router";
 import { useWalkthrough } from "@/contexts/WalkthroughContext";
-import { useTheme } from "@/contexts/ThemeContext";
 import { WALKTHROUGH_STEPS } from "@/lib/walkthroughConfig";
 
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
+const { height: SCREEN_H } = Dimensions.get("window");
 
 const TAB_ROUTES: Record<string, Href> = {
   discover: "/(tabs)" as Href,
@@ -26,10 +26,9 @@ const TAB_ROUTES: Record<string, Href> = {
 
 export default function WalkthroughOverlay() {
   const { isActive, currentStep, totalSteps, nextStep, skipWalkthrough, currentStepConfig } = useWalkthrough();
-  const { C } = useTheme();
   const insets = useSafeAreaInsets();
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
   const prevTabRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -42,10 +41,10 @@ export default function WalkthroughOverlay() {
       }
 
       fadeAnim.setValue(0);
-      slideAnim.setValue(30);
+      slideAnim.setValue(20);
       Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
-        Animated.timing(slideAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
+        Animated.timing(fadeAnim, { toValue: 1, duration: 280, useNativeDriver: true }),
+        Animated.timing(slideAnim, { toValue: 0, duration: 280, useNativeDriver: true }),
       ]).start();
     }
   }, [isActive, currentStep, currentStepConfig]);
@@ -58,99 +57,99 @@ export default function WalkthroughOverlay() {
 
   if (!isActive || !currentStepConfig) return null;
 
-  const isFirst = currentStep === 0;
   const isLast = currentStep === totalSteps - 1;
   const isFullScreen = currentStepConfig.isFullScreen;
-
-  if (isFullScreen) {
-    return (
-      <View style={[styles.fullOverlay, { backgroundColor: "rgba(0,0,0,0.92)" }]}>
-        <Animated.View style={[styles.welcomeCard, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-          <View style={styles.welcomeIconWrap}>
-            <Ionicons name="fitness" size={48} color="#00D97E" />
-          </View>
-          <Text style={styles.welcomeLogo}>Pace Up</Text>
-          <Text style={styles.welcomeTagline}>Move Together</Text>
-          <Text style={styles.welcomeDesc}>{currentStepConfig.description}</Text>
-          <Pressable style={styles.welcomeBtn} onPress={nextStep} testID="walkthrough-start">
-            <Text style={styles.welcomeBtnTxt}>Let's take a tour</Text>
-            <Ionicons name="arrow-forward" size={18} color="#050C09" />
-          </Pressable>
-          <Pressable onPress={skipWalkthrough} style={styles.skipLink} testID="walkthrough-skip">
-            <Text style={styles.skipLinkTxt}>Skip tour</Text>
-          </Pressable>
-        </Animated.View>
-      </View>
-    );
-  }
-
   const positionStyle = getTooltipPosition(currentStepConfig.tooltipPosition, insets);
 
   return (
-    <View style={styles.fullOverlay} pointerEvents="box-none">
-      <Pressable style={styles.dimBg} onPress={nextStep} />
-      <Animated.View
-        style={[
-          styles.tooltipCard,
-          positionStyle,
-          { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
-        ]}
-      >
-        <View style={styles.tooltipHeader}>
-          <Text style={styles.tooltipTitle}>{currentStepConfig.title}</Text>
-          <Text style={styles.stepIndicator}>{currentStep + 1} of {totalSteps}</Text>
+    <Modal
+      visible={isActive}
+      transparent
+      animationType="none"
+      statusBarTranslucent
+    >
+      {isFullScreen ? (
+        <View style={[styles.fullOverlay, { backgroundColor: "rgba(0,0,0,0.92)" }]}>
+          <Animated.View style={[styles.welcomeCard, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+            <View style={styles.welcomeIconWrap}>
+              <Ionicons name="fitness" size={48} color="#00D97E" />
+            </View>
+            <Text style={styles.welcomeLogo}>Pace Up</Text>
+            <Text style={styles.welcomeTagline}>Move Together</Text>
+            <Text style={styles.welcomeDesc}>{currentStepConfig.description}</Text>
+            <Pressable style={styles.welcomeBtn} onPress={nextStep} testID="walkthrough-start">
+              <Text style={styles.welcomeBtnTxt}>Let's take a tour</Text>
+              <Ionicons name="arrow-forward" size={18} color="#050C09" />
+            </Pressable>
+            <Pressable onPress={skipWalkthrough} style={styles.skipLink} testID="walkthrough-skip">
+              <Text style={styles.skipLinkTxt}>Skip tour</Text>
+            </Pressable>
+          </Animated.View>
         </View>
-        <Text style={styles.tooltipDesc}>{currentStepConfig.description}</Text>
+      ) : (
+        <View style={styles.fullOverlay}>
+          <Pressable style={styles.dimBg} onPress={nextStep} />
+          <Animated.View
+            style={[
+              styles.tooltipCard,
+              positionStyle,
+              { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+            ]}
+          >
+            <View style={styles.tooltipHeader}>
+              <Text style={styles.tooltipTitle}>{currentStepConfig.title}</Text>
+              <Text style={styles.stepIndicator}>{currentStep + 1} / {totalSteps}</Text>
+            </View>
+            <Text style={styles.tooltipDesc}>{currentStepConfig.description}</Text>
 
-        <View style={styles.dotRow}>
-          {WALKTHROUGH_STEPS.map((_, i) => (
-            <View
-              key={i}
-              style={[
-                styles.dot,
-                i === currentStep && styles.dotActive,
-                i < currentStep && styles.dotDone,
-              ]}
-            />
-          ))}
-        </View>
+            <View style={styles.dotRow}>
+              {WALKTHROUGH_STEPS.map((_, i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.dot,
+                    i === currentStep && styles.dotActive,
+                    i < currentStep && styles.dotDone,
+                  ]}
+                />
+              ))}
+            </View>
 
-        <View style={styles.btnRow}>
-          <Pressable onPress={skipWalkthrough} style={styles.skipBtn} testID="walkthrough-skip">
-            <Text style={styles.skipBtnTxt}>Skip</Text>
-          </Pressable>
-          <Pressable onPress={nextStep} style={styles.nextBtn} testID="walkthrough-next">
-            <Text style={styles.nextBtnTxt}>{isLast ? "Done" : "Next"}</Text>
-            <Ionicons name={isLast ? "checkmark" : "arrow-forward"} size={16} color="#050C09" />
-          </Pressable>
+            <View style={styles.btnRow}>
+              <Pressable onPress={skipWalkthrough} style={styles.skipBtn} testID="walkthrough-skip">
+                <Text style={styles.skipBtnTxt}>Skip</Text>
+              </Pressable>
+              <Pressable onPress={nextStep} style={styles.nextBtn} testID="walkthrough-next">
+                <Text style={styles.nextBtnTxt}>{isLast ? "Done" : "Next"}</Text>
+                <Ionicons name={isLast ? "checkmark" : "arrow-forward"} size={16} color="#050C09" />
+              </Pressable>
+            </View>
+          </Animated.View>
         </View>
-      </Animated.View>
-    </View>
+      )}
+    </Modal>
   );
 }
 
 function getTooltipPosition(position: string, insets: { top: number; bottom: number }) {
-  const webTop = Platform.OS === "web" ? 67 : 0;
+  const webOffset = Platform.OS === "web" ? 67 : 0;
   switch (position) {
-    case "top":
-      return { top: insets.top + webTop + 80 };
     case "bottom":
-      return { bottom: insets.bottom + 120 };
+      return { top: insets.top + webOffset + 80 };
+    case "top":
     case "center":
     default:
-      return { top: SCREEN_H * 0.3 };
+      return { bottom: insets.bottom + 100 };
   }
 }
 
 const styles = StyleSheet.create({
   fullOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 9999,
-    elevation: 9999,
+    flex: 1,
   },
   dimBg: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.65)",
+    backgroundColor: "rgba(0,0,0,0.70)",
   },
   welcomeCard: {
     flex: 1,
@@ -222,11 +221,11 @@ const styles = StyleSheet.create({
     padding: 20,
     borderWidth: 1,
     borderColor: "#00D97E33",
-    shadowColor: "#00D97E",
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 20,
+    shadowColor: "#000",
+    shadowOpacity: 0.4,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 24,
   },
   tooltipHeader: {
     flexDirection: "row",
