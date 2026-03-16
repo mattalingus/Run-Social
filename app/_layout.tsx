@@ -33,6 +33,24 @@ import C from "@/constants/colors";
 
 SplashScreen.preventAutoHideAsync();
 
+// Global error handler — catches crashes not caught by ErrorBoundary (e.g. useEffect errors)
+// Shows the error so we can diagnose iOS-specific crashes
+if (Platform.OS !== "web") {
+  try {
+    const prevHandler = (ErrorUtils as any).getGlobalHandler?.();
+    (ErrorUtils as any).setGlobalHandler?.((error: Error, isFatal: boolean) => {
+      const msg = error?.message || String(error);
+      const stack = error?.stack?.split("\n").slice(0, 5).join("\n") || "";
+      Alert.alert(
+        isFatal ? "Fatal Error (Please screenshot & send)" : "Error Caught",
+        `${msg}\n\n${stack}`,
+        [{ text: "OK" }]
+      );
+      if (!isFatal && typeof prevHandler === "function") prevHandler(error, isFatal);
+    });
+  } catch (_) {}
+}
+
 try {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
