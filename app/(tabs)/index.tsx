@@ -901,7 +901,7 @@ function RunCard({
                 </View>
               </View>
 
-              {run.crew_id && !run.user_is_crew_member ? (
+              {run.crew_id && run.user_is_crew_member === false ? (
                 <Pressable
                   style={s.joinCrewCta}
                   onPress={(e) => { e.stopPropagation?.(); router.push(`/crew-profile/${run.crew_id}`); }}
