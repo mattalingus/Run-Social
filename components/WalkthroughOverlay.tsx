@@ -7,7 +7,6 @@ import {
   Animated,
   Dimensions,
   Platform,
-  Modal,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -59,75 +58,70 @@ export default function WalkthroughOverlay() {
 
   const isLast = currentStep === totalSteps - 1;
   const isFullScreen = currentStepConfig.isFullScreen;
+
+  if (isFullScreen) {
+    return (
+      <View style={[styles.overlay, { backgroundColor: "rgba(0,0,0,0.92)" }]}>
+        <Animated.View style={[styles.welcomeCard, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+          <View style={styles.welcomeIconWrap}>
+            <Ionicons name="fitness" size={48} color="#00D97E" />
+          </View>
+          <Text style={styles.welcomeLogo}>Pace Up</Text>
+          <Text style={styles.welcomeTagline}>Move Together</Text>
+          <Text style={styles.welcomeDesc}>{currentStepConfig.description}</Text>
+          <Pressable style={styles.welcomeBtn} onPress={nextStep} testID="walkthrough-start">
+            <Text style={styles.welcomeBtnTxt}>Let's take a tour</Text>
+            <Ionicons name="arrow-forward" size={18} color="#050C09" />
+          </Pressable>
+          <Pressable onPress={skipWalkthrough} style={styles.skipLink} testID="walkthrough-skip">
+            <Text style={styles.skipLinkTxt}>Skip tour</Text>
+          </Pressable>
+        </Animated.View>
+      </View>
+    );
+  }
+
   const positionStyle = getTooltipPosition(currentStepConfig.tooltipPosition, insets);
 
   return (
-    <Modal
-      visible={isActive}
-      transparent
-      animationType="none"
-      statusBarTranslucent
-    >
-      {isFullScreen ? (
-        <View style={[styles.fullOverlay, { backgroundColor: "rgba(0,0,0,0.92)" }]}>
-          <Animated.View style={[styles.welcomeCard, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-            <View style={styles.welcomeIconWrap}>
-              <Ionicons name="fitness" size={48} color="#00D97E" />
-            </View>
-            <Text style={styles.welcomeLogo}>Pace Up</Text>
-            <Text style={styles.welcomeTagline}>Move Together</Text>
-            <Text style={styles.welcomeDesc}>{currentStepConfig.description}</Text>
-            <Pressable style={styles.welcomeBtn} onPress={nextStep} testID="walkthrough-start">
-              <Text style={styles.welcomeBtnTxt}>Let's take a tour</Text>
-              <Ionicons name="arrow-forward" size={18} color="#050C09" />
-            </Pressable>
-            <Pressable onPress={skipWalkthrough} style={styles.skipLink} testID="walkthrough-skip">
-              <Text style={styles.skipLinkTxt}>Skip tour</Text>
-            </Pressable>
-          </Animated.View>
+    <View style={styles.overlay} pointerEvents="box-none">
+      <Animated.View
+        style={[
+          styles.tooltipCard,
+          positionStyle,
+          { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+        ]}
+      >
+        <View style={styles.tooltipHeader}>
+          <Text style={styles.tooltipTitle}>{currentStepConfig.title}</Text>
+          <Text style={styles.stepIndicator}>{currentStep + 1} / {totalSteps}</Text>
         </View>
-      ) : (
-        <View style={styles.fullOverlay}>
-          <Pressable style={styles.dimBg} onPress={nextStep} />
-          <Animated.View
-            style={[
-              styles.tooltipCard,
-              positionStyle,
-              { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
-            ]}
-          >
-            <View style={styles.tooltipHeader}>
-              <Text style={styles.tooltipTitle}>{currentStepConfig.title}</Text>
-              <Text style={styles.stepIndicator}>{currentStep + 1} / {totalSteps}</Text>
-            </View>
-            <Text style={styles.tooltipDesc}>{currentStepConfig.description}</Text>
+        <Text style={styles.tooltipDesc}>{currentStepConfig.description}</Text>
 
-            <View style={styles.dotRow}>
-              {WALKTHROUGH_STEPS.map((_, i) => (
-                <View
-                  key={i}
-                  style={[
-                    styles.dot,
-                    i === currentStep && styles.dotActive,
-                    i < currentStep && styles.dotDone,
-                  ]}
-                />
-              ))}
-            </View>
-
-            <View style={styles.btnRow}>
-              <Pressable onPress={skipWalkthrough} style={styles.skipBtn} testID="walkthrough-skip">
-                <Text style={styles.skipBtnTxt}>Skip</Text>
-              </Pressable>
-              <Pressable onPress={nextStep} style={styles.nextBtn} testID="walkthrough-next">
-                <Text style={styles.nextBtnTxt}>{isLast ? "Done" : "Next"}</Text>
-                <Ionicons name={isLast ? "checkmark" : "arrow-forward"} size={16} color="#050C09" />
-              </Pressable>
-            </View>
-          </Animated.View>
+        <View style={styles.dotRow}>
+          {WALKTHROUGH_STEPS.map((_, i) => (
+            <View
+              key={i}
+              style={[
+                styles.dot,
+                i === currentStep && styles.dotActive,
+                i < currentStep && styles.dotDone,
+              ]}
+            />
+          ))}
         </View>
-      )}
-    </Modal>
+
+        <View style={styles.btnRow}>
+          <Pressable onPress={skipWalkthrough} style={styles.skipBtn} testID="walkthrough-skip">
+            <Text style={styles.skipBtnTxt}>Skip</Text>
+          </Pressable>
+          <Pressable onPress={nextStep} style={styles.nextBtn} testID="walkthrough-next">
+            <Text style={styles.nextBtnTxt}>{isLast ? "Done" : "Next"}</Text>
+            <Ionicons name={isLast ? "checkmark" : "arrow-forward"} size={16} color="#050C09" />
+          </Pressable>
+        </View>
+      </Animated.View>
+    </View>
   );
 }
 
@@ -144,12 +138,10 @@ function getTooltipPosition(position: string, insets: { top: number; bottom: num
 }
 
 const styles = StyleSheet.create({
-  fullOverlay: {
-    flex: 1,
-  },
-  dimBg: {
+  overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.70)",
+    zIndex: 9999,
+    elevation: 9999,
   },
   welcomeCard: {
     flex: 1,
@@ -214,18 +206,18 @@ const styles = StyleSheet.create({
   },
   tooltipCard: {
     position: "absolute",
-    left: 20,
-    right: 20,
+    left: 16,
+    right: 16,
     backgroundColor: "#132019",
     borderRadius: 20,
     padding: 20,
     borderWidth: 1,
     borderColor: "#00D97E33",
     shadowColor: "#000",
-    shadowOpacity: 0.4,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 24,
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 20,
   },
   tooltipHeader: {
     flexDirection: "row",
@@ -262,7 +254,7 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "#182B1F",
+    backgroundColor: "#1E3328",
   },
   dotActive: {
     width: 18,
