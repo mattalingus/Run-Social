@@ -842,7 +842,7 @@ export default function MapScreen() {
       </View>{/* ── end mapCard ──────────────────────────────────────────────── */}
 
       {/* ─── Split bottom strip: Events (left) + Paths (right) — fixed height, always rendered */}
-      <View style={[s.splitStrip, { height: 86 + insets.bottom, paddingBottom: insets.bottom }]}>
+      <View style={[s.splitStrip, { height: 144 + insets.bottom, paddingBottom: insets.bottom + 4 }]}>
         {!selectedRun && !selectedCommunityPath && (visibleRuns.length > 0 || visiblePaths.length > 0) && (<>
           {/* Events column — always on the left */}
           <View style={[s.splitCol, visiblePaths.length > 0 && s.splitColBorder]}>

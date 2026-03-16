@@ -1941,7 +1941,7 @@ export default function DiscoverScreen() {
               onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); goToMap(); }}
             >
               <Feather name="map" size={15} color={C.bg} />
-              <Text style={s.viewOnMapBtnTxt}>View On Map</Text>
+              <Text style={s.viewOnMapBtnTxt}>MAP VIEW</Text>
               <Feather name="chevron-right" size={15} color={C.bg} />
             </Pressable>
             </View>
@@ -3297,7 +3297,7 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     borderColor: C.primary,
     marginBottom: 7,
   },
-  viewOnMapBtnTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.bg, flex: 1, textAlign: "center" },
+  viewOnMapBtnTxt: { fontFamily: "Outfit_700Bold", fontSize: 17, color: C.bg, flex: 1, textAlign: "center", letterSpacing: 0.5 },
   sideBySideRow: {
     flexDirection: "row",
     gap: 10,
