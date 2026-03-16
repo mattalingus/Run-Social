@@ -377,6 +377,16 @@ export async function initDb() {
         ALTER TABLE crews ADD COLUMN IF NOT EXISTS last_overtake_notif_at TIMESTAMP DEFAULT NULL;
         ALTER TABLE crews ADD COLUMN IF NOT EXISTS subscription_tier TEXT DEFAULT 'none';
         ALTER TABLE crews ADD COLUMN IF NOT EXISTS member_cap_override INTEGER DEFAULT NULL;
+
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token VARCHAR NOT NULL UNIQUE,
+      expires_at TIMESTAMP NOT NULL,
+      used_at TIMESTAMP DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_prt_token ON password_reset_tokens(token);
   `);
 
   const dummyCheck = await pool.query(`SELECT COUNT(*) FROM users WHERE email LIKE 'dummy-%@paceup.dev'`);
@@ -812,6 +822,32 @@ export async function getUserById(id: string) {
 
 export async function verifyPassword(plain: string, hashed: string) {
   return bcrypt.compare(plain, hashed);
+}
+
+export async function createPasswordResetToken(userId: string): Promise<string> {
+  const crypto = await import("crypto");
+  const token = crypto.randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+  await pool.query(
+    `INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)`,
+    [userId, token, expiresAt]
+  );
+  return token;
+}
+
+export async function consumePasswordResetToken(token: string): Promise<string | null> {
+  const res = await pool.query(
+    `SELECT user_id FROM password_reset_tokens WHERE token = $1 AND used_at IS NULL AND expires_at > NOW()`,
+    [token]
+  );
+  if (!res.rows[0]) return null;
+  await pool.query(`UPDATE password_reset_tokens SET used_at = NOW() WHERE token = $1`, [token]);
+  return res.rows[0].user_id;
+}
+
+export async function updateUserPassword(userId: string, newPassword: string) {
+  const hashed = await bcrypt.hash(newPassword, 10);
+  await pool.query(`UPDATE users SET password = $1 WHERE id = $2`, [hashed, userId]);
 }
 
 export async function updateUser(id: string, updates: Record<string, any>) {

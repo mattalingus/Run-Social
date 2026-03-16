@@ -9,8 +9,6 @@ import {
   Platform,
   ActivityIndicator,
   ScrollView,
-  Alert,
-  Linking,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -120,17 +118,7 @@ export default function LoginScreen() {
           </Pressable>
 
           <Pressable
-            onPress={() => {
-              const msg = "To reset your password, please email us at support@paceupapp.com and we'll send you a reset link.";
-              if (Platform.OS === "web") {
-                window.alert(msg);
-              } else {
-                Alert.alert("Reset Password", msg, [
-                  { text: "Cancel", style: "cancel" },
-                  { text: "Email Support", onPress: () => Linking.openURL("mailto:support@paceupapp.com?subject=Password%20Reset%20Request") },
-                ]);
-              }
-            }}
+            onPress={() => router.push("/(auth)/forgot-password")}
             style={styles.forgotBtn}
           >
             <Text style={styles.forgotText}>Forgot password?</Text>

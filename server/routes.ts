@@ -4,6 +4,7 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { Pool } from "pg";
 import multer from "multer";
+import nodemailer from "nodemailer";
 import * as storage from "./storage";
 import { pool } from "./storage";
 import * as ai from "./ai";
@@ -147,6 +148,119 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
+  });
+
+  app.post("/api/auth/forgot-password", async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email) return res.status(400).json({ message: "Email is required" });
+      const user = await storage.getUserByEmail(email.trim());
+      if (!user) return res.json({ ok: true });
+      const token = await storage.createPasswordResetToken(user.id);
+      const host = process.env.REPLIT_DEV_DOMAIN
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}:5000`
+        : "https://PaceUp.replit.app";
+      const resetUrl = `${host}/auth/reset?token=${token}`;
+      const smtpUser = process.env.SMTP_USER;
+      const smtpPass = process.env.SMTP_PASS;
+      if (!smtpUser || !smtpPass) {
+        console.error("[forgot-password] SMTP_USER or SMTP_PASS not configured");
+        return res.json({ ok: true });
+      }
+      const transporter = nodemailer.createTransport({
+        host: "smtp.gmail.com",
+        port: 587,
+        secure: false,
+        auth: { user: smtpUser, pass: smtpPass },
+      });
+      await transporter.sendMail({
+        from: `"PaceUp" <${smtpUser}>`,
+        to: user.email,
+        subject: "Reset your PaceUp password",
+        html: `
+          <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px;">
+            <h2 style="color:#00D97E;">PaceUp</h2>
+            <p>Hi ${user.name},</p>
+            <p>We received a request to reset your password. Click the button below to choose a new one:</p>
+            <a href="${resetUrl}" style="display:inline-block;background:#00D97E;color:#fff;padding:14px 28px;border-radius:12px;text-decoration:none;font-weight:bold;margin:16px 0;">Reset Password</a>
+            <p style="color:#666;font-size:13px;">This link expires in 1 hour. If you didn't request this, you can safely ignore this email.</p>
+          </div>
+        `,
+      });
+      res.json({ ok: true });
+    } catch (e: any) {
+      console.error("[forgot-password]", e.message);
+      res.json({ ok: true });
+    }
+  });
+
+  app.post("/api/auth/reset-password", async (req, res) => {
+    try {
+      const { token, password } = req.body;
+      if (!token || !password) return res.status(400).json({ message: "Token and password required" });
+      if (password.length < 6) return res.status(400).json({ message: "Password must be at least 6 characters" });
+      const userId = await storage.consumePasswordResetToken(token);
+      if (!userId) return res.status(400).json({ message: "Invalid or expired reset link" });
+      await storage.updateUserPassword(userId, password);
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/auth/reset", (req, res) => {
+    const token = req.query.token as string || "";
+    res.send(`<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reset Password — PaceUp</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#050C09;color:#e8ede9;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.card{background:#0D1510;border-radius:20px;padding:32px;max-width:400px;width:100%}
+h1{color:#00D97E;font-size:24px;margin-bottom:6px}
+.sub{color:#8a9b8e;font-size:14px;margin-bottom:24px}
+label{display:block;color:#8a9b8e;font-size:13px;margin-bottom:6px}
+input{width:100%;padding:14px;border-radius:12px;border:1px solid #1a2a1f;background:#0A1410;color:#e8ede9;font-size:16px;margin-bottom:16px;outline:none}
+input:focus{border-color:#00D97E}
+.btn{width:100%;padding:14px;border-radius:14px;border:none;background:#00D97E;color:#fff;font-size:16px;font-weight:700;cursor:pointer}
+.btn:disabled{opacity:.5;cursor:default}
+.msg{text-align:center;padding:12px;border-radius:10px;margin-top:12px;font-size:14px}
+.msg.ok{background:#00D97E22;color:#00D97E}
+.msg.err{background:#ff444422;color:#ff6b6b}
+.open-app{display:block;text-align:center;margin-top:16px;color:#00D97E;font-size:14px}
+</style>
+</head><body>
+<div class="card">
+<h1>Reset Password</h1>
+<p class="sub">Enter a new password for your PaceUp account.</p>
+<form id="f" onsubmit="return go(event)">
+<input type="hidden" name="token" value="${token.replace(/"/g,"&quot;")}">
+<label>New Password</label>
+<input type="password" id="pw" minlength="6" required placeholder="At least 6 characters">
+<label>Confirm Password</label>
+<input type="password" id="pw2" minlength="6" required placeholder="Re-enter password">
+<button type="submit" class="btn" id="sub">Reset Password</button>
+</form>
+<div id="msg"></div>
+<a class="open-app" href="paceup://reset-password?token=${token.replace(/"/g,"&quot;")}">Open in PaceUp app instead</a>
+</div>
+<script>
+async function go(e){
+  e.preventDefault();
+  var pw=document.getElementById("pw").value,pw2=document.getElementById("pw2").value,m=document.getElementById("msg"),s=document.getElementById("sub");
+  if(pw!==pw2){m.className="msg err";m.textContent="Passwords don't match";return false}
+  s.disabled=true;s.textContent="Resetting...";
+  try{
+    var r=await fetch("/api/auth/reset-password",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:document.querySelector('[name=token]').value,password:pw})});
+    var d=await r.json();
+    if(r.ok){m.className="msg ok";m.textContent="Password reset! You can now log in with your new password.";document.getElementById("f").style.display="none"}
+    else{m.className="msg err";m.textContent=d.message||"Reset failed";s.disabled=false;s.textContent="Reset Password"}
+  }catch(x){m.className="msg err";m.textContent="Network error, try again";s.disabled=false;s.textContent="Reset Password"}
+  return false
+}
+</script>
+</body></html>`);
   });
 
   app.get("/api/auth/me", async (req, res) => {
