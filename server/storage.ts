@@ -1082,6 +1082,14 @@ export async function isCrewMember(crewId: string, userId: string): Promise<bool
   return res.rows.length > 0;
 }
 
+export async function getUserCrewIds(userId: string): Promise<Array<{ crew_id: string }>> {
+  const res = await pool.query(
+    `SELECT crew_id FROM crew_members WHERE user_id = $1 AND status = 'member'`,
+    [userId]
+  );
+  return res.rows;
+}
+
 export async function getCrewVisibleRuns(userId: string, bounds?: { swLat: number; neLat: number; swLng: number; neLng: number }) {
   let query = `SELECT r.*, u.name as host_name, u.avg_rating as host_rating, u.rating_count as host_rating_count, u.photo_url as host_photo,
       u.marker_icon as host_marker_icon, u.hosted_runs as host_hosted_runs,

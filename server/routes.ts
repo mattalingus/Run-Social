@@ -412,22 +412,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         storage.getPublicCrewRuns(bounds),
       ]);
       if (req.session.userId) {
-        const [friendLocked, invited, crewRuns] = await Promise.all([
+        const [friendLocked, invited, crewRuns, userCrewRows] = await Promise.all([
           storage.getFriendPrivateRuns(req.session.userId, bounds),
           storage.getInvitedPrivateRuns(req.session.userId, bounds),
           storage.getCrewVisibleRuns(req.session.userId, bounds),
+          storage.getUserCrewIds(req.session.userId),
         ]);
+        const userCrewIds = new Set(userCrewRows.map((r: any) => r.crew_id));
         const combined = [...publicRuns, ...publicCrewRuns, ...invited, ...friendLocked, ...crewRuns];
         const seen = new Set<string>();
         const deduped = combined.filter(r => { if (seen.has(r.id)) return false; seen.add(r.id); return true; });
         deduped.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-        return res.json(deduped);
+        const annotated = deduped.map(r => ({ ...r, user_is_crew_member: r.crew_id ? userCrewIds.has(r.crew_id) : true }));
+        return res.json(annotated);
       }
       const unauthCombined = [...publicRuns, ...publicCrewRuns];
       const unauthSeen = new Set<string>();
       const unauthDeduped = unauthCombined.filter(r => { if (unauthSeen.has(r.id)) return false; unauthSeen.add(r.id); return true; });
       unauthDeduped.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-      res.json(unauthDeduped);
+      const unauthAnnotated = unauthDeduped.map(r => ({ ...r, user_is_crew_member: r.crew_id ? false : true }));
+      res.json(unauthAnnotated);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }

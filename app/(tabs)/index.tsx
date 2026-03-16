@@ -177,6 +177,7 @@ interface Run {
   crew_emoji?: string | null;
   pace_groups?: { label: string; minPace: number; maxPace: number }[] | null;
   plan_count?: string;
+  user_is_crew_member?: boolean;
 }
 
 // ─── Route thumbnail helpers ──────────────────────────────────────────────────
@@ -900,14 +901,23 @@ function RunCard({
                 </View>
               </View>
 
-              {parseInt(run.plan_count ?? "0") > 0 && (
+              {run.crew_id && !run.user_is_crew_member ? (
+                <Pressable
+                  style={s.joinCrewCta}
+                  onPress={() => router.push(`/crews/${run.crew_id}`)}
+                >
+                  <Ionicons name="shield-outline" size={12} color={C.primary} />
+                  <Text style={s.joinCrewCtaTxt}>Join crew to participate</Text>
+                  <Feather name="chevron-right" size={12} color={C.primary} />
+                </Pressable>
+              ) : parseInt(run.plan_count ?? "0") > 0 ? (
                 <View style={s.metaItem}>
                   <Feather name="calendar" size={11} color={C.textMuted} />
                   <Text style={s.metaText}>
                     {run.plan_count} {parseInt(run.plan_count ?? "0") === 1 ? "person" : "people"} planning to {run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run"}
                   </Text>
                 </View>
-              )}
+              ) : null}
             </Pressable>
 
             {/* Tags outside Pressable — scroll works, still inside right column so divider spans them */}
@@ -3395,6 +3405,8 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   cardMeta: { gap: 3 },
   metaItem: { flexDirection: "row", alignItems: "center", gap: 6 },
   metaText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary, flex: 1 },
+  joinCrewCta: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: `${C.primary}18`, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 10 },
+  joinCrewCtaTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.primary, flex: 1 },
 
   cardStats: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 },
   stat: { flexDirection: "row", alignItems: "center", gap: 3, flex: 1, minWidth: 0 },
