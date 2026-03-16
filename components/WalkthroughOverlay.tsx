@@ -7,7 +7,6 @@ import {
   Animated,
   Dimensions,
   Platform,
-  InteractionManager,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -35,30 +34,24 @@ export default function WalkthroughOverlay() {
     if (!isActive || !currentStepConfig) return;
 
     const targetTab = currentStepConfig.tab;
+    // Profile tab navigation crashes on iOS due to a hidden messages tab in between.
+    // Skip programmatic navigation for profile steps — the cards appear in place and
+    // the user navigates to the Profile tab themselves.
+    const canNav = targetTab !== "profile";
     const route = TAB_ROUTES[targetTab];
-    const needsNav = route && prevTabRef.current !== targetTab;
+    const needsNav = canNav && route && prevTabRef.current !== targetTab;
 
     if (needsNav) {
       prevTabRef.current = targetTab;
-      // Navigate first, defer animation until after the tab transition settles
       router.navigate(route);
-      fadeAnim.setValue(0);
-      slideAnim.setValue(20);
-      const task = InteractionManager.runAfterInteractions(() => {
-        Animated.parallel([
-          Animated.timing(fadeAnim, { toValue: 1, duration: 280, useNativeDriver: true }),
-          Animated.timing(slideAnim, { toValue: 0, duration: 280, useNativeDriver: true }),
-        ]).start();
-      });
-      return () => task.cancel();
-    } else {
-      fadeAnim.setValue(0);
-      slideAnim.setValue(20);
-      Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 1, duration: 280, useNativeDriver: true }),
-        Animated.timing(slideAnim, { toValue: 0, duration: 280, useNativeDriver: true }),
-      ]).start();
     }
+
+    fadeAnim.setValue(0);
+    slideAnim.setValue(20);
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 280, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 280, useNativeDriver: true }),
+    ]).start();
   }, [isActive, currentStep, currentStepConfig]);
 
   useEffect(() => {
@@ -105,6 +98,12 @@ export default function WalkthroughOverlay() {
           { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
         ]}
       >
+        {currentStepConfig.tab === "profile" && (
+          <View style={styles.tabHint}>
+            <Ionicons name="person-outline" size={13} color="#00D97E" />
+            <Text style={styles.tabHintTxt}>Tap Profile tab to explore</Text>
+          </View>
+        )}
         <View style={styles.tooltipHeader}>
           <Text style={styles.tooltipTitle}>{currentStepConfig.title}</Text>
           <Text style={styles.stepIndicator}>{currentStep + 1} / {totalSteps}</Text>
@@ -231,6 +230,22 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 6 },
     elevation: 20,
+  },
+  tabHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "rgba(0,217,126,0.12)",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginBottom: 10,
+    alignSelf: "flex-start",
+  },
+  tabHintTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 12,
+    color: "#00D97E",
   },
   tooltipHeader: {
     flexDirection: "row",
