@@ -2379,15 +2379,19 @@ async function go(e){
       // Prefer server-side map (session-cookie-independent).
       // Fall back to session userId for any other OAuth flows.
       const pending = garminPendingTokens.get(oauth_token);
-      const userId: string | undefined = pending?.userId ?? (req.session?.userId as string | undefined);
-      if (!userId) {
-        return res.status(400).send("Session expired. Please return to PaceUp and try connecting Garmin again.");
+      // Require the server-side pending entry (contains userId + requestSecret).
+      // If it's missing (e.g. server restarted mid-OAuth), reject with a clear message
+      // rather than proceeding with an empty request secret which would silently fail.
+      if (!pending) {
+        return res.status(400).send(
+          "OAuth state expired. Please return to the PaceUp app and tap Connect again."
+        );
       }
+      const { userId, requestSecret } = pending;
       garminPendingTokens.delete(oauth_token);
 
       const oauthInst = makeGarminOAuth();
       if (!oauthInst) return res.status(503).send("Garmin integration is not configured.");
-      const requestSecret = pending?.requestSecret ?? "";
       const request = { url: GARMIN_ACCESS_TOKEN_URL, method: "POST" };
       const authData = oauthInst.authorize(request, { key: oauth_token, secret: requestSecret });
       const authHeader = oauthInst.toHeader({ ...authData, oauth_verifier });
