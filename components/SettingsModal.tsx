@@ -236,7 +236,18 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
     setHealthSyncMsg(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
-      const { fetchWorkouts } = require("@/lib/healthKit");
+      const { isHealthKitAvailable, requestHealthKitPermissions, fetchWorkouts } = require("@/lib/healthKit");
+      if (!isHealthKitAvailable()) {
+        setHealthSyncMsg("Apple Health is not available on this device.");
+        return;
+      }
+      try {
+        await requestHealthKitPermissions();
+      } catch (initErr: any) {
+        setHealthSyncMsg(`Could not access Health: ${initErr?.message ?? "permission denied"}`);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        return;
+      }
       const workouts = await fetchWorkouts(90);
       setHealthSyncing(false);
 

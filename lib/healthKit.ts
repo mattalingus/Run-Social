@@ -12,6 +12,7 @@ export interface HealthKitWorkout {
 }
 
 let AppleHealthKit: any = null;
+let hkInitialized = false;
 
 function getHealthKit(): any {
   if (Platform.OS !== "ios") return null;
@@ -28,13 +29,9 @@ export function isHealthKitAvailable(): boolean {
   return Platform.OS === "ios" && getHealthKit() !== null;
 }
 
-export async function requestHealthKitPermissions(): Promise<boolean> {
-  const hk = getHealthKit();
-  if (!hk) return false;
-
+function buildPermissions(): object {
   const { HealthKitDataType } = require("react-native-health");
-
-  const permissions = {
+  return {
     permissions: {
       read: [
         HealthKitDataType?.Workout ?? "Workout",
@@ -49,17 +46,47 @@ export async function requestHealthKitPermissions(): Promise<boolean> {
       ],
     },
   };
+}
 
+/**
+ * Ensures HealthKit is initialized for the current app session.
+ * Returns null on success, or an error string describing the failure reason.
+ * Uses a session flag so it only calls initHealthKit once per app launch.
+ */
+async function ensureHealthKitInitialized(): Promise<string | null> {
+  if (hkInitialized) return null;
+  const hk = getHealthKit();
+  if (!hk) return "HealthKit is not available on this device.";
+
+  const permissions = buildPermissions();
   return new Promise((resolve) => {
     hk.initHealthKit(permissions, (err: any) => {
       if (err) {
-        console.warn("HealthKit init error:", err);
-        resolve(false);
+        const msg = typeof err === "string" ? err : JSON.stringify(err);
+        console.warn("[HealthKit] initHealthKit error:", msg);
+        resolve(msg);
       } else {
-        resolve(true);
+        hkInitialized = true;
+        resolve(null);
       }
     });
   });
+}
+
+/**
+ * Requests HealthKit read + write permissions. Returns true on success.
+ * Throws a descriptive Error on failure so callers can surface the reason.
+ */
+export async function requestHealthKitPermissions(): Promise<boolean> {
+  const hk = getHealthKit();
+  if (!hk) return false;
+
+  hkInitialized = false;
+  const err = await ensureHealthKitInitialized();
+  if (err) {
+    throw new Error(err);
+  }
+  return true;
 }
 
 function mapWorkoutType(typeId: number | string): "run" | "ride" | "walk" | null {
@@ -78,6 +105,12 @@ export async function fetchWorkouts(daysSince: number = 90): Promise<HealthKitWo
   const hk = getHealthKit();
   if (!hk) return [];
 
+  const initErr = await ensureHealthKitInitialized();
+  if (initErr) {
+    console.warn("[HealthKit] fetchWorkouts init error:", initErr);
+    return [];
+  }
+
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - daysSince);
 
@@ -91,7 +124,7 @@ export async function fetchWorkouts(daysSince: number = 90): Promise<HealthKitWo
       },
       (err: any, results: any[]) => {
         if (err || !results) {
-          console.warn("HealthKit getSamples error:", err);
+          console.warn("[HealthKit] getSamples error:", err);
           resolve([]);
           return;
         }
@@ -139,6 +172,12 @@ export async function saveWorkoutToHealthKit(opts: SaveWorkoutOptions): Promise<
   if (Platform.OS !== "ios") return false;
   const hk = getHealthKit();
   if (!hk) return false;
+
+  const initErr = await ensureHealthKitInitialized();
+  if (initErr) {
+    console.warn("[HealthKit] saveWorkout init error:", initErr);
+    return false;
+  }
 
   const typeMap: Record<string, string> = {
     run: "Running",
