@@ -155,17 +155,16 @@ export function PurchasesProvider({ children }: { children: React.ReactNode }) {
   }, [user?.id, configured]);
 
   const restorePurchases = useCallback(async () => {
-    if (!PurchasesSDK || Platform.OS === "web") return;
-    const apiKey = getApiKey();
-    if (!apiKey) return;
-    try {
-      const customerInfo = await PurchasesSDK.restorePurchases();
-      const entitlements = Object.keys(customerInfo?.entitlements?.active || {});
-      setActiveEntitlements(entitlements);
-    } catch (e) {
-      console.warn("[PurchasesProvider] restore error:", e);
-      throw e;
+    if (!PurchasesSDK || Platform.OS === "web") {
+      throw new Error("Purchases are not supported on this platform");
     }
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      throw new Error("RevenueCat is not configured — please reinstall the app");
+    }
+    const customerInfo = await PurchasesSDK.restorePurchases();
+    const entitlements = Object.keys(customerInfo?.entitlements?.active || {});
+    setActiveEntitlements(entitlements);
   }, []);
 
   const value = useMemo(
