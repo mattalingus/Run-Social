@@ -4,14 +4,20 @@ import { useAuth } from "@/contexts/AuthContext";
 
 interface RevenueCatProduct {
   identifier: string;
+  priceString?: string;
 }
 
 interface RevenueCatPackage {
+  identifier: string;
   product: RevenueCatProduct;
 }
 
 interface RevenueCatOffering {
   availablePackages: RevenueCatPackage[];
+}
+
+interface RevenueCatOfferings {
+  current: RevenueCatOffering | null;
 }
 
 interface RevenueCatEntitlements {
@@ -26,7 +32,7 @@ interface RevenueCatSDK {
   configure: (config: { apiKey: string }) => void;
   logIn: (userId: string) => Promise<{ customerInfo: RevenueCatCustomerInfo }>;
   getCustomerInfo: () => Promise<RevenueCatCustomerInfo>;
-  getOfferings: () => Promise<{ current: RevenueCatOffering | null }>;
+  getOfferings: () => Promise<RevenueCatOfferings>;
   purchasePackage: (pkg: RevenueCatPackage) => Promise<{ customerInfo: RevenueCatCustomerInfo }>;
   restorePurchases: () => Promise<RevenueCatCustomerInfo>;
 }
@@ -38,8 +44,15 @@ if (Platform.OS !== "web") {
   } catch {}
 }
 
-const REVENUECAT_IOS_KEY = process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY || "appl_PLACEHOLDER_IOS_KEY";
-const REVENUECAT_ANDROID_KEY = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY || "goog_PLACEHOLDER_ANDROID_KEY";
+const REVENUECAT_TEST_KEY = process.env.EXPO_PUBLIC_REVENUECAT_TEST_API_KEY ?? "";
+const REVENUECAT_IOS_KEY = process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY ?? "";
+const REVENUECAT_ANDROID_KEY = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY ?? "";
+
+function getApiKey(): string {
+  if (Platform.OS === "ios") return REVENUECAT_IOS_KEY || REVENUECAT_TEST_KEY;
+  if (Platform.OS === "android") return REVENUECAT_ANDROID_KEY || REVENUECAT_TEST_KEY;
+  return REVENUECAT_TEST_KEY;
+}
 
 interface PurchasesContextValue {
   isReady: boolean;
@@ -61,6 +74,7 @@ export function PurchasesProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [isReady, setIsReady] = useState(false);
   const [activeEntitlements, setActiveEntitlements] = useState<string[]>([]);
+  const [configured, setConfigured] = useState(false);
 
   useEffect(() => {
     if (!PurchasesSDK || Platform.OS === "web") {
@@ -70,12 +84,18 @@ export function PurchasesProvider({ children }: { children: React.ReactNode }) {
 
     async function init() {
       try {
-        const apiKey = Platform.OS === "ios" ? REVENUECAT_IOS_KEY : REVENUECAT_ANDROID_KEY;
-        if (apiKey.includes("PLACEHOLDER")) {
+        const apiKey = getApiKey();
+        if (!apiKey) {
+          console.warn("[PurchasesProvider] No RevenueCat API key found — skipping init");
           setIsReady(true);
           return;
         }
-        PurchasesSDK!.configure({ apiKey });
+
+        if (!configured) {
+          PurchasesSDK!.configure({ apiKey });
+          setConfigured(true);
+        }
+
         if (user?.id) {
           await PurchasesSDK!.logIn(user.id);
         }
@@ -98,6 +118,8 @@ export function PurchasesProvider({ children }: { children: React.ReactNode }) {
 
   const purchasePackage = useCallback(async (productId: string, crewId?: string): Promise<boolean> => {
     if (!PurchasesSDK || Platform.OS === "web") return false;
+    const apiKey = getApiKey();
+    if (!apiKey) return false;
     try {
       if (crewId) {
         await PurchasesSDK.logIn(`crew_${crewId}`);
@@ -123,16 +145,19 @@ export function PurchasesProvider({ children }: { children: React.ReactNode }) {
       }
       return false;
     }
-  }, [user?.id]);
+  }, [user?.id, configured]);
 
   const restorePurchases = useCallback(async () => {
     if (!PurchasesSDK || Platform.OS === "web") return;
+    const apiKey = getApiKey();
+    if (!apiKey) return;
     try {
       const customerInfo = await PurchasesSDK.restorePurchases();
       const entitlements = Object.keys(customerInfo?.entitlements?.active || {});
       setActiveEntitlements(entitlements);
     } catch (e) {
       console.warn("[PurchasesProvider] restore error:", e);
+      throw e;
     }
   }, []);
 
