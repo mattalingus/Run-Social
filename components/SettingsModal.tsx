@@ -21,6 +21,7 @@ import * as WebBrowser from "expo-web-browser";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
+import { usePurchases } from "@/contexts/PurchasesContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -116,6 +117,8 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
   const { C, theme, toggleTheme } = useTheme();
   const { user, refreshUser } = useAuth();
   const qc = useQueryClient();
+  const { restorePurchases, isReady: purchasesReady } = usePurchases();
+  const [restoringPurchases, setRestoringPurchases] = useState(false);
 
   const distanceUnit: Unit = (user as any)?.distance_unit ?? "miles";
   const profilePrivacy: Privacy = (user as any)?.profile_privacy ?? "public";
@@ -429,6 +432,21 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
         { text: "Email Support", onPress: () => Linking.openURL("mailto:support@paceupapp.com?subject=Password%20Reset%20Request") },
       ]
     );
+  }
+
+  async function handleRestorePurchases() {
+    if (restoringPurchases) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setRestoringPurchases(true);
+    try {
+      await restorePurchases();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert("Purchases Restored", "Your subscriptions have been restored successfully.");
+    } catch {
+      Alert.alert("Restore Failed", "Could not restore purchases. Make sure you're signed in to the same Apple ID used for the original purchase.");
+    } finally {
+      setRestoringPurchases(false);
+    }
   }
 
   const privacyLabel: Record<Privacy, string> = {
@@ -833,6 +851,22 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
               }}
             />
             <Divider C={C} />
+            {Platform.OS !== "web" && (
+              <>
+                <SettingRow
+                  C={C}
+                  iconBg="#0A1A2A"
+                  icon={restoringPurchases
+                    ? <ActivityIndicator size="small" color={C.primary} />
+                    : <Feather name="refresh-cw" size={17} color={C.primary} />
+                  }
+                  label="Restore Purchases"
+                  sublabel="Recover crew subscriptions after reinstall"
+                  onPress={handleRestorePurchases}
+                />
+                <Divider C={C} />
+              </>
+            )}
             <SettingRow
               C={C}
               iconBg="#2A1A0A"

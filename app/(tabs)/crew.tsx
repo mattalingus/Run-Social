@@ -2069,8 +2069,12 @@ function CrewPlansSection({ crewId }: { crewId: string }) {
             </View>
             {tier.features.map((f, i) => (
               <View key={i} style={s.planFeatureRow}>
-                <Ionicons name="checkmark" size={14} color={tier.color} />
-                <Text style={s.planFeatureTxt}>{f}</Text>
+                <Ionicons
+                  name={active ? "checkmark-circle" : "lock-closed-outline"}
+                  size={14}
+                  color={active ? tier.color : C.textMuted}
+                />
+                <Text style={[s.planFeatureTxt, !active && { color: C.textMuted }]}>{f}</Text>
               </View>
             ))}
             {!active ? (
