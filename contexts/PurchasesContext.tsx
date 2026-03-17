@@ -44,9 +44,16 @@ if (Platform.OS !== "web") {
   } catch {}
 }
 
-const REVENUECAT_TEST_KEY = process.env.EXPO_PUBLIC_REVENUECAT_TEST_API_KEY ?? "";
-const REVENUECAT_IOS_KEY = process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY ?? "";
-const REVENUECAT_ANDROID_KEY = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY ?? "";
+const REVENUECAT_TEST_KEY =
+  process.env.EXPO_PUBLIC_REVENUECAT_TEST_API_KEY ?? "";
+const REVENUECAT_IOS_KEY =
+  process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY ||
+  process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY ||
+  "";
+const REVENUECAT_ANDROID_KEY =
+  process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY ||
+  process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY ||
+  "";
 
 function getApiKey(): string {
   if (Platform.OS === "ios") return REVENUECAT_IOS_KEY || REVENUECAT_TEST_KEY;

@@ -1955,6 +1955,7 @@ const PLAN_TIERS = [
   {
     id: "growth",
     productId: "crew_growth_monthly",
+    entitlementId: "crew_growth",
     name: "Crew Growth",
     price: "$1.99/mo",
     icon: "people" as const,
@@ -1964,6 +1965,7 @@ const PLAN_TIERS = [
   {
     id: "discovery_boost",
     productId: "crew_discovery_boost_monthly",
+    entitlementId: "crew_discovery_boost",
     name: "Discovery Boost",
     price: "$4.99/mo",
     icon: "rocket" as const,
@@ -1976,7 +1978,7 @@ function CrewPlansSection({ crewId }: { crewId: string }) {
   const { C } = useTheme();
   const s = useMemo(() => makeStyles(C), [C]);
   const qc = useQueryClient();
-  const { purchasePackage, restorePurchases } = usePurchases();
+  const { purchasePackage, restorePurchases, hasEntitlement } = usePurchases();
   const [purchasing, setPurchasing] = useState<string | null>(null);
 
   const { data: subStatus } = useQuery<SubscriptionStatus>({
@@ -1986,9 +1988,10 @@ function CrewPlansSection({ crewId }: { crewId: string }) {
 
   const currentTier = subStatus?.subscription_tier || "none";
 
-  function isTierActive(tierId: string): boolean {
+  function isTierActive(tierId: string, entitlementId: string): boolean {
     if (currentTier === "both") return true;
-    return currentTier === tierId;
+    if (currentTier === tierId) return true;
+    return hasEntitlement(entitlementId);
   }
 
   async function handleSubscribe(tier: typeof PLAN_TIERS[0]) {
@@ -2049,7 +2052,7 @@ function CrewPlansSection({ crewId }: { crewId: string }) {
       </View>
 
       {PLAN_TIERS.map((tier) => {
-        const active = isTierActive(tier.id);
+        const active = isTierActive(tier.id, tier.entitlementId);
         return (
           <View key={tier.id} style={[s.planCard, active && { borderColor: tier.color }]}>
             <View style={s.planCardHeader}>
