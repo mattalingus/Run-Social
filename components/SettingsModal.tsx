@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -141,6 +141,19 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [garminSyncing, setGarminSyncing] = useState(false);
   const [garminSyncMsg, setGarminSyncMsg] = useState<string | null>(null);
+
+  // Listen for the deep link fired after Garmin OAuth completes in the in-app browser.
+  // The callback page redirects to paceup://garmin-connected which triggers this listener.
+  useEffect(() => {
+    const sub = Linking.addEventListener("url", ({ url }) => {
+      if (url.startsWith("paceup://garmin-connected")) {
+        refetchGarmin().then(() => {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        });
+      }
+    });
+    return () => sub.remove();
+  }, [refetchGarmin]);
 
   const updateUser = useCallback(async (updates: Record<string, any>, fieldKey: string) => {
     setUpdatingField(fieldKey);

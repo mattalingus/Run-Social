@@ -19,6 +19,10 @@ const GARMIN_AUTH_URL = "https://connect.garmin.com/oauthConfirm";
 const GARMIN_ACCESS_TOKEN_URL = "https://connectapi.garmin.com/oauth-service/oauth/access_token";
 const GARMIN_ACTIVITIES_URL = "https://apis.garmin.com/wellness-api/rest/activities";
 
+// Server-side map: oauth_token (request token) → { userId, requestSecret }
+// Bypasses session cookie loss when the in-app browser redirects back for the callback.
+const garminPendingTokens = new Map<string, { userId: string; requestSecret: string }>();
+
 function makeGarminOAuth() {
   const key = process.env.GARMIN_CONSUMER_KEY;
   const secret = process.env.GARMIN_CONSUMER_SECRET;
@@ -2355,23 +2359,37 @@ async function go(e){
       const requestToken = params.get("oauth_token");
       const requestSecret = params.get("oauth_token_secret");
       if (!requestToken || !requestSecret) return res.status(500).json({ message: "Failed to obtain request token from Garmin." });
-      (req.session as any).garminRequestSecret = requestSecret;
-      await new Promise<void>((r) => req.session.save(() => r()));
+      // Store the userId ↔ requestToken mapping server-side so the callback can look it
+      // up without depending on the session cookie (which may drop in in-app browsers).
+      garminPendingTokens.set(requestToken, { userId: req.session.userId!, requestSecret });
+      // Clean up stale entries older than 15 minutes (map grows by at most one per connect attempt)
+      setTimeout(() => garminPendingTokens.delete(requestToken), 15 * 60 * 1000);
       res.json({ authUrl: `${GARMIN_AUTH_URL}?oauth_token=${requestToken}` });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
   app.get("/api/garmin/callback", async (req: any, res) => {
     try {
-      const { oauth_token, oauth_verifier } = req.query as Record<string, string>;
-      const userId = req.session?.userId as string | undefined;
-      if (!userId || !oauth_token || !oauth_verifier) {
-        return res.status(400).send("Missing OAuth parameters or session expired. Please try connecting Garmin again.");
+      const oauth_token = String(req.query.oauth_token ?? "");
+      const oauth_verifier = String(req.query.oauth_verifier ?? "");
+      if (!oauth_token || !oauth_verifier) {
+        return res.status(400).send("Missing OAuth parameters. Please try connecting Garmin again.");
       }
+
+      // Prefer server-side map (session-cookie-independent).
+      // Fall back to session userId for any other OAuth flows.
+      const pending = garminPendingTokens.get(oauth_token);
+      const userId: string | undefined = pending?.userId ?? (req.session?.userId as string | undefined);
+      if (!userId) {
+        return res.status(400).send("Session expired. Please return to PaceUp and try connecting Garmin again.");
+      }
+      garminPendingTokens.delete(oauth_token);
+
       const oauthInst = makeGarminOAuth();
       if (!oauthInst) return res.status(503).send("Garmin integration is not configured.");
+      const requestSecret = pending?.requestSecret ?? "";
       const request = { url: GARMIN_ACCESS_TOKEN_URL, method: "POST" };
-      const authData = oauthInst.authorize(request, { key: oauth_token, secret: "" });
+      const authData = oauthInst.authorize(request, { key: oauth_token, secret: requestSecret });
       const authHeader = oauthInst.toHeader({ ...authData, oauth_verifier });
       const accResp = await fetch(GARMIN_ACCESS_TOKEN_URL, {
         method: "POST",
@@ -2388,7 +2406,17 @@ async function go(e){
       const accessSecret = accParams.get("oauth_token_secret");
       if (!accessToken || !accessSecret) return res.status(500).send("Invalid token response from Garmin.");
       await storage.saveGarminToken(userId, accessToken, accessSecret);
-      res.send(`<!DOCTYPE html><html><head><title>PaceUp — Garmin Connected</title><style>body{background:#050C09;color:#fff;font-family:sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;} h1{color:#00D97E;font-size:24px;} p{color:#aaa;margin-top:8px;}</style></head><body><h1>Garmin Connected!</h1><p>You can now return to the PaceUp app.</p></body></html>`);
+      // Redirect to the PaceUp deep link so the app re-focuses and refetches status.
+      // On devices without the app installed this falls back to the HTML success page.
+      res.send(`<!DOCTYPE html><html><head><title>PaceUp — Garmin Connected</title>
+<meta http-equiv="refresh" content="0;url=paceup://garmin-connected">
+<style>body{background:#050C09;color:#fff;font-family:sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;} h1{color:#00D97E;font-size:24px;} p{color:#aaa;margin-top:8px;} a{color:#00D97E;}</style></head>
+<body>
+<h1>Garmin Connected!</h1>
+<p>Returning to PaceUp…</p>
+<p><a href="paceup://garmin-connected">Tap here if the app didn't open automatically</a></p>
+<script>window.location.href="paceup://garmin-connected";</script>
+</body></html>`);
     } catch (e: any) { res.status(500).send(`Error: ${e.message}`); }
   });
 
