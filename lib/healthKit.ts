@@ -43,7 +43,10 @@ export async function requestHealthKitPermissions(): Promise<boolean> {
         HealthKitDataType?.ActiveEnergyBurned ?? "ActiveEnergyBurned",
         HealthKitDataType?.HeartRate ?? "HeartRate",
       ],
-      write: [],
+      write: [
+        HealthKitDataType?.Workout ?? "Workout",
+        HealthKitDataType?.ActiveEnergyBurned ?? "ActiveEnergyBurned",
+      ],
     },
   };
 
@@ -120,5 +123,54 @@ export async function fetchWorkouts(daysSince: number = 90): Promise<HealthKitWo
         resolve(workouts);
       }
     );
+  });
+}
+
+export interface SaveWorkoutOptions {
+  activityType: "run" | "ride" | "walk";
+  startDate: Date;
+  endDate: Date;
+  distanceMiles: number;
+  durationSeconds: number;
+  caloriesBurned?: number;
+}
+
+export async function saveWorkoutToHealthKit(opts: SaveWorkoutOptions): Promise<boolean> {
+  if (Platform.OS !== "ios") return false;
+  const hk = getHealthKit();
+  if (!hk) return false;
+
+  const typeMap: Record<string, string> = {
+    run: "Running",
+    ride: "Cycling",
+    walk: "Walking",
+  };
+  const type = typeMap[opts.activityType] ?? "Running";
+
+  return new Promise((resolve) => {
+    try {
+      hk.saveWorkout(
+        {
+          type,
+          startDate: opts.startDate.toISOString(),
+          endDate: opts.endDate.toISOString(),
+          distance: opts.distanceMiles,
+          distanceUnit: "mile",
+          energyBurned: opts.caloriesBurned ?? 0,
+          energyBurnedUnit: "calorie",
+        },
+        (err: any) => {
+          if (err) {
+            console.warn("[HealthKit] saveWorkout error:", err);
+            resolve(false);
+          } else {
+            resolve(true);
+          }
+        }
+      );
+    } catch (e) {
+      console.warn("[HealthKit] saveWorkout exception:", e);
+      resolve(false);
+    }
   });
 }

@@ -199,11 +199,18 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
       );
       return;
     }
+    const { isHealthKitAvailable, requestHealthKitPermissions } = require("@/lib/healthKit");
+    if (!isHealthKitAvailable()) {
+      Alert.alert("Apple Health", "Apple Health is not available on this device.");
+      return;
+    }
     try {
-      const { requestHealthKitPermissions } = require("@/lib/healthKit");
       const granted = await requestHealthKitPermissions();
       if (!granted) {
-        Alert.alert("Permission Required", "Please allow PaceUp to access Apple Health in your device settings.");
+        Alert.alert(
+          "Permission Denied",
+          "PaceUp needs access to Apple Health to import your workouts.\n\nGo to Settings → Privacy & Security → Health → PaceUp and allow access."
+        );
         return;
       }
       await apiRequest("PUT", "/api/users/me", { appleHealthConnected: true });
@@ -211,7 +218,15 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert("Connected!", "Apple Health is now connected. Tap Sync to import your workouts.");
     } catch (e: any) {
-      Alert.alert("Apple Health", "Apple Health integration requires the latest app update from the App Store. Please update to enable this feature.");
+      const msg = e?.message ?? "";
+      if (msg.toLowerCase().includes("permission") || msg.toLowerCase().includes("denied") || msg.toLowerCase().includes("authoriz")) {
+        Alert.alert(
+          "Permission Denied",
+          "PaceUp needs access to Apple Health. Go to Settings → Privacy & Security → Health → PaceUp and allow access."
+        );
+      } else {
+        Alert.alert("Apple Health", msg || "Could not connect to Apple Health. Please try again.");
+      }
     }
   }
 
@@ -223,11 +238,38 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
     try {
       const { fetchWorkouts } = require("@/lib/healthKit");
       const workouts = await fetchWorkouts(90);
+      setHealthSyncing(false);
+
       if (workouts.length === 0) {
-        setHealthSyncMsg("No new workouts found.");
+        setHealthSyncMsg("No workouts found in the last 90 days.");
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
         return;
       }
+
+      const runs = workouts.filter((w: any) => w.activityType === "run").length;
+      const rides = workouts.filter((w: any) => w.activityType === "ride").length;
+      const walks = workouts.filter((w: any) => w.activityType === "walk").length;
+      const devices = [...new Set(workouts.map((w: any) => w.sourceName).filter(Boolean))];
+
+      const breakdown: string[] = [];
+      if (runs > 0) breakdown.push(`${runs} run${runs !== 1 ? "s" : ""}`);
+      if (rides > 0) breakdown.push(`${rides} ride${rides !== 1 ? "s" : ""}`);
+      if (walks > 0) breakdown.push(`${walks} walk${walks !== 1 ? "s" : ""}`);
+      const breakdownStr = breakdown.join(", ");
+      const sourceStr = devices.length > 0 ? `\nSources: ${devices.slice(0, 3).join(", ")}` : "";
+
+      await new Promise<void>((resolve, reject) => {
+        Alert.alert(
+          `Found ${workouts.length} Workout${workouts.length !== 1 ? "s" : ""}`,
+          `${breakdownStr} from the last 90 days.${sourceStr}\n\nImport all into PaceUp?`,
+          [
+            { text: "Cancel", style: "cancel", onPress: () => reject(new Error("cancelled")) },
+            { text: "Import All", onPress: () => resolve() },
+          ]
+        );
+      });
+
+      setHealthSyncing(true);
       const resp = await apiRequest("POST", "/api/health/import", { workouts });
       const data = await resp.json();
       const msg = data.imported > 0
@@ -237,8 +279,10 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       qc.invalidateQueries({ queryKey: ["/api/solo-runs"] });
     } catch (e: any) {
-      setHealthSyncMsg(`Sync failed: ${e.message}`);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      if (e?.message !== "cancelled") {
+        setHealthSyncMsg(`Sync failed: ${e.message}`);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
     } finally {
       setHealthSyncing(false);
     }

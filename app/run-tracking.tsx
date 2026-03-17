@@ -1038,6 +1038,21 @@ export default function RunTrackingScreen() {
           await AsyncStorage.setItem(`paceup_saved_draft_${user.id}`, draftIdRef.current);
           await AsyncStorage.removeItem(`paceup_draft_run_${user.id}`).catch(() => {});
         }
+        // Write-back to Apple Health so it credits Activity rings (iOS only, silent fail)
+        if (Platform.OS === "ios" && (user as any)?.apple_health_connected) {
+          try {
+            const { saveWorkoutToHealthKit } = require("@/lib/healthKit");
+            const runEndDate = new Date();
+            const runStartDate = new Date(runEndDate.getTime() - elapsed * 1000);
+            await saveWorkoutToHealthKit({
+              activityType: activityFilter as "run" | "ride" | "walk",
+              startDate: runStartDate,
+              endDate: runEndDate,
+              distanceMiles: Math.max(distance, 0.001),
+              durationSeconds: elapsed,
+            });
+          } catch (_) {}
+        }
         setSaving(false);
         return;
       } catch (e: any) {
