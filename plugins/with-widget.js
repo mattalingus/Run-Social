@@ -210,6 +210,7 @@ struct PaceUpSmallView: View {
       }
       .padding(12)
     }
+    .widgetURL(URL(string: "paceup://discover")!)
   }
 }
 
@@ -289,6 +290,7 @@ struct PaceUpMediumView: View {
       }
       .padding(14)
     }
+    .widgetURL(URL(string: "paceup://discover")!)
   }
 }
 
