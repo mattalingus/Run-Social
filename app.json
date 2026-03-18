@@ -27,6 +27,7 @@
       "buildNumber": "20",
       "bundleIdentifier": "com.paceup",
       "infoPlist": {
+        "NSSupportsLiveActivities": true,
         "NSCameraUsageDescription": "PaceUp uses your camera to add photos to your runs and rides.",
         "NSPhotoLibraryUsageDescription": "PaceUp accesses your photo library to add photos to your runs and rides.",
         "NSPhotoLibraryAddUsageDescription": "PaceUp saves your activity screenshots to your photo library.",
