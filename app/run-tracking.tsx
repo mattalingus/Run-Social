@@ -538,6 +538,7 @@ export default function RunTrackingScreen() {
   const foregroundOnlyRef = useRef(false);
   const webWatchIdRef = useRef<number | null>(null);
   const lastCoordRef = useRef<Coord | null>(null);
+  const liveActivityStartedRef = useRef(false);
   const totalDistRef = useRef(0);
   const routePathRef = useRef<Coord[]>([]);
   const mapRef = useRef<any>(null);
@@ -567,20 +568,6 @@ export default function RunTrackingScreen() {
 
   useEffect(() => { elapsedRef.current = elapsed; }, [elapsed]);
 
-  // ─── Live Activity updates (every 60 s while active) ─────────────────────
-  useEffect(() => {
-    if (phase !== "active" || elapsed === 0 || elapsed % 60 !== 0) return;
-    const paceNum =
-      totalDistRef.current > 0.01
-        ? elapsed / 60 / totalDistRef.current
-        : 0;
-    LiveActivity.update({
-      elapsedSeconds: elapsed,
-      distanceMiles: totalDistRef.current,
-      paceMinPerMile: paceNum,
-      activityType: activityFilter as "run" | "ride" | "walk",
-    });
-  }, [elapsed, phase]);
 
   // ─── Periodic autosave (crash recovery) ───────────────────────────────────
   const AUTOSAVE_KEY = user ? `paceup_active_run_${user.id}` : null;
@@ -725,6 +712,30 @@ export default function RunTrackingScreen() {
       }
     }
     lastCoordRef.current = coord;
+
+    // Live Activity: start on first GPS fix, then update on every subsequent tick
+    if (Platform.OS !== "web") {
+      const paceNum = totalDistRef.current > 0.01
+        ? elapsedRef.current / 60 / totalDistRef.current
+        : 0;
+      const actType = (activityFilter ?? "run") as "run" | "ride" | "walk";
+      if (!liveActivityStartedRef.current) {
+        liveActivityStartedRef.current = true;
+        LiveActivity.start({
+          elapsedSeconds: elapsedRef.current,
+          distanceMiles: totalDistRef.current,
+          paceMinPerMile: paceNum,
+          activityType: actType,
+        });
+      } else {
+        LiveActivity.update({
+          elapsedSeconds: elapsedRef.current,
+          distanceMiles: totalDistRef.current,
+          paceMinPerMile: paceNum,
+          activityType: actType,
+        });
+      }
+    }
 
     // Pan map to follow runner
     if (mapRef.current) {
@@ -893,14 +904,9 @@ export default function RunTrackingScreen() {
         }
       } catch (_) {}
     }
+    liveActivityStartedRef.current = false;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setPhase("active");
-    LiveActivity.start({
-      elapsedSeconds: 0,
-      distanceMiles: 0,
-      paceMinPerMile: 0,
-      activityType: activityFilter as "run" | "ride" | "walk",
-    });
   }
 
   function stopPedometer() {

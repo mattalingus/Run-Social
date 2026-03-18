@@ -1519,10 +1519,15 @@ export default function DiscoverScreen() {
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     const next = upcoming[0];
     if (next) {
-      const d = new Date(next.date);
-      const dayLabel = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-      const timeLabel = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-      updateWidget({ nextRunTitle: next.title, nextRunTime: `${dayLabel} ${timeLabel}` });
+      const distRange =
+        next.min_distance === next.max_distance
+          ? `${next.min_distance}`
+          : `${next.min_distance}–${next.max_distance}`;
+      updateWidget({
+        nextRunTitle: next.title,
+        nextRunTimestamp: new Date(next.date).getTime() / 1000,
+        distanceRangeMiles: distRange,
+      });
     }
   }, [runs, user]);
 

@@ -3,9 +3,11 @@
  *
  * What this does:
  *  1. Writes PaceUpWidgetBridge.m + PaceUpWidgetBridge.swift to ios/
- *     (React Native native module that writes App Group data + reloads timelines)
- *  2. Writes PaceUpWidget/ Swift extension (small + medium WidgetKit widgets
- *     showing weekly miles and the next scheduled run)
+ *     (React Native native module that writes a JSON file to the App Group
+ *     shared container, then reloads WidgetKit timelines)
+ *  2. Writes PaceUpWidget/ Swift extension (small + medium WidgetKit widgets)
+ *     - Small: next upcoming run + time until start
+ *     - Medium: next run + distance range + weekly progress toward monthly goal
  *  3. Adds both sets of files to the correct Xcode targets
  *  4. Writes the extension Info.plist and App Group entitlements file
  */
@@ -28,7 +30,7 @@ const WIDGET_BRIDGE_M = `\
 
 @interface RCT_EXTERN_MODULE(PaceUpWidgetBridge, NSObject)
 
-RCT_EXTERN_METHOD(updateWidgetData:(NSDictionary *)data
+RCT_EXTERN_METHOD(writeWidgetJson:(NSString *)jsonString
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
@@ -42,21 +44,31 @@ import WidgetKit
 @objc(PaceUpWidgetBridge)
 class PaceUpWidgetBridge: NSObject {
 
-  @objc func updateWidgetData(
-    _ data: NSDictionary,
+  @objc func writeWidgetJson(
+    _ jsonString: String,
     resolver resolve: @escaping RCTPromiseResolveBlock,
-    rejecter _: @escaping RCTPromiseRejectBlock
+    rejecter reject: @escaping RCTPromiseRejectBlock
   ) {
-    guard let defaults = UserDefaults(suiteName: "${APP_GROUP}") else {
-      resolve(nil); return
+    guard
+      let containerURL = FileManager.default.containerURL(
+        forSecurityApplicationGroupIdentifier: "${APP_GROUP}"
+      )
+    else {
+      reject("NO_APP_GROUP", "App Group not available", nil)
+      return
     }
-    if let v = data["nextRunTitle"] as? String { defaults.set(v, forKey: "nextRunTitle") }
-    if let v = data["nextRunTime"] as? String { defaults.set(v, forKey: "nextRunTime") }
-    if let v = data["weeklyMiles"] as? Double { defaults.set(v, forKey: "weeklyMiles") }
-    if let v = data["monthlyGoal"] as? Double { defaults.set(v, forKey: "monthlyGoal") }
-    defaults.synchronize()
-    WidgetCenter.shared.reloadAllTimelines()
-    resolve(nil)
+    let fileURL = containerURL.appendingPathComponent("widget_data.json")
+    guard let data = jsonString.data(using: .utf8) else {
+      reject("ENCODE_ERR", "Could not encode JSON string", nil)
+      return
+    }
+    do {
+      try data.write(to: fileURL, options: .atomicWrite)
+      WidgetCenter.shared.reloadAllTimelines()
+      resolve(nil)
+    } catch {
+      reject("WRITE_ERR", error.localizedDescription, error)
+    }
   }
 
   @objc static func requiresMainQueueSetup() -> Bool { false }
@@ -68,22 +80,39 @@ import WidgetKit
 import SwiftUI
 
 private let kAppGroup = "${APP_GROUP}"
+private let kDataFile = "widget_data.json"
 
-// MARK: - Timeline
+// MARK: - Data model
+
+struct WidgetPayload: Codable {
+  var nextRunTitle: String
+  var nextRunTimestamp: Double
+  var distanceRangeMiles: String
+  var weeklyMiles: Double
+  var monthlyGoal: Double
+}
+
+// MARK: - Timeline entry
 
 struct PaceUpWidgetEntry: TimelineEntry {
   let date: Date
-  let nextRunTitle: String
-  let nextRunTime: String
-  let weeklyMiles: Double
-  let monthlyGoal: Double
+  let payload: WidgetPayload
 }
 
+// MARK: - Provider
+
 struct PaceUpWidgetProvider: TimelineProvider {
+
   func placeholder(in _: Context) -> PaceUpWidgetEntry {
     PaceUpWidgetEntry(
-      date: Date(), nextRunTitle: "Morning Run",
-      nextRunTime: "Tomorrow 7:00 AM", weeklyMiles: 12.4, monthlyGoal: 50
+      date: Date(),
+      payload: WidgetPayload(
+        nextRunTitle: "Morning Run",
+        nextRunTimestamp: Date().addingTimeInterval(3600).timeIntervalSince1970,
+        distanceRangeMiles: "3-5",
+        weeklyMiles: 12.4,
+        monthlyGoal: 50
+      )
     )
   }
 
@@ -93,26 +122,51 @@ struct PaceUpWidgetProvider: TimelineProvider {
 
   func getTimeline(in _: Context, completion: @escaping (Timeline<PaceUpWidgetEntry>) -> Void) {
     let e = makeEntry()
-    let refresh = Calendar.current.date(byAdding: .minute, value: 30, to: Date()) ?? Date()
+    let refresh = Calendar.current.date(byAdding: .minute, value: 15, to: Date()) ?? Date()
     completion(Timeline(entries: [e], policy: .after(refresh)))
   }
 
   private func makeEntry() -> PaceUpWidgetEntry {
-    let d = UserDefaults(suiteName: kAppGroup)
-    return PaceUpWidgetEntry(
-      date: Date(),
-      nextRunTitle: d?.string(forKey: "nextRunTitle") ?? "",
-      nextRunTime: d?.string(forKey: "nextRunTime") ?? "",
-      weeklyMiles: d?.double(forKey: "weeklyMiles") ?? 0,
-      monthlyGoal: d?.double(forKey: "monthlyGoal") ?? 0
+    var payload = WidgetPayload(
+      nextRunTitle: "",
+      nextRunTimestamp: 0,
+      distanceRangeMiles: "",
+      weeklyMiles: 0,
+      monthlyGoal: 0
     )
+    if let containerURL = FileManager.default.containerURL(
+      forSecurityApplicationGroupIdentifier: kAppGroup
+    ),
+      let data = try? Data(contentsOf: containerURL.appendingPathComponent(kDataFile)),
+      let decoded = try? JSONDecoder().decode(WidgetPayload.self, from: data)
+    {
+      payload = decoded
+    }
+    return PaceUpWidgetEntry(date: Date(), payload: payload)
   }
 }
 
-// MARK: - Views
+// MARK: - Helpers
 
 private let kGreen = Color(red: 0, green: 0.851, blue: 0.494)
-private let kBg = Color(red: 5 / 255, green: 12 / 255, blue: 9 / 255)
+private let kBg    = Color(red: 5 / 255, green: 12 / 255, blue: 9 / 255)
+
+private func timeUntilLabel(timestamp: Double) -> String {
+  guard timestamp > 0 else { return "" }
+  let seconds = timestamp - Date().timeIntervalSince1970
+  guard seconds > 0 else { return "Starting soon" }
+  let hours = Int(seconds) / 3600
+  let minutes = (Int(seconds) % 3600) / 60
+  if hours >= 24 {
+    let days = hours / 24
+    return "in \\(days)d"
+  }
+  if hours >= 1 { return "in \\(hours)h \\(minutes)m" }
+  if minutes >= 1 { return "in \\(minutes)m" }
+  return "Starting soon"
+}
+
+// MARK: - Small widget: next upcoming run
 
 struct PaceUpSmallView: View {
   let e: PaceUpWidgetEntry
@@ -129,21 +183,29 @@ struct PaceUpSmallView: View {
             .foregroundColor(kGreen)
         }
         Spacer()
-        Text(String(format: "%.1f", e.weeklyMiles))
-          .font(.system(size: 30, weight: .bold))
-          .foregroundColor(.white)
-        Text("mi this week")
-          .font(.system(size: 11, weight: .medium))
-          .foregroundColor(.gray)
-        if e.monthlyGoal > 0 {
-          let pct = min(e.weeklyMiles * 4 / e.monthlyGoal, 1.0)
-          GeometryReader { g in
-            ZStack(alignment: .leading) {
-              Capsule().fill(Color.white.opacity(0.15)).frame(height: 4)
-              Capsule().fill(kGreen).frame(width: g.size.width * pct, height: 4)
-            }
+        if e.payload.nextRunTitle.isEmpty {
+          Text("No runs scheduled")
+            .font(.system(size: 13, weight: .medium))
+            .foregroundColor(.gray)
+        } else {
+          Text("NEXT RUN")
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundColor(.gray)
+          Text(e.payload.nextRunTitle)
+            .font(.system(size: 14, weight: .bold))
+            .foregroundColor(.white)
+            .lineLimit(2)
+          let untilLabel = timeUntilLabel(timestamp: e.payload.nextRunTimestamp)
+          if !untilLabel.isEmpty {
+            Text(untilLabel)
+              .font(.system(size: 12, weight: .semibold))
+              .foregroundColor(kGreen)
           }
-          .frame(height: 4)
+          if !e.payload.distanceRangeMiles.isEmpty {
+            Text("\\(e.payload.distanceRangeMiles) mi")
+              .font(.system(size: 11))
+              .foregroundColor(.gray)
+          }
         }
       }
       .padding(12)
@@ -151,12 +213,16 @@ struct PaceUpSmallView: View {
   }
 }
 
+// MARK: - Medium widget: next run + weekly progress
+
 struct PaceUpMediumView: View {
   let e: PaceUpWidgetEntry
   var body: some View {
     ZStack {
       kBg
       HStack(spacing: 16) {
+
+        // Left: next run
         VStack(alignment: .leading, spacing: 4) {
           HStack(spacing: 4) {
             Image(systemName: "figure.run")
@@ -167,14 +233,49 @@ struct PaceUpMediumView: View {
               .foregroundColor(kGreen)
           }
           Spacer()
-          Text(String(format: "%.1f mi", e.weeklyMiles))
-            .font(.system(size: 22, weight: .bold))
-            .foregroundColor(.white)
-          Text("this week")
-            .font(.system(size: 11))
+          if e.payload.nextRunTitle.isEmpty {
+            Text("No upcoming runs")
+              .font(.system(size: 12))
+              .foregroundColor(.gray)
+          } else {
+            Text("NEXT RUN")
+              .font(.system(size: 9, weight: .semibold))
+              .foregroundColor(.gray)
+            Text(e.payload.nextRunTitle)
+              .font(.system(size: 13, weight: .bold))
+              .foregroundColor(.white)
+              .lineLimit(2)
+            let untilLabel = timeUntilLabel(timestamp: e.payload.nextRunTimestamp)
+            if !untilLabel.isEmpty {
+              Text(untilLabel)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(kGreen)
+            }
+            if !e.payload.distanceRangeMiles.isEmpty {
+              Text("\\(e.payload.distanceRangeMiles) mi")
+                .font(.system(size: 11))
+                .foregroundColor(.gray)
+            }
+          }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+
+        Rectangle().fill(Color.white.opacity(0.12)).frame(width: 1)
+
+        // Right: weekly progress
+        VStack(alignment: .leading, spacing: 4) {
+          Text("THIS WEEK")
+            .font(.system(size: 9, weight: .semibold))
             .foregroundColor(.gray)
-          if e.monthlyGoal > 0 {
-            let pct = min(e.weeklyMiles * 4 / e.monthlyGoal, 1.0)
+          Text(String(format: "%.1f mi", e.payload.weeklyMiles))
+            .font(.system(size: 20, weight: .bold))
+            .foregroundColor(.white)
+          if e.payload.monthlyGoal > 0 {
+            let weeklyGoal = e.payload.monthlyGoal / 4
+            let pct = min(e.payload.weeklyMiles / weeklyGoal, 1.0)
+            Text(String(format: "%.0f%% of %.0f mi/wk", pct * 100, weeklyGoal))
+              .font(.system(size: 10))
+              .foregroundColor(.gray)
             GeometryReader { g in
               ZStack(alignment: .leading) {
                 Capsule().fill(Color.white.opacity(0.15)).frame(height: 4)
@@ -182,40 +283,16 @@ struct PaceUpMediumView: View {
               }
             }
             .frame(height: 4)
-            Text(String(format: "Goal: %.0f mi/mo", e.monthlyGoal))
-              .font(.system(size: 10))
-              .foregroundColor(.gray)
           }
         }
-        .frame(maxWidth: .infinity)
-
-        if !e.nextRunTitle.isEmpty {
-          Rectangle().fill(Color.white.opacity(0.12)).frame(width: 1)
-          VStack(alignment: .leading, spacing: 4) {
-            Text("NEXT RUN")
-              .font(.system(size: 9, weight: .semibold))
-              .foregroundColor(.gray)
-            Text(e.nextRunTitle)
-              .font(.system(size: 13, weight: .semibold))
-              .foregroundColor(.white)
-              .lineLimit(2)
-            if !e.nextRunTime.isEmpty {
-              Text(e.nextRunTime)
-                .font(.system(size: 11))
-                .foregroundColor(.gray)
-            }
-            Spacer()
-            Image(systemName: "chevron.right.circle.fill")
-              .foregroundColor(kGreen)
-              .font(.system(size: 18))
-          }
-          .frame(maxWidth: .infinity, alignment: .leading)
-        }
+        .frame(maxWidth: .infinity, alignment: .leading)
       }
       .padding(14)
     }
   }
 }
+
+// MARK: - Entry view + Widget
 
 struct PaceUpWidgetEntryView: View {
   @Environment(\\.widgetFamily) var family
@@ -229,8 +306,6 @@ struct PaceUpWidgetEntryView: View {
   }
 }
 
-// MARK: - Widget + Bundle
-
 struct PaceUpWidget: Widget {
   let kind = "PaceUpWidget"
   var body: some WidgetConfiguration {
@@ -243,7 +318,7 @@ struct PaceUpWidget: Widget {
       }
     }
     .configurationDisplayName("PaceUp")
-    .description("Weekly miles and your next run.")
+    .description("Your next run and weekly progress.")
     .supportedFamilies([.systemSmall, .systemMedium])
   }
 }

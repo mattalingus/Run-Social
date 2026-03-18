@@ -60,6 +60,7 @@ export default function RunLiveScreen() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const mapRef = useRef<MapView>(null);
+  const liveActivityStartedRef = useRef(false);
 
   // ── Tracking context (survives minimize/navigation) ──────────────────────
   const tracking = useLiveTracking();
@@ -126,18 +127,18 @@ export default function RunLiveScreen() {
     handleStartTracking();
   }, [liveState?.isActive]);
 
-  // Live Activity: update every 60 s while tracking
+  // Live Activity: update on each GPS fix (displayDist changes when a new coordinate arrives)
   useEffect(() => {
-    if (phase !== "active" || elapsed === 0 || elapsed % 60 !== 0) return;
+    if (phase !== "active" || !liveActivityStartedRef.current) return;
     const actType = (run?.activity_type ?? "run") as "run" | "ride" | "walk";
-    const paceNum = calcPaceNum(totalDistRef.current, elapsed);
+    const paceNum = calcPaceNum(totalDistRef.current, elapsedRef.current);
     LiveActivity.update({
-      elapsedSeconds: elapsed,
+      elapsedSeconds: elapsedRef.current,
       distanceMiles: totalDistRef.current,
       paceMinPerMile: paceNum,
       activityType: actType,
     });
-  }, [elapsed, phase]);
+  }, [displayDist]);
 
   // Show toast when presence is confirmed by context
   useEffect(() => {
@@ -209,6 +210,7 @@ export default function RunLiveScreen() {
         return;
       }
     }
+    liveActivityStartedRef.current = false;
     await startTracking(id!, run?.activity_type ?? "run");
     const actType = ((run?.activity_type ?? "run") as "run" | "ride" | "walk");
     LiveActivity.start({
@@ -217,6 +219,7 @@ export default function RunLiveScreen() {
       paceMinPerMile: 0,
       activityType: actType,
     });
+    liveActivityStartedRef.current = true;
   }
 
   // ── Finish tracking ───────────────────────────────────────────────────────
