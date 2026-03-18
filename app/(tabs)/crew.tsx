@@ -29,9 +29,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { useTheme } from "@/contexts/ThemeContext";
-import { useWalkthrough } from "@/contexts/WalkthroughContext";
 import WalkthroughPulse from "@/components/WalkthroughPulse";
-import { MOCK_CREW } from "@/lib/walkthroughMockData";
 import { usePurchases } from "@/contexts/PurchasesContext";
 import { darkColors, type ColorScheme } from "@/constants/colors";
 import { toDisplayPace, toDisplayDist, unitLabel, type DistanceUnit } from "@/lib/units";
@@ -2456,28 +2454,9 @@ export default function CrewScreen() {
   const { user: currentUser } = useAuth();
   const [ghostCrewDone, setGhostCrewDone] = useState(true);
 
-  const { isActive: walkthroughActive, currentStepConfig } = useWalkthrough();
-  const { data: crewsRaw = [], isLoading } = useQuery<Crew[]>({
+  const { data: crews = [], isLoading } = useQuery<Crew[]>({
     queryKey: ["/api/crews"],
   });
-  const crews = useMemo(() => {
-    if (walkthroughActive && crewsRaw.length === 0) {
-      return [MOCK_CREW as Crew];
-    }
-    return crewsRaw;
-  }, [walkthroughActive, crewsRaw]);
-
-  const wtOpenedCrewRef = useRef(false);
-  useEffect(() => {
-    if (walkthroughActive && currentStepConfig?.id === "crew-chat" && crews.length > 0 && !selectedCrew) {
-      setSelectedCrew(crews[0]);
-      wtOpenedCrewRef.current = true;
-    }
-    if (walkthroughActive && currentStepConfig?.id !== "crew-chat" && wtOpenedCrewRef.current && selectedCrew) {
-      setSelectedCrew(null);
-      wtOpenedCrewRef.current = false;
-    }
-  }, [walkthroughActive, currentStepConfig, crews, selectedCrew]);
 
   useEffect(() => {
     if (!currentUser?.id) return;

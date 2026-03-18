@@ -18,7 +18,6 @@ import { NotificationBannerProvider } from "@/contexts/NotificationBannerContext
 import { PurchasesProvider } from "@/contexts/PurchasesContext";
 import { WalkthroughProvider } from "@/contexts/WalkthroughContext";
 import NotificationBanner from "@/components/NotificationBanner";
-import WalkthroughOverlay from "@/components/WalkthroughOverlay";
 import { StatusBar } from "expo-status-bar";
 import {
   useFonts,
@@ -207,7 +206,6 @@ function RootLayoutNav() {
         />
       </Stack>
       {user && <NotificationBanner />}
-      {user && <WalkthroughOverlay />}
     </>
   );
 }

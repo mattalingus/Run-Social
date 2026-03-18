@@ -37,9 +37,7 @@ import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { onOpenNotifications } from "@/contexts/NotificationBannerContext";
 import WebFAB from "@/components/WebFAB";
-import { useWalkthrough } from "@/contexts/WalkthroughContext";
 import WalkthroughPulse from "@/components/WalkthroughPulse";
-import { MOCK_EVENT } from "@/lib/walkthroughMockData";
 import { updateWidget } from "@/lib/widgetBridge";
 
 function formatDaysAgo(dateStr: string): string {
@@ -1700,15 +1698,8 @@ export default function DiscoverScreen() {
     [runs, activityFilter]
   );
 
-  const { isActive: walkthroughActive } = useWalkthrough();
   const isFallback = sorted.length === 0 && fallbackRuns.length > 0 && !isLoading && !search;
-  const displayListRaw = isFallback ? fallbackRuns : sorted;
-  const displayList = useMemo(() => {
-    if (walkthroughActive && displayListRaw.length === 0) {
-      return [MOCK_EVENT as Run];
-    }
-    return displayListRaw;
-  }, [walkthroughActive, displayListRaw]);
+  const displayList = isFallback ? fallbackRuns : sorted;
 
   // Reset to 5 whenever the user changes search/filters/activity
   useEffect(() => { setVisibleCount(5); }, [search, applied, activityFilter]);
