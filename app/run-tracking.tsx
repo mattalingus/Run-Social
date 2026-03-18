@@ -47,6 +47,7 @@ import { type ColorScheme } from "@/constants/colors";
 import { useTheme } from "@/contexts/ThemeContext";
 import { formatDistance } from "@/lib/formatDistance";
 import { toDisplayDist, toDisplayPace, unitLabel, type DistanceUnit } from "@/lib/units";
+import { LiveActivity } from "@/lib/liveActivity";
 
 const IS_NATIVE = Platform.OS !== "web";
 
@@ -566,6 +567,21 @@ export default function RunTrackingScreen() {
 
   useEffect(() => { elapsedRef.current = elapsed; }, [elapsed]);
 
+  // ─── Live Activity updates (every 60 s while active) ─────────────────────
+  useEffect(() => {
+    if (phase !== "active" || elapsed === 0 || elapsed % 60 !== 0) return;
+    const paceNum =
+      totalDistRef.current > 0.01
+        ? elapsed / 60 / totalDistRef.current
+        : 0;
+    LiveActivity.update({
+      elapsedSeconds: elapsed,
+      distanceMiles: totalDistRef.current,
+      paceMinPerMile: paceNum,
+      activityType: activityFilter as "run" | "ride" | "walk",
+    });
+  }, [elapsed, phase]);
+
   // ─── Periodic autosave (crash recovery) ───────────────────────────────────
   const AUTOSAVE_KEY = user ? `paceup_active_run_${user.id}` : null;
 
@@ -879,6 +895,12 @@ export default function RunTrackingScreen() {
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setPhase("active");
+    LiveActivity.start({
+      elapsedSeconds: 0,
+      distanceMiles: 0,
+      paceMinPerMile: 0,
+      activityType: activityFilter as "run" | "ride" | "walk",
+    });
   }
 
   function stopPedometer() {
@@ -936,6 +958,16 @@ export default function RunTrackingScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     if (Platform.OS !== "web") Speech.stop();
     stopPedometer();
+    const finalPaceNum =
+      totalDistRef.current > 0.01
+        ? elapsedRef.current / 60 / totalDistRef.current
+        : 0;
+    LiveActivity.end({
+      elapsedSeconds: elapsedRef.current,
+      distanceMiles: totalDistRef.current,
+      paceMinPerMile: finalPaceNum,
+      activityType: activityFilter as "run" | "ride" | "walk",
+    });
     // Compute final partial-mile split before transitioning to done screen
     const finalSplits = [...mileSplitsRef.current];
     const remainingDist = totalDistRef.current - lastSplitMileRef.current;

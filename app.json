@@ -24,7 +24,7 @@
     },
     "ios": {
       "supportsTablet": false,
-      "buildNumber": "17",
+      "buildNumber": "19",
       "bundleIdentifier": "com.paceup",
       "infoPlist": {
         "NSCameraUsageDescription": "PaceUp uses your camera to add photos to your runs and rides.",
@@ -48,7 +48,8 @@
         "NSHealthUpdateUsageDescription": "PaceUp can save your activity data to Apple Health."
       },
       "entitlements": {
-        "com.apple.developer.healthkit": true
+        "com.apple.developer.healthkit": true,
+        "com.apple.security.application-groups": ["group.com.paceup"]
       }
     },
     "android": {
@@ -118,7 +119,9 @@
         }
       ],
       "expo-audio",
-      "expo-av"
+      "expo-av",
+      "./plugins/with-live-activity",
+      "./plugins/with-widget"
     ],
     "experiments": {
       "typedRoutes": true,

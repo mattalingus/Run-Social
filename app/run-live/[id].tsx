@@ -25,6 +25,7 @@ import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import C from "@/constants/colors";
 import MAP_STYLE from "@/lib/mapStyle";
+import { LiveActivity } from "@/lib/liveActivity";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -125,6 +126,19 @@ export default function RunLiveScreen() {
     handleStartTracking();
   }, [liveState?.isActive]);
 
+  // Live Activity: update every 60 s while tracking
+  useEffect(() => {
+    if (phase !== "active" || elapsed === 0 || elapsed % 60 !== 0) return;
+    const actType = (run?.activity_type ?? "run") as "run" | "ride" | "walk";
+    const paceNum = calcPaceNum(totalDistRef.current, elapsed);
+    LiveActivity.update({
+      elapsedSeconds: elapsed,
+      distanceMiles: totalDistRef.current,
+      paceMinPerMile: paceNum,
+      activityType: actType,
+    });
+  }, [elapsed, phase]);
+
   // Show toast when presence is confirmed by context
   useEffect(() => {
     if (presentConfirmed) {
@@ -196,6 +210,13 @@ export default function RunLiveScreen() {
       }
     }
     await startTracking(id!, run?.activity_type ?? "run");
+    const actType = ((run?.activity_type ?? "run") as "run" | "ride" | "walk");
+    LiveActivity.start({
+      elapsedSeconds: 0,
+      distanceMiles: 0,
+      paceMinPerMile: 0,
+      activityType: actType,
+    });
   }
 
   // ── Finish tracking ───────────────────────────────────────────────────────
@@ -212,8 +233,14 @@ export default function RunLiveScreen() {
           onPress: async () => {
             beginFinishing();
             setSaving(true);
+            const finalPace = calcPaceNum(totalDistRef.current, elapsedRef.current);
+            LiveActivity.end({
+              elapsedSeconds: elapsedRef.current,
+              distanceMiles: totalDistRef.current,
+              paceMinPerMile: finalPace,
+              activityType: (run?.activity_type ?? "run") as "run" | "ride" | "walk",
+            });
             try {
-              const finalPace = calcPaceNum(totalDistRef.current, elapsedRef.current);
               await apiRequest("POST", `/api/runs/${id}/runner-finish`, {
                 finalDistance: totalDistRef.current,
                 finalPace,
