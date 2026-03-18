@@ -28,7 +28,6 @@ import { apiRequest } from "@/lib/query-client";
 import { useTheme } from "@/contexts/ThemeContext";
 import ShareActivityModal, { ShareRunData } from "@/components/ShareActivityModal";
 import { darkColors as C } from "@/constants/colors";
-import { updateWidget } from "@/lib/widgetBridge";
 import { MARKER_ICONS } from "@/constants/markerIcons";
 import { ACHIEVEMENTS, type AchievementDef } from "@/constants/achievements";
 import { formatDistance } from "@/lib/formatDistance";
@@ -465,14 +464,6 @@ function ProfileScreenInner() {
     return { totalMiles, monthMiles, yearMiles, count: filtered.length, avgPace, totalMovingSeconds };
   }, [soloRuns, profileActivity]);
 
-  // Push latest stats to the home screen widget
-  React.useEffect(() => {
-    if (!user) return;
-    updateWidget({
-      weeklyMiles: actStats.monthMiles / 4,
-      monthlyGoal: user.monthly_goal ?? 50,
-    });
-  }, [actStats.monthMiles, user?.monthly_goal]);
 
   const computedTopRuns = React.useMemo(() => {
     const completed = soloRuns.filter((r) => (r.activity_type ?? "run") === profileActivity && r.completed);

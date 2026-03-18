@@ -38,7 +38,6 @@ import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { onOpenNotifications } from "@/contexts/NotificationBannerContext";
 import WebFAB from "@/components/WebFAB";
 import WalkthroughPulse from "@/components/WalkthroughPulse";
-import { updateWidget } from "@/lib/widgetBridge";
 
 function formatDaysAgo(dateStr: string): string {
   const d = new Date(dateStr);
@@ -1511,25 +1510,6 @@ export default function DiscoverScreen() {
     enabled: !!user,
   });
 
-  // Push next upcoming run to the home screen widget
-  useEffect(() => {
-    if (!user) return;
-    const upcoming = [...runs]
-      .filter((r) => !r.is_completed && new Date(r.date).getTime() > Date.now())
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    const next = upcoming[0];
-    if (next) {
-      const distRange =
-        next.min_distance === next.max_distance
-          ? `${next.min_distance}`
-          : `${next.min_distance}–${next.max_distance}`;
-      updateWidget({
-        nextRunTitle: next.title,
-        nextRunTimestamp: new Date(next.date).getTime() / 1000,
-        distanceRangeMiles: distRange,
-      });
-    }
-  }, [runs, user]);
 
   useEffect(() => {
     if (!user?.id || ghostBookmarkDone) return;

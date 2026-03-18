@@ -18,6 +18,7 @@ import { NotificationBannerProvider } from "@/contexts/NotificationBannerContext
 import { PurchasesProvider } from "@/contexts/PurchasesContext";
 import { WalkthroughProvider } from "@/contexts/WalkthroughContext";
 import NotificationBanner from "@/components/NotificationBanner";
+import { useWidgetSync } from "@/lib/useWidgetSync";
 import { StatusBar } from "expo-status-bar";
 import {
   useFonts,
@@ -83,6 +84,9 @@ function RootLayoutNav() {
   const [fontsLoaded, fontError] = useFonts({ Outfit_400Regular, Outfit_600SemiBold, Outfit_700Bold, PlayfairDisplay_700Bold, DancingScript_700Bold, Nunito_800ExtraBold });
   const splashHidden = useRef(false);
   const pushRegistered = useRef(false);
+
+  // Keep home screen widget data current after every API fetch
+  useWidgetSync();
 
   useEffect(() => {
     if (!isLoading && (fontsLoaded || fontError)) {
