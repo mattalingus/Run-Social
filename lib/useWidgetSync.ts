@@ -66,7 +66,7 @@ export function useWidgetSync() {
 
     updateWidget({
       weeklyMiles,
-      monthlyGoal: (user as any).monthly_goal ?? 50,
+      monthlyGoal: user.monthly_goal ?? 50,
       nextRunTitle: next?.title ?? "",
       nextRunTimestamp: next ? new Date(next.date).getTime() / 1000 : 0,
       distanceRangeMiles: distRange,
