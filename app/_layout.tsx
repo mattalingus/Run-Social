@@ -151,7 +151,9 @@ function RootLayoutNav() {
         const data = response.notification.request.content.data;
         const runId = data?.runId;
         if (!runId) return;
-        if (data?.screen === "run-live") {
+        if (data?.type === "run_started_present") {
+          router.push(`/run-live/${runId}?autostart=1`);
+        } else if (data?.screen === "run-live") {
           router.push(`/run-live/${runId}`);
         } else {
           router.push(`/run/${runId}`);

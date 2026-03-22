@@ -3803,6 +3803,21 @@ export async function getRunParticipantTokensFiltered(runId: string, notifField:
   return result.rows.map((r: any) => r.push_token);
 }
 
+export async function getRunPresentParticipantTokensFiltered(runId: string, notifField: string): Promise<string[]> {
+  const result = await pool.query(
+    `SELECT u.push_token
+     FROM run_participants rp
+     JOIN users u ON rp.user_id = u.id
+     WHERE rp.run_id = $1 AND rp.status != 'cancelled'
+       AND rp.is_present = true
+       AND u.push_token IS NOT NULL
+       AND u.notifications_enabled = true
+       AND u.${notifField} = true`,
+    [runId]
+  );
+  return result.rows.map((r: any) => r.push_token);
+}
+
 export async function getRunBroadcastTokens(runId: string): Promise<string[]> {
   const result = await pool.query(
     `SELECT u.push_token FROM run_participants rp

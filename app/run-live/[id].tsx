@@ -55,7 +55,7 @@ const DOT_COLORS = ["#FF6B6B", "#4ECDC4", "#FFE66D", "#A855F7", "#F97316", "#38B
 // ─── Screen ──────────────────────────────────────────────────────────────────
 
 export default function RunLiveScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, autostart } = useLocalSearchParams<{ id: string; autostart?: string }>();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -118,19 +118,37 @@ export default function RunLiveScreen() {
   }, []);
 
   // Auto-start tracking when host activates run and current user is a confirmed participant
+  // (fires when liveState transitions from falsy → true while screen is already open)
   useEffect(() => {
     if (!liveState?.isActive) return;
     if (!run || !user) return;
     if (run.host_id === user.id) return;
     if (phase !== "idle") return;
     if (Platform.OS === "web") return;
-    // Only auto-start if this user is a confirmed participant in the live state
+    if (autostart) return; // handled by the autostart effect below
     const isParticipant = liveState?.participants?.some(
       (p: any) => p.user_id === user.id
     );
     if (!isParticipant) return;
     handleStartTracking();
   }, [liveState?.isActive]);
+
+  // Auto-start via notification deep-link (?autostart=1):
+  // When a present participant taps the "run is starting" notification, they land here
+  // with liveState already active. Fire immediately once both liveState and run are ready.
+  useEffect(() => {
+    if (!autostart) return;
+    if (!liveState?.isActive) return;
+    if (!run || !user) return;
+    if (run.host_id === user.id) return;
+    if (phase !== "idle") return;
+    if (Platform.OS === "web") return;
+    const isPresent = liveState?.participants?.some(
+      (p: any) => p.user_id === user.id && p.is_present
+    );
+    if (!isPresent) return;
+    handleStartTracking();
+  }, [liveState, run, autostart]);
 
   // Live Activity: update on each GPS fix (displayDist changes when a new coordinate arrives)
   useEffect(() => {
