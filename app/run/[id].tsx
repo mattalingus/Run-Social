@@ -1204,7 +1204,7 @@ export default function RunDetailScreen() {
               onPress={() => router.push(`/run-live/${id}`)}
             >
               {isLive && <View style={styles.liveDot} />}
-              <Feather name={isLive ? "radio" : "play-circle"} size={18} color={C.text} />
+              <Feather name={isLive ? "radio" : "play-circle"} size={18} color="#fff" />
               <Text style={styles.liveBtnText}>
                 {isLive
                   ? (run?.activity_type === "ride" ? "Ready to Ride" : run?.activity_type === "walk" ? "Ready to Walk" : "Ready to Run")
@@ -1850,9 +1850,9 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   joinRequestApproveTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.bg },
   joinRequestDeny: { backgroundColor: C.card, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1, borderColor: C.border },
   joinRequestDenyTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.textSecondary },
-  liveBtn: { backgroundColor: "#0A3A1F", borderRadius: 14, height: 52, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, borderWidth: 1.5, borderColor: C.primary },
-  liveBtnText: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.primary },
-  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.primary },
+  liveBtn: { backgroundColor: C.primary, borderRadius: 14, height: 52, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
+  liveBtnText: { fontFamily: "Outfit_700Bold", fontSize: 16, color: "#fff" },
+  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#fff" },
   btnDisabled: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
   hostMgmtRow: { flexDirection: "row", gap: 10 },
   hostMgmtBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, height: 44, borderRadius: 12, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
