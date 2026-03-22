@@ -61,6 +61,7 @@ export default function RunLiveScreen() {
   const qc = useQueryClient();
   const mapRef = useRef<MapView>(null);
   const liveActivityStartedRef = useRef(false);
+  const autostartAttemptedRef = useRef(false);
 
   // ── Tracking context (survives minimize/navigation) ──────────────────────
   const tracking = useLiveTracking();
@@ -136,8 +137,10 @@ export default function RunLiveScreen() {
   // Auto-start via notification deep-link (?autostart=1):
   // When a present participant taps the "run is starting" notification, they land here
   // with liveState already active. Fire immediately once both liveState and run are ready.
+  // One-shot guard prevents repeated retries if handleStartTracking() fails (e.g. location denied).
   useEffect(() => {
     if (!autostart) return;
+    if (autostartAttemptedRef.current) return;
     if (!liveState?.isActive) return;
     if (!run || !user) return;
     if (run.host_id === user.id) return;
@@ -147,6 +150,7 @@ export default function RunLiveScreen() {
       (p: any) => p.user_id === user.id && p.is_present
     );
     if (!isPresent) return;
+    autostartAttemptedRef.current = true;
     handleStartTracking();
   }, [liveState, run, autostart]);
 
