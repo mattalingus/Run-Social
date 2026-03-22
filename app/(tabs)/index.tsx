@@ -255,7 +255,11 @@ function getPaceColor(minPace: number, maxPace: number, C: { orange: string; gol
 
 function formatDate(dateStr: string) {
   const d = new Date(dateStr);
-  const days = Math.floor((d.getTime() - Date.now()) / 86400000);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const runDay = new Date(d);
+  runDay.setHours(0, 0, 0, 0);
+  const days = Math.round((runDay.getTime() - today.getTime()) / 86400000);
   if (days === 0) return "Today";
   if (days === 1) return "Tomorrow";
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
