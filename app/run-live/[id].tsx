@@ -127,7 +127,7 @@ export default function RunLiveScreen() {
     if (Platform.OS === "web") return;
     if (autostart) return; // handled by the autostart effect below
     const isParticipant = liveState?.participants?.some(
-      (p: any) => p.user_id === user.id
+      (p: any) => p.user_id === user.id && p.is_present
     );
     if (!isParticipant) return;
     handleStartTracking();
