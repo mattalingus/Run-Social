@@ -1733,8 +1733,8 @@ function ProfileScreenInner() {
                   refreshUser();
                 }
               } catch (e: any) {
-                if (e.message?.includes("501") || e.message?.includes("not configured")) {
-                  Alert.alert("Coming Soon", "Facebook friend discovery will be available once configured. Ask the app admin to add a Facebook App ID.");
+                if (e.message?.includes("501") || e.message?.includes("404") || e.message?.includes("not configured")) {
+                  Alert.alert("Coming Soon", "Facebook friend discovery is coming soon. It will be enabled in an upcoming app update.");
                 } else {
                   Alert.alert("Error", e.message || "Could not connect Facebook");
                 }

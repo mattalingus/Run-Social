@@ -225,7 +225,11 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
       if (!granted) {
         Alert.alert(
           "Permission Denied",
-          "PaceUp needs access to Apple Health to import your workouts.\n\nGo to Settings → Privacy & Security → Health → PaceUp and allow access."
+          "PaceUp needs access to Apple Health to import your workouts.\n\nGo to Settings → Privacy & Security → Health → PaceUp and allow access.",
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Open Settings", onPress: () => Linking.openURL("app-settings:") },
+          ]
         );
         return;
       }
@@ -238,7 +242,11 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
       if (msg.toLowerCase().includes("permission") || msg.toLowerCase().includes("denied") || msg.toLowerCase().includes("authoriz")) {
         Alert.alert(
           "Permission Denied",
-          "PaceUp needs access to Apple Health. Go to Settings → Privacy & Security → Health → PaceUp and allow access."
+          "PaceUp needs access to Apple Health.\n\nGo to Settings → Privacy & Security → Health → PaceUp and allow access.",
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Open Settings", onPress: () => Linking.openURL("app-settings:") },
+          ]
         );
       } else {
         Alert.alert("Apple Health", msg || "Could not connect to Apple Health. Please try again.");

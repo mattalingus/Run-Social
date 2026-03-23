@@ -1,5 +1,6 @@
 import { Platform } from "react-native";
 import * as Contacts from "expo-contacts";
+import * as Crypto from "expo-crypto";
 import { apiRequest } from "@/lib/query-client";
 
 function normalizePhone(raw: string): string {
@@ -10,12 +11,10 @@ function normalizePhone(raw: string): string {
 }
 
 async function sha256(message: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(message);
-  const buffer = await crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(buffer))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+  return await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    message
+  );
 }
 
 export async function hashPhone(phone: string): Promise<string> {
