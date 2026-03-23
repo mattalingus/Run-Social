@@ -348,6 +348,8 @@ export async function initDb() {
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'manual';
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS step_count INTEGER;
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS move_time_seconds INTEGER;
+    ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS tag_along_source_run_id VARCHAR REFERENCES runs(id) ON DELETE SET NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_solo_runs_tag_along ON solo_runs(user_id, tag_along_source_run_id) WHERE tag_along_source_run_id IS NOT NULL;
     ALTER TABLE crew_messages ALTER COLUMN user_id DROP NOT NULL;
 
     CREATE TABLE IF NOT EXISTS crew_achievements (
@@ -1948,12 +1950,15 @@ export async function createTagAlongRequest(runId: string, requesterId: string, 
   if (!tgtParticipant.rows.length) throw new Error('Target is not a participant in this run');
   if (run.host_id === targetId) throw new Error('Cannot tag along with the host');
 
-  // Requester must not already have an accepted link
+  // Neither requester nor target can already be in any accepted tag-along link for this run
+  // (covers requester-as-requester, requester-as-target, target-as-requester, target-as-target)
   const acceptedCheck = await pool.query(
-    `SELECT 1 FROM tag_along_requests WHERE run_id = $1 AND requester_id = $2 AND status = 'accepted'`,
-    [runId, requesterId]
+    `SELECT 1 FROM tag_along_requests
+     WHERE run_id = $1 AND status = 'accepted'
+       AND (requester_id = $2 OR target_id = $2 OR requester_id = $3 OR target_id = $3)`,
+    [runId, requesterId, targetId]
   );
-  if (acceptedCheck.rows.length) throw new Error('Tag-along already accepted for this run');
+  if (acceptedCheck.rows.length) throw new Error('One of these participants is already in an accepted tag-along for this run');
 
   const existing = await pool.query(
     `SELECT id, status FROM tag_along_requests WHERE run_id = $1 AND requester_id = $2`,
@@ -1992,24 +1997,17 @@ export async function acceptTagAlongRequest(requestId: string, targetId: string,
     }
     const req = reqRes.rows[0];
 
-    // Enforce one accepted link per target per run
+    // Enforce single-link invariant: neither target nor requester may be in any accepted link for this run
+    // (either as requester OR as target — prevents A→B and C→A multi-hop chains)
     const existingAccepted = await client.query(
-      `SELECT 1 FROM tag_along_requests WHERE run_id = $1 AND target_id = $2 AND status = 'accepted'`,
-      [runId, targetId]
+      `SELECT 1 FROM tag_along_requests
+       WHERE run_id = $1 AND status = 'accepted'
+         AND (requester_id = $2 OR target_id = $2 OR requester_id = $3 OR target_id = $3)`,
+      [runId, targetId, req.requester_id]
     );
     if (existingAccepted.rows.length) {
       await client.query('ROLLBACK');
-      throw new Error('You have already accepted another tag-along request for this run');
-    }
-
-    // Enforce one accepted link per requester per run (double-check in transaction)
-    const existingAcceptedRequester = await client.query(
-      `SELECT 1 FROM tag_along_requests WHERE run_id = $1 AND requester_id = $2 AND status = 'accepted'`,
-      [runId, req.requester_id]
-    );
-    if (existingAcceptedRequester.rows.length) {
-      await client.query('ROLLBACK');
-      throw new Error('Requester already has an accepted tag-along for this run');
+      throw new Error('One of these participants is already in an accepted tag-along for this run');
     }
 
     await client.query(
@@ -2063,36 +2061,69 @@ export async function finalizeTagAlongsForRun(runId: string): Promise<void> {
   }
 }
 
+function haversineDistMi(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 3958.8;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 export async function createSoloRunForTagAlong(runId: string, tagAlongUserId: string, acceptorUserId: string): Promise<boolean> {
   const runRes = await pool.query(`SELECT * FROM runs WHERE id = $1`, [runId]);
   if (!runRes.rows.length) return false;
   const run = runRes.rows[0];
 
+  // Idempotency: stable key — one tag-along solo run per (user, source_run_id)
+  const existingCheck = await pool.query(
+    `SELECT 1 FROM solo_runs WHERE user_id = $1 AND tag_along_source_run_id = $2 LIMIT 1`,
+    [tagAlongUserId, runId]
+  );
+  if (existingCheck.rows.length > 0) return false;
+
+  // Fetch route points from acceptor (used for both distance fallback and route path)
+  const routeRes = await pool.query(
+    `SELECT latitude, longitude, recorded_at FROM run_tracking_points
+     WHERE run_id = $1 AND user_id = $2 ORDER BY recorded_at ASC`,
+    [runId, acceptorUserId]
+  );
+  const pts = routeRes.rows;
+
+  // Prefer formally-submitted final_distance / final_pace; fall back to GPS-derived values
   const partRes = await pool.query(
     `SELECT final_distance, final_pace FROM run_participants WHERE run_id = $1 AND user_id = $2`,
     [runId, acceptorUserId]
   );
-  if (!partRes.rows.length || !partRes.rows[0].final_distance) return false;
-  const { final_distance, final_pace } = partRes.rows[0];
+  let finalDist: number | null = partRes.rows[0]?.final_distance ?? null;
+  let finalPace: number | null = partRes.rows[0]?.final_pace ?? null;
 
-  // Idempotency: skip if a tag-along solo run for this group run already exists for this user
-  const existingCheck = await pool.query(
-    `SELECT 1 FROM solo_runs WHERE user_id = $1 AND title LIKE $2 AND date::date = $3::date LIMIT 1`,
-    [tagAlongUserId, `%(Tag-Along %`, run.date]
-  );
-  if (existingCheck.rows.length > 0) return false;
+  // GPS-derived fallback: compute from tracking points when formal finish data is absent
+  if ((!finalDist || finalDist <= 0) && pts.length >= 2) {
+    let gpsDist = 0;
+    for (let i = 1; i < pts.length; i++) {
+      gpsDist += haversineDistMi(
+        parseFloat(pts[i - 1].latitude), parseFloat(pts[i - 1].longitude),
+        parseFloat(pts[i].latitude), parseFloat(pts[i].longitude)
+      );
+    }
+    if (gpsDist > 0.01) {
+      finalDist = gpsDist;
+      const firstTs = new Date(pts[0].recorded_at).getTime();
+      const lastTs = new Date(pts[pts.length - 1].recorded_at).getTime();
+      const elapsedMin = (lastTs - firstTs) / 60000;
+      finalPace = elapsedMin > 0 && gpsDist > 0 ? elapsedMin / gpsDist : null;
+    }
+  }
 
-  const routeRes = await pool.query(
-    `SELECT latitude, longitude FROM run_tracking_points
-     WHERE run_id = $1 AND user_id = $2 ORDER BY recorded_at ASC`,
-    [runId, acceptorUserId]
-  );
-  const routePath = routeRes.rows.length > 0
-    ? JSON.stringify(routeRes.rows.map((r: any) => ({ latitude: r.latitude, longitude: r.longitude })))
+  if (!finalDist || finalDist <= 0) return false;
+
+  const routePath = pts.length > 0
+    ? JSON.stringify(pts.map((r: any) => ({ latitude: r.latitude, longitude: r.longitude })))
     : null;
 
-  const duration = final_pace > 0 && final_distance > 0
-    ? Math.round(final_pace * 60 * final_distance)
+  const duration = finalPace && finalPace > 0 && finalDist > 0
+    ? Math.round(finalPace * 60 * finalDist)
     : null;
 
   const actType = run.activity_type || 'run';
@@ -2100,9 +2131,9 @@ export async function createSoloRunForTagAlong(runId: string, tagAlongUserId: st
   const title = `${run.title} (Tag-Along ${label})`;
 
   await pool.query(
-    `INSERT INTO solo_runs (user_id, title, date, distance_miles, pace_min_per_mile, duration_seconds, completed, route_path, activity_type)
-     VALUES ($1, $2, $3, $4, $5, $6, true, $7::jsonb, $8)`,
-    [tagAlongUserId, title, run.date, final_distance, final_pace, duration, routePath, actType]
+    `INSERT INTO solo_runs (user_id, title, date, distance_miles, pace_min_per_mile, duration_seconds, completed, route_path, activity_type, tag_along_source_run_id)
+     VALUES ($1, $2, $3, $4, $5, $6, true, $7::jsonb, $8, $9)`,
+    [tagAlongUserId, title, run.date, finalDist, finalPace, duration, routePath, actType, runId]
   );
   return true;
 }
