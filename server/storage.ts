@@ -2021,8 +2021,8 @@ export async function acceptTagAlongRequest(requestId: string, targetId: string,
       throw new Error('One of these participants is already in an accepted tag-along for this run');
     }
 
-    await client.query(
-      `UPDATE tag_along_requests SET status = 'accepted' WHERE id = $1`,
+    const updated = await client.query(
+      `UPDATE tag_along_requests SET status = 'accepted' WHERE id = $1 RETURNING *`,
       [requestId]
     );
     await client.query(
@@ -2030,7 +2030,7 @@ export async function acceptTagAlongRequest(requestId: string, targetId: string,
       [runId, req.requester_id, targetId]
     );
     await client.query('COMMIT');
-    return req;
+    return updated.rows[0];
   } catch (e) {
     await client.query('ROLLBACK');
     throw e;
