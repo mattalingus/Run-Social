@@ -74,6 +74,7 @@ export const runParticipants = pgTable("run_participants", {
   status: participantStatusEnum("status").default("joined"),
   joinedAt: timestamp("joined_at").defaultNow(),
   milesLogged: real("miles_logged"),
+  tagAlongOfUserId: varchar("tag_along_of_user_id"),
 });
 
 export const hostRatings = pgTable("host_ratings", {
@@ -115,6 +116,15 @@ export const passwordResetTokens = pgTable("password_reset_tokens", {
   usedAt: timestamp("used_at"),
 });
 
+export const tagAlongRequests = pgTable("tag_along_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  runId: varchar("run_id").notNull().references(() => runs.id, { onDelete: "cascade" }),
+  requesterId: varchar("requester_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  targetId: varchar("target_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type Run = typeof runs.$inferSelect;
@@ -122,3 +132,4 @@ export type RunParticipant = typeof runParticipants.$inferSelect;
 export type HostRating = typeof hostRatings.$inferSelect;
 export type Achievement = typeof achievements.$inferSelect;
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type TagAlongRequest = typeof tagAlongRequests.$inferSelect;
