@@ -2491,7 +2491,7 @@ async function go(e){
       if (!oauthInst) return res.status(503).send("Garmin integration is not configured.");
       const request = { url: GARMIN_ACCESS_TOKEN_URL, method: "POST" };
       const authData = oauthInst.authorize(request, { key: oauth_token, secret: requestSecret });
-      const authHeader = oauthInst.toHeader({ ...authData, oauth_verifier } as any);
+      const authHeader = oauthInst.toHeader({ ...authData, oauth_verifier } as OAuth.Authorization & { oauth_verifier: string });
       const accResp = await fetch(GARMIN_ACCESS_TOKEN_URL, {
         method: "POST",
         headers: { ...authHeader, "Content-Type": "application/x-www-form-urlencoded" },
