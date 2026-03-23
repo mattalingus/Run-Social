@@ -516,8 +516,8 @@ export default function RunTrackingScreen() {
           } catch (e) {
             Speech.speak(text, {
               rate: 0.95,
-              onDone: () => ensureAudioMode(false),
-              onError: () => ensureAudioMode(false),
+              onDone: () => { void ensureAudioMode(false); },
+              onError: () => { void ensureAudioMode(false); },
             });
           }
         };
@@ -528,8 +528,8 @@ export default function RunTrackingScreen() {
 
     Speech.speak(text, {
       rate: 0.95,
-      onDone: () => ensureAudioMode(false),
-      onError: () => ensureAudioMode(false),
+      onDone: () => { void ensureAudioMode(false); },
+      onError: () => { void ensureAudioMode(false); },
     });
   }, [activityFilter]);
 
@@ -1095,7 +1095,7 @@ export default function RunTrackingScreen() {
         return;
       } catch (e: any) {
         lastErr = e;
-        console.log(`[saveRun] Attempt ${attempt}/${MAX_RETRIES} failed: ${e.message}`);
+        
         if (attempt < MAX_RETRIES) {
           await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
         }

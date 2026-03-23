@@ -90,7 +90,7 @@ export default function CrewProfileScreen() {
       <Stack.Screen options={{ headerShown: false }} />
 
       <Pressable onPress={() => router.back()} style={s.topBack} hitSlop={12}>
-        <Ionicons name="chevron-back" size={24} color={C.textPrimary} />
+        <Ionicons name="chevron-back" size={24} color={C.text} />
       </Pressable>
 
       <View style={s.hero}>
@@ -194,7 +194,7 @@ const s = StyleSheet.create({
   crewName: {
     fontFamily: "Outfit_700Bold",
     fontSize: 26,
-    color: C.textPrimary,
+    color: C.text,
     textAlign: "center",
   },
   memberCount: {
@@ -241,7 +241,7 @@ const s = StyleSheet.create({
   createdBy: {
     fontFamily: "Outfit_400Regular",
     fontSize: 13,
-    color: C.textTertiary,
+    color: C.textMuted,
     marginBottom: 28,
   },
   joinBtn: {
@@ -276,7 +276,7 @@ const s = StyleSheet.create({
   loginHint: {
     fontFamily: "Outfit_400Regular",
     fontSize: 14,
-    color: C.textTertiary,
+    color: C.textMuted,
     textAlign: "center",
   },
 });

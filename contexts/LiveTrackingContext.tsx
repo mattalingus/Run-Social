@@ -14,7 +14,7 @@ type Phase = "idle" | "active" | "finishing";
 
 interface LiveTrackingContextValue {
   runId: string | null;
-  activityType: "run" | "ride";
+  activityType: "run" | "ride" | "walk";
   phase: Phase;
   displayDist: number;
   elapsed: number;
@@ -24,7 +24,7 @@ interface LiveTrackingContextValue {
   routePathRef: React.MutableRefObject<Array<{ latitude: number; longitude: number }>>;
   totalDistRef: React.MutableRefObject<number>;
   elapsedRef: React.MutableRefObject<number>;
-  startTracking: (runId: string, activityType: "run" | "ride") => Promise<void>;
+  startTracking: (runId: string, activityType: "run" | "ride" | "walk") => Promise<void>;
   beginFinishing: () => void;
   resetTracking: () => void;
   recoverToActive: () => void;
@@ -52,7 +52,7 @@ const LiveTrackingContext = createContext<LiveTrackingContextValue | null>(null)
 
 export function LiveTrackingProvider({ children }: { children: React.ReactNode }) {
   const [runId, setRunId] = useState<string | null>(null);
-  const [activityType, setActivityType] = useState<"run" | "ride">("run");
+  const [activityType, setActivityType] = useState<"run" | "ride" | "walk">("run");
   const [phase, setPhase] = useState<Phase>("idle");
   const [displayDist, setDisplayDist] = useState(0);
   const [elapsed, setElapsed] = useState(0);
@@ -202,7 +202,7 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
     }
   }
 
-  async function startTracking(rid: string, type: "run" | "ride") {
+  async function startTracking(rid: string, type: "run" | "ride" | "walk") {
     lastCoordRef.current = null;
     totalDistRef.current = 0;
     elapsedRef.current = 0;

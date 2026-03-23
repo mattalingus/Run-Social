@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useCallback } from "react";
+import { type WalkthroughStep } from "@/lib/walkthroughConfig";
 
 interface WalkthroughContextType {
   isActive: boolean;
@@ -7,7 +8,7 @@ interface WalkthroughContextType {
   startWalkthrough: () => void;
   nextStep: () => void;
   skipWalkthrough: () => void;
-  currentStepConfig: null;
+  currentStepConfig: WalkthroughStep | null;
 }
 
 const WalkthroughContext = createContext<WalkthroughContextType>({

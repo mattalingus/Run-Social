@@ -116,6 +116,7 @@ interface CrewMember {
   avg_pace?: number;
   hosted_runs?: number;
   joined_at: string;
+  role?: string;
 }
 
 interface CrewDetail extends Crew {
@@ -2093,7 +2094,7 @@ function CrewPlansSection({ crewId }: { crewId: string }) {
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
-                style={[s.planSubscribeBtn, { backgroundColor: C.cardBg, borderWidth: 1, borderColor: tier.color }]}
+                style={[s.planSubscribeBtn, { backgroundColor: C.card, borderWidth: 1, borderColor: tier.color }]}
                 onPress={handleManageSubscription}
                 activeOpacity={0.85}
               >

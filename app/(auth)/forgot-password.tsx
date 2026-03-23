@@ -60,7 +60,7 @@ export default function ForgotPasswordScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={12}>
-          <Feather name="arrow-left" size={24} color={C.textPrimary} />
+          <Feather name="arrow-left" size={24} color={C.text} />
         </Pressable>
 
         <View style={styles.header}>
@@ -139,7 +139,7 @@ const styles = StyleSheet.create({
   title: {
     fontFamily: "Outfit_700Bold",
     fontSize: 28,
-    color: C.textPrimary,
+    color: C.text,
     marginBottom: 8,
   },
   subtitle: {
@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: "Outfit_400Regular",
     fontSize: 16,
-    color: C.textPrimary,
+    color: C.text,
     paddingVertical: 16,
   },
   primaryBtn: {
@@ -199,7 +199,7 @@ const styles = StyleSheet.create({
   sentTitle: {
     fontFamily: "Outfit_700Bold",
     fontSize: 22,
-    color: C.textPrimary,
+    color: C.text,
     marginBottom: 10,
   },
   sentDetail: {

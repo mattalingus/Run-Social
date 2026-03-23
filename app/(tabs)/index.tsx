@@ -38,6 +38,7 @@ import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { onOpenNotifications } from "@/contexts/NotificationBannerContext";
 import WebFAB from "@/components/WebFAB";
 import WalkthroughPulse from "@/components/WalkthroughPulse";
+import { useWalkthrough } from "@/contexts/WalkthroughContext";
 
 function formatDaysAgo(dateStr: string): string {
   const d = new Date(dateStr);
@@ -1082,6 +1083,7 @@ export default function DiscoverScreen() {
   const qc = useQueryClient();
   const { C } = useTheme();
   const s = useMemo(() => makeStyles(C), [C]);
+  const { isActive: walkthroughActive } = useWalkthrough();
 
   const [search, setSearch] = useState("");
   async function handleSearch(text: string) {

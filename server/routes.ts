@@ -429,7 +429,7 @@ async function go(e){
 
   app.get("/api/users/:id/profile", requireAuth, async (req, res) => {
     try {
-      const profile = await storage.getPublicUserProfile(req.params.id);
+      const profile = await storage.getPublicUserProfile(req.params.id as string);
       if (!profile) return res.status(404).json({ message: "User not found" });
       res.json(profile);
     } catch (e: any) {
@@ -439,8 +439,8 @@ async function go(e){
 
   app.get("/api/users/:id/friendship", requireAuth, async (req, res) => {
     try {
-      if (req.params.id === req.session.userId) return res.json({ status: "self", friendshipId: null });
-      const status = await storage.getFriendshipStatus(req.session.userId!, req.params.id);
+      if (req.params.id as string === req.session.userId) return res.json({ status: "self", friendshipId: null });
+      const status = await storage.getFriendshipStatus(req.session.userId!, req.params.id as string);
       res.json(status);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
@@ -483,7 +483,7 @@ async function go(e){
 
   app.put("/api/friends/:id/accept", requireAuth, async (req, res) => {
     try {
-      const friendship = await storage.acceptFriendRequest(req.params.id, req.session.userId!);
+      const friendship = await storage.acceptFriendRequest(req.params.id as string, req.session.userId!);
       if (!friendship) return res.status(404).json({ message: "Request not found" });
       storage.checkFriendAchievements(req.session.userId!).catch((err: any) => console.error("[bg]", err?.message ?? err));
       if (friendship.requester_id) {
@@ -497,7 +497,7 @@ async function go(e){
 
   app.delete("/api/friends/:id", requireAuth, async (req, res) => {
     try {
-      await storage.removeFriend(req.params.id, req.session.userId!);
+      await storage.removeFriend(req.params.id as string, req.session.userId!);
       res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ message: e.message });
@@ -507,19 +507,19 @@ async function go(e){
   app.get("/api/runs", async (req, res) => {
     try {
       const filters: any = {};
-      if (req.query.minPace) filters.minPace = parseFloat(req.query.minPace as string);
-      if (req.query.maxPace) filters.maxPace = parseFloat(req.query.maxPace as string);
-      if (req.query.minDistance) filters.minDistance = parseFloat(req.query.minDistance as string);
-      if (req.query.maxDistance) filters.maxDistance = parseFloat(req.query.maxDistance as string);
-      if (req.query.tag) filters.tag = req.query.tag as string;
-      if (req.query.styles) {
+      if (req.query.minPace as string) filters.minPace = parseFloat(req.query.minPace as string);
+      if (req.query.maxPace as string) filters.maxPace = parseFloat(req.query.maxPace as string);
+      if (req.query.minDistance as string) filters.minDistance = parseFloat(req.query.minDistance as string);
+      if (req.query.maxDistance as string) filters.maxDistance = parseFloat(req.query.maxDistance as string);
+      if (req.query.tag as string) filters.tag = req.query.tag as string;
+      if (req.query.styles as string) {
         const raw = req.query.styles as string;
         filters.styles = raw.split(",").map(s => s.trim()).filter(Boolean);
       }
-      if (req.query.swLat) filters.swLat = parseFloat(req.query.swLat as string);
-      if (req.query.swLng) filters.swLng = parseFloat(req.query.swLng as string);
-      if (req.query.neLat) filters.neLat = parseFloat(req.query.neLat as string);
-      if (req.query.neLng) filters.neLng = parseFloat(req.query.neLng as string);
+      if (req.query.swLat as string) filters.swLat = parseFloat(req.query.swLat as string);
+      if (req.query.swLng as string) filters.swLng = parseFloat(req.query.swLng as string);
+      if (req.query.neLat as string) filters.neLat = parseFloat(req.query.neLat as string);
+      if (req.query.neLng as string) filters.neLng = parseFloat(req.query.neLng as string);
       const bounds = (filters.swLat !== undefined && filters.neLat !== undefined && filters.swLng !== undefined && filters.neLng !== undefined)
         ? { swLat: filters.swLat, neLat: filters.neLat, swLng: filters.swLng, neLng: filters.neLng }
         : undefined;
@@ -585,7 +585,7 @@ async function go(e){
 
   app.post("/api/solo-runs/:id/ai-summary", requireAuth, async (req, res) => {
     try {
-      const run = await storage.getSoloRunById(req.params.id);
+      const run = await storage.getSoloRunById(req.params.id as string);
       if (!run || run.user_id !== req.session.userId) return res.status(404).json({ message: "Run not found" });
       if ((run as any).ai_summary) return res.json({ summary: (run as any).ai_summary });
       const summary = await ai.generateRunSummary(run);
@@ -823,7 +823,7 @@ async function go(e){
 
   app.get("/api/users/:id/starred-runs", requireAuth, async (req, res) => {
     try {
-      const runs = await storage.getStarredRunsForUser(req.params.id, 3);
+      const runs = await storage.getStarredRunsForUser(req.params.id as string, 3);
       res.json(runs);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
@@ -895,7 +895,7 @@ async function go(e){
 
   app.get("/api/community-paths", async (req, res) => {
     try {
-      const bounds = (req.query.swLat && req.query.neLat && req.query.swLng && req.query.neLng)
+      const bounds = (req.query.swLat as string && req.query.neLat as string && req.query.swLng as string && req.query.neLng as string)
         ? {
             swLat: parseFloat(req.query.swLat as string),
             neLat: parseFloat(req.query.neLat as string),
@@ -914,7 +914,7 @@ async function go(e){
     try {
       const { routeName } = req.body;
       if (!routeName) return res.status(400).json({ message: "routeName required" });
-      const path = await storage.publishSoloRunRoute(req.params.id, req.session.userId!, routeName);
+      const path = await storage.publishSoloRunRoute(req.params.id as string, req.session.userId!, routeName);
       res.json(path);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
@@ -943,7 +943,7 @@ async function go(e){
 
   app.get("/api/crews/:id/messages", requireAuth, async (req, res) => {
     try {
-      const crewId = req.params.id;
+      const crewId = req.params.id as string;
       const userId = req.session.userId!;
       const isMember = await storage.isCrewMember(crewId, userId);
       if (!isMember) return res.status(403).json({ message: "Not a crew member" });
@@ -958,7 +958,7 @@ async function go(e){
 
   app.post("/api/crews/:id/messages", requireAuth, async (req, res) => {
     try {
-      const crewId = req.params.id;
+      const crewId = req.params.id as string;
       const userId = req.session.userId!;
       const isMember = await storage.isCrewMember(crewId, userId);
       if (!isMember) return res.status(403).json({ message: "Not a crew member" });
@@ -1013,7 +1013,7 @@ async function go(e){
 
   app.get("/api/runs/invite/:token", async (req, res) => {
     try {
-      const run = await storage.getRunByInviteToken(req.params.token.toUpperCase());
+      const run = await storage.getRunByInviteToken((req.params.token as string).toUpperCase());
       if (!run) return res.status(404).json({ message: "Invalid invite code" });
       if (req.session.userId) {
         await storage.grantRunAccess(run.id, req.session.userId);
@@ -1026,7 +1026,7 @@ async function go(e){
 
   app.get("/api/runs/:id/messages", requireAuth, async (req, res) => {
     try {
-      const runId = req.params.id;
+      const runId = req.params.id as string;
       const userId = req.session.userId!;
       const isParticipant = await storage.isRunParticipant(runId, userId);
       const run = await storage.getRunById(runId);
@@ -1046,7 +1046,7 @@ async function go(e){
 
   app.post("/api/runs/:id/messages", requireAuth, async (req, res) => {
     try {
-      const runId = req.params.id;
+      const runId = req.params.id as string;
       const userId = req.session.userId!;
       const { message } = req.body;
 
@@ -1076,10 +1076,10 @@ async function go(e){
 
   app.get("/api/runs/:id/access", requireAuth, async (req, res) => {
     try {
-      const run = await storage.getRunById(req.params.id);
+      const run = await storage.getRunById(req.params.id as string);
       if (!run) return res.status(404).json({ message: "Run not found" });
       if (run.privacy !== "private") return res.json({ hasAccess: true });
-      const hasAccess = await storage.hasRunAccess(req.params.id, req.session.userId!);
+      const hasAccess = await storage.hasRunAccess(req.params.id as string, req.session.userId!);
       res.json({ hasAccess, hasPassword: !!run.invite_password });
     } catch (e: any) {
       res.status(500).json({ message: e.message });
@@ -1089,7 +1089,7 @@ async function go(e){
   app.post("/api/runs/:id/join-private", requireAuth, async (req, res) => {
     try {
       const { password, token } = req.body;
-      const result = await storage.verifyAndJoinPrivateRun(req.params.id, req.session.userId!, password, token);
+      const result = await storage.verifyAndJoinPrivateRun(req.params.id as string, req.session.userId!, password, token);
       if (result.error) {
         if (result.error === "run_not_found") return res.status(404).json({ message: "Run not found" });
         return res.status(403).json({ message: "Incorrect password or invite code" });
@@ -1103,10 +1103,10 @@ async function go(e){
   app.post("/api/runs/:id/invite", requireAuth, async (req, res) => {
     try {
       const { friendId } = req.body;
-      const run = await storage.getRunById(req.params.id);
+      const run = await storage.getRunById(req.params.id as string);
       if (!run) return res.status(404).json({ message: "Run not found" });
       if (run.host_id !== req.session.userId) return res.status(403).json({ message: "Only host can invite" });
-      await storage.inviteToRun(req.params.id, friendId, req.session.userId!);
+      await storage.inviteToRun(req.params.id as string, friendId, req.session.userId!);
       res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ message: e.message });
@@ -1135,7 +1135,7 @@ async function go(e){
 
   app.get("/api/runs/:id/status", requireAuth, async (req, res) => {
     try {
-      const status = await storage.getRunStatus(req.session.userId!, req.params.id);
+      const status = await storage.getRunStatus(req.session.userId!, req.params.id as string);
       res.json(status);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
@@ -1144,9 +1144,9 @@ async function go(e){
 
   app.post("/api/runs/:id/bookmark", requireAuth, async (req, res) => {
     try {
-      const run = await storage.getRunById(req.params.id);
+      const run = await storage.getRunById(req.params.id as string);
       if (!run) return res.status(404).json({ message: "Run not found" });
-      const result = await storage.toggleBookmark(req.session.userId!, req.params.id);
+      const result = await storage.toggleBookmark(req.session.userId!, req.params.id as string);
       res.json(result);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
@@ -1155,10 +1155,10 @@ async function go(e){
 
   app.post("/api/runs/:id/plan", requireAuth, async (req, res) => {
     try {
-      const run = await storage.getRunById(req.params.id);
+      const run = await storage.getRunById(req.params.id as string);
       if (!run) return res.status(404).json({ message: "Run not found" });
       if (run.host_id === req.session.userId) return res.status(400).json({ message: "You are the host" });
-      const result = await storage.togglePlan(req.session.userId!, req.params.id);
+      const result = await storage.togglePlan(req.session.userId!, req.params.id as string);
       res.json(result);
       // Notify host only when planning (not unplanning), fire-and-forget
       if (result.planned) {
@@ -1190,7 +1190,7 @@ async function go(e){
 
   app.get("/api/runs/:id", async (req, res) => {
     try {
-      const run = await storage.getRunById(req.params.id);
+      const run = await storage.getRunById(req.params.id as string);
       if (!run) return res.status(404).json({ message: "Run not found" });
       if (run.crew_id) {
         if (!req.session.userId) return res.status(403).json({ message: "Crew run — members only", isCrewRun: true });
@@ -1207,7 +1207,7 @@ async function go(e){
         }
       } else if (run.privacy === "private") {
         if (!req.session.userId) return res.status(403).json({ message: "Private run", isPrivate: true });
-        const hasAccess = await storage.hasRunAccess(req.params.id, req.session.userId);
+        const hasAccess = await storage.hasRunAccess(req.params.id as string, req.session.userId);
         if (!hasAccess) {
           return res.status(403).json({
             message: "Private run",
@@ -1225,13 +1225,13 @@ async function go(e){
   });
 
   app.get("/api/runs/:id/participants", async (req, res) => {
-    const participants = await storage.getRunParticipants(req.params.id);
+    const participants = await storage.getRunParticipants(req.params.id as string);
     res.json(participants);
   });
 
   app.post("/api/runs/:id/join", requireAuth, async (req, res) => {
     try {
-      const run = await storage.getRunById(req.params.id);
+      const run = await storage.getRunById(req.params.id as string);
       if (!run) return res.status(404).json({ message: "Run not found" });
       if (run.host_id === req.session.userId) return res.status(400).json({ message: "You are the host" });
       const user = await storage.getUserById(req.session.userId!);
@@ -1263,7 +1263,7 @@ async function go(e){
       const paceGroupLabel = req.body.paceGroupLabel ?? null;
       let participant;
       try {
-        participant = await storage.joinRun(req.params.id, req.session.userId!, paceGroupLabel);
+        participant = await storage.joinRun(req.params.id as string, req.session.userId!, paceGroupLabel);
       } catch (joinErr: any) {
         if (joinErr.message === "EVENT_FULL") {
           return res.status(409).json({ message: "This event is full" });
@@ -1291,7 +1291,7 @@ async function go(e){
     try {
       const { paceGroupLabel } = req.body;
       if (!paceGroupLabel) return res.status(400).json({ message: "paceGroupLabel required" });
-      await storage.joinRun(req.params.id, req.session.userId!, paceGroupLabel);
+      await storage.joinRun(req.params.id as string, req.session.userId!, paceGroupLabel);
       res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ message: e.message });
@@ -1300,17 +1300,17 @@ async function go(e){
 
   app.post("/api/runs/:id/request-join", requireAuth, async (req, res) => {
     try {
-      const run = await storage.getRunById(req.params.id);
+      const run = await storage.getRunById(req.params.id as string);
       if (!run) return res.status(404).json({ message: "Run not found" });
       if (run.host_id === req.session.userId) return res.status(400).json({ message: "You are the host" });
       const runDate = new Date(run.date);
       const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
       if (runDate < twoHoursAgo) return res.status(400).json({ message: "This event has already taken place" });
-      const participantCount = await storage.getRunParticipantCount(req.params.id);
+      const participantCount = await storage.getRunParticipantCount(req.params.id as string);
       if (participantCount < run.max_participants) {
         return res.status(400).json({ message: "This event is not full — you can join directly" });
       }
-      const result = await storage.requestJoinRun(req.params.id, req.session.userId!);
+      const result = await storage.requestJoinRun(req.params.id as string, req.session.userId!);
       if (result.alreadyExists && result.row.status !== "cancelled") {
         return res.status(400).json({ message: result.row.status === "pending" ? "already_requested" : "already_joined" });
       }
@@ -1335,8 +1335,8 @@ async function go(e){
 
   app.post("/api/runs/:id/leave", requireAuth, async (req, res) => {
     try {
-      const prior = await storage.getParticipantStatus(req.params.id, req.session.userId!);
-      await storage.leaveRun(req.params.id, req.session.userId!);
+      const prior = await storage.getParticipantStatus(req.params.id as string, req.session.userId!);
+      await storage.leaveRun(req.params.id as string, req.session.userId!);
       if (prior === "confirmed") {
         await storage.decrementCompletedRuns(req.session.userId!);
       }
@@ -1350,8 +1350,8 @@ async function go(e){
     try {
       const { date } = req.body;
       if (!date) return res.status(400).json({ message: "date is required" });
-      const updated = await storage.updateRunDateTime(req.params.id, req.session.userId!, date);
-      const tokens = await storage.getRunParticipantTokensFiltered(req.params.id, 'notif_run_reminders');
+      const updated = await storage.updateRunDateTime(req.params.id as string, req.session.userId!, date);
+      const tokens = await storage.getRunParticipantTokensFiltered(req.params.id as string, 'notif_run_reminders');
       if (tokens.length) {
         const newDate = new Date(updated.date);
         const label = `${newDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} at ${newDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
@@ -1359,7 +1359,7 @@ async function go(e){
           tokens,
           "Run time updated ⏰",
           `"${updated.title}" has been rescheduled to ${label}`,
-          { runId: req.params.id }
+          { runId: req.params.id as string }
         );
       }
       res.json(updated);
@@ -1370,8 +1370,8 @@ async function go(e){
 
   app.delete("/api/runs/:id", requireAuth, async (req, res) => {
     try {
-      const result = await storage.cancelRun(req.params.id, req.session.userId!);
-      storage.getRunParticipantTokensFiltered(req.params.id, 'notif_run_reminders').then((filteredTokens) => {
+      const result = await storage.cancelRun(req.params.id as string, req.session.userId!);
+      storage.getRunParticipantTokensFiltered(req.params.id as string, 'notif_run_reminders').then((filteredTokens) => {
         if (filteredTokens.length) {
           sendPushNotification(
             filteredTokens,
@@ -1396,14 +1396,14 @@ async function go(e){
       if (message.trim().length > 280) {
         return res.status(400).json({ message: "Message must be 280 characters or less" });
       }
-      const run = await storage.getRunById(req.params.id);
+      const run = await storage.getRunById(req.params.id as string);
       if (!run) return res.status(404).json({ message: "Run not found" });
       if (run.host_id !== req.session.userId) {
         return res.status(403).json({ message: "Only the host can send messages to participants" });
       }
-      const tokens = await storage.getRunBroadcastTokens(req.params.id);
+      const tokens = await storage.getRunBroadcastTokens(req.params.id as string);
       if (tokens.length) {
-        sendPushNotification(tokens, `${run.title}`, message.trim(), { runId: req.params.id });
+        sendPushNotification(tokens, `${run.title}`, message.trim(), { runId: req.params.id as string });
       }
       res.json({ sent: tokens.length });
     } catch (e: any) {
@@ -1415,11 +1415,11 @@ async function go(e){
     try {
       const { milesLogged } = req.body;
       const miles = parseFloat(milesLogged) || 3;
-      const result = await storage.confirmRunCompletion(req.params.id, req.session.userId!, miles);
+      const result = await storage.confirmRunCompletion(req.params.id as string, req.session.userId!, miles);
       res.json({ success: result.success });
 
       if (result.crewStreakUpdated) {
-        const runId = req.params.id;
+        const runId = req.params.id as string;
         const { crewId, newStreak } = result.crewStreakUpdated;
         (async () => {
           try {
@@ -1468,21 +1468,21 @@ async function go(e){
   });
 
   app.get("/api/runs/:id/my-rating", requireAuth, async (req, res) => {
-    const rating = await storage.getUserRatingForRun(req.params.id, req.session.userId!);
+    const rating = await storage.getUserRatingForRun(req.params.id as string, req.session.userId!);
     res.json(rating);
   });
 
   app.post("/api/runs/:id/rate", requireAuth, async (req, res) => {
     try {
-      const run = await storage.getRunById(req.params.id);
+      const run = await storage.getRunById(req.params.id as string);
       if (!run) return res.status(404).json({ message: "Run not found" });
-      const participated = await storage.isParticipant(req.params.id, req.session.userId!);
+      const participated = await storage.isParticipant(req.params.id as string, req.session.userId!);
       if (!participated && run.host_id !== req.session.userId) {
         return res.status(403).json({ message: "Only participants can rate" });
       }
       const { stars, tags } = req.body;
       if (!stars || stars < 1 || stars > 5) return res.status(400).json({ message: "Stars must be 1-5" });
-      const result = await storage.rateHost({ runId: req.params.id, hostId: run.host_id, raterId: req.session.userId!, stars, tags: tags || [] });
+      const result = await storage.rateHost({ runId: req.params.id as string, hostId: run.host_id, raterId: req.session.userId!, stars, tags: tags || [] });
       res.json(result);
     } catch (e: any) {
       if (e.message === "Already rated this run") return res.status(400).json({ message: e.message });
@@ -1520,7 +1520,7 @@ async function go(e){
 
   app.patch("/api/solo-runs/:id/star", requireAuth, async (req, res) => {
     try {
-      const run = await storage.toggleStarSoloRun(req.params.id, req.session.userId!);
+      const run = await storage.toggleStarSoloRun(req.params.id as string, req.session.userId!);
       if (!run) return res.status(404).json({ message: "Run not found" });
       res.json(run);
     } catch (e: any) {
@@ -1566,7 +1566,7 @@ async function go(e){
 
   app.get("/api/solo-runs/:id/pr-tiers", requireAuth, async (req, res) => {
     try {
-      const tiers = await storage.getSoloRunPrTiers(req.session.userId!, req.params.id);
+      const tiers = await storage.getSoloRunPrTiers(req.session.userId!, req.params.id as string);
       res.json(tiers);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
@@ -1575,7 +1575,7 @@ async function go(e){
 
   app.put("/api/solo-runs/:id", requireAuth, async (req, res) => {
     try {
-      const run = await storage.updateSoloRun(req.params.id, req.session.userId!, req.body);
+      const run = await storage.updateSoloRun(req.params.id as string, req.session.userId!, req.body);
       if (!run) return res.status(404).json({ message: "Run not found" });
       res.json(run);
     } catch (e: any) {
@@ -1585,7 +1585,7 @@ async function go(e){
 
   app.delete("/api/solo-runs/:id", requireAuth, async (req, res) => {
     try {
-      await storage.deleteSoloRun(req.params.id, req.session.userId!);
+      await storage.deleteSoloRun(req.params.id as string, req.session.userId!);
       res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ message: e.message });
@@ -1642,12 +1642,12 @@ async function go(e){
 
   app.post("/api/runs/:id/start", requireAuth, async (req, res) => {
     try {
-      const run = await storage.startGroupRun(req.params.id, req.session.userId!);
+      const run = await storage.startGroupRun(req.params.id as string, req.session.userId!);
       res.json(run);
       const verb = run.activity_type === "ride" ? "Ride" : run.activity_type === "walk" ? "Walk" : "Run";
       Promise.all([
-        storage.getRunPresentParticipantTokensFiltered(req.params.id, "notif_run_reminders"),
-        storage.getRunParticipantTokensFiltered(req.params.id, "notif_run_reminders"),
+        storage.getRunPresentParticipantTokensFiltered(req.params.id as string, "notif_run_reminders"),
+        storage.getRunParticipantTokensFiltered(req.params.id as string, "notif_run_reminders"),
       ]).then(([presentTokens, allTokens]) => {
         const presentSet = new Set(presentTokens);
         const nonPresentTokens = allTokens.filter((t) => !presentSet.has(t));
@@ -1657,7 +1657,7 @@ async function go(e){
             presentTokens,
             `${verb} is starting — tracking on! 🏃`,
             run.title,
-            { type: "run_started_present", screen: "run-live", runId: req.params.id }
+            { type: "run_started_present", screen: "run-live", runId: req.params.id as string }
           );
         }
         // Not yet present → standard "go now" notification
@@ -1666,7 +1666,7 @@ async function go(e){
             nonPresentTokens,
             `${verb} has started — Let's go! 🚀`,
             run.title,
-            { screen: "run-live", runId: req.params.id }
+            { screen: "run-live", runId: req.params.id as string }
           );
         }
       }).catch((err: any) => console.error("[bg]", err?.message ?? err));
@@ -1682,7 +1682,7 @@ async function go(e){
       const { latitude, longitude, cumulativeDistance = 0, pace = 0 } = req.body;
       if (latitude == null || longitude == null) return res.status(400).json({ message: "latitude and longitude required" });
       const result = await storage.pingRunLocation(
-        req.params.id, req.session.userId!,
+        req.params.id as string, req.session.userId!,
         parseFloat(latitude), parseFloat(longitude),
         parseFloat(cumulativeDistance), parseFloat(pace)
       );
@@ -1694,7 +1694,7 @@ async function go(e){
 
   app.get("/api/runs/:id/live", async (req, res) => {
     try {
-      const state = await storage.getLiveRunState(req.params.id);
+      const state = await storage.getLiveRunState(req.params.id as string);
       if (!state) return res.status(404).json({ message: "Run not found" });
       res.json(state);
     } catch (e: any) {
@@ -1704,7 +1704,7 @@ async function go(e){
 
   app.get("/api/runs/:id/host-route", async (req, res) => {
     try {
-      const path = await storage.getHostRoutePath(req.params.id);
+      const path = await storage.getHostRoutePath(req.params.id as string);
       res.json(path);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
@@ -1713,7 +1713,7 @@ async function go(e){
 
   app.get("/api/runs/:id/tracking-path", async (req, res) => {
     try {
-      const points = await storage.getHostRoutePath(req.params.id);
+      const points = await storage.getHostRoutePath(req.params.id as string);
       res.json({ path: points });
     } catch (e: any) {
       res.status(500).json({ message: e.message });
@@ -1729,12 +1729,12 @@ async function go(e){
       const safeDist = Number.isFinite(parsedDist) && parsedDist > 0 ? parsedDist : 0;
       const safePace = Number.isFinite(parsedPace) && parsedPace > 0 ? parsedPace : 0;
       const result = await storage.finishRunnerRun(
-        req.params.id, req.session.userId!,
+        req.params.id as string, req.session.userId!,
         safeDist, safePace
       );
       res.json({ success: result.success });
       // Fire-and-forget crew achievement check
-      storage.getRunById(req.params.id).then((run: any) => {
+      storage.getRunById(req.params.id as string).then((run: any) => {
         if (run?.crew_id) {
           storage.checkAndAwardCrewAchievements(run.crew_id).catch((err: any) => console.error("[bg]", err?.message ?? err));
         }
@@ -1753,11 +1753,11 @@ async function go(e){
       const requesterId = req.session.userId!;
       if (requesterId === targetUserId) return res.status(400).json({ message: "Cannot tag along with yourself" });
 
-      const run = await storage.getRunById(req.params.id);
+      const run = await storage.getRunById(req.params.id as string);
       if (!run) return res.status(404).json({ message: "Run not found" });
       if (run.host_id === requesterId) return res.status(400).json({ message: "Host cannot tag along" });
 
-      const request = await storage.createTagAlongRequest(req.params.id, requesterId, targetUserId);
+      const request = await storage.createTagAlongRequest(req.params.id as string, requesterId, targetUserId);
 
       // Push notification to target
       const [requester, target] = await Promise.all([
@@ -1770,7 +1770,7 @@ async function go(e){
           target.push_token,
           "Tag-Along Request 🏃",
           `${firstName} wants to tag along with your GPS for "${run.title}". Accept?`,
-          { type: "tag_along_request", runId: req.params.id, requestId: request.id }
+          { type: "tag_along_request", runId: req.params.id as string, requestId: request.id }
         ).catch(() => {});
       }
 
@@ -1783,9 +1783,9 @@ async function go(e){
   app.post("/api/runs/:id/tag-along/accept/:requestId", requireAuth, async (req, res) => {
     try {
       const result = await storage.acceptTagAlongRequest(
-        req.params.requestId,
+        req.params.requestId as string,
         req.session.userId!,
-        req.params.id
+        req.params.id as string
       );
       if (!result) return res.status(404).json({ message: "Request not found or already handled" });
       res.json(result);
@@ -1797,9 +1797,9 @@ async function go(e){
   app.post("/api/runs/:id/tag-along/decline/:requestId", requireAuth, async (req, res) => {
     try {
       const result = await storage.declineTagAlongRequest(
-        req.params.requestId,
+        req.params.requestId as string,
         req.session.userId!,
-        req.params.id
+        req.params.id as string
       );
       if (!result) return res.status(404).json({ message: "Request not found or already handled" });
       res.json(result);
@@ -1811,9 +1811,9 @@ async function go(e){
   app.post("/api/runs/:id/tag-along/cancel/:requestId", requireAuth, async (req, res) => {
     try {
       const result = await storage.cancelTagAlongRequest(
-        req.params.requestId,
+        req.params.requestId as string,
         req.session.userId!,
-        req.params.id
+        req.params.id as string
       );
       if (!result) return res.status(404).json({ message: "Request not found or already pending" });
       res.json(result);
@@ -1826,7 +1826,7 @@ async function go(e){
 
   app.get("/api/runs/:id/results", async (req, res) => {
     try {
-      const results = await storage.getRunResults(req.params.id);
+      const results = await storage.getRunResults(req.params.id as string);
       res.json(results);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
@@ -1860,7 +1860,7 @@ async function go(e){
 
   app.get("/api/saved-paths/:id/runs", requireAuth, async (req, res) => {
     try {
-      const runs = await storage.getSoloRunsByPathId(req.session.userId!, req.params.id);
+      const runs = await storage.getSoloRunsByPathId(req.session.userId!, req.params.id as string);
       res.json(runs);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
@@ -1873,7 +1873,7 @@ async function go(e){
       if (!name || typeof name !== "string" || !name.trim()) {
         return res.status(400).json({ message: "name is required" });
       }
-      const path = await storage.updateSavedPath(req.params.id, req.session.userId!, name.trim());
+      const path = await storage.updateSavedPath(req.params.id as string, req.session.userId!, name.trim());
       if (!path) return res.status(404).json({ message: "Path not found" });
       res.json(path);
     } catch (e: any) {
@@ -1883,7 +1883,7 @@ async function go(e){
 
   app.delete("/api/saved-paths/:id", requireAuth, async (req, res) => {
     try {
-      const result = await storage.deleteSavedPath(req.params.id, req.session.userId!);
+      const result = await storage.deleteSavedPath(req.params.id as string, req.session.userId!);
       res.json(result);
     } catch (e: any) {
       const status = e.message.includes("Not found") ? 404 : 500;
@@ -1895,7 +1895,7 @@ async function go(e){
 
   app.get("/api/runs/:id/photos", async (req: any, res) => {
     try {
-      const photos = await storage.getRunPhotos(req.params.id);
+      const photos = await storage.getRunPhotos(req.params.id as string);
       res.json(photos);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
@@ -1905,16 +1905,16 @@ async function go(e){
   app.post("/api/runs/:id/photos", requireAuth, upload.single("photo"), async (req: any, res) => {
     try {
       if (!req.file) return res.status(400).json({ message: "No photo provided" });
-      const run = await storage.getRunById(req.params.id);
+      const run = await storage.getRunById(req.params.id as string);
       if (!run) return res.status(404).json({ message: "Run not found" });
-      const participants = await storage.getRunParticipants(req.params.id);
+      const participants = await storage.getRunParticipants(req.params.id as string);
       const isParticipant = participants.some((p: any) => p.id === req.session.userId);
       const isHost = run.host_id === req.session.userId;
       if (!isParticipant && !isHost) return res.status(403).json({ message: "Not a participant" });
       const ext = (req.file.originalname.split(".").pop() || "jpg").toLowerCase();
-      const filename = `run-${req.params.id}-${req.session.userId}-${Date.now()}.${ext}`;
+      const filename = `run-${req.params.id as string}-${req.session.userId}-${Date.now()}.${ext}`;
       const url = await uploadPhotoBuffer(req.file.buffer, filename, req.file.mimetype);
-      const photo = await storage.addRunPhoto(req.params.id, req.session.userId!, url);
+      const photo = await storage.addRunPhoto(req.params.id as string, req.session.userId!, url);
       res.status(201).json(photo);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
@@ -1923,7 +1923,7 @@ async function go(e){
 
   app.delete("/api/runs/:id/photos/:photoId", requireAuth, async (req: any, res) => {
     try {
-      await storage.deleteRunPhoto(req.params.photoId, req.session.userId!);
+      await storage.deleteRunPhoto(req.params.photoId as string, req.session.userId!);
       res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ message: e.message });
@@ -1934,7 +1934,7 @@ async function go(e){
 
   app.get("/api/solo-runs/:id/photos", requireAuth, async (req: any, res) => {
     try {
-      const photos = await storage.getSoloRunPhotos(req.params.id, req.session.userId!);
+      const photos = await storage.getSoloRunPhotos(req.params.id as string, req.session.userId!);
       res.json(photos);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
@@ -1944,13 +1944,13 @@ async function go(e){
   app.post("/api/solo-runs/:id/photos", requireAuth, upload.single("photo"), async (req: any, res) => {
     try {
       if (!req.file) return res.status(400).json({ message: "No photo provided" });
-      const soloRun = await storage.getSoloRunById(req.params.id);
+      const soloRun = await storage.getSoloRunById(req.params.id as string);
       if (!soloRun) return res.status(404).json({ message: "Solo run not found" });
       if (soloRun.userId !== req.session.userId) return res.status(403).json({ message: "Not authorized" });
       const ext = (req.file.originalname.split(".").pop() || "jpg").toLowerCase();
-      const filename = `solo-${req.params.id}-${Date.now()}.${ext}`;
+      const filename = `solo-${req.params.id as string}-${Date.now()}.${ext}`;
       const url = await uploadPhotoBuffer(req.file.buffer, filename, req.file.mimetype);
-      const photo = await storage.addSoloRunPhoto(req.params.id, req.session.userId!, url);
+      const photo = await storage.addSoloRunPhoto(req.params.id as string, req.session.userId!, url);
       res.status(201).json(photo);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
@@ -1959,7 +1959,7 @@ async function go(e){
 
   app.delete("/api/solo-runs/:id/photos/:photoId", requireAuth, async (req: any, res) => {
     try {
-      await storage.deleteSoloRunPhoto(req.params.photoId, req.session.userId!);
+      await storage.deleteSoloRunPhoto(req.params.photoId as string, req.session.userId!);
       res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ message: e.message });
@@ -1977,8 +1977,8 @@ async function go(e){
 
   app.get("/api/crews/rankings", requireAuth, async (req, res) => {
     try {
-      const activityType = String(req.query.activityType || "run");
-      const period = String(req.query.period || "all");
+      const activityType = String(req.query.activityType as string || "run");
+      const period = String(req.query.period as string || "all");
 
       let dateFilter = "";
       if (period === "week") {
@@ -1987,7 +1987,7 @@ async function go(e){
         dateFilter = `AND r.date >= NOW() - INTERVAL '30 days'`;
       }
 
-      const myCrewId = req.query.myCrewId ? String(req.query.myCrewId) : null;
+      const myCrewId = req.query.myCrewId as string ? String(req.query.myCrewId as string) : null;
 
       const allRankedResult = await pool.query(`
         SELECT
@@ -2084,7 +2084,7 @@ async function go(e){
   app.post("/api/crew-invites/:crewId/respond", requireAuth, async (req, res) => {
     try {
       const { accept } = req.body;
-      await storage.respondToCrewInvite(req.params.crewId, req.session.userId!, accept ? 'accept' : 'reject');
+      await storage.respondToCrewInvite(req.params.crewId as string, req.session.userId!, accept ? 'accept' : 'decline');
       res.json({ ok: true });
     } catch (e: any) {
       if ((e as any).code === "MEMBER_CAP_REACHED") return res.status(400).json({ message: e.message, code: "MEMBER_CAP_REACHED" });
@@ -2095,7 +2095,7 @@ async function go(e){
   app.get("/api/crews/search", requireAuth, async (req, res) => {
     try {
       const q = (req.query.q as string) || "";
-      const friendsOnly = req.query.friends === "true";
+      const friendsOnly = req.query.friends as string === "true";
       if (!q.trim() && !friendsOnly) return res.json([]);
       const results = await storage.searchCrews(req.session.userId!, q, friendsOnly);
       res.json(results);
@@ -2113,14 +2113,14 @@ async function go(e){
 
   app.post("/api/crews/:id/join-request", requireAuth, async (req, res) => {
     try {
-      const result = await storage.requestToJoinCrew(req.params.id, req.session.userId!);
+      const result = await storage.requestToJoinCrew(req.params.id as string, req.session.userId!);
       if ("error" in result) {
         if (result.error === "member_cap_reached") {
           return res.status(400).json({ message: "This crew has reached its 100-member limit. The crew chief needs to upgrade.", code: "MEMBER_CAP_REACHED" });
         }
         return res.status(400).json({ message: result.error });
       }
-      const crew = await storage.getCrewById(req.params.id);
+      const crew = await storage.getCrewById(req.params.id as string);
       if (crew) {
         const chief = await storage.getUserById(crew.created_by);
         const requester = await storage.getUserById(req.session.userId!);
@@ -2139,22 +2139,22 @@ async function go(e){
 
   app.get("/api/crews/:id/join-requests", requireAuth, async (req, res) => {
     try {
-      const crew = await storage.getCrewById(req.params.id);
+      const crew = await storage.getCrewById(req.params.id as string);
       if (!crew) return res.status(404).json({ message: "Crew not found" });
       if (crew.created_by !== req.session.userId!) return res.status(403).json({ message: "Only the Crew Chief can view requests" });
-      const requests = await storage.getCrewJoinRequests(req.params.id);
+      const requests = await storage.getCrewJoinRequests(req.params.id as string);
       res.json(requests);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
   app.post("/api/crews/:id/join-requests/:requesterId/respond", requireAuth, async (req, res) => {
     try {
-      const crew = await storage.getCrewById(req.params.id);
+      const crew = await storage.getCrewById(req.params.id as string);
       if (!crew) return res.status(404).json({ message: "Crew not found" });
       if (crew.created_by !== req.session.userId!) return res.status(403).json({ message: "Only the Crew Chief can respond to requests" });
       const { accept } = req.body;
-      await storage.respondToCrewJoinRequest(req.params.id, req.params.requesterId, !!accept);
-      const requester = await storage.getUserById(req.params.requesterId);
+      await storage.respondToCrewJoinRequest(req.params.id as string, req.params.requesterId as string, !!accept);
+      const requester = await storage.getUserById(req.params.requesterId as string);
       if (userWantsNotif(requester, 'crew_activity')) {
         sendPushNotification(
           requester!.push_token,
@@ -2174,7 +2174,7 @@ async function go(e){
 
   app.get("/api/crews/:id", requireAuth, async (req, res) => {
     try {
-      const crew = await storage.getCrewById(req.params.id);
+      const crew = await storage.getCrewById(req.params.id as string);
       if (!crew) return res.status(404).json({ message: "Crew not found" });
       res.json(crew);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
@@ -2184,16 +2184,16 @@ async function go(e){
     try {
       const { userId } = req.body;
       if (!userId) return res.status(400).json({ message: "userId required" });
-      await storage.inviteUserToCrew(req.params.id, userId, req.session.userId!);
+      await storage.inviteUserToCrew(req.params.id as string, userId, req.session.userId!);
       const invitedUser = await storage.getUserById(userId);
-      const crew = await storage.getCrewById(req.params.id);
+      const crew = await storage.getCrewById(req.params.id as string);
       if (crew && userWantsNotif(invitedUser, 'crew_activity')) {
         const inviter = await storage.getUserById(req.session.userId!);
         sendPushNotification(
           invitedUser!.push_token,
           `You've been invited to ${crew.name} 🏃`,
           `${inviter?.name ?? "Someone"} invited you to join their crew`,
-          { crewId: req.params.id }
+          { crewId: req.params.id as string }
         );
       }
       res.json({ ok: true });
@@ -2202,14 +2202,14 @@ async function go(e){
 
   app.delete("/api/crews/:id", requireAuth, async (req, res) => {
     try {
-      await storage.disbandCrewById(req.params.id, req.session.userId!);
+      await storage.disbandCrewById(req.params.id as string, req.session.userId!);
       res.json({ ok: true });
     } catch (e: any) { res.status(e.message?.includes("Only the creator") ? 403 : 500).json({ message: e.message }); }
   });
 
   app.delete("/api/crews/:id/members/:memberId", requireAuth, async (req, res) => {
     try {
-      await storage.removeCrewMember(req.params.id, req.session.userId!, req.params.memberId);
+      await storage.removeCrewMember(req.params.id as string, req.session.userId!, req.params.memberId as string);
       res.json({ ok: true });
     } catch (e: any) {
       const status = e.message?.includes("Only the Crew Chief") ? 403 : e.message?.includes("not found") ? 404 : 500;
@@ -2220,7 +2220,7 @@ async function go(e){
   app.put("/api/crews/:crewId/members/:userId/role", requireAuth, async (req, res) => {
     try {
       const callerId = req.session.userId!;
-      const { crewId, userId } = req.params;
+      const { crewId, userId } = req.params as Record<string, string>;
       const { role } = req.body;
       if (!["officer", "member", "crew_chief"].includes(role)) {
         return res.status(400).json({ message: "Invalid role" });
@@ -2241,42 +2241,42 @@ async function go(e){
 
   app.delete("/api/crews/:id/leave", requireAuth, async (req, res) => {
     try {
-      const result = await storage.leaveCrewById(req.params.id, req.session.userId!);
+      const result = await storage.leaveCrewById(req.params.id as string, req.session.userId!);
       res.json({ ok: true, disbanded: result?.disbanded ?? false });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
   app.patch("/api/crews/:id/mute", requireAuth, async (req, res) => {
     try {
-      const muted = await storage.toggleCrewChatMute(req.params.id, req.session.userId!);
+      const muted = await storage.toggleCrewChatMute(req.params.id as string, req.session.userId!);
       res.json({ muted });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
   app.get("/api/crews/:id/runs", requireAuth, async (req, res) => {
     try {
-      const runs = await storage.getCrewRuns(req.params.id);
+      const runs = await storage.getCrewRuns(req.params.id as string);
       res.json(runs);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
   app.get("/api/crews/:id/history", requireAuth, async (req, res) => {
     try {
-      const history = await storage.getCrewRunHistory(req.params.id);
+      const history = await storage.getCrewRunHistory(req.params.id as string);
       res.json(history);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
   app.get("/api/crews/:id/achievements", requireAuth, async (req, res) => {
     try {
-      const data = await storage.getCrewAchievements(req.params.id);
+      const data = await storage.getCrewAchievements(req.params.id as string);
       res.json(data);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
   app.get("/api/crews/:id/subscription", requireAuth, async (req, res) => {
     try {
-      const status = await storage.getCrewSubscriptionStatus(req.params.id);
+      const status = await storage.getCrewSubscriptionStatus(req.params.id as string);
       if (!status) return res.status(404).json({ message: "Crew not found" });
       res.json(status);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
@@ -2303,6 +2303,7 @@ async function go(e){
       const crew = await storage.getCrewById(crewId);
       if (!crew) return res.status(200).json({ ok: true });
       const subStatus = await storage.getCrewSubscriptionStatus(crewId);
+      if (!subStatus) return res.status(200).json({ ok: true });
       const currentTier = subStatus.subscription_tier;
       const isGrowth = product_id === 'crew_growth_monthly';
       const isBoost = product_id === 'crew_discovery_boost_monthly';
@@ -2339,8 +2340,8 @@ async function go(e){
 
   app.get("/api/gifs/search", async (req, res) => {
     try {
-      const q = String(req.query.q || "").trim();
-      const limit = Math.min(Number(req.query.limit) || 20, 50);
+      const q = String(req.query.q as string || "").trim();
+      const limit = Math.min(Number(req.query.limit as string) || 20, 50);
       const apiKey = process.env.GIPHY_API_KEY;
       if (!apiKey) return res.status(500).json({ message: "GIPHY API key not configured" });
       const url = q
@@ -2374,8 +2375,8 @@ async function go(e){
 
   app.get("/api/dm/:friendId", requireAuth, async (req, res) => {
     try {
-      const limit = Math.min(Number(req.query.limit) || 50, 100);
-      const messages = await storage.getDmThread(req.session.userId!, req.params.friendId, limit);
+      const limit = Math.min(Number(req.query.limit as string) || 50, 100);
+      const messages = await storage.getDmThread(req.session.userId!, req.params.friendId as string, limit);
       res.json(messages);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
@@ -2389,7 +2390,7 @@ async function go(e){
       const metadata = isGif ? { gif_url, gif_preview_url } : undefined;
       const dm = await storage.sendDm(
         req.session.userId!,
-        req.params.friendId,
+        req.params.friendId as string,
         (message ?? "").trim(),
         messageType,
         metadata
@@ -2398,7 +2399,7 @@ async function go(e){
       // Fire push notification to recipient (non-blocking)
       Promise.all([
         storage.getUserById(req.session.userId!),
-        storage.getUserById(req.params.friendId),
+        storage.getUserById(req.params.friendId as string),
       ]).then(([sender, recipient]) => {
         if (sender && recipient?.push_token && recipient.notifications_enabled !== false) {
           const body = isGif ? "Sent you a GIF 🏃" : (message ?? "").trim();
@@ -2418,14 +2419,14 @@ async function go(e){
 
   app.post("/api/dm/:friendId/read", requireAuth, async (req, res) => {
     try {
-      await storage.markDmRead(req.session.userId!, req.params.friendId);
+      await storage.markDmRead(req.session.userId!, req.params.friendId as string);
       res.json({ ok: true });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
   app.delete("/api/dm/:friendId", requireAuth, async (req, res) => {
     try {
-      await storage.deleteDmThread(req.session.userId!, req.params.friendId);
+      await storage.deleteDmThread(req.session.userId!, req.params.friendId as string);
       res.json({ ok: true });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
@@ -2466,8 +2467,8 @@ async function go(e){
 
   app.get("/api/garmin/callback", async (req: any, res) => {
     try {
-      const oauth_token = String(req.query.oauth_token ?? "");
-      const oauth_verifier = String(req.query.oauth_verifier ?? "");
+      const oauth_token = String(req.query.oauth_token as string ?? "");
+      const oauth_verifier = String(req.query.oauth_verifier as string ?? "");
       if (!oauth_token || !oauth_verifier) {
         return res.status(400).send("Missing OAuth parameters. Please try connecting Garmin again.");
       }
@@ -2490,7 +2491,7 @@ async function go(e){
       if (!oauthInst) return res.status(503).send("Garmin integration is not configured.");
       const request = { url: GARMIN_ACCESS_TOKEN_URL, method: "POST" };
       const authData = oauthInst.authorize(request, { key: oauth_token, secret: requestSecret });
-      const authHeader = oauthInst.toHeader({ ...authData, oauth_verifier });
+      const authHeader = oauthInst.toHeader({ ...authData, oauth_verifier } as any);
       const accResp = await fetch(GARMIN_ACCESS_TOKEN_URL, {
         method: "POST",
         headers: { ...authHeader, "Content-Type": "application/x-www-form-urlencoded" },

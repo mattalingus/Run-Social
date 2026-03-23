@@ -32,18 +32,18 @@ export function addGroupLocationListener(cb: LocationCallback): () => void {
   };
 }
 
-TaskManager.defineTask(SOLO_LOCATION_TASK, ({ data, error }: any) => {
+TaskManager.defineTask<{ locations: Location.LocationObject[] }>(SOLO_LOCATION_TASK, async ({ data, error }) => {
   if (error || !data) return;
-  const { locations } = data as { locations: Location.LocationObject[] };
+  const { locations } = data;
   for (const loc of locations) {
     const { latitude, longitude, speed, altitude, accuracy } = loc.coords;
     soloListeners.forEach((cb) => cb(latitude, longitude, speed ?? null, altitude ?? null, accuracy ?? null));
   }
 });
 
-TaskManager.defineTask(GROUP_LOCATION_TASK, ({ data, error }: any) => {
+TaskManager.defineTask<{ locations: Location.LocationObject[] }>(GROUP_LOCATION_TASK, async ({ data, error }) => {
   if (error || !data) return;
-  const { locations } = data as { locations: Location.LocationObject[] };
+  const { locations } = data;
   for (const loc of locations) {
     const { latitude, longitude, speed, altitude, accuracy } = loc.coords;
     groupListeners.forEach((cb) => cb(latitude, longitude, speed ?? null, altitude ?? null, accuracy ?? null));
