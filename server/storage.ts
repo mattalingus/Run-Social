@@ -1927,12 +1927,13 @@ export async function getLiveRunState(runId: string) {
 export async function createTagAlongRequest(runId: string, requesterId: string, targetId: string) {
   // Validate run exists and is a group run (not solo)
   const runRes = await pool.query(
-    `SELECT privacy, is_active, host_id FROM runs WHERE id = $1`,
+    `SELECT privacy, is_active, is_completed, host_id FROM runs WHERE id = $1`,
     [runId]
   );
   if (!runRes.rows.length) throw new Error('Run not found');
   const run = runRes.rows[0];
   if (run.privacy === 'solo') throw new Error('Cannot tag along on a solo run');
+  if (!run.is_active || run.is_completed) throw new Error('Tag-along requests can only be sent during an active run');
   if (run.host_id === requesterId) throw new Error('Host cannot tag along');
 
   // Validate requester is an active participant
@@ -1985,6 +1986,16 @@ export async function acceptTagAlongRequest(requestId: string, targetId: string,
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    // Guard: run must still be active and not completed (no retroactive tag-along)
+    const runCheck = await client.query(
+      `SELECT is_active, is_completed FROM runs WHERE id = $1`,
+      [runId]
+    );
+    if (!runCheck.rows.length || !runCheck.rows[0].is_active || runCheck.rows[0].is_completed) {
+      await client.query('ROLLBACK');
+      throw new Error('Tag-along can only be accepted during an active run');
+    }
 
     // Validate the request belongs to the run and is pending for this target
     const reqRes = await client.query(
