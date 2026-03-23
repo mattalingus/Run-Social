@@ -476,6 +476,22 @@ async function go(e){
       const result = await storage.sendFriendRequest(req.session.userId!, userId);
       if (result.error) return res.status(400).json({ message: result.error === "already_friends" ? "Already friends" : "Request already sent" });
       res.json(result.data);
+      // Push notification to recipient — fire and forget
+      Promise.all([
+        pool.query(`SELECT name FROM users WHERE id = $1`, [req.session.userId!]),
+        pool.query(`SELECT push_token, notifications_enabled, notif_friend_requests FROM users WHERE id = $1`, [userId]),
+      ]).then(([senderRes, recipientRes]) => {
+        const sender = senderRes.rows[0];
+        const recipient = recipientRes.rows[0];
+        if (sender && recipient && userWantsNotif(recipient, "friend_requests")) {
+          sendPushNotification(
+            recipient.push_token,
+            "New Friend Request",
+            `${sender.name} wants to connect on PaceUp`,
+            { screen: "notifications" }
+          );
+        }
+      }).catch(() => {});
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
@@ -488,6 +504,22 @@ async function go(e){
       storage.checkFriendAchievements(req.session.userId!).catch((err: any) => console.error("[bg]", err?.message ?? err));
       if (friendship.requester_id) {
         storage.checkFriendAchievements(friendship.requester_id).catch((err: any) => console.error("[bg]", err?.message ?? err));
+        // Push to the original requester — fire and forget
+        Promise.all([
+          pool.query(`SELECT name FROM users WHERE id = $1`, [req.session.userId!]),
+          pool.query(`SELECT push_token, notifications_enabled, notif_friend_requests FROM users WHERE id = $1`, [friendship.requester_id]),
+        ]).then(([acceptorRes, requesterRes]) => {
+          const acceptor = acceptorRes.rows[0];
+          const requester = requesterRes.rows[0];
+          if (acceptor && requester && userWantsNotif(requester, "friend_requests")) {
+            sendPushNotification(
+              requester.push_token,
+              "Friend Request Accepted",
+              `${acceptor.name} accepted your friend request`,
+              { screen: "notifications" }
+            );
+          }
+        }).catch(() => {});
       }
       res.json(friendship);
     } catch (e: any) {
@@ -633,8 +665,31 @@ async function go(e){
     try {
       const { friendshipId, action } = req.body;
       if (!friendshipId || !action) return res.status(400).json({ message: "friendshipId and action required" });
+      // Fetch before respond so we have the requester_id for the push
+      const frRow = action === "accept"
+        ? await pool.query(`SELECT requester_id FROM friends WHERE id = $1 AND addressee_id = $2`, [friendshipId, req.session.userId!])
+        : null;
       await storage.respondToFriendRequest(friendshipId, req.session.userId!, action);
       res.json({ success: true });
+      // Push to original requester when accepted — fire and forget
+      if (action === "accept" && frRow?.rows[0]?.requester_id) {
+        const requesterId = frRow.rows[0].requester_id as string;
+        Promise.all([
+          pool.query(`SELECT name FROM users WHERE id = $1`, [req.session.userId!]),
+          pool.query(`SELECT push_token, notifications_enabled, notif_friend_requests FROM users WHERE id = $1`, [requesterId]),
+        ]).then(([acceptorRes, requesterRes]) => {
+          const acceptor = acceptorRes.rows[0];
+          const requester = requesterRes.rows[0];
+          if (acceptor && requester && userWantsNotif(requester, "friend_requests")) {
+            sendPushNotification(
+              requester.push_token,
+              "Friend Request Accepted",
+              `${acceptor.name} accepted your friend request`,
+              { screen: "notifications" }
+            );
+          }
+        }).catch(() => {});
+      }
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
