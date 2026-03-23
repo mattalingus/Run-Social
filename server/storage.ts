@@ -387,6 +387,19 @@ export async function initDb() {
       created_at TIMESTAMP DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS idx_prt_token ON password_reset_tokens(token);
+
+    ALTER TABLE run_participants ADD COLUMN IF NOT EXISTS tag_along_of_user_id VARCHAR DEFAULT NULL;
+
+    CREATE TABLE IF NOT EXISTS tag_along_requests (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      run_id VARCHAR NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+      requester_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      target_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      status VARCHAR NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(run_id, requester_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_tag_along_run ON tag_along_requests(run_id, status);
   `);
 
   const dummyCheck = await pool.query(`SELECT COUNT(*) FROM users WHERE email LIKE 'dummy-%@paceup.dev'`);
@@ -1859,6 +1872,7 @@ export async function getLiveRunState(runId: string) {
 
   const participantsRes = await pool.query(
     `SELECT rp.user_id, u.name, u.photo_url, rp.is_present, rp.final_distance, rp.final_pace, rp.final_rank,
+       rp.tag_along_of_user_id,
        tp.latitude, tp.longitude, tp.cumulative_distance, tp.pace as current_pace, tp.recorded_at
      FROM run_participants rp
      JOIN users u ON u.id = rp.user_id
@@ -1869,6 +1883,15 @@ export async function getLiveRunState(runId: string) {
      ) tp ON true
      WHERE rp.run_id = $1 AND rp.status != 'cancelled'
      ORDER BY rp.joined_at ASC`,
+    [runId]
+  );
+
+  const tagAlongRes = await pool.query(
+    `SELECT tar.*, ru.name as requester_name, tu.name as target_name
+     FROM tag_along_requests tar
+     JOIN users ru ON ru.id = tar.requester_id
+     JOIN users tu ON tu.id = tar.target_id
+     WHERE tar.run_id = $1 AND tar.status IN ('pending', 'accepted')`,
     [runId]
   );
 
@@ -1893,8 +1916,106 @@ export async function getLiveRunState(runId: string) {
     activeCount,
     staleCount,
     participants,
+    tagAlongRequests: tagAlongRes.rows,
   };
 }
+
+// ─── Tag-Along ────────────────────────────────────────────────────────────────
+
+export async function createTagAlongRequest(runId: string, requesterId: string, targetId: string) {
+  const existing = await pool.query(
+    `SELECT id, status FROM tag_along_requests WHERE run_id = $1 AND requester_id = $2`,
+    [runId, requesterId]
+  );
+  if (existing.rows.length > 0) {
+    const ex = existing.rows[0];
+    if (ex.status === 'accepted') throw new Error('Tag-along already accepted for this run');
+    await pool.query(
+      `UPDATE tag_along_requests SET target_id = $2, status = 'pending', created_at = NOW() WHERE id = $1`,
+      [ex.id, targetId]
+    );
+    const res = await pool.query(`SELECT * FROM tag_along_requests WHERE id = $1`, [ex.id]);
+    return res.rows[0];
+  }
+  const res = await pool.query(
+    `INSERT INTO tag_along_requests (run_id, requester_id, target_id, status)
+     VALUES ($1, $2, $3, 'pending') RETURNING *`,
+    [runId, requesterId, targetId]
+  );
+  return res.rows[0];
+}
+
+export async function acceptTagAlongRequest(requestId: string, targetId: string) {
+  const res = await pool.query(
+    `UPDATE tag_along_requests SET status = 'accepted'
+     WHERE id = $1 AND target_id = $2 AND status = 'pending' RETURNING *`,
+    [requestId, targetId]
+  );
+  if (!res.rows.length) return null;
+  const { requester_id, run_id } = res.rows[0];
+  await pool.query(
+    `UPDATE run_participants SET tag_along_of_user_id = $3 WHERE run_id = $1 AND user_id = $2`,
+    [run_id, requester_id, targetId]
+  );
+  return res.rows[0];
+}
+
+export async function declineTagAlongRequest(requestId: string, targetId: string) {
+  const res = await pool.query(
+    `UPDATE tag_along_requests SET status = 'declined'
+     WHERE id = $1 AND target_id = $2 AND status = 'pending' RETURNING *`,
+    [requestId, targetId]
+  );
+  return res.rows.length > 0 ? res.rows[0] : null;
+}
+
+export async function cancelTagAlongRequest(requestId: string, requesterId: string) {
+  const res = await pool.query(
+    `UPDATE tag_along_requests SET status = 'declined'
+     WHERE id = $1 AND requester_id = $2 AND status = 'pending' RETURNING *`,
+    [requestId, requesterId]
+  );
+  return res.rows.length > 0 ? res.rows[0] : null;
+}
+
+export async function createSoloRunForTagAlong(runId: string, tagAlongUserId: string, acceptorUserId: string): Promise<boolean> {
+  const runRes = await pool.query(`SELECT * FROM runs WHERE id = $1`, [runId]);
+  if (!runRes.rows.length) return false;
+  const run = runRes.rows[0];
+
+  const partRes = await pool.query(
+    `SELECT final_distance, final_pace FROM run_participants WHERE run_id = $1 AND user_id = $2`,
+    [runId, acceptorUserId]
+  );
+  if (!partRes.rows.length || !partRes.rows[0].final_distance) return false;
+  const { final_distance, final_pace } = partRes.rows[0];
+
+  const routeRes = await pool.query(
+    `SELECT latitude, longitude FROM run_tracking_points
+     WHERE run_id = $1 AND user_id = $2 ORDER BY recorded_at ASC`,
+    [runId, acceptorUserId]
+  );
+  const routePath = routeRes.rows.length > 0
+    ? JSON.stringify(routeRes.rows.map((r: any) => ({ latitude: r.latitude, longitude: r.longitude })))
+    : null;
+
+  const duration = final_pace > 0 && final_distance > 0
+    ? Math.round(final_pace * 60 * final_distance)
+    : null;
+
+  const actType = run.activity_type || 'run';
+  const label = actType === 'ride' ? 'Ride' : actType === 'walk' ? 'Walk' : 'Run';
+  const title = `${run.title} (Tag-Along ${label})`;
+
+  await pool.query(
+    `INSERT INTO solo_runs (user_id, title, date, distance_miles, pace_min_per_mile, duration_seconds, completed, route_path, activity_type)
+     VALUES ($1, $2, $3, $4, $5, $6, true, $7::jsonb, $8)`,
+    [tagAlongUserId, title, run.date, final_distance, final_pace, duration, routePath, actType]
+  );
+  return true;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export async function finishRunnerRun(runId: string, userId: string, finalDistance: number, finalPace: number) {
   const client = await pool.connect();
@@ -1943,6 +2064,23 @@ export async function finishRunnerRun(runId: string, userId: string, finalDistan
     }
 
     await client.query('COMMIT');
+
+    // Fire-and-forget: auto-create solo runs for accepted tag-along participants
+    if (finalDistance > 0 && finalPace > 0) {
+      pool.query(
+        `SELECT requester_id FROM tag_along_requests
+         WHERE run_id = $1 AND target_id = $2 AND status = 'accepted'`,
+        [runId, userId]
+      ).then(async (tagRes: any) => {
+        for (const row of tagRes.rows) {
+          try {
+            await createSoloRunForTagAlong(runId, row.requester_id, userId);
+          } catch (e: any) {
+            console.error('[tag-along] Failed to create solo run for', row.requester_id, e?.message);
+          }
+        }
+      }).catch((e: any) => console.error('[tag-along] query error', e?.message));
+    }
 
     return { success: true, shouldComplete };
   } catch (e) {

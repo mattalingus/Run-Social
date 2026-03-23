@@ -92,6 +92,7 @@ export default function RunLiveScreen() {
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [promotedToHost, setPromotedToHost] = useState(false);
   const wasHostRef = useRef(false);
+  const [tagAlongSending, setTagAlongSending] = useState<string | null>(null); // targetUserId being requested
 
   // ── Server data ───────────────────────────────────────────────────────────
 
@@ -299,6 +300,41 @@ export default function RunLiveScreen() {
     router.back();
   }
 
+  // ── Tag-Along Handlers ────────────────────────────────────────────────────
+
+  async function handleTagAlongRequest(targetUserId: string) {
+    setTagAlongSending(targetUserId);
+    try {
+      await apiRequest("POST", `/api/runs/${id}/tag-along/request`, { targetUserId });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e: any) {
+      Alert.alert("Error", e.message || "Could not send tag-along request");
+    } finally {
+      setTagAlongSending(null);
+    }
+  }
+
+  async function handleTagAlongCancel(requestId: string) {
+    try {
+      await apiRequest("POST", `/api/runs/${id}/tag-along/cancel/${requestId}`);
+    } catch {}
+  }
+
+  async function handleTagAlongAccept(requestId: string) {
+    try {
+      await apiRequest("POST", `/api/runs/${id}/tag-along/accept/${requestId}`);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e: any) {
+      Alert.alert("Error", e.message || "Could not accept request");
+    }
+  }
+
+  async function handleTagAlongDecline(requestId: string) {
+    try {
+      await apiRequest("POST", `/api/runs/${id}/tag-along/decline/${requestId}`);
+    } catch {}
+  }
+
   // ── Chat Polling ──────────────────────────────────────────────────────────
 
   const fetchMessages = useCallback(async () => {
@@ -355,6 +391,24 @@ export default function RunLiveScreen() {
   const runPin = run ? { latitude: run.location_lat, longitude: run.location_lng } : null;
   const paceNum = calcPaceNum(displayDist, elapsed);
   const otherRunners = presentParticipants.filter((p: any) => p.user_id !== user?.id);
+
+  // ── Tag-Along derived state ────────────────────────────────────────────────
+  const tagAlongRequests: any[] = liveState?.tagAlongRequests ?? [];
+  // Pending requests targeting the current user (they need to respond)
+  const incomingTagAlongRequests = tagAlongRequests.filter(
+    (r: any) => r.target_id === user?.id && r.status === "pending"
+  );
+  // My outgoing request (I sent it)
+  const myOutgoingRequest = tagAlongRequests.find(
+    (r: any) => r.requester_id === user?.id
+  );
+  // Accepted tag-along for current user as requester
+  const myTagAlongLink = tagAlongRequests.find(
+    (r: any) => r.requester_id === user?.id && r.status === "accepted"
+  );
+  // Name of the person I'm tagging along with
+  const myTagAlongPartnerName = myTagAlongLink?.target_name ?? null;
+  const isTaggingAlong = !!myTagAlongLink;
 
   // ── Leaderboard: merge server distances with user's live distance ─────────
   const leaderboardRows = presentParticipants
@@ -507,7 +561,46 @@ export default function RunLiveScreen() {
             )}
           </View>
 
-          {/* Stats strip */}
+          {/* Incoming tag-along request banners */}
+          {incomingTagAlongRequests.map((req: any) => (
+            <View key={req.id} style={s.tagAlongBanner}>
+              <View style={s.tagAlongBannerLeft}>
+                <Feather name="link" size={14} color={C.primary} />
+                <Text style={s.tagAlongBannerText} numberOfLines={2}>
+                  <Text style={{ fontFamily: "Outfit_700Bold" }}>{req.requester_name.split(" ")[0]}</Text>
+                  {" wants to tag along with your GPS"}
+                </Text>
+              </View>
+              <View style={s.tagAlongBannerActions}>
+                <Pressable
+                  style={[s.tagAlongActionBtn, s.tagAlongAcceptBtn]}
+                  onPress={() => handleTagAlongAccept(req.id)}
+                >
+                  <Text style={s.tagAlongAcceptTxt}>Accept</Text>
+                </Pressable>
+                <Pressable
+                  style={s.tagAlongActionBtn}
+                  onPress={() => handleTagAlongDecline(req.id)}
+                >
+                  <Text style={s.tagAlongDeclineTxt}>Decline</Text>
+                </Pressable>
+              </View>
+            </View>
+          ))}
+
+          {/* Stats strip — or "Tagging along" banner if linked */}
+          {isTaggingAlong ? (
+            <View style={s.taggingAlongStrip}>
+              <Feather name="link-2" size={16} color={C.primary} />
+              <Text style={s.taggingAlongText}>
+                Tagging along with{" "}
+                <Text style={{ fontFamily: "Outfit_700Bold" }}>
+                  {myTagAlongPartnerName?.split(" ")[0] ?? "your partner"}
+                </Text>
+                {" — your run will be saved automatically"}
+              </Text>
+            </View>
+          ) : (
           <View style={s.statsStrip}>
             <View style={s.statItem}>
               <Text style={s.statValue}>{displayDist.toFixed(2)}</Text>
@@ -524,6 +617,7 @@ export default function RunLiveScreen() {
               <Text style={s.statLabel}>min/mi</Text>
             </View>
           </View>
+          )}
 
           {/* Leaderboard toggle + inline panel */}
           <Pressable
@@ -576,6 +670,39 @@ export default function RunLiveScreen() {
                           </Text>
                         )}
                       </View>
+                      {/* Tag-Along button — only for non-self, non-host participants when run is active */}
+                      {!isSelf && !isHost && runner.user_id !== liveState?.hostId && liveState?.isActive && !isTaggingAlong && (() => {
+                        const myReq = myOutgoingRequest;
+                        const isSendingToThis = tagAlongSending === runner.user_id;
+                        const pendingToThis = myReq?.target_id === runner.user_id && myReq?.status === "pending";
+                        const acceptedToThis = myReq?.target_id === runner.user_id && myReq?.status === "accepted";
+                        if (acceptedToThis) return null; // already accepted, shown in banner above
+                        if (pendingToThis) {
+                          return (
+                            <Pressable
+                              style={s.tagAlongCancelBtn}
+                              onPress={() => handleTagAlongCancel(myReq.id)}
+                              hitSlop={8}
+                            >
+                              <Feather name="x" size={11} color={C.textMuted} />
+                              <Text style={s.tagAlongCancelTxt}>Pending</Text>
+                            </Pressable>
+                          );
+                        }
+                        return (
+                          <Pressable
+                            style={[s.tagAlongBtn, (isSendingToThis || !!myReq) && { opacity: 0.5 }]}
+                            onPress={() => !myReq && handleTagAlongRequest(runner.user_id)}
+                            disabled={isSendingToThis || !!myReq}
+                            hitSlop={8}
+                          >
+                            <Feather name="link" size={11} color={C.primary} />
+                            <Text style={s.tagAlongBtnTxt}>
+                              {isSendingToThis ? "…" : "Tag Along"}
+                            </Text>
+                          </Pressable>
+                        );
+                      })()}
                     </View>
                   );
                 })}
@@ -889,4 +1016,42 @@ const s = StyleSheet.create({
     backgroundColor: C.surface, alignItems: "center", justifyContent: "center",
     borderWidth: 1, borderColor: C.border,
   },
+
+  tagAlongBanner: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    marginHorizontal: 10, marginTop: 8, paddingHorizontal: 12, paddingVertical: 10,
+    backgroundColor: C.primary + "14", borderRadius: 12,
+    borderWidth: 1, borderColor: C.primary + "44", gap: 10,
+  },
+  tagAlongBannerLeft: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
+  tagAlongBannerText: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.text, flex: 1 },
+  tagAlongBannerActions: { flexDirection: "row", gap: 8 },
+  tagAlongActionBtn: {
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8,
+    backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
+  },
+  tagAlongAcceptBtn: { backgroundColor: C.primary, borderColor: C.primary },
+  tagAlongAcceptTxt: { fontFamily: "Outfit_700Bold", fontSize: 12, color: "#fff" },
+  tagAlongDeclineTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.textSecondary },
+
+  taggingAlongStrip: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: C.primary + "18", marginHorizontal: 10, marginTop: 10,
+    borderRadius: 16, paddingVertical: 16, paddingHorizontal: 16,
+    borderWidth: 1, borderColor: C.primary + "44",
+  },
+  taggingAlongText: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.text, flex: 1, lineHeight: 20 },
+
+  tagAlongBtn: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8,
+    backgroundColor: C.primary + "18", borderWidth: 1, borderColor: C.primary + "44",
+  },
+  tagAlongBtnTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.primary },
+  tagAlongCancelBtn: {
+    flexDirection: "row", alignItems: "center", gap: 3,
+    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8,
+    backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
+  },
+  tagAlongCancelTxt: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted },
 });

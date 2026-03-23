@@ -1744,6 +1744,74 @@ async function go(e){
     }
   });
 
+  // ─── Tag-Along Endpoints ───────────────────────────────────────────────────
+
+  app.post("/api/runs/:id/tag-along/request", requireAuth, async (req, res) => {
+    try {
+      const { targetUserId } = req.body;
+      if (!targetUserId) return res.status(400).json({ message: "targetUserId required" });
+      const requesterId = req.session.userId!;
+      if (requesterId === targetUserId) return res.status(400).json({ message: "Cannot tag along with yourself" });
+
+      const run = await storage.getRunById(req.params.id);
+      if (!run) return res.status(404).json({ message: "Run not found" });
+      if (run.host_id === requesterId) return res.status(400).json({ message: "Host cannot tag along" });
+
+      const request = await storage.createTagAlongRequest(req.params.id, requesterId, targetUserId);
+
+      // Push notification to target
+      const [requester, target] = await Promise.all([
+        storage.getUserById(requesterId),
+        storage.getUserById(targetUserId),
+      ]);
+      if (target?.push_token && target.notifications_enabled !== false) {
+        const firstName = requester?.name?.split(" ")[0] ?? "Someone";
+        sendPushNotification(
+          target.push_token,
+          "Tag-Along Request 🏃",
+          `${firstName} wants to tag along with your GPS for "${run.title}". Accept?`,
+          { type: "tag_along_request", runId: req.params.id, requestId: request.id }
+        ).catch(() => {});
+      }
+
+      res.json(request);
+    } catch (e: any) {
+      res.status(400).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/runs/:id/tag-along/accept/:requestId", requireAuth, async (req, res) => {
+    try {
+      const result = await storage.acceptTagAlongRequest(req.params.requestId, req.session.userId!);
+      if (!result) return res.status(404).json({ message: "Request not found or already handled" });
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/runs/:id/tag-along/decline/:requestId", requireAuth, async (req, res) => {
+    try {
+      const result = await storage.declineTagAlongRequest(req.params.requestId, req.session.userId!);
+      if (!result) return res.status(404).json({ message: "Request not found or already handled" });
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/runs/:id/tag-along/cancel/:requestId", requireAuth, async (req, res) => {
+    try {
+      const result = await storage.cancelTagAlongRequest(req.params.requestId, req.session.userId!);
+      if (!result) return res.status(404).json({ message: "Request not found or already pending" });
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+
   app.get("/api/runs/:id/results", async (req, res) => {
     try {
       const results = await storage.getRunResults(req.params.id);
