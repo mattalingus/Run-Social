@@ -1923,13 +1923,44 @@ export async function getLiveRunState(runId: string) {
 // ─── Tag-Along ────────────────────────────────────────────────────────────────
 
 export async function createTagAlongRequest(runId: string, requesterId: string, targetId: string) {
+  // Validate run exists and is a group run (not solo)
+  const runRes = await pool.query(
+    `SELECT privacy, is_active, host_id FROM runs WHERE id = $1`,
+    [runId]
+  );
+  if (!runRes.rows.length) throw new Error('Run not found');
+  const run = runRes.rows[0];
+  if (run.privacy === 'solo') throw new Error('Cannot tag along on a solo run');
+  if (run.host_id === requesterId) throw new Error('Host cannot tag along');
+
+  // Validate requester is an active participant
+  const reqParticipant = await pool.query(
+    `SELECT 1 FROM run_participants WHERE run_id = $1 AND user_id = $2 AND status != 'cancelled'`,
+    [runId, requesterId]
+  );
+  if (!reqParticipant.rows.length) throw new Error('You are not a participant in this run');
+
+  // Validate target is an active participant (not host)
+  const tgtParticipant = await pool.query(
+    `SELECT 1 FROM run_participants WHERE run_id = $1 AND user_id = $2 AND status != 'cancelled'`,
+    [runId, targetId]
+  );
+  if (!tgtParticipant.rows.length) throw new Error('Target is not a participant in this run');
+  if (run.host_id === targetId) throw new Error('Cannot tag along with the host');
+
+  // Requester must not already have an accepted link
+  const acceptedCheck = await pool.query(
+    `SELECT 1 FROM tag_along_requests WHERE run_id = $1 AND requester_id = $2 AND status = 'accepted'`,
+    [runId, requesterId]
+  );
+  if (acceptedCheck.rows.length) throw new Error('Tag-along already accepted for this run');
+
   const existing = await pool.query(
     `SELECT id, status FROM tag_along_requests WHERE run_id = $1 AND requester_id = $2`,
     [runId, requesterId]
   );
   if (existing.rows.length > 0) {
     const ex = existing.rows[0];
-    if (ex.status === 'accepted') throw new Error('Tag-along already accepted for this run');
     await pool.query(
       `UPDATE tag_along_requests SET target_id = $2, status = 'pending', created_at = NOW() WHERE id = $1`,
       [ex.id, targetId]
@@ -1945,37 +1976,91 @@ export async function createTagAlongRequest(runId: string, requesterId: string, 
   return res.rows[0];
 }
 
-export async function acceptTagAlongRequest(requestId: string, targetId: string) {
-  const res = await pool.query(
-    `UPDATE tag_along_requests SET status = 'accepted'
-     WHERE id = $1 AND target_id = $2 AND status = 'pending' RETURNING *`,
-    [requestId, targetId]
-  );
-  if (!res.rows.length) return null;
-  const { requester_id, run_id } = res.rows[0];
-  await pool.query(
-    `UPDATE run_participants SET tag_along_of_user_id = $3 WHERE run_id = $1 AND user_id = $2`,
-    [run_id, requester_id, targetId]
-  );
-  return res.rows[0];
+export async function acceptTagAlongRequest(requestId: string, targetId: string, runId: string) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Validate the request belongs to the run and is pending for this target
+    const reqRes = await client.query(
+      `SELECT * FROM tag_along_requests WHERE id = $1 AND target_id = $2 AND run_id = $3 AND status = 'pending'`,
+      [requestId, targetId, runId]
+    );
+    if (!reqRes.rows.length) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+    const req = reqRes.rows[0];
+
+    // Enforce one accepted link per target per run
+    const existingAccepted = await client.query(
+      `SELECT 1 FROM tag_along_requests WHERE run_id = $1 AND target_id = $2 AND status = 'accepted'`,
+      [runId, targetId]
+    );
+    if (existingAccepted.rows.length) {
+      await client.query('ROLLBACK');
+      throw new Error('You have already accepted another tag-along request for this run');
+    }
+
+    // Enforce one accepted link per requester per run (double-check in transaction)
+    const existingAcceptedRequester = await client.query(
+      `SELECT 1 FROM tag_along_requests WHERE run_id = $1 AND requester_id = $2 AND status = 'accepted'`,
+      [runId, req.requester_id]
+    );
+    if (existingAcceptedRequester.rows.length) {
+      await client.query('ROLLBACK');
+      throw new Error('Requester already has an accepted tag-along for this run');
+    }
+
+    await client.query(
+      `UPDATE tag_along_requests SET status = 'accepted' WHERE id = $1`,
+      [requestId]
+    );
+    await client.query(
+      `UPDATE run_participants SET tag_along_of_user_id = $3 WHERE run_id = $1 AND user_id = $2`,
+      [runId, req.requester_id, targetId]
+    );
+    await client.query('COMMIT');
+    return req;
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
 }
 
-export async function declineTagAlongRequest(requestId: string, targetId: string) {
+export async function declineTagAlongRequest(requestId: string, targetId: string, runId: string) {
   const res = await pool.query(
     `UPDATE tag_along_requests SET status = 'declined'
-     WHERE id = $1 AND target_id = $2 AND status = 'pending' RETURNING *`,
-    [requestId, targetId]
+     WHERE id = $1 AND target_id = $2 AND run_id = $3 AND status = 'pending' RETURNING *`,
+    [requestId, targetId, runId]
   );
   return res.rows.length > 0 ? res.rows[0] : null;
 }
 
-export async function cancelTagAlongRequest(requestId: string, requesterId: string) {
+export async function cancelTagAlongRequest(requestId: string, requesterId: string, runId: string) {
   const res = await pool.query(
     `UPDATE tag_along_requests SET status = 'declined'
-     WHERE id = $1 AND requester_id = $2 AND status = 'pending' RETURNING *`,
-    [requestId, requesterId]
+     WHERE id = $1 AND requester_id = $2 AND run_id = $3 AND status = 'pending' RETURNING *`,
+    [requestId, requesterId, runId]
   );
   return res.rows.length > 0 ? res.rows[0] : null;
+}
+
+export async function finalizeTagAlongsForRun(runId: string): Promise<void> {
+  // Find all accepted tag-along requests for this run
+  const tagRes = await pool.query(
+    `SELECT requester_id, target_id FROM tag_along_requests WHERE run_id = $1 AND status = 'accepted'`,
+    [runId]
+  );
+  for (const row of tagRes.rows) {
+    try {
+      await createSoloRunForTagAlong(runId, row.requester_id, row.target_id);
+    } catch (e: any) {
+      console.error('[tag-along] finalizeTagAlongsForRun error for', row.requester_id, e?.message);
+    }
+  }
 }
 
 export async function createSoloRunForTagAlong(runId: string, tagAlongUserId: string, acceptorUserId: string): Promise<boolean> {
@@ -1989,6 +2074,13 @@ export async function createSoloRunForTagAlong(runId: string, tagAlongUserId: st
   );
   if (!partRes.rows.length || !partRes.rows[0].final_distance) return false;
   const { final_distance, final_pace } = partRes.rows[0];
+
+  // Idempotency: skip if a tag-along solo run for this group run already exists for this user
+  const existingCheck = await pool.query(
+    `SELECT 1 FROM solo_runs WHERE user_id = $1 AND title LIKE $2 AND date::date = $3::date LIMIT 1`,
+    [tagAlongUserId, `%(Tag-Along %`, run.date]
+  );
+  if (existingCheck.rows.length > 0) return false;
 
   const routeRes = await pool.query(
     `SELECT latitude, longitude FROM run_tracking_points
@@ -2065,8 +2157,15 @@ export async function finishRunnerRun(runId: string, userId: string, finalDistan
 
     await client.query('COMMIT');
 
-    // Fire-and-forget: auto-create solo runs for accepted tag-along participants
-    if (finalDistance > 0 && finalPace > 0) {
+    // Fire-and-forget: create solo runs for tag-along participants
+    if (shouldComplete) {
+      // Run completed — handle ALL accepted tag-alongs (covers acceptors who never called finish)
+      finalizeTagAlongsForRun(runId).catch((e: any) =>
+        console.error('[tag-along] finalizeTagAlongsForRun error', e?.message)
+      );
+    } else if (finalDistance > 0 && finalPace > 0) {
+      // Acceptor finished early — create solo runs for their tag-along requesters now
+      // finalizeTagAlongsForRun will cover any missed ones when the run completes
       pool.query(
         `SELECT requester_id FROM tag_along_requests
          WHERE run_id = $1 AND target_id = $2 AND status = 'accepted'`,

@@ -1782,31 +1782,43 @@ async function go(e){
 
   app.post("/api/runs/:id/tag-along/accept/:requestId", requireAuth, async (req, res) => {
     try {
-      const result = await storage.acceptTagAlongRequest(req.params.requestId, req.session.userId!);
+      const result = await storage.acceptTagAlongRequest(
+        req.params.requestId,
+        req.session.userId!,
+        req.params.id
+      );
       if (!result) return res.status(404).json({ message: "Request not found or already handled" });
       res.json(result);
     } catch (e: any) {
-      res.status(500).json({ message: e.message });
+      res.status(400).json({ message: e.message });
     }
   });
 
   app.post("/api/runs/:id/tag-along/decline/:requestId", requireAuth, async (req, res) => {
     try {
-      const result = await storage.declineTagAlongRequest(req.params.requestId, req.session.userId!);
+      const result = await storage.declineTagAlongRequest(
+        req.params.requestId,
+        req.session.userId!,
+        req.params.id
+      );
       if (!result) return res.status(404).json({ message: "Request not found or already handled" });
       res.json(result);
     } catch (e: any) {
-      res.status(500).json({ message: e.message });
+      res.status(400).json({ message: e.message });
     }
   });
 
   app.post("/api/runs/:id/tag-along/cancel/:requestId", requireAuth, async (req, res) => {
     try {
-      const result = await storage.cancelTagAlongRequest(req.params.requestId, req.session.userId!);
+      const result = await storage.cancelTagAlongRequest(
+        req.params.requestId,
+        req.session.userId!,
+        req.params.id
+      );
       if (!result) return res.status(404).json({ message: "Request not found or already pending" });
       res.json(result);
     } catch (e: any) {
-      res.status(500).json({ message: e.message });
+      res.status(400).json({ message: e.message });
     }
   });
 
