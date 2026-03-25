@@ -1741,11 +1741,7 @@ function ProfileScreenInner() {
                   refreshUser();
                 }
               } catch (e: any) {
-                if (e.message?.includes("501") || e.message?.includes("404") || e.message?.includes("not configured")) {
-                  Alert.alert("Coming Soon", "Facebook friend discovery is coming soon. It will be enabled in an upcoming app update.");
-                } else {
-                  Alert.alert("Error", e.message || "Could not connect Facebook");
-                }
+                Alert.alert("Error", e.message || "Could not connect Facebook. Please try again.");
               } finally {
                 setFbConnecting(false);
               }
