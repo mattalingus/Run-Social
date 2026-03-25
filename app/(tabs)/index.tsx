@@ -1508,6 +1508,9 @@ export default function DiscoverScreen() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/runs/bookmarked"] });
     },
+    onError: () => {
+      Alert.alert("Error", "Could not update saved runs. Please try again.");
+    },
   });
 
   const { data: plannedRuns = [] } = useQuery<Run[]>({
@@ -1583,6 +1586,9 @@ export default function DiscoverScreen() {
       );
       qc.invalidateQueries({ queryKey: ["/api/runs/planned"] });
       qc.invalidateQueries({ queryKey: ["/api/runs", runId, "status"] });
+    },
+    onError: () => {
+      Alert.alert("Error", "Could not remove from planned runs. Please try again.");
     },
   });
 

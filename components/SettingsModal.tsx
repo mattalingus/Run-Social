@@ -229,7 +229,7 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
           "PaceUp needs access to Apple Health to import your workouts.\n\nGo to Settings → Privacy & Security → Health → PaceUp and allow access.",
           [
             { text: "Cancel", style: "cancel" },
-            { text: "Open Settings", onPress: () => Linking.openURL("app-settings:") },
+            { text: "Open Settings", onPress: () => Linking.openURL("app-settings:").catch(() => {}) },
           ]
         );
         return;
@@ -246,7 +246,7 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
           "PaceUp needs access to Apple Health.\n\nGo to Settings → Privacy & Security → Health → PaceUp and allow access.",
           [
             { text: "Cancel", style: "cancel" },
-            { text: "Open Settings", onPress: () => Linking.openURL("app-settings:") },
+            { text: "Open Settings", onPress: () => Linking.openURL("app-settings:").catch(() => {}) },
           ]
         );
       } else {
@@ -438,7 +438,7 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
       "To reset your password, email us at support@paceupapp.com with your account username and we'll send you a reset link.",
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Email Support", onPress: () => Linking.openURL("mailto:support@paceupapp.com?subject=Password%20Reset%20Request") },
+        { text: "Email Support", onPress: () => Linking.openURL("mailto:support@paceupapp.com?subject=Password%20Reset%20Request").catch(() => {}) },
       ]
     );
   }
@@ -946,7 +946,7 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
               icon={<Feather name="mail" size={17} color="#4DA6FF" />}
               label="Contact Support"
               sublabel="support@paceupapp.com"
-              onPress={() => Linking.openURL("mailto:support@paceupapp.com")}
+              onPress={() => Linking.openURL("mailto:support@paceupapp.com").catch(() => {})}
             />
           </SectionCard>
 

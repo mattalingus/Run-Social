@@ -93,9 +93,9 @@ export default function PaywallSheet({ visible, onClose, plans, crewId, onSucces
 
   function openManageSubscriptions() {
     if (Platform.OS === "ios") {
-      Linking.openURL("https://apps.apple.com/account/subscriptions");
+      Linking.openURL("https://apps.apple.com/account/subscriptions").catch(() => {});
     } else if (Platform.OS === "android") {
-      Linking.openURL("https://play.google.com/store/account/subscriptions");
+      Linking.openURL("https://play.google.com/store/account/subscriptions").catch(() => {});
     }
   }
 
@@ -200,11 +200,11 @@ export default function PaywallSheet({ visible, onClose, plans, crewId, onSucces
             </Pressable>
 
             <View style={st.legalRow}>
-              <Pressable onPress={() => Linking.openURL("https://paceupapp.com/terms")}>
+              <Pressable onPress={() => Linking.openURL("https://paceupapp.com/terms").catch(() => {})}>
                 <Text style={st.legalTxt}>Terms</Text>
               </Pressable>
               <Text style={st.legalDot}>·</Text>
-              <Pressable onPress={() => Linking.openURL("https://paceupapp.com/privacy")}>
+              <Pressable onPress={() => Linking.openURL("https://paceupapp.com/privacy").catch(() => {})}>
                 <Text style={st.legalTxt}>Privacy</Text>
               </Pressable>
             </View>

@@ -95,9 +95,9 @@ export default function SubscriptionCenterScreen() {
 
   function openManageSubscriptions() {
     if (Platform.OS === "ios") {
-      Linking.openURL("https://apps.apple.com/account/subscriptions");
+      Linking.openURL("https://apps.apple.com/account/subscriptions").catch(() => {});
     } else if (Platform.OS === "android") {
-      Linking.openURL("https://play.google.com/store/account/subscriptions");
+      Linking.openURL("https://play.google.com/store/account/subscriptions").catch(() => {});
     } else {
       Alert.alert(
         "Manage Subscriptions",
@@ -107,7 +107,7 @@ export default function SubscriptionCenterScreen() {
   }
 
   function openSupport() {
-    Linking.openURL("mailto:support@paceupapp.com?subject=Subscription%20Help");
+    Linking.openURL("mailto:support@paceupapp.com?subject=Subscription%20Help").catch(() => {});
   }
 
   return (
@@ -210,7 +210,7 @@ export default function SubscriptionCenterScreen() {
               color={C.text}
               mutedColor={C.textMuted}
               borderColor={C.border}
-              onPress={() => Linking.openURL("https://paceupapp.com/terms")}
+              onPress={() => Linking.openURL("https://paceupapp.com/terms").catch(() => {})}
               showChevron
             />
             <MenuItem
@@ -219,7 +219,7 @@ export default function SubscriptionCenterScreen() {
               color={C.text}
               mutedColor={C.textMuted}
               borderColor={C.border}
-              onPress={() => Linking.openURL("https://paceupapp.com/privacy")}
+              onPress={() => Linking.openURL("https://paceupapp.com/privacy").catch(() => {})}
               showChevron
               isLast
             />

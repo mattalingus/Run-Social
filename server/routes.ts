@@ -105,6 +105,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { password: _, ...safeUser } = user;
       res.json({ ...safeUser, rememberToken });
     } catch (e: any) {
+      if (e?.code === "23505") {
+        return res.status(400).json({ message: "Email or username already taken" });
+      }
       res.status(500).json({ message: e.message });
     }
   });
@@ -1022,6 +1025,7 @@ async function go(e){
       if (!message && !gif_url) return res.status(400).json({ message: "Message or GIF required" });
 
       const user = await storage.getUserById(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
       const messageType = gif_url ? "gif" : "text";
       const metadata = gif_url ? { gif_url, gif_preview_url } : undefined;
       const newMessage = await storage.createCrewMessage(
@@ -1116,6 +1120,7 @@ async function go(e){
       }
 
       const user = await storage.getUserById(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
       const newMessage = await storage.createRunMessage(
         runId,
         userId,

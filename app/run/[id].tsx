@@ -770,7 +770,7 @@ export default function RunDetailScreen() {
                 android: `geo:${lat},${lng}?q=${label}`,
                 default: `https://www.google.com/maps?q=${lat},${lng}`,
               });
-              if (url) Linking.openURL(url);
+              if (url) Linking.openURL(url).catch(() => {});
             }}
           >
             <Feather name="map-pin" size={18} color={C.primary} />
@@ -892,7 +892,7 @@ export default function RunDetailScreen() {
                   android: `geo:${lat},${lng}?q=${label}`,
                   default: `https://www.google.com/maps?q=${lat},${lng}`,
                 });
-                if (url) Linking.openURL(url);
+                if (url) Linking.openURL(url).catch(() => {});
               }}
             >
               <View style={styles.routeCardHeader}>
@@ -1081,8 +1081,12 @@ export default function RunDetailScreen() {
                         <Pressable
                           style={styles.joinRequestDeny}
                           onPress={async () => {
-                            await apiRequest("POST", "/api/runs/requests/respond", { participantId: p.participation_id ?? p.participant_id ?? p.rp_id, action: "deny", runId: id });
-                            qc.invalidateQueries({ queryKey: ["/api/runs", id, "participants"] });
+                            try {
+                              await apiRequest("POST", "/api/runs/requests/respond", { participantId: p.participation_id ?? p.participant_id ?? p.rp_id, action: "deny", runId: id });
+                              qc.invalidateQueries({ queryKey: ["/api/runs", id, "participants"] });
+                            } catch {
+                              Alert.alert("Error", "Could not deny the request. Please try again.");
+                            }
                           }}
                         >
                           <Text style={styles.joinRequestDenyTxt}>Deny</Text>
@@ -1090,9 +1094,13 @@ export default function RunDetailScreen() {
                         <Pressable
                           style={styles.joinRequestApprove}
                           onPress={async () => {
-                            await apiRequest("POST", "/api/runs/requests/respond", { participantId: p.participation_id ?? p.participant_id ?? p.rp_id, action: "approve", runId: id });
-                            qc.invalidateQueries({ queryKey: ["/api/runs", id, "participants"] });
-                            qc.invalidateQueries({ queryKey: ["/api/runs", id] });
+                            try {
+                              await apiRequest("POST", "/api/runs/requests/respond", { participantId: p.participation_id ?? p.participant_id ?? p.rp_id, action: "approve", runId: id });
+                              qc.invalidateQueries({ queryKey: ["/api/runs", id, "participants"] });
+                              qc.invalidateQueries({ queryKey: ["/api/runs", id] });
+                            } catch {
+                              Alert.alert("Error", "Could not approve the request. Please try again.");
+                            }
                           }}
                         >
                           <Text style={styles.joinRequestApproveTxt}>Approve</Text>
