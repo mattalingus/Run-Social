@@ -31,6 +31,7 @@ import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { useTheme } from "@/contexts/ThemeContext";
 import WalkthroughPulse from "@/components/WalkthroughPulse";
 import { usePurchases } from "@/contexts/PurchasesContext";
+import PaywallSheet, { type PaywallPlan } from "@/components/PaywallSheet";
 import { darkColors, type ColorScheme } from "@/constants/colors";
 import { toDisplayPace, toDisplayDist, unitLabel, type DistanceUnit } from "@/lib/units";
 import { Image as ExpoImage } from "expo-image";
@@ -1950,25 +1951,25 @@ function SuggestedCrewsSection() {
 }
 
 // ─── Crew Plans Section ──────────────────────────────────────────────────────
-const PLAN_TIERS = [
+const CREW_PLANS: PaywallPlan[] = [
   {
-    id: "growth",
     productId: "crew_growth_monthly",
     entitlementId: "crew_growth",
-    name: "Crew Growth",
-    price: "$1.99/mo",
-    icon: "people" as const,
+    title: "Crew Growth",
+    subtitle: "Remove the member cap",
+    emoji: "🚀",
     color: "#4CAF50",
+    fallbackPrice: "$1.99",
     features: ["Unlimited members (remove 100 cap)", "Priority support"],
   },
   {
-    id: "discovery_boost",
     productId: "crew_discovery_boost_monthly",
     entitlementId: "crew_discovery_boost",
-    name: "Discovery Boost",
-    price: "$4.99/mo",
-    icon: "rocket" as const,
+    title: "Discovery Boost",
+    subtitle: "More visibility on PaceUp",
+    emoji: "⚡",
     color: "#FF9800",
+    fallbackPrice: "$4.99",
     features: ["~30% boost in Suggested Crews", "Public crew events featured", "Crew badge on discover page"],
   },
 ];
@@ -1977,8 +1978,8 @@ function CrewPlansSection({ crewId }: { crewId: string }) {
   const { C } = useTheme();
   const s = useMemo(() => makeStyles(C), [C]);
   const qc = useQueryClient();
-  const { purchasePackage, restorePurchases, hasEntitlement } = usePurchases();
-  const [purchasing, setPurchasing] = useState<string | null>(null);
+  const { hasEntitlement, getPriceString } = usePurchases();
+  const [showPaywall, setShowPaywall] = useState(false);
 
   const { data: subStatus } = useQuery<SubscriptionStatus>({
     queryKey: ["/api/crews", crewId, "subscription"],
@@ -1987,53 +1988,15 @@ function CrewPlansSection({ crewId }: { crewId: string }) {
 
   const currentTier = subStatus?.subscription_tier || "none";
 
-  function isTierActive(tierId: string, entitlementId: string): boolean {
+  function isTierActive(entitlementId: string): boolean {
     if (currentTier === "both") return true;
-    if (currentTier === tierId) return true;
+    if (currentTier === "growth" && entitlementId === "crew_growth") return true;
+    if (currentTier === "discovery_boost" && entitlementId === "crew_discovery_boost") return true;
     return hasEntitlement(entitlementId);
   }
 
-  async function handleSubscribe(tier: typeof PLAN_TIERS[0]) {
-    setPurchasing(tier.id);
-    try {
-      const purchased = await purchasePackage(tier.productId, crewId);
-      if (purchased) {
-        setTimeout(() => {
-          qc.invalidateQueries({ queryKey: ["/api/crews", crewId, "subscription"] });
-          qc.invalidateQueries({ queryKey: ["/api/crews"] });
-        }, 2000);
-        Alert.alert("Subscribed!", `${tier.name} plan is now active. It may take a moment to reflect.`);
-      } else {
-        Alert.alert("Purchase Not Completed", "The purchase was not completed. Please try again.");
-      }
-    } catch {
-      Alert.alert("Error", "Could not complete purchase. Please try again.");
-    } finally {
-      setPurchasing(null);
-    }
-  }
-
-  function handleManageSubscription() {
-    if (Platform.OS === "ios") {
-      Linking.openURL("https://apps.apple.com/account/subscriptions");
-    } else if (Platform.OS === "android") {
-      Linking.openURL("https://play.google.com/store/account/subscriptions");
-    } else {
-      Alert.alert(
-        "Manage Subscription",
-        "To cancel or change your subscription, open your device's subscription settings (App Store on iOS, Google Play on Android)."
-      );
-    }
-  }
-
-  async function handleRestore() {
-    try {
-      await restorePurchases();
-      qc.invalidateQueries({ queryKey: ["/api/crews", crewId, "subscription"] });
-      Alert.alert("Restored", "Your purchases have been restored.");
-    } catch {
-      Alert.alert("Error", "Could not restore purchases.");
-    }
+  function getPrice(productId: string, fallback: string): string {
+    return getPriceString(productId) ?? fallback;
   }
 
   return (
@@ -2050,124 +2013,97 @@ function CrewPlansSection({ crewId }: { crewId: string }) {
         </Text>
       </View>
 
-      {PLAN_TIERS.map((tier) => {
-        const active = isTierActive(tier.id, tier.entitlementId);
+      {CREW_PLANS.map((plan) => {
+        const active = isTierActive(plan.entitlementId);
+        const livePrice = getPrice(plan.productId, plan.fallbackPrice);
         return (
-          <View key={tier.id} style={[s.planCard, active && { borderColor: tier.color }]}>
+          <View key={plan.productId} style={[s.planCard, active && { borderColor: plan.color }]}>
             <View style={s.planCardHeader}>
-              <View style={[s.planIconCircle, { backgroundColor: tier.color + "22" }]}>
-                <Ionicons name={tier.icon} size={18} color={tier.color} />
+              <View style={[s.planIconCircle, { backgroundColor: plan.color + "22" }]}>
+                <Text style={{ fontSize: 18 }}>{plan.emoji}</Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={s.planCardName}>{tier.name}</Text>
-                <Text style={s.planCardPrice}>{tier.price}</Text>
+                <Text style={s.planCardName}>{plan.title}</Text>
+                <Text style={s.planCardPrice}>{livePrice}/mo</Text>
               </View>
               {active && (
-                <View style={[s.planActiveBadge, { backgroundColor: tier.color + "22" }]}>
-                  <Ionicons name="checkmark-circle" size={14} color={tier.color} />
-                  <Text style={[s.planActiveBadgeTxt, { color: tier.color }]}>Active</Text>
+                <View style={[s.planActiveBadge, { backgroundColor: plan.color + "22" }]}>
+                  <Ionicons name="checkmark-circle" size={14} color={plan.color} />
+                  <Text style={[s.planActiveBadgeTxt, { color: plan.color }]}>Active</Text>
                 </View>
               )}
             </View>
-            {tier.features.map((f, i) => (
+            {plan.features.map((f, i) => (
               <View key={i} style={s.planFeatureRow}>
                 <Ionicons
                   name={active ? "checkmark-circle" : "lock-closed-outline"}
                   size={14}
-                  color={active ? tier.color : C.textMuted}
+                  color={active ? plan.color : C.textMuted}
                 />
                 <Text style={[s.planFeatureTxt, !active && { color: C.textMuted }]}>{f}</Text>
               </View>
             ))}
             {!active ? (
               <TouchableOpacity
-                style={[s.planSubscribeBtn, { backgroundColor: tier.color }]}
-                onPress={() => handleSubscribe(tier)}
-                disabled={purchasing === tier.id}
+                style={[s.planSubscribeBtn, { backgroundColor: plan.color }]}
+                onPress={() => setShowPaywall(true)}
                 activeOpacity={0.85}
               >
-                {purchasing === tier.id ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <Text style={s.planSubscribeBtnTxt}>Subscribe</Text>
-                )}
+                <Text style={s.planSubscribeBtnTxt}>Subscribe — {livePrice}/mo</Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
-                style={[s.planSubscribeBtn, { backgroundColor: C.card, borderWidth: 1, borderColor: tier.color }]}
-                onPress={handleManageSubscription}
+                style={[s.planSubscribeBtn, { backgroundColor: C.card, borderWidth: 1, borderColor: plan.color }]}
+                onPress={() => Linking.openURL(Platform.OS === "android"
+                  ? "https://play.google.com/store/account/subscriptions"
+                  : "https://apps.apple.com/account/subscriptions"
+                )}
                 activeOpacity={0.85}
               >
-                <Text style={[s.planSubscribeBtnTxt, { color: tier.color }]}>Manage Subscription</Text>
+                <Text style={[s.planSubscribeBtnTxt, { color: plan.color }]}>Manage Subscription</Text>
               </TouchableOpacity>
             )}
           </View>
         );
       })}
 
-      <TouchableOpacity onPress={handleRestore} style={s.restoreBtn}>
-        <Text style={s.restoreBtnTxt}>Restore Purchases</Text>
+      <TouchableOpacity onPress={() => setShowPaywall(true)} style={s.restoreBtn}>
+        <Text style={s.restoreBtnTxt}>View All Plans</Text>
       </TouchableOpacity>
+
+      <PaywallSheet
+        visible={showPaywall}
+        onClose={() => setShowPaywall(false)}
+        plans={CREW_PLANS}
+        crewId={crewId}
+        onSuccess={() => {
+          qc.invalidateQueries({ queryKey: ["/api/crews", crewId, "subscription"] });
+          qc.invalidateQueries({ queryKey: ["/api/crews"] });
+        }}
+      />
     </View>
   );
 }
 
 // ─── Member Cap Upsell Sheet ─────────────────────────────────────────────────
-function MemberCapUpsell({ visible, onClose, crewId }: { visible: boolean; onClose: () => void; crewId: string }) {
-  const { C } = useTheme();
-  const s = useMemo(() => makeStyles(C), [C]);
-  const { purchasePackage } = usePurchases();
-  const qc = useQueryClient();
-  const [purchasing, setPurchasing] = useState(false);
+const GROWTH_PLAN_ONLY: PaywallPlan[] = [CREW_PLANS[0]];
 
-  async function handleUpgrade() {
-    setPurchasing(true);
-    try {
-      const purchased = await purchasePackage("crew_growth_monthly", crewId);
-      if (purchased) {
+function MemberCapUpsell({ visible, onClose, crewId }: { visible: boolean; onClose: () => void; crewId: string }) {
+  const qc = useQueryClient();
+  return (
+    <PaywallSheet
+      visible={visible}
+      onClose={onClose}
+      plans={GROWTH_PLAN_ONLY}
+      crewId={crewId}
+      onSuccess={() => {
         setTimeout(() => {
           qc.invalidateQueries({ queryKey: ["/api/crews", crewId, "subscription"] });
           qc.invalidateQueries({ queryKey: ["/api/crews"] });
-        }, 2000);
-        Alert.alert("Upgraded!", "Your crew can now have unlimited members. It may take a moment to reflect.");
+        }, 1500);
         onClose();
-      } else {
-        Alert.alert("Purchase Not Completed", "The purchase was not completed. Please try again.");
-      }
-    } catch {
-      Alert.alert("Error", "Could not complete purchase.");
-    } finally {
-      setPurchasing(false);
-    }
-  }
-
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={s.upsellOverlay} onPress={onClose}>
-        <View style={s.upsellCard} onStartShouldSetResponder={() => true}>
-          <Ionicons name="people" size={40} color={C.primary} />
-          <Text style={s.upsellTitle}>Crew Full!</Text>
-          <Text style={s.upsellBody}>
-            Your crew has reached the 100-member limit. Upgrade to Crew Growth to remove the cap and accept unlimited members.
-          </Text>
-          <TouchableOpacity
-            style={s.upsellBtn}
-            onPress={handleUpgrade}
-            disabled={purchasing}
-            activeOpacity={0.85}
-          >
-            {purchasing ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text style={s.upsellBtnTxt}>Upgrade — $1.99/mo</Text>
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity onPress={onClose} style={{ marginTop: 10 }}>
-            <Text style={s.upsellDismissTxt}>Not now</Text>
-          </TouchableOpacity>
-        </View>
-      </Pressable>
-    </Modal>
+      }}
+    />
   );
 }
 

@@ -21,6 +21,7 @@ import * as WebBrowser from "expo-web-browser";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
+import { router } from "expo-router";
 import { usePurchases } from "@/contexts/PurchasesContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -861,6 +862,18 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
             <Divider C={C} />
             {Platform.OS !== "web" && (
               <>
+                <SettingRow
+                  C={C}
+                  iconBg="#0A1A2A"
+                  icon={<Feather name="star" size={17} color={C.primary} />}
+                  label="Subscription Center"
+                  sublabel="View plans, manage or restore purchases"
+                  onPress={() => {
+                    onClose();
+                    setTimeout(() => router.push("/subscription-center"), 300);
+                  }}
+                />
+                <Divider C={C} />
                 <SettingRow
                   C={C}
                   iconBg="#0A1A2A"
