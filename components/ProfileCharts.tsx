@@ -6,7 +6,7 @@ import {
   Pressable,
   ScrollView,
 } from "react-native";
-import { Feather } from "@expo/vector-icons";
+import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { darkColors as C } from "@/constants/colors";
 import { toDisplayDist, type DistanceUnit } from "@/lib/units";
@@ -150,7 +150,7 @@ function getPeriodStats(
   }
 
   const distance = subset.reduce((s, a) => s + a.distance_miles, 0);
-  const duration = subset.reduce((s, a) => s + ((a as any).move_time_seconds ?? a.duration_seconds ?? 0), 0);
+  const duration = subset.reduce((s, a) => s + (a.move_time_seconds ?? a.duration_seconds ?? 0), 0);
   const elevation = subset.reduce((s, a) => s + (a.elevation_gain_ft ?? 0), 0);
   return { distance, duration, elevation };
 }
@@ -256,6 +256,12 @@ function ChartBars({
   );
 }
 
+function activityIcon(activityType: string): { name: string; lib: "Ionicons" | "Feather" } {
+  if (activityType === "ride") return { name: "bicycle-outline", lib: "Ionicons" };
+  if (activityType === "walk") return { name: "footsteps-outline", lib: "Ionicons" };
+  return { name: "walk-outline", lib: "Ionicons" };
+}
+
 function ActivityCalendar({
   activities,
   activityType,
@@ -356,6 +362,7 @@ function ActivityCalendar({
             const isToday = isCurrentMonth && day === today.getDate();
             const isActive = activeDays.has(day);
             const isFuture = isCurrentMonth && day > today.getDate();
+            const icon = activityIcon(activityType);
             return (
               <View key={di} style={s.calDayCell}>
                 <View
@@ -365,16 +372,19 @@ function ActivityCalendar({
                     isToday && !isActive && { borderWidth: 1.5, borderColor: C.primary },
                   ]}
                 >
-                  <Text
-                    style={[
-                      s.calDayTxt,
-                      isActive && { color: C.bg, fontFamily: "Outfit_700Bold" },
-                      isToday && !isActive && { color: C.primary, fontFamily: "Outfit_700Bold" },
-                      isFuture && !isActive && { color: C.textMuted + "55" },
-                    ]}
-                  >
-                    {day}
-                  </Text>
+                  {isActive ? (
+                    <Ionicons name={icon.name as any} size={14} color={C.bg} />
+                  ) : (
+                    <Text
+                      style={[
+                        s.calDayTxt,
+                        isToday && { color: C.primary, fontFamily: "Outfit_700Bold" },
+                        isFuture && { color: C.textMuted + "55" },
+                      ]}
+                    >
+                      {day}
+                    </Text>
+                  )}
                 </View>
               </View>
             );

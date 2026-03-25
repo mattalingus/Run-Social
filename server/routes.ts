@@ -398,6 +398,7 @@ async function go(e){
       const runs = await storage.getSoloRuns(req.session.userId!);
       const filtered = runs
         .filter((r: any) => !r.is_deleted && r.completed && (!type || (r.activity_type ?? "run") === type))
+        .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
         .map((r: any) => ({
           date: r.date,
           distance_miles: r.distance_miles,
