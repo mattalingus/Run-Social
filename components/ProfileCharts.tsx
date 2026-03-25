@@ -256,11 +256,6 @@ function ChartBars({
   );
 }
 
-function activityIcon(activityType: string): { name: string; lib: "Ionicons" | "Feather" } {
-  if (activityType === "ride") return { name: "bicycle-outline", lib: "Ionicons" };
-  if (activityType === "walk") return { name: "footsteps-outline", lib: "Ionicons" };
-  return { name: "walk-outline", lib: "Ionicons" };
-}
 
 function ActivityCalendar({
   activities,
@@ -362,7 +357,6 @@ function ActivityCalendar({
             const isToday = isCurrentMonth && day === today.getDate();
             const isActive = activeDays.has(day);
             const isFuture = isCurrentMonth && day > today.getDate();
-            const icon = activityIcon(activityType);
             return (
               <View key={di} style={s.calDayCell}>
                 <View
@@ -373,7 +367,13 @@ function ActivityCalendar({
                   ]}
                 >
                   {isActive ? (
-                    <Ionicons name={icon.name as any} size={14} color={C.bg} />
+                    activityType === "ride" ? (
+                      <Ionicons name="bicycle-outline" size={14} color={C.bg} />
+                    ) : activityType === "walk" ? (
+                      <Ionicons name="footsteps-outline" size={14} color={C.bg} />
+                    ) : (
+                      <Ionicons name="walk-outline" size={14} color={C.bg} />
+                    )
                   ) : (
                     <Text
                       style={[
@@ -444,13 +444,15 @@ export default function ProfileCharts({ activities, activityType, distUnit }: Pr
             <Text style={s.statVal}>{stats.duration > 0 ? fmtDuration(stats.duration) : "—"}</Text>
             <Text style={s.statLabel}>Time</Text>
           </View>
-          <View style={s.statDivider} />
-          <View style={s.statItem}>
-            <Text style={s.statVal}>
-              {stats.elevation > 0 ? `${Math.round(stats.elevation).toLocaleString()} ft` : "—"}
-            </Text>
-            <Text style={s.statLabel}>Elev Gain</Text>
-          </View>
+          {stats.elevation > 0 && (
+            <>
+              <View style={s.statDivider} />
+              <View style={s.statItem}>
+                <Text style={s.statVal}>{`${Math.round(stats.elevation).toLocaleString()} ft`}</Text>
+                <Text style={s.statLabel}>Elev Gain</Text>
+              </View>
+            </>
+          )}
         </View>
       </View>
 
