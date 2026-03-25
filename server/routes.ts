@@ -392,6 +392,26 @@ async function go(e){
     }
   });
 
+  app.get("/api/users/me/activity-history", requireAuth, async (req, res) => {
+    try {
+      const { type } = req.query;
+      const runs = await storage.getSoloRuns(req.session.userId!);
+      const filtered = runs
+        .filter((r: any) => !r.is_deleted && r.completed && (!type || (r.activity_type ?? "run") === type))
+        .map((r: any) => ({
+          date: r.date,
+          distance_miles: r.distance_miles,
+          duration_seconds: r.duration_seconds,
+          move_time_seconds: r.move_time_seconds,
+          elevation_gain_ft: r.elevation_gain_ft,
+          activity_type: r.activity_type ?? "run",
+        }));
+      res.json(filtered);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.get("/api/users/me/achievements", requireAuth, async (req, res) => {
     const achievements = await storage.getUserAchievements(req.session.userId!);
     res.json(achievements);

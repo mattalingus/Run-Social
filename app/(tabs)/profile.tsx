@@ -34,6 +34,7 @@ import { formatDistance } from "@/lib/formatDistance";
 import { toDisplayDist, toDisplayPace, unitLabel, type DistanceUnit } from "@/lib/units";
 import { pickAndUploadImage } from "@/lib/uploadImage";
 import MileSplitsChart from "@/components/MileSplitsChart";
+import ProfileCharts from "@/components/ProfileCharts";
 import HostProfileSheet from "@/components/HostProfileSheet";
 import SettingsModal from "@/components/SettingsModal";
 import * as WebBrowser from "expo-web-browser";
@@ -932,6 +933,13 @@ function ProfileScreenInner() {
           <Feather name="chevron-right" size={10} color={C.textMuted} style={{ marginTop: 2 }} />
         </Pressable>
       </View>
+
+      {/* ── Progress Charts ───────────────────────────────────────────────── */}
+      <ProfileCharts
+        activities={soloRuns}
+        activityType={profileActivity}
+        distUnit={distUnit}
+      />
 
       {/* ── Host Rating Warning ──────────────────────────────────────────────── */}
       {(user.avg_rating ?? 0) > 0 && (user.avg_rating ?? 0) < 4.0 && (user.rating_count ?? 0) >= 1 && (
