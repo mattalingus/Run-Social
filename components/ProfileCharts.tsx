@@ -444,15 +444,13 @@ export default function ProfileCharts({ activities, activityType, distUnit }: Pr
             <Text style={s.statVal}>{stats.duration > 0 ? fmtDuration(stats.duration) : "—"}</Text>
             <Text style={s.statLabel}>Time</Text>
           </View>
-          {stats.elevation > 0 && (
-            <>
-              <View style={s.statDivider} />
-              <View style={s.statItem}>
-                <Text style={s.statVal}>{`${Math.round(stats.elevation).toLocaleString()} ft`}</Text>
-                <Text style={s.statLabel}>Elev Gain</Text>
-              </View>
-            </>
-          )}
+          <View style={s.statDivider} />
+          <View style={s.statItem}>
+            <Text style={s.statVal}>
+              {stats.elevation > 0 ? `${Math.round(stats.elevation).toLocaleString()} ft` : "—"}
+            </Text>
+            <Text style={s.statLabel}>Elev Gain</Text>
+          </View>
         </View>
       </View>
 
