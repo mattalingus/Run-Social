@@ -462,13 +462,21 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
         setHcSyncMsg("Health Connect is not available on this device.");
         return;
       }
+      let granted: boolean;
       try {
-        await requestHealthConnectPermissions();
+        granted = await requestHealthConnectPermissions();
       } catch (initErr: any) {
         setHcSyncMsg(`Could not access Health Connect: ${initErr?.message ?? "permission denied"}`);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         return;
       }
+      if (!granted) {
+        setHcSyncing(false);
+        setHcSyncMsg("Permission denied — open Health Connect to allow PaceUp access.");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        return;
+      }
+
       const workouts = await fetchHealthConnectWorkouts(90);
       setHcSyncing(false);
 
@@ -498,7 +506,7 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
       });
 
       setHcSyncing(true);
-      const resp = await apiRequest("POST", "/api/health/import", { workouts });
+      const resp = await apiRequest("POST", "/api/health/import", { workouts, source: "health_connect" });
       const data = await resp.json();
       const msg = data.imported > 0
         ? `${data.imported} new activit${data.imported === 1 ? "y" : "ies"} imported!`

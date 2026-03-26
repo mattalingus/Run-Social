@@ -2671,10 +2671,12 @@ async function go(e){
   app.post("/api/health/import", requireAuth, async (req: any, res) => {
     try {
       const userId = req.session.userId!;
-      const { workouts } = req.body;
+      const { workouts, source = "apple_health" } = req.body;
       if (!Array.isArray(workouts) || workouts.length === 0) {
         return res.status(400).json({ message: "No workouts provided" });
       }
+
+      const isHealthConnect = source === "health_connect";
 
       let imported = 0;
       for (const w of workouts) {
@@ -2687,16 +2689,24 @@ async function go(e){
 
         const typeMap: Record<string, string> = { run: "run", ride: "ride", walk: "walk" };
         const actType = typeMap[w.activityType] || "run";
-        const title = `${actType === "ride" ? "Ride" : actType === "walk" ? "Walk" : "Run"} via ${w.sourceName || "Apple Health"}`;
 
-        const wasNew = await storage.saveHealthKitActivity(userId, w.id, {
-          title,
+        const activityData = {
           date: new Date(w.startDate),
           distanceMiles: Math.round(distMiles * 100) / 100,
           paceMinPerMile: paceMinPerMile ? Math.round(paceMinPerMile * 100) / 100 : null,
           durationSeconds: Math.round(w.durationSeconds),
           activityType: actType,
-        });
+          title: "",
+        };
+
+        let wasNew: boolean;
+        if (isHealthConnect) {
+          activityData.title = `${actType === "ride" ? "Ride" : actType === "walk" ? "Walk" : "Run"} via Health Connect`;
+          wasNew = await storage.saveHealthConnectActivity(userId, w.id, activityData);
+        } else {
+          activityData.title = `${actType === "ride" ? "Ride" : actType === "walk" ? "Walk" : "Run"} via ${w.sourceName || "Apple Health"}`;
+          wasNew = await storage.saveHealthKitActivity(userId, w.id, activityData);
+        }
         if (wasNew) imported++;
       }
       res.json({ imported, total: workouts.length });

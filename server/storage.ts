@@ -346,6 +346,7 @@ export async function initDb() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS health_connect_connected BOOLEAN DEFAULT false;
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS garmin_activity_id TEXT UNIQUE;
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS apple_health_id TEXT UNIQUE;
+    ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS health_connect_id TEXT UNIQUE;
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'manual';
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS step_count INTEGER;
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS move_time_seconds INTEGER;
@@ -1645,6 +1646,36 @@ export async function saveHealthKitActivity(userId: string, healthKitId: string,
     `INSERT INTO solo_runs (user_id, apple_health_id, source, title, date, distance_miles, pace_min_per_mile, duration_seconds, activity_type, completed, planned)
      VALUES ($1, $2, 'apple_health', $3, $4, $5, $6, $7, $8, true, false)`,
     [userId, healthKitId, data.title, data.date, data.distanceMiles, data.paceMinPerMile, data.durationSeconds, data.activityType]
+  );
+  return true;
+}
+
+export async function saveHealthConnectActivity(userId: string, hcId: string, data: {
+  title: string;
+  date: Date;
+  distanceMiles: number;
+  paceMinPerMile: number | null;
+  durationSeconds: number | null;
+  activityType: string;
+}): Promise<boolean> {
+  const byId = await pool.query(
+    `SELECT id FROM solo_runs WHERE health_connect_id = $1`,
+    [hcId]
+  );
+  if (byId.rows.length > 0) return false;
+
+  const windowStart = new Date(data.date.getTime() - 60000);
+  const windowEnd = new Date(data.date.getTime() + 60000);
+  const byTime = await pool.query(
+    `SELECT id FROM solo_runs WHERE user_id = $1 AND date >= $2 AND date <= $3 AND completed = true`,
+    [userId, windowStart, windowEnd]
+  );
+  if (byTime.rows.length > 0) return false;
+
+  await pool.query(
+    `INSERT INTO solo_runs (user_id, health_connect_id, source, title, date, distance_miles, pace_min_per_mile, duration_seconds, activity_type, completed, planned)
+     VALUES ($1, $2, 'health_connect', $3, $4, $5, $6, $7, $8, true, false)`,
+    [userId, hcId, data.title, data.date, data.distanceMiles, data.paceMinPerMile, data.durationSeconds, data.activityType]
   );
   return true;
 }
