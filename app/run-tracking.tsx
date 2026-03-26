@@ -1118,6 +1118,21 @@ export default function RunTrackingScreen() {
             });
           } catch (_) {}
         }
+        // Write-back to Google Health Connect (Android only, silent fail)
+        if (Platform.OS === "android" && (user as any)?.health_connect_connected) {
+          try {
+            const { saveWorkoutToHealthConnect } = require("@/lib/healthConnect");
+            const runEndDate = new Date();
+            const runStartDate = new Date(runEndDate.getTime() - elapsed * 1000);
+            await saveWorkoutToHealthConnect({
+              activityType: activityFilter as "run" | "ride" | "walk",
+              startDate: runStartDate,
+              endDate: runEndDate,
+              distanceMeters: Math.max(distance, 0.001) * 1609.344,
+              durationSeconds: elapsed,
+            });
+          } catch (_) {}
+        }
         setSaving(false);
         return;
       } catch (e: any) {

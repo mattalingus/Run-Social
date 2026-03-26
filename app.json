@@ -74,7 +74,14 @@
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_LOCATION",
-        "android.permission.RECEIVE_BOOT_COMPLETED"
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.health.READ_EXERCISE",
+        "android.permission.health.READ_DISTANCE",
+        "android.permission.health.READ_TOTAL_CALORIES_BURNED",
+        "android.permission.health.READ_EXERCISE_ROUTE",
+        "android.permission.health.WRITE_EXERCISE",
+        "android.permission.health.WRITE_DISTANCE",
+        "android.permission.health.WRITE_TOTAL_CALORIES_BURNED"
       ]
     },
     "web": {
@@ -127,7 +134,17 @@
       "expo-av",
       "./plugins/with-live-activity",
       "./plugins/with-widget",
-      "./plugins/with-android-widget"
+      "./plugins/with-android-widget",
+      [
+        "react-native-health-connect",
+        {
+          "permissions": [
+            "ExerciseSession",
+            "Distance",
+            "TotalCaloriesBurned"
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

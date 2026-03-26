@@ -132,6 +132,7 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
 
   const stravaConnected = !!(user as any)?.strava_id;
   const appleHealthConnected = !!(user as any)?.apple_health_connected;
+  const healthConnectConnected = !!(user as any)?.health_connect_connected;
 
   const { data: garminStatus, refetch: refetchGarmin } = useQuery<{ connected: boolean; lastSync: string | null }>({
     queryKey: ["/api/garmin/status"],
@@ -185,6 +186,9 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
 
   const [healthSyncing, setHealthSyncing] = useState(false);
   const [healthSyncMsg, setHealthSyncMsg] = useState<string | null>(null);
+
+  const [hcSyncing, setHcSyncing] = useState(false);
+  const [hcSyncMsg, setHcSyncMsg] = useState<string | null>(null);
 
   async function handleConnectAppleHealth() {
     if (Platform.OS !== "ios") {
@@ -388,6 +392,127 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setGarminSyncing(false);
+    }
+  }
+
+  async function handleConnectHealthConnect() {
+    if (Platform.OS !== "android") return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (healthConnectConnected) {
+      Alert.alert(
+        "Disconnect Health Connect",
+        "Stop syncing workouts with Google Health Connect? Your imported activities will remain.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Disconnect",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await apiRequest("PUT", "/api/users/me", { healthConnectConnected: false });
+                await refreshUser();
+                setHcSyncMsg(null);
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              } catch (e: any) {
+                Alert.alert("Error", e.message || "Could not disconnect Health Connect.");
+              }
+            },
+          },
+        ]
+      );
+      return;
+    }
+    const { isHealthConnectAvailable, requestHealthConnectPermissions } = require("@/lib/healthConnect");
+    if (!isHealthConnectAvailable()) {
+      Alert.alert("Health Connect", "Google Health Connect is not available on this device. Install it from the Play Store to use this feature.");
+      return;
+    }
+    try {
+      const granted = await requestHealthConnectPermissions();
+      if (!granted) {
+        Alert.alert(
+          "Permission Denied",
+          "PaceUp needs access to Health Connect to import your workouts.\n\nOpen Health Connect and allow access for PaceUp.",
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Open Settings", onPress: () => {
+              try { require("react-native-health-connect").openHealthConnectSettings(); } catch {}
+            }},
+          ]
+        );
+        return;
+      }
+      await apiRequest("PUT", "/api/users/me", { healthConnectConnected: true });
+      await refreshUser();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert("Connected!", "Google Health Connect is now connected. Tap Sync to import your workouts.");
+    } catch (e: any) {
+      Alert.alert("Health Connect", e.message || "Could not connect to Health Connect. Please try again.");
+    }
+  }
+
+  async function handleHealthConnectSync() {
+    if (hcSyncing) return;
+    setHcSyncing(true);
+    setHcSyncMsg(null);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      const { isHealthConnectAvailable, requestHealthConnectPermissions, fetchHealthConnectWorkouts } = require("@/lib/healthConnect");
+      if (!isHealthConnectAvailable()) {
+        setHcSyncMsg("Health Connect is not available on this device.");
+        return;
+      }
+      try {
+        await requestHealthConnectPermissions();
+      } catch (initErr: any) {
+        setHcSyncMsg(`Could not access Health Connect: ${initErr?.message ?? "permission denied"}`);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        return;
+      }
+      const workouts = await fetchHealthConnectWorkouts(90);
+      setHcSyncing(false);
+
+      if (workouts.length === 0) {
+        setHcSyncMsg("No workouts found in the last 90 days.");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        return;
+      }
+
+      const runs = workouts.filter((w: any) => w.activityType === "run").length;
+      const rides = workouts.filter((w: any) => w.activityType === "ride").length;
+      const walks = workouts.filter((w: any) => w.activityType === "walk").length;
+      const breakdown: string[] = [];
+      if (runs > 0) breakdown.push(`${runs} run${runs !== 1 ? "s" : ""}`);
+      if (rides > 0) breakdown.push(`${rides} ride${rides !== 1 ? "s" : ""}`);
+      if (walks > 0) breakdown.push(`${walks} walk${walks !== 1 ? "s" : ""}`);
+
+      await new Promise<void>((resolve, reject) => {
+        Alert.alert(
+          `Found ${workouts.length} Workout${workouts.length !== 1 ? "s" : ""}`,
+          `${breakdown.join(", ")} from the last 90 days.\n\nImport all into PaceUp?`,
+          [
+            { text: "Cancel", style: "cancel", onPress: () => reject(new Error("cancelled")) },
+            { text: "Import All", onPress: () => resolve() },
+          ]
+        );
+      });
+
+      setHcSyncing(true);
+      const resp = await apiRequest("POST", "/api/health/import", { workouts });
+      const data = await resp.json();
+      const msg = data.imported > 0
+        ? `${data.imported} new activit${data.imported === 1 ? "y" : "ies"} imported!`
+        : "All activities already synced.";
+      setHcSyncMsg(msg);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      qc.invalidateQueries({ queryKey: ["/api/solo-runs"] });
+    } catch (e: any) {
+      if (e?.message !== "cancelled") {
+        setHcSyncMsg(`Sync failed: ${e.message}`);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
+    } finally {
+      setHcSyncing(false);
     }
   }
 
@@ -713,6 +838,44 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
                       >
                         <Text style={[st.connectBtnTxt, { color: appleHealthConnected ? "#FF4D4D" : C.textSecondary }]}>
                           {appleHealthConnected ? "Disconnect" : "Connect"}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  }
+                />
+                <Divider C={C} />
+              </>
+            )}
+
+            {/* Google Health Connect — Android only */}
+            {Platform.OS === "android" && (
+              <>
+                <SettingRow
+                  C={C}
+                  iconBg="#0A2A1A"
+                  icon={<FontAwesome5 name="heartbeat" size={16} color="#4CAF50" />}
+                  label="Health Connect"
+                  sublabel={healthConnectConnected ? (hcSyncMsg ?? "Connected — tap Sync to import workouts") : "Import from Google / Samsung Health"}
+                  right={
+                    <View style={{ flexDirection: "row", gap: 8 }}>
+                      {healthConnectConnected && (
+                        <Pressable
+                          style={[st.connectBtn, { borderColor: "#4CAF50", backgroundColor: "#4CAF5022" }]}
+                          onPress={handleHealthConnectSync}
+                          disabled={hcSyncing}
+                        >
+                          {hcSyncing
+                            ? <ActivityIndicator size="small" color="#4CAF50" />
+                            : <Text style={[st.connectBtnTxt, { color: "#4CAF50" }]}>Sync</Text>
+                          }
+                        </Pressable>
+                      )}
+                      <Pressable
+                        style={[st.connectBtn, { borderColor: healthConnectConnected ? "#FF4D4D" : C.border, backgroundColor: healthConnectConnected ? "#FF4D4D22" : C.surface }]}
+                        onPress={handleConnectHealthConnect}
+                      >
+                        <Text style={[st.connectBtnTxt, { color: healthConnectConnected ? "#FF4D4D" : C.textSecondary }]}>
+                          {healthConnectConnected ? "Disconnect" : "Connect"}
                         </Text>
                       </Pressable>
                     </View>
