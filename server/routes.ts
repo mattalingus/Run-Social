@@ -957,12 +957,33 @@ async function go(e){
       } else {
         storage.getFriendsWithPushTokensFiltered(req.session.userId!, 'notif_run_reminders').then((tokens) => {
           if (tokens.length) {
-            const privacy = run.privacy === "private" ? "private" : "public";
+            const actLabel = run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run";
+            const actEmoji = run.activity_type === "ride" ? "🚴" : run.activity_type === "walk" ? "🚶" : "🏃";
+            // Build distance string from min/max distance
+            const minDist = parseFloat(run.min_distance ?? 0);
+            const maxDist = parseFloat(run.max_distance ?? 0);
+            let distStr = "";
+            if (minDist > 0 && maxDist > 0 && minDist !== maxDist) {
+              distStr = ` ${minDist}–${maxDist} mi`;
+            } else if (maxDist > 0) {
+              distStr = ` ${maxDist} mi`;
+            } else if (minDist > 0) {
+              distStr = ` ${minDist} mi`;
+            }
+            // Format scheduled date/time
+            const runDate = run.date ? new Date(run.date) : null;
+            let timeStr = "";
+            if (runDate && !isNaN(runDate.getTime())) {
+              const time = runDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "UTC" });
+              const date = runDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+              timeStr = ` at ${time} on ${date}`;
+            }
+            const displayName = (host as any)?.username ? `@${(host as any).username}` : (run.host_name ?? "A friend");
             sendPushNotification(
               tokens,
-              "New activity from a friend 🏃",
-              `${run.host_name} just posted a ${privacy} ${run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run"} — "${run.title}"`,
-              { runId: run.id }
+              `${actEmoji} ${displayName} posted a${distStr} ${actLabel}`,
+              `${timeStr ? `Scheduled${timeStr}` : run.title} — join them!`,
+              { runId: run.id, screen: "run", type: "friend_run_posted" }
             );
           }
         }).catch((err: any) => console.error("[bg]", err?.message ?? err));
