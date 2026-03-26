@@ -8,7 +8,7 @@ import {
 } from "react-native";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { darkColors as C } from "@/constants/colors";
+import { useTheme } from "@/contexts/ThemeContext";
 import { toDisplayDist, type DistanceUnit } from "@/lib/units";
 
 type Period = "W" | "M" | "6M" | "Y";
@@ -189,6 +189,8 @@ function ChartBars({
   period: Period;
   periodTotal: number;
 }) {
+  const { C } = useTheme();
+  const s = useMemo(() => makeStyles(C), [C]);
   const maxVal = Math.max(...bars.map((b) => b.value), 0.01);
   const barWidth = period === "M" ? 8 : period === "W" ? 36 : period === "6M" ? 44 : 22;
   const barGap = period === "M" ? 2 : period === "W" ? 6 : 8;
@@ -264,6 +266,8 @@ function ActivityCalendar({
   activities: ActivityDataPoint[];
   activityType: string;
 }) {
+  const { C } = useTheme();
+  const s = useMemo(() => makeStyles(C), [C]);
   const today = new Date();
   const [displayDate, setDisplayDate] = useState(
     () => new Date(today.getFullYear(), today.getMonth(), 1)
@@ -402,6 +406,8 @@ interface ProfileChartsProps {
 }
 
 export default function ProfileCharts({ activities, activityType, distUnit }: ProfileChartsProps) {
+  const { C } = useTheme();
+  const s = useMemo(() => makeStyles(C), [C]);
   const [period, setPeriod] = useState<Period>("W");
 
   const bars = useMemo(
@@ -461,11 +467,11 @@ export default function ProfileCharts({ activities, activityType, distUnit }: Pr
   );
 }
 
-const s = StyleSheet.create({
+function makeStyles(C: ReturnType<typeof useTheme>["C"]) {
+  return StyleSheet.create({
   wrapper: {
     marginTop: 4,
     marginBottom: 4,
-    paddingHorizontal: 16,
   },
   card: {
     backgroundColor: C.card,
@@ -608,4 +614,5 @@ const s = StyleSheet.create({
     fontSize: 13,
     color: C.textMuted,
   },
-});
+  });
+}
