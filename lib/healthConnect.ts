@@ -35,6 +35,21 @@ export function isHealthConnectAvailable(): boolean {
   return Platform.OS === "android" && getHC() !== null;
 }
 
+export type HCSdkStatus = "available" | "unavailable" | "update_required" | "unknown";
+
+export async function getHealthConnectSdkStatus(): Promise<HCSdkStatus> {
+  const hc = getHC();
+  if (!hc) return "unavailable";
+  try {
+    const status = await hc.getSdkStatus();
+    if (status === 3) return "available";
+    if (status === 2) return "update_required";
+    return "unavailable";
+  } catch {
+    return "unknown";
+  }
+}
+
 const EXERCISE_TYPE_RUNNING = 56;
 const EXERCISE_TYPE_BIKING = 8;
 const EXERCISE_TYPE_WALKING = 79;

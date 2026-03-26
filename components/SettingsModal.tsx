@@ -422,9 +422,32 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
       );
       return;
     }
-    const { isHealthConnectAvailable, requestHealthConnectPermissions } = require("@/lib/healthConnect");
+    const { isHealthConnectAvailable, getHealthConnectSdkStatus, requestHealthConnectPermissions } = require("@/lib/healthConnect");
     if (!isHealthConnectAvailable()) {
       Alert.alert("Health Connect", "Google Health Connect is not available on this device. Install it from the Play Store to use this feature.");
+      return;
+    }
+    const sdkStatus = await getHealthConnectSdkStatus();
+    if (sdkStatus === "update_required") {
+      Alert.alert(
+        "Health Connect Update Required",
+        "Please update the Google Health Connect app from the Play Store to continue.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Open Play Store", onPress: () => Linking.openURL("market://details?id=com.google.android.apps.healthdata").catch(() => Linking.openURL("https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata")) },
+        ]
+      );
+      return;
+    }
+    if (sdkStatus === "unavailable") {
+      Alert.alert(
+        "Health Connect Not Installed",
+        "Google Health Connect is required to sync with Samsung Health and other fitness apps. Install it from the Play Store.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Install", onPress: () => Linking.openURL("market://details?id=com.google.android.apps.healthdata").catch(() => Linking.openURL("https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata")) },
+        ]
+      );
       return;
     }
     try {
@@ -457,9 +480,15 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
     setHcSyncMsg(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
-      const { isHealthConnectAvailable, requestHealthConnectPermissions, fetchHealthConnectWorkouts } = require("@/lib/healthConnect");
+      const { isHealthConnectAvailable, getHealthConnectSdkStatus, requestHealthConnectPermissions, fetchHealthConnectWorkouts } = require("@/lib/healthConnect");
       if (!isHealthConnectAvailable()) {
         setHcSyncMsg("Health Connect is not available on this device.");
+        return;
+      }
+      const sdkStatus = await getHealthConnectSdkStatus();
+      if (sdkStatus !== "available" && sdkStatus !== "unknown") {
+        setHcSyncMsg(sdkStatus === "update_required" ? "Update Health Connect from the Play Store to sync." : "Install Google Health Connect from the Play Store.");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
         return;
       }
       let granted: boolean;
