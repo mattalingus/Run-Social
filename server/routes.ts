@@ -978,7 +978,7 @@ async function go(e){
               const date = runDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
               timeStr = ` at ${time} on ${date}`;
             }
-            const displayName = (host as any)?.username ? `@${(host as any).username}` : (run.host_name ?? "A friend");
+            const displayName = host?.username ? `@${host.username}` : (run.host_name ?? "A friend");
             sendPushNotification(
               tokens,
               `${actEmoji} ${displayName} posted a${distStr} ${actLabel}`,
