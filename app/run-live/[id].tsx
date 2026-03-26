@@ -26,6 +26,7 @@ import { apiRequest, getApiUrl } from "@/lib/query-client";
 import C from "@/constants/colors";
 import MAP_STYLE from "@/lib/mapStyle";
 import { LiveActivity } from "@/lib/liveActivity";
+import { AndroidLiveNotification } from "@/lib/androidLiveNotification";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -155,7 +156,7 @@ export default function RunLiveScreen() {
     handleStartTracking();
   }, [liveState, run, autostart]);
 
-  // Live Activity: update on each GPS fix (displayDist changes when a new coordinate arrives)
+  // Live Activity (iOS) + Android lock screen notification: update on each GPS fix
   useEffect(() => {
     if (phase !== "active" || !liveActivityStartedRef.current) return;
     const actType = (run?.activity_type ?? "run") as "run" | "ride" | "walk";
@@ -166,6 +167,16 @@ export default function RunLiveScreen() {
       paceMinPerMile: paceNum,
       activityType: actType,
     });
+    if (Platform.OS === "android") {
+      AndroidLiveNotification.update({
+        elapsedSeconds: elapsedRef.current,
+        distanceMiles: totalDistRef.current,
+        paceMinPerMile: paceNum,
+        activityType: actType,
+        coordinates: routePathRef.current,
+        runId: id ?? undefined,
+      });
+    }
   }, [displayDist]);
 
   // Show toast when presence is confirmed by context
@@ -247,6 +258,16 @@ export default function RunLiveScreen() {
       paceMinPerMile: 0,
       activityType: actType,
     });
+    if (Platform.OS === "android") {
+      AndroidLiveNotification.start({
+        elapsedSeconds: 0,
+        distanceMiles: 0,
+        paceMinPerMile: 0,
+        activityType: actType,
+        coordinates: [],
+        runId: id ?? undefined,
+      });
+    }
     liveActivityStartedRef.current = true;
   }
 
@@ -271,6 +292,14 @@ export default function RunLiveScreen() {
               paceMinPerMile: finalPace,
               activityType: (run?.activity_type ?? "run") as "run" | "ride" | "walk",
             });
+            if (Platform.OS === "android") {
+              AndroidLiveNotification.end({
+                elapsedSeconds: elapsedRef.current,
+                distanceMiles: totalDistRef.current,
+                paceMinPerMile: finalPace,
+                activityType: (run?.activity_type ?? "run") as "run" | "ride" | "walk",
+              });
+            }
             try {
               await apiRequest("POST", `/api/runs/${id}/runner-finish`, {
                 finalDistance: totalDistRef.current,

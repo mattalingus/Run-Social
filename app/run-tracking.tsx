@@ -48,6 +48,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { formatDistance } from "@/lib/formatDistance";
 import { toDisplayDist, toDisplayPace, unitLabel, type DistanceUnit } from "@/lib/units";
 import { LiveActivity } from "@/lib/liveActivity";
+import { AndroidLiveNotification } from "@/lib/androidLiveNotification";
 
 const IS_NATIVE = Platform.OS !== "web";
 
@@ -713,7 +714,7 @@ export default function RunTrackingScreen() {
     }
     lastCoordRef.current = coord;
 
-    // Live Activity: start on first GPS fix, then update on every subsequent tick
+    // Live Activity (iOS) + Android lock screen notification: start on first GPS fix, update on each tick
     if (Platform.OS !== "web") {
       const paceNum = totalDistRef.current > 0.01
         ? elapsedRef.current / 60 / totalDistRef.current
@@ -727,6 +728,15 @@ export default function RunTrackingScreen() {
           paceMinPerMile: paceNum,
           activityType: actType,
         });
+        if (Platform.OS === "android") {
+          AndroidLiveNotification.start({
+            elapsedSeconds: elapsedRef.current,
+            distanceMiles: totalDistRef.current,
+            paceMinPerMile: paceNum,
+            activityType: actType,
+            coordinates: routePathRef.current,
+          });
+        }
       } else {
         LiveActivity.update({
           elapsedSeconds: elapsedRef.current,
@@ -734,6 +744,15 @@ export default function RunTrackingScreen() {
           paceMinPerMile: paceNum,
           activityType: actType,
         });
+        if (Platform.OS === "android") {
+          AndroidLiveNotification.update({
+            elapsedSeconds: elapsedRef.current,
+            distanceMiles: totalDistRef.current,
+            paceMinPerMile: paceNum,
+            activityType: actType,
+            coordinates: routePathRef.current,
+          });
+        }
       }
     }
 
@@ -974,6 +993,14 @@ export default function RunTrackingScreen() {
       paceMinPerMile: finalPaceNum,
       activityType: activityFilter as "run" | "ride" | "walk",
     });
+    if (Platform.OS === "android") {
+      AndroidLiveNotification.end({
+        elapsedSeconds: elapsedRef.current,
+        distanceMiles: totalDistRef.current,
+        paceMinPerMile: finalPaceNum,
+        activityType: activityFilter as "run" | "ride" | "walk",
+      });
+    }
     // Compute final partial-mile split before transitioning to done screen
     const finalSplits = [...mileSplitsRef.current];
     const remainingDist = totalDistRef.current - lastSplitMileRef.current;

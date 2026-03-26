@@ -149,6 +149,17 @@ function RootLayoutNav() {
     try {
       sub = Notifications.addNotificationResponseReceivedListener((response) => {
         const data = response.notification.request.content.data;
+        // Android live tracking notification: tap opens the correct tracking screen.
+        // For group runs (runId present) → navigate to run-live/[id]; for solo → run-tracking.
+        if (data?.screen === "live-tracking") {
+          const liveRunId = data?.runId as string | undefined;
+          if (liveRunId) {
+            router.push(`/run-live/${liveRunId}` as any);
+          } else {
+            router.push("/run-tracking" as any);
+          }
+          return;
+        }
         const runId = data?.runId;
         if (!runId) return;
         if (data?.type === "run_started_present") {

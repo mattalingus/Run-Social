@@ -1,7 +1,9 @@
 import { useEffect } from "react";
+import { Platform } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { updateWidget } from "@/lib/widgetBridge";
+import { updateAndroidWidget } from "@/lib/androidWidgetBridge";
 
 interface SoloRun {
   id: string;
@@ -64,12 +66,22 @@ export function useWidgetSync() {
         : `${next.min_distance}–${next.max_distance}`
       : "";
 
-    updateWidget({
+    const widgetPayload = {
       weeklyMiles,
       monthlyGoal: user.monthly_goal ?? 50,
       nextRunTitle: next?.title ?? "",
       nextRunTimestamp: next ? new Date(next.date).getTime() / 1000 : 0,
       distanceRangeMiles: distRange,
-    });
+    };
+
+    // iOS: write to App Group shared container via native module (WidgetKit)
+    if (Platform.OS === "ios") {
+      updateWidget(widgetPayload);
+    }
+
+    // Android: write to SharedPreferences and broadcast widget update
+    if (Platform.OS === "android") {
+      updateAndroidWidget(widgetPayload);
+    }
   }, [soloRuns, runs, user]);
 }
