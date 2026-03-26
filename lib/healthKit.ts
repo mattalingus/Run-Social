@@ -18,7 +18,8 @@ function getHealthKit(): any {
   if (Platform.OS !== "ios") return null;
   if (AppleHealthKit) return AppleHealthKit;
   try {
-    AppleHealthKit = require("react-native-health").default;
+    const mod = require("react-native-health");
+    AppleHealthKit = mod.default ?? mod;
     return AppleHealthKit;
   } catch {
     return null;
@@ -30,19 +31,18 @@ export function isHealthKitAvailable(): boolean {
 }
 
 function buildPermissions(): object {
-  const { HealthKitDataType } = require("react-native-health");
   return {
     permissions: {
       read: [
-        HealthKitDataType?.Workout ?? "Workout",
-        HealthKitDataType?.DistanceWalkingRunning ?? "DistanceWalkingRunning",
-        HealthKitDataType?.DistanceCycling ?? "DistanceCycling",
-        HealthKitDataType?.ActiveEnergyBurned ?? "ActiveEnergyBurned",
-        HealthKitDataType?.HeartRate ?? "HeartRate",
+        "Workout",
+        "DistanceWalkingRunning",
+        "DistanceCycling",
+        "ActiveEnergyBurned",
+        "HeartRate",
       ],
       write: [
-        HealthKitDataType?.Workout ?? "Workout",
-        HealthKitDataType?.ActiveEnergyBurned ?? "ActiveEnergyBurned",
+        "Workout",
+        "ActiveEnergyBurned",
       ],
     },
   };
