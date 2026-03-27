@@ -1,5 +1,12 @@
-import React, { useState, useMemo } from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import React, { useState, useMemo, useRef } from "react";
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  Modal,
+  TouchableWithoutFeedback,
+} from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useTheme } from "@/contexts/ThemeContext";
 
@@ -36,11 +43,15 @@ function buildGrid(year: number, month: number): (number | null)[][] {
   return rows;
 }
 
+type TriggerLayout = { x: number; y: number; width: number; height: number };
+
 export default function MiniCalendarPicker({ value, onChange, minDate, maxDate }: Props) {
   const { C } = useTheme();
   const [open, setOpen] = useState(false);
   const [viewYear, setViewYear] = useState(value.getFullYear());
   const [viewMonth, setViewMonth] = useState(value.getMonth());
+  const [triggerLayout, setTriggerLayout] = useState<TriggerLayout | null>(null);
+  const triggerRef = useRef<View>(null);
 
   const today = useMemo(() => new Date(), []);
 
@@ -50,6 +61,21 @@ export default function MiniCalendarPicker({ value, onChange, minDate, maxDate }
   );
 
   const grid = useMemo(() => buildGrid(viewYear, viewMonth), [viewYear, viewMonth]);
+
+  function openCalendar() {
+    if (triggerRef.current) {
+      triggerRef.current.measureInWindow((x, y, width, height) => {
+        setTriggerLayout({ x, y, width, height });
+        setViewYear(value.getFullYear());
+        setViewMonth(value.getMonth());
+        setOpen(true);
+      });
+    }
+  }
+
+  function close() {
+    setOpen(false);
+  }
 
   function prevMonth() {
     if (viewMonth === 0) { setViewMonth(11); setViewYear((y) => y - 1); }
@@ -63,8 +89,14 @@ export default function MiniCalendarPicker({ value, onChange, minDate, maxDate }
 
   function selectDay(day: number) {
     onChange(new Date(viewYear, viewMonth, day));
-    setOpen(false);
+    close();
   }
+
+  const calendarWidth = triggerLayout ? Math.max(triggerLayout.width, 260) : 280;
+  const calendarTop = triggerLayout
+    ? triggerLayout.y + triggerLayout.height + 4
+    : 0;
+  const calendarLeft = triggerLayout ? triggerLayout.x : 0;
 
   const s = useMemo(
     () =>
@@ -85,14 +117,23 @@ export default function MiniCalendarPicker({ value, onChange, minDate, maxDate }
           fontSize: 15,
           color: C.text,
         },
+        backdrop: {
+          flex: 1,
+          backgroundColor: "transparent",
+        },
         calendar: {
+          position: "absolute",
           backgroundColor: C.card,
           borderWidth: 1,
           borderColor: C.border,
           borderRadius: 12,
-          marginTop: 4,
           paddingHorizontal: 10,
           paddingVertical: 12,
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.25,
+          shadowRadius: 8,
+          elevation: 8,
         },
         monthHeader: {
           flexDirection: "row",
@@ -143,81 +184,115 @@ export default function MiniCalendarPicker({ value, onChange, minDate, maxDate }
 
   return (
     <View>
-      <Pressable style={s.trigger} onPress={() => setOpen((o) => !o)}>
-        <Text style={s.triggerText}>{formattedValue}</Text>
-        <Feather name={open ? "chevron-up" : "calendar"} size={16} color={open ? C.primary : C.textMuted} />
-      </Pressable>
+      <View ref={triggerRef}>
+        <Pressable style={s.trigger} onPress={open ? close : openCalendar}>
+          <Text style={s.triggerText}>{formattedValue}</Text>
+          <Feather
+            name={open ? "chevron-up" : "calendar"}
+            size={16}
+            color={open ? C.primary : C.textMuted}
+          />
+        </Pressable>
+      </View>
 
-      {open && (
-        <View style={s.calendar}>
-          <View style={s.monthHeader}>
-            <Pressable onPress={prevMonth} hitSlop={10} style={{ padding: 4 }}>
-              <Feather name="chevron-left" size={20} color={C.text} />
-            </Pressable>
-            <Text style={s.monthTitle}>
-              {MONTH_NAMES[viewMonth]} {viewYear}
-            </Text>
-            <Pressable onPress={nextMonth} hitSlop={10} style={{ padding: 4 }}>
-              <Feather name="chevron-right" size={20} color={C.text} />
-            </Pressable>
-          </View>
+      <Modal
+        visible={open}
+        transparent
+        animationType="none"
+        onRequestClose={close}
+        statusBarTranslucent
+      >
+        <TouchableWithoutFeedback onPress={close}>
+          <View style={s.backdrop}>
+            {triggerLayout != null && (
+              <TouchableWithoutFeedback onPress={() => {}}>
+                <View
+                  style={[
+                    s.calendar,
+                    {
+                      top: calendarTop,
+                      left: calendarLeft,
+                      width: calendarWidth,
+                    },
+                  ]}
+                >
+                  <View style={s.monthHeader}>
+                    <Pressable onPress={prevMonth} hitSlop={10} style={{ padding: 4 }}>
+                      <Feather name="chevron-left" size={20} color={C.text} />
+                    </Pressable>
+                    <Text style={s.monthTitle}>
+                      {MONTH_NAMES[viewMonth]} {viewYear}
+                    </Text>
+                    <Pressable onPress={nextMonth} hitSlop={10} style={{ padding: 4 }}>
+                      <Feather name="chevron-right" size={20} color={C.text} />
+                    </Pressable>
+                  </View>
 
-          <View style={s.dayHeaderRow}>
-            {DAY_LABELS.map((d, i) => (
-              <View key={i} style={s.dayHeaderCell}>
-                <Text style={s.dayHeaderText}>{d}</Text>
-              </View>
-            ))}
-          </View>
+                  <View style={s.dayHeaderRow}>
+                    {DAY_LABELS.map((d, i) => (
+                      <View key={i} style={s.dayHeaderCell}>
+                        <Text style={s.dayHeaderText}>{d}</Text>
+                      </View>
+                    ))}
+                  </View>
 
-          {grid.map((row, ri) => (
-            <View key={ri} style={s.row}>
-              {row.map((day, ci) => {
-                if (day === null) return <View key={ci} style={s.cell} />;
-                const cellDate = new Date(viewYear, viewMonth, day);
-                const isToday = sameDay(cellDate, today);
-                const isSelected = sameDay(cellDate, value);
-                const isDisabled =
-                  (minDate != null && cellDate < minDate) ||
-                  (maxDate != null && cellDate > maxDate);
+                  {grid.map((row, ri) => (
+                    <View key={ri} style={s.row}>
+                      {row.map((day, ci) => {
+                        if (day === null) return <View key={ci} style={s.cell} />;
+                        const cellDate = new Date(viewYear, viewMonth, day);
+                        const isToday = sameDay(cellDate, today);
+                        const isSelected = sameDay(cellDate, value);
+                        const isDisabled =
+                          (minDate != null && cellDate < minDate) ||
+                          (maxDate != null && cellDate > maxDate);
 
-                return (
-                  <Pressable
-                    key={ci}
-                    style={s.cell}
-                    onPress={() => !isDisabled && selectDay(day)}
-                    disabled={!!isDisabled}
-                  >
-                    <View
-                      style={[
-                        s.circle,
-                        isSelected && { backgroundColor: "#00D97E" },
-                        !isSelected && isToday && { backgroundColor: "rgba(0,217,126,0.15)" },
-                      ]}
-                    >
-                      <Text
-                        style={{
-                          fontFamily: isSelected || isToday ? "Outfit_600SemiBold" : "Outfit_400Regular",
-                          fontSize: 14,
-                          color: isSelected
-                            ? "#050C09"
-                            : isToday
-                            ? "#00D97E"
-                            : isDisabled
-                            ? C.textMuted
-                            : C.text,
-                        }}
-                      >
-                        {day}
-                      </Text>
+                        return (
+                          <Pressable
+                            key={ci}
+                            style={s.cell}
+                            onPress={() => !isDisabled && selectDay(day)}
+                            disabled={!!isDisabled}
+                          >
+                            <View
+                              style={[
+                                s.circle,
+                                isSelected && { backgroundColor: "#00D97E" },
+                                !isSelected && isToday && {
+                                  backgroundColor: "rgba(0,217,126,0.15)",
+                                },
+                              ]}
+                            >
+                              <Text
+                                style={{
+                                  fontFamily:
+                                    isSelected || isToday
+                                      ? "Outfit_600SemiBold"
+                                      : "Outfit_400Regular",
+                                  fontSize: 14,
+                                  color: isSelected
+                                    ? "#050C09"
+                                    : isToday
+                                    ? "#00D97E"
+                                    : isDisabled
+                                    ? C.textMuted
+                                    : C.text,
+                                }}
+                              >
+                                {day}
+                              </Text>
+                            </View>
+                          </Pressable>
+                        );
+                      })}
                     </View>
-                  </Pressable>
-                );
-              })}
-            </View>
-          ))}
-        </View>
-      )}
+                  ))}
+                </View>
+              </TouchableWithoutFeedback>
+            )}
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </View>
   );
 }
