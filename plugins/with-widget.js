@@ -21,7 +21,7 @@ const fs = require("fs");
 
 const WIDGET_NAME = "PaceUpWidget";
 const WIDGET_BUNDLE_ID = "com.paceup.PaceUpWidget";
-const APP_GROUP = "group.com.paceup";
+const APP_GROUP = "group.com.paceup.app";
 
 // ─── Swift/ObjC source templates ─────────────────────────────────────────────
 

@@ -50,7 +50,7 @@
       },
       "entitlements": {
         "com.apple.developer.healthkit": true,
-        "com.apple.security.application-groups": ["group.com.paceup"]
+        "com.apple.security.application-groups": ["group.com.paceup.app"]
       }
     },
     "android": {

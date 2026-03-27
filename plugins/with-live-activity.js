@@ -308,7 +308,7 @@ const EXTENSION_ENTITLEMENTS = `\
 <dict>
     <key>com.apple.security.application-groups</key>
     <array>
-        <string>group.com.paceup</string>
+        <string>group.com.paceup.app</string>
     </array>
 </dict>
 </plist>
