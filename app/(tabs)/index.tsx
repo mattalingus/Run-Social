@@ -874,14 +874,14 @@ function RunCard({
               </View>
 
               <View style={s.cardStats}>
-                <View style={s.statPill}>
+                <View style={s.statPillPace}>
                   {run.crew_id && run.pace_groups && run.pace_groups.length > 0 ? (
                     <Text numberOfLines={1} style={[s.statPillValue, { color: C.primary }]}>Groups</Text>
                   ) : (
                     <Text numberOfLines={1} style={[s.statPillValue, { color: getPaceColor(run.min_pace, run.max_pace, C) }]}>
                       {run.min_pace === run.max_pace
-                        ? toDisplayPace(run.min_pace, distUnit)
-                        : `${toDisplayPace(run.min_pace, distUnit)}–${toDisplayPace(run.max_pace, distUnit)}`}
+                        ? toDisplayPace(run.min_pace, distUnit).replace(/ \/(mi|km)$/, "")
+                        : `${toDisplayPace(run.min_pace, distUnit).replace(/ \/(mi|km)$/, "")}–${toDisplayPace(run.max_pace, distUnit).replace(/ \/(mi|km)$/, "")}`}
                     </Text>
                   )}
                   <Text style={s.statPillLabel}>Pace {distUnit === "km" ? "min/km" : "min/mi"}</Text>
@@ -3453,6 +3453,7 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   statUnit: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted },
   statDiv: { width: 1, height: 24, backgroundColor: C.border },
   statPill: { flex: 1, alignItems: "center", gap: 2 },
+  statPillPace: { width: 84, alignItems: "center", gap: 2 },
   statPillValue: { fontFamily: "Outfit_700Bold", fontSize: 12, color: C.text },
   statPillLabel: { fontFamily: "Outfit_400Regular", fontSize: 10, color: C.textMuted, textTransform: "uppercase", letterSpacing: 0.3 },
 
