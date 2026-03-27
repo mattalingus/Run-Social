@@ -374,17 +374,6 @@ function tomorrowDate(): Date {
   return d;
 }
 
-function parseDMY(raw: string): Date | null {
-  const parts = raw.split("/");
-  if (parts.length !== 3) return null;
-  const [mm, dd, yy] = parts.map(Number);
-  if (isNaN(mm) || isNaN(dd) || isNaN(yy)) return null;
-  const year = yy < 100 ? 2000 + yy : yy;
-  const d = new Date(year, mm - 1, dd);
-  if (d.getMonth() !== mm - 1) return null;
-  return d;
-}
-
 function parseHHMMAMPM(raw: string, ampm: "AM" | "PM"): { hours: number; minutes: number } | null {
   const parts = raw.split(":");
   if (parts.length !== 2) return null;
