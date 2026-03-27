@@ -27,6 +27,7 @@ import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { darkColors as C, type ColorScheme } from "@/constants/colors";
 import { useTheme } from "@/contexts/ThemeContext";
+import MiniCalendarPicker from "@/components/MiniCalendarPicker";
 import { formatDistance } from "@/lib/formatDistance";
 import { toDisplayDist, toDisplayPace, unitLabel, type DistanceUnit } from "@/lib/units";
 import MAP_STYLE from "@/lib/mapStyle";
@@ -366,13 +367,11 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function tomorrowStr() {
+function tomorrowDate(): Date {
   const d = new Date();
   d.setDate(d.getDate() + 1);
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  const yy = String(d.getFullYear()).slice(2);
-  return `${mm}/${dd}/${yy}`;
+  d.setHours(0, 0, 0, 0);
+  return d;
 }
 
 function parseDMY(raw: string): Date | null {
@@ -569,7 +568,7 @@ export default function SoloScreen() {
 
   // Plan form state
   const [pTitle, setPTitle] = useState("");
-  const [pDate, setPDate] = useState(tomorrowStr());
+  const [pDate, setPDate] = useState<Date>(tomorrowDate());
   const [pTime, setPTime] = useState("7:00");
   const [pAmPm, setPAmPm] = useState<"AM" | "PM">("AM");
   const [pDist, setPDist] = useState("");
@@ -785,12 +784,10 @@ export default function SoloScreen() {
   async function savePlan() {
     const dist = parseFloat(pDist);
     if (isNaN(dist) || dist <= 0) { Alert.alert("Invalid", "Enter a valid distance"); return; }
-    const parsedDate = parseDMY(pDate.trim());
-    if (!parsedDate) { Alert.alert("Invalid", "Enter a valid date (MM/DD/YY)"); return; }
     const parsedTime = parseHHMMAMPM(pTime.trim(), pAmPm);
     if (!parsedTime) { Alert.alert("Invalid", "Enter a valid time (e.g. 7:30)"); return; }
-    parsedDate.setHours(parsedTime.hours, parsedTime.minutes, 0, 0);
-    const runDate = parsedDate;
+    const runDate = new Date(pDate);
+    runDate.setHours(parsedTime.hours, parsedTime.minutes, 0, 0);
     if (isNaN(runDate.getTime())) { Alert.alert("Invalid", "Invalid date or time"); return; }
 
     setSaving(true);
@@ -808,7 +805,7 @@ export default function SoloScreen() {
       });
       if (pNotify) await scheduleRunNotifications(runDate, label, activityFilter);
       setShowPlan(false);
-      setPTitle(""); setPDate(tomorrowStr()); setPTime("7:00"); setPAmPm("AM"); setPDist(""); setPPace("");
+      setPTitle(""); setPDate(tomorrowDate()); setPTime("7:00"); setPAmPm("AM"); setPDist(""); setPPace("");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e: any) {
       Alert.alert("Error", e.message);
@@ -1506,21 +1503,9 @@ export default function SoloScreen() {
 
             <Text style={s.inputLabel}>Date & Time *</Text>
             <View style={{ flexDirection: "row", gap: 10, marginBottom: 12 }}>
-              <TextInput
-                style={[s.input, { flex: 1, marginBottom: 0 }]}
-                value={pDate}
-                onChangeText={(text) => {
-                  const digits = text.replace(/\D/g, "").slice(0, 6);
-                  let fmt = digits;
-                  if (digits.length > 2) fmt = digits.slice(0, 2) + "/" + digits.slice(2);
-                  if (digits.length > 4) fmt = digits.slice(0, 2) + "/" + digits.slice(2, 4) + "/" + digits.slice(4);
-                  setPDate(fmt);
-                }}
-                placeholder="MM/DD/YY"
-                placeholderTextColor={C.textMuted}
-                keyboardType="number-pad"
-                maxLength={8}
-              />
+              <View style={{ flex: 1 }}>
+                <MiniCalendarPicker value={pDate} onChange={setPDate} />
+              </View>
               <View style={{ flex: 1, flexDirection: "row", gap: 6 }}>
                 <TextInput
                   style={[s.input, { flex: 1, marginBottom: 0 }]}

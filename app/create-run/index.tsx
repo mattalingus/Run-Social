@@ -28,6 +28,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/query-client";
 import { darkColors as C, type ColorScheme } from "@/constants/colors";
 import { useTheme } from "@/contexts/ThemeContext";
+import MiniCalendarPicker from "@/components/MiniCalendarPicker";
 
 const TAG_GROUPS = [
   { label: "Vibe",         tags: ["Talkative", "Quiet", "Motivational", "Social", "Ministry", "Recovery"] },
@@ -119,7 +120,7 @@ export default function CreateRunScreen() {
   const [title, setTitle] = useState(params.pathName ? `${params.activityType === "ride" ? "Ride on" : params.activityType === "walk" ? "Walk on" : "Run on"} ${params.pathName}` : "");
   const [description, setDescription] = useState("");
   const [privacy, setPrivacy] = useState("public");
-  const [date, setDate] = useState("");
+  const [date, setDate] = useState<Date>(new Date());
   const [time, setTime] = useState("");
   const [locationName, setLocationName] = useState(params.pathName ?? "");
   const [locationLat, setLocationLat] = useState(params.pathLat ?? "");
@@ -188,25 +189,9 @@ export default function CreateRunScreen() {
     return digits.slice(0, 2) + ":" + digits.slice(2, 4);
   }
 
-  function handleDateChange(text: string) {
-    const digits = text.replace(/\D/g, "").slice(0, 6);
-    let formatted = digits;
-    if (digits.length > 2) formatted = digits.slice(0, 2) + "/" + digits.slice(2);
-    if (digits.length > 4) formatted = digits.slice(0, 2) + "/" + digits.slice(2, 4) + "/" + digits.slice(4);
-    setDate(formatted);
-  }
-
   function handleTimeChange(text: string) {
     const digits = text.replace(/\D/g, "").slice(0, 4);
     setTime(autoFormatTime(digits));
-  }
-
-  function parseDMY(raw: string): Date | null {
-    const [m, d, y] = raw.trim().split("/");
-    if (!m || !d || !y) return null;
-    const year = y.length === 2 ? 2000 + parseInt(y, 10) : parseInt(y, 10);
-    const dt = new Date(year, parseInt(m, 10) - 1, parseInt(d, 10));
-    return isNaN(dt.getTime()) ? null : dt;
   }
 
   function parseHHMMAMPM(raw: string, ap: "AM" | "PM"): { hours: number; minutes: number } | null {
@@ -248,17 +233,14 @@ export default function CreateRunScreen() {
   const createMutation = useMutation({
     mutationFn: async () => {
       if (!title.trim()) throw new Error("Title is required");
-      if (!date.trim()) throw new Error("Date is required (MM/DD/YY)");
       if (!time.trim()) throw new Error("Time is required (H:MM)");
       if (!locationName.trim()) throw new Error("Location name is required — tap the pin to set it on the map");
       if (!locationLat || !locationLng) throw new Error("Please set the location on the map");
 
-      const parsedDate = parseDMY(date.trim());
-      if (!parsedDate) throw new Error("Invalid date — use MM/DD/YY format");
       const parsedTime = parseHHMMAMPM(time.trim(), amPm);
       if (!parsedTime) throw new Error("Invalid time — use H:MM format");
 
-      const dateTime = new Date(parsedDate.getFullYear(), parsedDate.getMonth(), parsedDate.getDate(), parsedTime.hours, parsedTime.minutes);
+      const dateTime = new Date(date.getFullYear(), date.getMonth(), date.getDate(), parsedTime.hours, parsedTime.minutes);
       if (isNaN(dateTime.getTime())) throw new Error("Invalid date or time");
 
       const dist = isCrew ? parseFloat(plannedDistance) || 3 : parseFloat(minDistance);
@@ -468,15 +450,9 @@ export default function CreateRunScreen() {
         <View style={styles.field}>
           <Text style={styles.label}>Date & Time *</Text>
           <View style={{ flexDirection: "row", gap: 10 }}>
-            <TextInput
-              style={[styles.input, { flex: 1 }]}
-              value={date}
-              onChangeText={handleDateChange}
-              placeholder="MM/DD/YY"
-              placeholderTextColor={C.textMuted}
-              keyboardType="number-pad"
-              maxLength={8}
-            />
+            <View style={{ flex: 1 }}>
+              <MiniCalendarPicker value={date} onChange={setDate} />
+            </View>
             <View style={{ flex: 1, flexDirection: "row", gap: 6 }}>
               <TextInput
                 style={[styles.input, { flex: 1 }]}
