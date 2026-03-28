@@ -55,6 +55,7 @@
     },
     "android": {
       "package": "com.paceup",
+      "minSdkVersion": 26,
       "adaptiveIcon": {
         "backgroundColor": "#080F0C",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

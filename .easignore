@@ -8,3 +8,5 @@ server_dist/
 .upm/
 scripts/
 *.log
+ios/
+android/
