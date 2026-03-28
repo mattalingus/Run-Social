@@ -396,12 +396,17 @@ function withLiveActivity(config) {
       for (const ref of extCfgList.buildConfigurations) {
         const bc = xcBuildCfg[ref.value];
         if (!bc) continue;
+        bc.buildSettings.PRODUCT_NAME = `"${EXTENSION_NAME}"`;
+        bc.buildSettings.PRODUCT_BUNDLE_IDENTIFIER = `"${EXTENSION_BUNDLE_ID}"`;
+        bc.buildSettings.WRAPPER_EXTENSION = "appex";
         bc.buildSettings.INFOPLIST_FILE = `"${EXTENSION_NAME}/Info.plist"`;
         bc.buildSettings.SWIFT_VERSION = "5.0";
         bc.buildSettings.TARGETED_DEVICE_FAMILY = '"1"';
         bc.buildSettings.IPHONEOS_DEPLOYMENT_TARGET = "16.2";
         bc.buildSettings.APPLICATION_EXTENSION_API_ONLY = "YES";
         bc.buildSettings.CODE_SIGN_ENTITLEMENTS = `"${EXTENSION_NAME}/${EXTENSION_NAME}.entitlements"`;
+        bc.buildSettings.SKIP_INSTALL = "YES";
+        bc.buildSettings.ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = "NO";
       }
     }
 

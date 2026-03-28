@@ -437,12 +437,17 @@ function withWidget(config) {
       for (const ref of widgetCfgList.buildConfigurations) {
         const bc = xcBuildCfg[ref.value];
         if (!bc) continue;
+        bc.buildSettings.PRODUCT_NAME = `"${WIDGET_NAME}"`;
+        bc.buildSettings.PRODUCT_BUNDLE_IDENTIFIER = `"${WIDGET_BUNDLE_ID}"`;
+        bc.buildSettings.WRAPPER_EXTENSION = "appex";
         bc.buildSettings.INFOPLIST_FILE = `"${WIDGET_NAME}/Info.plist"`;
         bc.buildSettings.SWIFT_VERSION = "5.0";
         bc.buildSettings.TARGETED_DEVICE_FAMILY = '"1"';
         bc.buildSettings.IPHONEOS_DEPLOYMENT_TARGET = "16.0";
         bc.buildSettings.APPLICATION_EXTENSION_API_ONLY = "YES";
         bc.buildSettings.CODE_SIGN_ENTITLEMENTS = `"${WIDGET_NAME}/${WIDGET_NAME}.entitlements"`;
+        bc.buildSettings.SKIP_INSTALL = "YES";
+        bc.buildSettings.ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = "NO";
       }
     }
 

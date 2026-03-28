@@ -27,7 +27,8 @@
         "EXPO_PUBLIC_DOMAIN": "PaceUp.replit.app"
       },
       "ios": {
-        "resourceClass": "m-medium"
+        "resourceClass": "m-medium",
+        "image": "macos-sequoia-15.3-xcode-16.2"
       }
     }
   },
