@@ -56,6 +56,15 @@ declare module "express-session" {
 
 const PgStore = connectPgSimple(session);
 
+const ALLOWED_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp", "heic"]);
+
+function validateUploadExtension(originalname: string): string | null {
+  const ext = originalname.includes(".")
+    ? originalname.split(".").pop()!.toLowerCase()
+    : "";
+  return ext && ALLOWED_IMAGE_EXTENSIONS.has(ext) ? ext : null;
+}
+
 function requireAuth(req: Request, res: Response, next: Function) {
   if (!req.session.userId) return res.status(401).json({ message: "Unauthorized" });
   next();
@@ -1738,7 +1747,10 @@ async function go(e){
   app.post("/api/upload/photo", requireAuth, upload.single("photo"), async (req: any, res) => {
     try {
       if (!req.file) return res.status(400).json({ message: "No photo provided" });
-      const ext = (req.file.originalname.split(".").pop() || "jpg").toLowerCase();
+      const ext = validateUploadExtension(req.file.originalname);
+      if (!ext) {
+        return res.status(400).json({ message: "Invalid file type. Only jpg, jpeg, png, gif, webp, and heic are allowed." });
+      }
       const filename = `${req.session.userId}-${Date.now()}.${ext}`;
       const url = await uploadPhotoBuffer(req.file.buffer, filename, req.file.mimetype);
       res.json({ url });
@@ -2035,14 +2047,10 @@ async function go(e){
       const isParticipant = participants.some((p: any) => p.id === req.session.userId);
       const isHost = run.host_id === req.session.userId;
       if (!isParticipant && !isHost) return res.status(403).json({ message: "Not a participant" });
-      const ALLOWED_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp", "heic"]);
-      const rawExt = req.file.originalname.includes(".")
-        ? req.file.originalname.split(".").pop()!.toLowerCase()
-        : "";
-      if (!rawExt || !ALLOWED_IMAGE_EXTENSIONS.has(rawExt)) {
+      const ext = validateUploadExtension(req.file.originalname);
+      if (!ext) {
         return res.status(400).json({ message: "Invalid file type. Only jpg, jpeg, png, gif, webp, and heic are allowed." });
       }
-      const ext = rawExt;
       const filename = `run-${req.params.id as string}-${req.session.userId}-${Date.now()}.${ext}`;
       const url = await uploadPhotoBuffer(req.file.buffer, filename, req.file.mimetype);
       const photo = await storage.addRunPhoto(req.params.id as string, req.session.userId!, url);
@@ -2078,7 +2086,10 @@ async function go(e){
       const soloRun = await storage.getSoloRunById(req.params.id as string);
       if (!soloRun) return res.status(404).json({ message: "Solo run not found" });
       if (soloRun.userId !== req.session.userId) return res.status(403).json({ message: "Not authorized" });
-      const ext = (req.file.originalname.split(".").pop() || "jpg").toLowerCase();
+      const ext = validateUploadExtension(req.file.originalname);
+      if (!ext) {
+        return res.status(400).json({ message: "Invalid file type. Only jpg, jpeg, png, gif, webp, and heic are allowed." });
+      }
       const filename = `solo-${req.params.id as string}-${Date.now()}.${ext}`;
       const url = await uploadPhotoBuffer(req.file.buffer, filename, req.file.mimetype);
       const photo = await storage.addSoloRunPhoto(req.params.id as string, req.session.userId!, url);
