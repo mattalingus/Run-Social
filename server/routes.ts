@@ -1402,13 +1402,13 @@ async function go(e){
       }
       res.json(participant);
       storage.getUserById(run.host_id).then((host) => {
-        if (userWantsNotif(host, 'run_reminders')) {
+        if (host && userWantsNotif(host, 'run_reminders')) {
           sendPushNotification(
-            host!.push_token,
+            host.push_token,
             `Someone joined your ${run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run"} 🎉`,
             `${user.name} joined "${run.title}"`,
             { runId: run.id }
-          );
+          ).catch((err: any) => console.error("[push] join notification failed:", err?.message ?? err));
         }
       }).catch((err: any) => console.error("[bg]", err?.message ?? err));
     } catch (e: any) {
