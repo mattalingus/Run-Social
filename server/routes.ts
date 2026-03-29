@@ -1566,8 +1566,8 @@ async function go(e){
             const rankings = await storage.getCrewRankings("national");
             const crewRankIdx = rankings.findIndex((r: any) => r.id === crewId);
             const crewRank = crewRankIdx === -1 ? 0 : crewRankIdx + 1;
-            if (crewRank > 1) {
-              const overtaken = rankings[crewRank - 1];
+            if (crewRank > 1 && crewRank < rankings.length) {
+              const overtaken = rankings[crewRank];
               if (overtaken && overtaken.id !== crewId) {
                 const nowMs = Date.now();
                 const lastNotif = overtaken.last_overtake_notif_at ? new Date(overtaken.last_overtake_notif_at).getTime() : 0;
