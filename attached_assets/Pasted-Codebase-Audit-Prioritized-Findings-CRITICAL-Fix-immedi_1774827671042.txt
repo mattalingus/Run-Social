@@ -1,0 +1,53 @@
+Codebase Audit — Prioritized Findings
+CRITICAL (Fix immediately)
+Hardcoded session secret — server/routes.ts:77
+
+SESSION_SECRET || "paceup-secret-key" means if the env var is ever missing in prod, all sessions become forgeable. Should throw on startup instead of falling back.
+Operator precedence bug in pace calculation — server/routes.ts:1537
+
+run.min_pace + run.max_pace / 2 is parsed as min_pace + (max_pace / 2) due to precedence — missing parentheses around (min_pace + max_pace). Wrong average, and crashes if max_pace is null.
+Unsafe array index after findIndex — server/routes.ts:1548
+
+rankings.findIndex(...) + 1 returns 0 when not found (−1 + 1), then rankings[0] silently gives a wrong result. Out-of-bounds when crew is last in rankings.
+Dynamic SQL placeholder off-by-one risk — server/routes.ts:802-806
+
+The friendIds.map((_,i) => \($1, $${i+2})`)` construction is easy to mis-index if the parameter array ever changes order. Low immediate risk but fragile.
+HIGH
+No file extension whitelist on uploads — server/routes.ts:2016
+
+Extension is taken directly from originalname.split(".").pop() with no allowlist check. Allows .exe, .sh, etc. to be stored.
+No NaN validation after parseFloat — server/routes.ts:566-578
+
+parseFloat("abc") → NaN is passed straight into storage queries. Need explicit isNaN() guard.
+No rate limiting on auth endpoints — server/routes.ts:90, 115, 158
+
+Register, login, and forgot-password have no rate limiting. Brute force and account enumeration are trivial.
+Fire-and-forget notifications silently fail — server/routes.ts:504-518
+
+.catch(() => {}) drops all notification errors. Users silently don't receive push notifications.
+Password reset token in URL query string — server/routes.ts:217
+
+Token is passed as ?token=... so it leaks into server logs, browser history, and Referer headers. Should be in the request body.
+No CSRF protection on any state-changing endpoint.
+
+MEDIUM
+No timeout on Facebook OAuth calls — server/routes.ts:788-796
+
+External fetch with no timeout will hang a request indefinitely.
+N+1 query pattern in notifications — server/storage.ts:457-614
+
+Multiple queries per notification where a JOIN would work. Will degrade under load.
+host!.push_token crash risk in background promise — server/routes.ts:1267
+
+Non-awaited background chain accesses host!.push_token without null-checking host.
+Silent .catch(() => {}) throughout — Makes debugging in production very hard.
+
+Division by zero in pace math — No guard when denominators could be 0.
+
+Garmin OAuth response not status-checked before parsing — server/routes.ts:39-46
+
+LOW
+Password validation logic duplicated between server and client — can drift.
+Error messages leak user preference data — server/routes.ts:1347
+Unvalidated open redirect in OAuth callback — server/routes.ts:813
+split(".").pop() for extension parsing doesn't handle filenames with no extension or multiple dots correctly.
