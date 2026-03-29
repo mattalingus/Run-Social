@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
+import rateLimit from "express-rate-limit";
 import multer from "multer";
 import nodemailer from "nodemailer";
 import * as storage from "./storage";
@@ -61,6 +62,10 @@ function requireAuth(req: Request, res: Response, next: Function) {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  if (!process.env.SESSION_SECRET) {
+    throw new Error("SESSION_SECRET environment variable is required but not set");
+  }
+
   await storage.initDb();
 
   if (process.env.NODE_ENV !== "production") {
@@ -74,7 +79,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use(
     session({
       store: new PgStore({ pool, createTableIfMissing: true }),
-      secret: process.env.SESSION_SECRET || "paceup-secret-key",
+      secret: process.env.SESSION_SECRET,
       resave: false,
       saveUninitialized: false,
       proxy: true,
@@ -87,7 +92,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     })
   );
 
-  app.post("/api/auth/register", async (req, res) => {
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: "Too many requests, please try again later" },
+  });
+
+  app.post("/api/auth/register", authLimiter, async (req, res) => {
     try {
       const { email, password, firstName, lastName, username, gender } = req.body;
       if (!email || !password || !firstName || !lastName || !username) return res.status(400).json({ message: "All fields required" });
@@ -112,7 +125,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/auth/login", async (req, res) => {
+  app.post("/api/auth/login", authLimiter, async (req, res) => {
     try {
       const { identifier, password } = req.body;
       if (!identifier || !password) return res.status(400).json({ message: "Username/email and password required" });
@@ -155,7 +168,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/auth/forgot-password", async (req, res) => {
+  app.post("/api/auth/forgot-password", authLimiter, async (req, res) => {
     try {
       const { email } = req.body;
       if (!email) return res.status(400).json({ message: "Email is required" });
@@ -513,9 +526,9 @@ async function go(e){
             "New Friend Request",
             `${sender.name} wants to connect on PaceUp`,
             { screen: "notifications" }
-          );
+          ).catch((err: any) => console.error("[push] friend request notification failed:", err?.message ?? err));
         }
-      }).catch(() => {});
+      }).catch((err: any) => console.error("[bg] friend request notification:", err?.message ?? err));
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
@@ -541,9 +554,9 @@ async function go(e){
               "Friend Request Accepted",
               `${acceptor.name} accepted your friend request`,
               { screen: "notifications" }
-            );
+            ).catch((err: any) => console.error("[push] friend accept notification failed:", err?.message ?? err));
           }
-        }).catch(() => {});
+        }).catch((err: any) => console.error("[bg] friend accept notification:", err?.message ?? err));
       }
       res.json(friendship);
     } catch (e: any) {
@@ -563,19 +576,24 @@ async function go(e){
   app.get("/api/runs", async (req, res) => {
     try {
       const filters: any = {};
-      if (req.query.minPace as string) filters.minPace = parseFloat(req.query.minPace as string);
-      if (req.query.maxPace as string) filters.maxPace = parseFloat(req.query.maxPace as string);
-      if (req.query.minDistance as string) filters.minDistance = parseFloat(req.query.minDistance as string);
-      if (req.query.maxDistance as string) filters.maxDistance = parseFloat(req.query.maxDistance as string);
+      const parseFloatGuarded = (val: string, field: string): number => {
+        const n = parseFloat(val);
+        if (isNaN(n)) throw Object.assign(new Error(`Invalid numeric value for ${field}`), { status: 400 });
+        return n;
+      };
+      if (req.query.minPace as string) filters.minPace = parseFloatGuarded(req.query.minPace as string, "minPace");
+      if (req.query.maxPace as string) filters.maxPace = parseFloatGuarded(req.query.maxPace as string, "maxPace");
+      if (req.query.minDistance as string) filters.minDistance = parseFloatGuarded(req.query.minDistance as string, "minDistance");
+      if (req.query.maxDistance as string) filters.maxDistance = parseFloatGuarded(req.query.maxDistance as string, "maxDistance");
       if (req.query.tag as string) filters.tag = req.query.tag as string;
       if (req.query.styles as string) {
         const raw = req.query.styles as string;
         filters.styles = raw.split(",").map(s => s.trim()).filter(Boolean);
       }
-      if (req.query.swLat as string) filters.swLat = parseFloat(req.query.swLat as string);
-      if (req.query.swLng as string) filters.swLng = parseFloat(req.query.swLng as string);
-      if (req.query.neLat as string) filters.neLat = parseFloat(req.query.neLat as string);
-      if (req.query.neLng as string) filters.neLng = parseFloat(req.query.neLng as string);
+      if (req.query.swLat as string) filters.swLat = parseFloatGuarded(req.query.swLat as string, "swLat");
+      if (req.query.swLng as string) filters.swLng = parseFloatGuarded(req.query.swLng as string, "swLng");
+      if (req.query.neLat as string) filters.neLat = parseFloatGuarded(req.query.neLat as string, "neLat");
+      if (req.query.neLng as string) filters.neLng = parseFloatGuarded(req.query.neLng as string, "neLng");
       const bounds = (filters.swLat !== undefined && filters.neLat !== undefined && filters.swLng !== undefined && filters.neLng !== undefined)
         ? { swLat: filters.swLat, neLat: filters.neLat, swLng: filters.swLng, neLng: filters.neLng }
         : undefined;
@@ -605,7 +623,7 @@ async function go(e){
       const unauthAnnotated = unauthDeduped.map(r => ({ ...r, user_is_crew_member: r.crew_id ? false : true }));
       res.json(unauthAnnotated);
     } catch (e: any) {
-      res.status(500).json({ message: e.message });
+      res.status(e.status ?? 500).json({ message: e.message });
     }
   });
 
@@ -710,9 +728,9 @@ async function go(e){
               "Friend Request Accepted",
               `${acceptor.name} accepted your friend request`,
               { screen: "notifications" }
-            );
+            ).catch((err: any) => console.error("[push] friend accept (v2) notification failed:", err?.message ?? err));
           }
-        }).catch(() => {});
+        }).catch((err: any) => console.error("[bg] friend accept (v2) notification:", err?.message ?? err));
       }
     } catch (e: any) {
       res.status(500).json({ message: e.message });
@@ -785,15 +803,16 @@ async function go(e){
       const appSecret = process.env.FACEBOOK_APP_SECRET;
       if (!appId || !appSecret) return res.status(501).send("Facebook not configured");
       const redirectUri = `${req.protocol}://${req.get("host")}/api/auth/facebook/callback`;
-      const tokenRes = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${appSecret}&code=${code}`);
+      const fbTimeout = () => AbortSignal.timeout(10000);
+      const tokenRes = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${appSecret}&code=${code}`, { signal: fbTimeout() });
       const tokenData = await tokenRes.json() as any;
       if (!tokenData.access_token) return res.status(400).send("Failed to get access token");
-      const meRes = await fetch(`https://graph.facebook.com/v19.0/me?fields=id,name&access_token=${tokenData.access_token}`);
+      const meRes = await fetch(`https://graph.facebook.com/v19.0/me?fields=id,name&access_token=${tokenData.access_token}`, { signal: fbTimeout() });
       const me = await meRes.json() as any;
       if (me.id) {
         await pool.query(`UPDATE users SET facebook_id = $1 WHERE id = $2`, [me.id, storedUserId]);
         try {
-          const friendsRes = await fetch(`https://graph.facebook.com/v19.0/me/friends?fields=id&limit=5000&access_token=${tokenData.access_token}`);
+          const friendsRes = await fetch(`https://graph.facebook.com/v19.0/me/friends?fields=id&limit=5000&access_token=${tokenData.access_token}`, { signal: fbTimeout() });
           const friendsData = await friendsRes.json() as any;
           if (friendsData.data && Array.isArray(friendsData.data) && friendsData.data.length > 0) {
             await pool.query(`DELETE FROM facebook_friends WHERE user_id = $1`, [storedUserId]);
@@ -1265,14 +1284,14 @@ async function go(e){
       // Notify host only when planning (not unplanning), fire-and-forget
       if (result.planned) {
         storage.getUserById(run.host_id).then(async (host) => {
-          if (userWantsNotif(host, 'run_reminders')) {
+          if (host && userWantsNotif(host, 'run_reminders')) {
             const planner = await storage.getUserById(req.session.userId!);
             sendPushNotification(
-              host!.push_token,
+              host.push_token,
               `Someone plans to ${run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run"} with you 📅`,
               `${planner?.name ?? "Someone"} is planning to join "${run.title}"`,
               { runId: run.id }
-            );
+            ).catch((err: any) => console.error("[push] plan notification failed:", err?.message ?? err));
           }
         }).catch((err: any) => console.error("[bg]", err?.message ?? err));
       }
@@ -1534,7 +1553,9 @@ async function go(e){
                 crew.name,
                 run.title,
                 (await storage.getRunParticipants(run.id)).length,
-                (run.min_pace + run.max_pace / 2).toFixed(2)
+                (run.min_pace != null && run.max_pace != null
+                  ? ((run.min_pace + run.max_pace) / 2).toFixed(2)
+                  : "0")
               );
               await storage.createCrewMessage(
                 crewId, "system", "PaceUp Bot", null,
@@ -1543,9 +1564,10 @@ async function go(e){
               );
             }
             const rankings = await storage.getCrewRankings("national");
-            const crewRank = rankings.findIndex((r: any) => r.id === crewId) + 1;
+            const crewRankIdx = rankings.findIndex((r: any) => r.id === crewId);
+            const crewRank = crewRankIdx === -1 ? 0 : crewRankIdx + 1;
             if (crewRank > 1) {
-              const overtaken = rankings[crewRank];
+              const overtaken = rankings[crewRank - 1];
               if (overtaken && overtaken.id !== crewId) {
                 const nowMs = Date.now();
                 const lastNotif = overtaken.last_overtake_notif_at ? new Date(overtaken.last_overtake_notif_at).getTime() : 0;
@@ -1873,7 +1895,7 @@ async function go(e){
           "Tag-Along Request 🏃",
           `${firstName} wants to tag along with your GPS for "${run.title}". Accept?`,
           { type: "tag_along_request", runId: req.params.id as string, requestId: request.id }
-        ).catch(() => {});
+        ).catch((err: any) => console.error("[push] tag-along request notification failed:", err?.message ?? err));
       }
 
       res.json(request);
@@ -2013,7 +2035,14 @@ async function go(e){
       const isParticipant = participants.some((p: any) => p.id === req.session.userId);
       const isHost = run.host_id === req.session.userId;
       if (!isParticipant && !isHost) return res.status(403).json({ message: "Not a participant" });
-      const ext = (req.file.originalname.split(".").pop() || "jpg").toLowerCase();
+      const ALLOWED_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp", "heic"]);
+      const rawExt = req.file.originalname.includes(".")
+        ? req.file.originalname.split(".").pop()!.toLowerCase()
+        : "";
+      if (!rawExt || !ALLOWED_IMAGE_EXTENSIONS.has(rawExt)) {
+        return res.status(400).json({ message: "Invalid file type. Only jpg, jpeg, png, gif, webp, and heic are allowed." });
+      }
+      const ext = rawExt;
       const filename = `run-${req.params.id as string}-${req.session.userId}-${Date.now()}.${ext}`;
       const url = await uploadPhotoBuffer(req.file.buffer, filename, req.file.mimetype);
       const photo = await storage.addRunPhoto(req.params.id as string, req.session.userId!, url);
