@@ -589,6 +589,12 @@ async function go(e){
       const { userId } = req.body;
       if (!userId) return res.status(400).json({ message: "userId required" });
       if (userId === req.session.userId) return res.status(400).json({ message: "Cannot add yourself" });
+      // Block guard: deny if either user has blocked the other
+      const [iBlocked, theyBlocked] = await Promise.all([
+        storage.isBlocking(req.session.userId!, userId),
+        storage.isBlockedBy(req.session.userId!, userId),
+      ]);
+      if (iBlocked || theyBlocked) return res.status(404).json({ message: "User not found" });
       const result = await storage.sendFriendRequest(req.session.userId!, userId);
       if (result.error) return res.status(400).json({ message: result.error === "already_friends" ? "Already friends" : "Request already sent" });
       res.json(result.data);
@@ -2601,6 +2607,12 @@ async function go(e){
       const { message, gif_url, gif_preview_url } = req.body;
       const isGif = !!gif_url;
       if (!message?.trim() && !isGif) return res.status(400).json({ message: "Message required" });
+      // Block guard: deny messaging a user who has blocked the sender, or vice versa
+      const [iBlocked, theyBlocked] = await Promise.all([
+        storage.isBlocking(req.session.userId!, req.params.friendId as string),
+        storage.isBlockedBy(req.session.userId!, req.params.friendId as string),
+      ]);
+      if (iBlocked || theyBlocked) return res.status(403).json({ message: "Cannot send message to this user" });
       const messageType = isGif ? "gif" : "text";
       const metadata = isGif ? { gif_url, gif_preview_url } : undefined;
       const dm = await storage.sendDm(
