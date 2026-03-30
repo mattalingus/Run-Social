@@ -404,6 +404,15 @@ export async function initDb() {
       UNIQUE(run_id, requester_id)
     );
     CREATE INDEX IF NOT EXISTS idx_tag_along_run ON tag_along_requests(run_id, status);
+
+    CREATE TABLE IF NOT EXISTS user_blocks (
+      blocker_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      blocked_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMP DEFAULT NOW(),
+      PRIMARY KEY (blocker_id, blocked_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_blocks_blocker ON user_blocks(blocker_id);
+    CREATE INDEX IF NOT EXISTS idx_user_blocks_blocked ON user_blocks(blocked_id);
   `);
 
   const dummyCheck = await pool.query(`SELECT COUNT(*) FROM users WHERE email LIKE 'dummy-%@paceup.dev'`);
@@ -4300,4 +4309,44 @@ export async function getRecentCommunityActivity() {
     ...row,
     participant_count: parseInt(row.participant_count, 10),
   }));
+}
+
+// ─── User Blocks ──────────────────────────────────────────────────────────────
+
+export async function blockUser(blockerId: string, blockedId: string): Promise<void> {
+  await pool.query(
+    `INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+    [blockerId, blockedId]
+  );
+}
+
+export async function unblockUser(blockerId: string, blockedId: string): Promise<void> {
+  await pool.query(
+    `DELETE FROM user_blocks WHERE blocker_id = $1 AND blocked_id = $2`,
+    [blockerId, blockedId]
+  );
+}
+
+export async function isBlockedBy(requesterId: string, targetId: string): Promise<boolean> {
+  const res = await pool.query(
+    `SELECT 1 FROM user_blocks WHERE blocker_id = $1 AND blocked_id = $2`,
+    [targetId, requesterId]
+  );
+  return res.rows.length > 0;
+}
+
+export async function isBlocking(requesterId: string, targetId: string): Promise<boolean> {
+  const res = await pool.query(
+    `SELECT 1 FROM user_blocks WHERE blocker_id = $1 AND blocked_id = $2`,
+    [requesterId, targetId]
+  );
+  return res.rows.length > 0;
+}
+
+export async function getBlockList(userId: string): Promise<string[]> {
+  const res = await pool.query(
+    `SELECT blocked_id FROM user_blocks WHERE blocker_id = $1`,
+    [userId]
+  );
+  return res.rows.map((r: any) => r.blocked_id);
 }

@@ -480,7 +480,11 @@ async function go(e){
 
       // Self — always allowed
       if (targetId !== requesterId) {
-        // Check the target user's privacy setting
+        // Block check: if the target user has blocked the requester, return 404 (don't reveal existence)
+        const blocked = await storage.isBlockedBy(requesterId, targetId);
+        if (blocked) return res.status(404).json({ message: "User not found" });
+
+        // Privacy check: respect the target user's profile visibility setting
         const privacyRow = await pool.query(
           `SELECT profile_privacy FROM users WHERE id = $1`,
           [targetId]
@@ -500,6 +504,50 @@ async function go(e){
       const profile = await storage.getPublicUserProfile(targetId);
       if (!profile) return res.status(404).json({ message: "User not found" });
       res.json(profile);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  // ─── Block / Unblock ──────────────────────────────────────────────────────
+
+  app.get("/api/users/:id/block-status", requireAuth, async (req, res) => {
+    try {
+      const targetId = req.params.id as string;
+      const requesterId = req.session.userId!;
+      if (targetId === requesterId) return res.json({ amBlocking: false, amBlockedBy: false });
+      const [amBlocking, amBlockedBy] = await Promise.all([
+        storage.isBlocking(requesterId, targetId),
+        storage.isBlockedBy(requesterId, targetId),
+      ]);
+      res.json({ amBlocking, amBlockedBy });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/users/:id/block", requireAuth, async (req, res) => {
+    try {
+      const targetId = req.params.id as string;
+      const requesterId = req.session.userId!;
+      if (targetId === requesterId) return res.status(400).json({ message: "Cannot block yourself" });
+      await storage.blockUser(requesterId, targetId);
+      // Remove any existing friendship between the two users
+      await pool.query(
+        `DELETE FROM friendships WHERE (requester_id = $1 AND recipient_id = $2) OR (requester_id = $2 AND recipient_id = $1)`,
+        [requesterId, targetId]
+      );
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.delete("/api/users/:id/block", requireAuth, async (req, res) => {
+    try {
+      const targetId = req.params.id as string;
+      await storage.unblockUser(req.session.userId!, targetId);
+      res.json({ ok: true });
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }

@@ -80,6 +80,12 @@ export default function UserProfileScreen() {
     enabled: !!id,
   });
 
+  const { data: blockStatus } = useQuery<{ amBlocking: boolean; amBlockedBy: boolean }>({
+    queryKey: ["/api/users", id, "block-status"],
+    enabled: !!id && id !== authUser?.id,
+    staleTime: 10000,
+  });
+
   const friendMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/friends/request", { userId: id });
@@ -91,6 +97,39 @@ export default function UserProfileScreen() {
     },
     onError: () => Alert.alert("Error", "Could not send friend request"),
   });
+
+  const blockMutation = useMutation({
+    mutationFn: async (blocking: boolean) => {
+      if (blocking) {
+        await apiRequest("POST", `/api/users/${id}/block`);
+      } else {
+        await apiRequest("DELETE", `/api/users/${id}/block`);
+      }
+    },
+    onSuccess: (_, blocking) => {
+      qc.invalidateQueries({ queryKey: ["/api/users", id, "block-status"] });
+      qc.invalidateQueries({ queryKey: ["/api/users", id, "friendship"] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (blocking) {
+        Alert.alert("Blocked", `You've blocked this user. They can no longer view your profile or interact with you.`);
+      }
+    },
+    onError: () => Alert.alert("Error", "Could not update block status"),
+  });
+
+  function handleBlockPress() {
+    if (blockStatus?.amBlocking) {
+      Alert.alert("Unblock User", "Allow this user to see your profile and interact with you again?", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Unblock", onPress: () => blockMutation.mutate(false) },
+      ]);
+    } else {
+      Alert.alert("Block User", "This user won't be able to see your profile, and any existing friendship will be removed.", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Block", style: "destructive", onPress: () => blockMutation.mutate(true) },
+      ]);
+    }
+  }
 
   const isMe = id === authUser?.id;
   const fStatus = friendship?.status;
@@ -158,37 +197,54 @@ export default function UserProfileScreen() {
             ) : null}
 
             {!isMe && (
-              <View style={s.actions}>
-                <Pressable
-                  style={[
-                    s.actionBtn,
-                    fStatus === "accepted" && { backgroundColor: C.primaryMuted },
-                  ]}
-                  disabled={fStatus === "accepted" || fStatus === "pending" || friendMutation.isPending}
-                  onPress={() => friendMutation.mutate()}
-                >
-                  <Ionicons name={friendBtnIcon()} size={16} color={fStatus === "accepted" ? C.primary : C.bg} />
-                  <Text style={[s.actionBtnTxt, fStatus === "accepted" && { color: C.primary }]}>
-                    {friendMutation.isPending ? "Sending…" : friendBtnLabel()}
-                  </Text>
-                </Pressable>
+              <View style={{ alignItems: "center", gap: 10, marginTop: 20, width: "100%" }}>
+                <View style={s.actions}>
+                  <Pressable
+                    style={[
+                      s.actionBtn,
+                      fStatus === "accepted" && { backgroundColor: C.primaryMuted },
+                    ]}
+                    disabled={fStatus === "accepted" || fStatus === "pending" || friendMutation.isPending || blockStatus?.amBlocking}
+                    onPress={() => friendMutation.mutate()}
+                  >
+                    <Ionicons name={friendBtnIcon()} size={16} color={fStatus === "accepted" ? C.primary : C.bg} />
+                    <Text style={[s.actionBtnTxt, fStatus === "accepted" && { color: C.primary }]}>
+                      {friendMutation.isPending ? "Sending…" : friendBtnLabel()}
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={s.actionSecondary}
+                    onPress={() => {
+                      router.push({
+                        pathname: "/dm/[friendId]",
+                        params: {
+                          friendId: id!,
+                          friendName: profile.name || "",
+                          friendUsername: "",
+                          friendPhoto: profile.photo_url || "",
+                        },
+                      });
+                    }}
+                  >
+                    <Ionicons name="chatbubble-outline" size={16} color={C.primary} />
+                    <Text style={s.actionSecondaryTxt}>Message</Text>
+                  </Pressable>
+                </View>
 
                 <Pressable
-                  style={s.actionSecondary}
-                  onPress={() => {
-                    router.push({
-                      pathname: "/dm/[friendId]",
-                      params: {
-                        friendId: id!,
-                        friendName: profile.name || "",
-                        friendUsername: "",
-                        friendPhoto: profile.photo_url || "",
-                      },
-                    });
-                  }}
+                  style={s.blockBtn}
+                  disabled={blockMutation.isPending}
+                  onPress={handleBlockPress}
                 >
-                  <Ionicons name="chatbubble-outline" size={16} color={C.primary} />
-                  <Text style={s.actionSecondaryTxt}>Message</Text>
+                  <Feather
+                    name={blockStatus?.amBlocking ? "slash" : "slash"}
+                    size={12}
+                    color={blockStatus?.amBlocking ? C.textSecondary : "#F87171"}
+                  />
+                  <Text style={[s.blockBtnTxt, blockStatus?.amBlocking && { color: C.textSecondary }]}>
+                    {blockMutation.isPending ? "…" : blockStatus?.amBlocking ? "Unblock User" : "Block User"}
+                  </Text>
                 </Pressable>
               </View>
             )}
@@ -299,5 +355,13 @@ function makeStyles(C: ColorScheme) {
     showAllBtn: { alignSelf: "center", marginTop: 12, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 12, borderWidth: 1, borderColor: C.border },
     showAllText: { fontSize: 13, fontFamily: "Outfit_600SemiBold", color: C.primary },
     errorText: { fontSize: 16, fontFamily: "Outfit_400Regular", color: C.textSecondary, marginTop: 60 },
+    blockBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+    },
+    blockBtnTxt: { fontSize: 12, fontFamily: "Outfit_600SemiBold", color: "#F87171" },
   });
 }
