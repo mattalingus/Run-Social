@@ -359,7 +359,7 @@ export default function RunDetailScreen() {
     if (!isParticipant || isHost || run?.is_completed) return;
     const timer = setInterval(() => { refetch(); }, 15_000);
     return () => clearInterval(timer);
-  }, [isParticipant, isHost, run?.is_completed]);
+  }, [isParticipant, isHost, run?.is_completed, refetch]);
 
   function handleOpenEdit() {
     if (!run) return;

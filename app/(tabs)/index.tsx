@@ -1693,6 +1693,7 @@ export default function DiscoverScreen() {
   const fallbackRuns = useMemo(() =>
     runs
       .filter((r) => (r.activity_type ?? "run") === activityFilter)
+      .filter((r) => !r.date || (Date.now() - new Date(r.date).getTime()) < 2 * 60 * 60 * 1000)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
     [runs, activityFilter]
   );
