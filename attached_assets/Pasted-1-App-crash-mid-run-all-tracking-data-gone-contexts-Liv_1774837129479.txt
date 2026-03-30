@@ -1,0 +1,60 @@
+1. App crash mid-run = all tracking data gone
+contexts/LiveTrackingContext.tsx:63-72 — Everything is in React refs and state. totalDistRef, routePathRef, elapsedRef — all lost on app death. There's a minimize()/restore() for screen navigation, but nothing that survives a process kill. User is 4 miles in, phone gets a memory warning, OS kills the app. They reopen and start from zero. That's an instant 1-star review.
+
+2. Run stuck as is_active=true forever if user never taps Finish
+server/storage.ts — UPDATE runs SET is_active = true has no corresponding timeout or auto-close. Phone dies, app crashes, user forgets — the run stays live forever in the DB. No cron job, no inactivity timeout (e.g., "no location pings in 4 hours → auto-close"). These ghost runs will pile up.
+
+3. Network drops when tapping "Finish Run" = run never completes
+app/run-live/[id].tsx:300-330 — The finish POST fires once with no retry logic. If the user is in a tunnel or signal drops for 5 seconds as they cross the finish, the request fails. The client transitions to phase="finishing" (stops tracking) but server still has is_active=true. Run is orphaned. Stats not saved. No retry, no queue, no recovery path.
+
+4. No pause mechanic
+contexts/LiveTrackingContext.tsx:13 — Phases: "idle" | "active" | "finishing". That's it. Runner needs a water break, needs to tie a shoe, gets stopped at a red light for 3 minutes — no way to pause. Elapsed time keeps ticking, GPS keeps pinging, battery keeps draining. For longer runs (half marathon training, brick workouts) this is a real gap.
+
+GPS and distance accuracy issues
+5. GPS jitter inflates distance on long runs
+app/run-tracking.tsx:633-687 — The filter rejects points with accuracy > 40m but accepts anything under that. Stationary GPS bouncing between two points 8m apart counts every one of those bounces as real movement via haversine. On a 10-mile run in a city you could easily see +0.3–0.5 miles of phantom distance. No velocity check, no smoothing, just a 0.3-mile hard cap per jump.
+
+6. Location permission revoked mid-run — silent degradation
+contexts/LiveTrackingContext.tsx:130-150 — If OS revokes location permission, showPermissionLostAlert() fires once. But the run keeps going — elapsed time ticks, server pings fire, the user sees no "TRACKING STOPPED" indicator. Final distance is based on the last good GPS point, which could be miles back. User finishes thinking they ran 5 miles, server records 2.1 miles.
+
+
+Map UX problems
+8. Map doesn't auto-follow the runner
+app/run-live/[id].tsx — mapRef exists but no animateToRegion or equivalent is called when new GPS coordinates come in. User pans the map accidentally → they're off-screen with no snap-back. The runner's dot vanishes and there's no "back to me" button. This is map 101 for fitness apps.
+
+9. 3 polling intervals running simultaneously during live run
+run-live/[id].tsx:106 — Live state: every 5s. Messages: every 5s. Plus location pings from context every 10s. That's 12+ HTTP requests per minute, per user, the entire duration of the run. No pause when app is backgrounded, no backoff. On a 2-hour long run that's 1,440+ requests from a single participant.
+
+10. 30+ participant leaderboard — no virtualization
+run-live/[id].tsx — All leaderboard rows and all map markers rendered simultaneously. 50 runners = 50 Marker components + 250 text nodes, refreshed every 5 seconds. On a mid-tier Android this will stutter badly. No FlatList windowing, no marker clustering on the map.
+
+
+Profile Section — Real Use Cases
+Privacy/security gaps
+12. Private profile setting is not enforced server-side
+server/routes.ts:454-460 — GET /api/users/:id/profile calls getPublicUserProfile() with no check for profilePrivacy. If a user sets their profile to private, anyone authenticated can still hit the endpoint and get their stats, runs, pace data.
+
+13. Blocked user can still view your profile
+No block check anywhere in the profile endpoint chain. Alice blocks Bob → Bob opens Alice's profile URL → gets full data back. The block only affects UI-level filtering, not the API.
+
+Stats accuracy problems
+
+15. Profile stats stale for up to 30 seconds after a run completes
+app/(tabs)/profile.tsx — staleTime: 30000 on the user profile query. User finishes a run, immediately checks their profile, sees old numbers. Minor but jarring after completing a workout.
+
+Scale issues
+16. Run history hard-capped at 200 with no pagination
+server/storage.ts:1410 — LIMIT 200 hardcoded, no offset. A dedicated runner doing 5 runs/week hits 200 in under a year. After that, older runs are silently invisible. No infinite scroll, no "load more."
+
+17. Friends list, starred runs — no pagination either
+Friends modal and starred runs fetch everything in one shot. 1,000 friends = 1,000 rows, one response, rendered all at once.
+
+Presentation bugs
+18. Achievements hard-capped at 6 shown
+app/user-profile/[id].tsx:194 — earned.slice(0, 6). If you've earned 12 achievements, you see 6. No "show all" option.
+
+19. Profile photo load failure shows broken image, not fallback
+app/user-profile/[id].tsx:126 — resolveImgUrl() only checks if the URL string exists, not if the image actually loads. A 404 URL shows a broken image icon, not the initial-letter fallback that exists for null URLs. Needs an onError handler on <ExpoImage>.
+
+20. Achievement gaming — no distance/pace validation
+server/storage.ts:2465 — Achievements trigger purely on completed_runs >= N with no minimum distance or pace check. Join 10 runs of any length to get "ten_toes_down." Easy to exploit.
