@@ -148,6 +148,7 @@ export default function CreateRunScreen() {
     { label: "Group A", minPace: "7", maxPace: "9" },
     { label: "Group B", minPace: "9", maxPace: "11" },
   ]);
+  const [paceGroupErrors, setPaceGroupErrors] = useState<string[]>([]);
   const [locationPickerOpen, setLocationPickerOpen] = useState(false);
   const [pickerLat, setPickerLat] = useState(parseFloat(locationLat) || 0);
   const [pickerLng, setPickerLng] = useState(parseFloat(locationLng) || 0);
@@ -320,6 +321,22 @@ export default function CreateRunScreen() {
     Haptics.selectionAsync();
   }
 
+  function validateAndSubmit() {
+    if (isCrew && paceGroups.length > 0) {
+      const errors = paceGroups.map((g) => {
+        const min = parseFloat(g.minPace);
+        const max = parseFloat(g.maxPace);
+        if (isNaN(min) || isNaN(max)) return "Enter valid min and max pace values";
+        if (min >= max) return "Min pace must be less than max pace";
+        return "";
+      });
+      setPaceGroupErrors(errors);
+      if (errors.some(Boolean)) return;
+    }
+    setPaceGroupErrors([]);
+    createMutation.mutate();
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: C.bg }]}>
       <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
@@ -329,7 +346,7 @@ export default function CreateRunScreen() {
         <Text style={styles.headerTitle}>{activityType === "ride" ? "Host a Ride" : activityType === "walk" ? "Host a Walk" : "Host a Run"}</Text>
         <Pressable
           style={({ pressed }) => [styles.createBtn, { opacity: (pressed || createMutation.isPending || (privacy === "crew" && !selectedCrewId && !params.crewId)) ? 0.5 : 1 }]}
-          onPress={() => createMutation.mutate()}
+          onPress={validateAndSubmit}
           disabled={createMutation.isPending || (privacy === "crew" && !selectedCrewId && !params.crewId)}
         >
           {createMutation.isPending ? (
@@ -580,7 +597,7 @@ export default function CreateRunScreen() {
               )}
             </View>
             {paceGroups.map((group, idx) => (
-              <View key={idx} style={{ backgroundColor: C.surface, borderRadius: 12, borderWidth: 1, borderColor: C.border, padding: 12, marginBottom: 8 }}>
+              <View key={idx} style={{ backgroundColor: C.surface, borderRadius: 12, borderWidth: 1, borderColor: paceGroupErrors[idx] ? C.danger : C.border, padding: 12, marginBottom: 8 }}>
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
                   <TextInput
                     style={[styles.input, { flex: 1, marginRight: 8, marginBottom: 0 }]}
@@ -596,7 +613,7 @@ export default function CreateRunScreen() {
                   />
                   {paceGroups.length > 1 && (
                     <Pressable
-                      onPress={() => { setPaceGroups(paceGroups.filter((_, i) => i !== idx)); Haptics.selectionAsync(); }}
+                      onPress={() => { setPaceGroups(paceGroups.filter((_, i) => i !== idx)); setPaceGroupErrors(paceGroupErrors.filter((_, i) => i !== idx)); Haptics.selectionAsync(); }}
                       style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: C.danger + "22", alignItems: "center", justifyContent: "center" }}
                     >
                       <Feather name="trash-2" size={13} color={C.danger} />
@@ -607,12 +624,17 @@ export default function CreateRunScreen() {
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.splitLabel, { textAlign: "left" }]}>Min Pace (min/mi)</Text>
                     <TextInput
-                      style={styles.input}
+                      style={[styles.input, paceGroupErrors[idx] ? { borderColor: C.danger } : {}]}
                       value={group.minPace}
                       onChangeText={(t) => {
                         const updated = [...paceGroups];
                         updated[idx] = { ...updated[idx], minPace: t };
                         setPaceGroups(updated);
+                        if (paceGroupErrors[idx]) {
+                          const errs = [...paceGroupErrors];
+                          errs[idx] = "";
+                          setPaceGroupErrors(errs);
+                        }
                       }}
                       keyboardType="decimal-pad"
                       placeholder="7.0"
@@ -622,12 +644,17 @@ export default function CreateRunScreen() {
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.splitLabel, { textAlign: "left" }]}>Max Pace (min/mi)</Text>
                     <TextInput
-                      style={styles.input}
+                      style={[styles.input, paceGroupErrors[idx] ? { borderColor: C.danger } : {}]}
                       value={group.maxPace}
                       onChangeText={(t) => {
                         const updated = [...paceGroups];
                         updated[idx] = { ...updated[idx], maxPace: t };
                         setPaceGroups(updated);
+                        if (paceGroupErrors[idx]) {
+                          const errs = [...paceGroupErrors];
+                          errs[idx] = "";
+                          setPaceGroupErrors(errs);
+                        }
                       }}
                       keyboardType="decimal-pad"
                       placeholder="9.0"
@@ -635,6 +662,11 @@ export default function CreateRunScreen() {
                     />
                   </View>
                 </View>
+                {!!paceGroupErrors[idx] && (
+                  <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.danger, marginTop: 6 }}>
+                    {paceGroupErrors[idx]}
+                  </Text>
+                )}
               </View>
             ))}
           </View>

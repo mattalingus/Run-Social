@@ -577,9 +577,18 @@ export default function RunDetailScreen() {
         {
           text: "Confirm",
           onPress: async (miles: string | undefined) => {
+            const parsed = parseFloat(miles ?? "");
+            if (!isFinite(parsed) || parsed <= 0) {
+              Alert.alert(
+                "Invalid Distance",
+                "Please enter a positive number of miles (e.g. 3.1).",
+                [{ text: "Try Again", onPress: handleConfirmComplete }]
+              );
+              return;
+            }
             setConfirming(true);
             try {
-              await apiRequest("POST", `/api/runs/${id}/complete`, { milesLogged: parseFloat(miles || "3") });
+              await apiRequest("POST", `/api/runs/${id}/complete`, { milesLogged: parsed });
               await refreshUser();
               qc.invalidateQueries({ queryKey: ["/api/runs/mine"] });
               qc.invalidateQueries({ queryKey: ["/api/users/me/achievements"] });
@@ -1656,8 +1665,8 @@ export default function RunDetailScreen() {
                 <View style={styles.editFieldGroup}>
                   <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                     <Text style={styles.editFieldLabel}>Message</Text>
-                    <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: broadcastMsg.length > 250 ? C.danger : C.textMuted }}>
-                      {broadcastMsg.length} / 280
+                    <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: (280 - broadcastMsg.length) <= 30 ? C.danger : C.textMuted }}>
+                      {280 - broadcastMsg.length} left
                     </Text>
                   </View>
                   <TextInput
@@ -1672,9 +1681,9 @@ export default function RunDetailScreen() {
                   />
                 </View>
                 <Pressable
-                  style={({ pressed }) => [styles.primaryBtn, { opacity: pressed || broadcasting || !broadcastMsg.trim() ? 0.75 : 1, marginTop: 8 }]}
+                  style={({ pressed }) => [styles.primaryBtn, { opacity: pressed || broadcasting || !broadcastMsg.trim() || broadcastMsg.length >= 280 ? 0.75 : 1, marginTop: 8 }]}
                   onPress={handleBroadcast}
-                  disabled={broadcasting || !broadcastMsg.trim()}
+                  disabled={broadcasting || !broadcastMsg.trim() || broadcastMsg.length >= 280}
                 >
                   {broadcasting ? <ActivityIndicator color={C.text} /> : (
                     <>
@@ -1739,6 +1748,22 @@ export default function RunDetailScreen() {
                     </Pressable>
                   );
                 })}
+                {/* No-preference / skip option so users are never trapped */}
+                <Pressable
+                  onPress={() => {
+                    setShowPaceGroupSheet(false);
+                    doJoin();
+                  }}
+                  style={{
+                    flexDirection: "row", alignItems: "center", justifyContent: "center",
+                    borderRadius: 14, borderWidth: 1, borderStyle: "dashed",
+                    borderColor: C.border, padding: 14, marginBottom: 4, gap: 6,
+                  }}
+                >
+                  <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textSecondary }}>
+                    No preference — skip
+                  </Text>
+                </Pressable>
               </ScrollView>
               <Pressable
                 style={{ marginTop: 16, backgroundColor: pendingJoinPaceGroup ? C.primary : C.surface, borderRadius: 14, paddingVertical: 15, alignItems: "center", opacity: pendingJoinPaceGroup ? 1 : 0.5 }}

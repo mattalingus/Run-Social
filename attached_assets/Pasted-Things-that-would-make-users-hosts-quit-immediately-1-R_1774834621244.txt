@@ -1,0 +1,54 @@
+Things that would make users/hosts quit immediately
+1. Removed crew members can still join (and complete) runs they were registered for
+server/storage.ts:3670 — removeCrewMember only deletes from crew_members. It never touches run_participants. So a member you kicked is still on your crew run's leaderboard, still gets completion credit, still shows in live tracking. That's embarrassing for a crew host and infuriating when you notice it.
+
+2. Non-members can join crew runs if they get the run ID
+server/routes.ts:1334 — The join endpoint has no crew membership check. It checks run.crew_id to see if a crew run restriction message should be shown elsewhere, but joinRun() itself will accept anyone. If a non-member has a link (via share, notification, deep link), they can join silently.
+
+3. Crew disbanded mid-run — nobody gets told, runs become orphaned
+server/routes.ts:2305 — Disbanding deletes the crew row. The associated runs stay in the DB with a now-dead crew_id. Active participants are still registered, live tracking still works technically, but the run is now in a weird ghost state. No notifications sent to any participants. They finish the run, try to go back to the crew tab — it's gone with no explanation.
+
+4. Owner leaves crew — new owner never gets notified
+server/storage.ts:3691 — The code correctly promotes the oldest member to owner. But that new owner gets zero notification. They'll find out randomly when they open the crew tab and notice they now have admin controls. No "You're now the crew chief of Dawn Patrol" push or in-app message.
+
+5. Kicking a member mid-live run — no signal to them at all
+They keep seeing the leaderboard, keep tracking, finish the run, their stats count. Nothing tells them they were removed. They might post about finishing the crew run while the host is confused why they're still showing up.
+
+Things that would cause confusion and frustration
+6. Re-inviting a removed member silently does nothing
+server/storage.ts:3656 — INSERT ... ON CONFLICT DO NOTHING. If you remove Bob and try to invite him again, the invite fires, you get a success response, but Bob never sees the invite (the old removed row conflicts and is skipped). Host thinks invite went out. Bob is waiting. Neither knows.
+
+7. Muting a crew's chat doesn't stop notifications
+server/routes.ts notification logic — The push filter checks u.notif_crew_activity (global setting), not the per-crew mute flag. So you mute the Tuesday Crew chat, go to bed, and still get buzzed every time someone posts. This one specifically will cause users to turn off all notifications app-wide, which is worse.
+
+
+9. Accepting a crew invite when the crew is at capacity gives a confusing error
+routes.ts:2186 — The capacity check throws MEMBER_CAP_REACHED but the frontend doesn't distinguish this from a generic error. User sees a vague message, doesn't know if it's a network issue or if the crew is full. No upgrade prompt, no "crew is full" explanation.
+
+10. No pagination on crew members — 100+ member crews will be slow
+storage.ts:3631 — getCrewById fetches every member row with no LIMIT. 200 members = 200 rows serialized, sent over the wire, rendered. On a slow connection that's a dead screen with a spinner. And there's no way to search within the members list.
+
+11. Leaving a crew doesn't remove you from future crew runs
+storage.ts:3702 — Leaves only remove from crew_members. You're still in run_participants for every upcoming crew run. You'll still get reminders, still show up on RSVPs. The host sees you as a registrant even though you've left. Confusing for everyone.
+
+12. Ownership transfer has a race condition
+storage.ts:3691 — It picks the oldest member by joined_at with LIMIT 1. If two people leave simultaneously, both queries could see the same "next owner" and try to promote them. No locking. Minor risk but worth noting for active large crews.
+
+UX gaps that feel unpolished
+13. "Requested" vs "Invited" look identical in the invite sheet
+crew.tsx:577 — The badge says "Requested" (orange) for both user-initiated join requests and host-initiated invites. A host inviting someone sees the same orange indicator whether they invited them or the user knocked themselves. No way to tell the difference.
+
+14. No real-time member count
+crew-profile/[id].tsx:46 — No refetchInterval, no stale time. If you're looking at a crew profile and 3 people join while you're reading, the count stays the same until you navigate away and back.
+
+15. No filter or search within crew members list
+For a crew with 60 members, there's no search, no filter by role. Scrolling through 60 avatars to find one person to remove or message is painful.
+
+16. No indication of who the crew chief is in the run detail screen
+When a crew member is on the run detail page, it shows the host's name but not that they're the crew chief. If the crew chief changes (via owner transfer), the run host label goes stale.
+
+17. Crew run in feed — no "crew members only" lock indicator before tapping
+A public discovery of a run with crew_id set shows up in the feed normally. Non-member taps it, gets the gated screen. That's a dead-end tap with no upfront signal. Should show a lock icon or "Crew: [name]" badge on the run card.
+
+18. Crew run rankings stale and uncached
+routes.ts:2080 — Rankings recalculate live from raw run data on every request, no caching layer. With many crews this will be slow. And the frontend likely caches the result, so you can complete a run and not see your crew move up for a while.

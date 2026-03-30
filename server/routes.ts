@@ -1544,7 +1544,10 @@ async function go(e){
   app.post("/api/runs/:id/complete", requireAuth, async (req, res) => {
     try {
       const { milesLogged } = req.body;
-      const miles = parseFloat(milesLogged) || 3;
+      const miles = parseFloat(milesLogged);
+      if (!isFinite(miles) || miles <= 0) {
+        return res.status(400).json({ message: "Miles logged must be a positive number" });
+      }
       const result = await storage.confirmRunCompletion(req.params.id as string, req.session.userId!, miles);
       res.json({ success: result.success });
 
