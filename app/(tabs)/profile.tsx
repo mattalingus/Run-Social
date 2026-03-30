@@ -429,13 +429,11 @@ function ProfileScreenInner() {
   const { data: soloRuns = [] } = useQuery<SoloRunItem[]>({
     queryKey: ["/api/solo-runs"],
     enabled: !!user,
-    staleTime: 30_000,
   });
 
   const { data: starredRuns = [] } = useQuery<SoloRunItem[]>({
     queryKey: ["/api/solo-runs/starred"],
     enabled: !!user,
-    staleTime: 30_000,
   });
 
   const actStats = React.useMemo(() => {

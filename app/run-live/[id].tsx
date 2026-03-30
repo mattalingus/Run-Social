@@ -70,6 +70,7 @@ export default function RunLiveScreen() {
     phase,
     elapsed,
     displayDist,
+    userLocation,
     routePathRef,
     totalDistRef,
     elapsedRef,
@@ -96,6 +97,7 @@ export default function RunLiveScreen() {
   const [tagAlongSending, setTagAlongSending] = useState<string | null>(null); // targetUserId being requested
   const [secsAgo, setSecsAgo] = useState(0);
   const lastFetchedRef = useRef<number>(Date.now());
+  const [isFollowing, setIsFollowing] = useState(true);
 
   // ── Server data ───────────────────────────────────────────────────────────
 
@@ -267,7 +269,7 @@ export default function RunLiveScreen() {
       }
     }
     liveActivityStartedRef.current = false;
-    await startTracking(id!, run?.activity_type ?? "run");
+    await startTracking(id!, run?.activity_type ?? "run", user?.id);
     const actType = ((run?.activity_type ?? "run") as "run" | "ride" | "walk");
     LiveActivity.start({
       elapsedSeconds: 0,
@@ -317,17 +319,28 @@ export default function RunLiveScreen() {
                 activityType: (run?.activity_type ?? "run") as "run" | "ride" | "walk",
               });
             }
-            try {
-              await apiRequest("POST", `/api/runs/${id}/runner-finish`, {
-                finalDistance: totalDistRef.current,
-                finalPace,
-              });
+            let lastErr: any;
+            let saved = false;
+            for (let attempt = 0; attempt < 3; attempt++) {
+              try {
+                if (attempt > 0) await new Promise((r) => setTimeout(r, 2000 * attempt));
+                await apiRequest("POST", `/api/runs/${id}/runner-finish`, {
+                  finalDistance: totalDistRef.current,
+                  finalPace,
+                });
+                saved = true;
+                break;
+              } catch (e: any) {
+                lastErr = e;
+              }
+            }
+            if (saved) {
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
               resetTracking();
               qc.invalidateQueries({ queryKey: ["/api/runs"] });
               router.replace(`/run-results/${id}?autoShare=1`);
-            } catch (e: any) {
-              Alert.alert("Error", e.message || "Could not save run");
+            } else {
+              Alert.alert("Error", lastErr?.message || "Could not save run. Please try again.");
               recoverToActive();
               setSaving(false);
             }
@@ -400,6 +413,18 @@ export default function RunLiveScreen() {
     const interval = setInterval(fetchMessages, 5000);
     return () => clearInterval(interval);
   }, [fetchMessages]);
+
+  // Map auto-follow — animate to user position on Android when isFollowing
+  useEffect(() => {
+    if (Platform.OS !== "web" && Platform.OS !== "ios" && isFollowing && userLocation && phase === "active") {
+      mapRef.current?.animateToRegion({
+        latitude: userLocation.latitude,
+        longitude: userLocation.longitude,
+        latitudeDelta: 0.004,
+        longitudeDelta: 0.004,
+      }, 600);
+    }
+  }, [userLocation, isFollowing, phase]);
 
   const handleSendMessage = async () => {
     if (!messageInput.trim() || !id || !user) return;
@@ -543,6 +568,8 @@ export default function RunLiveScreen() {
                 initialRegion={initialRegion}
                 showsUserLocation
                 showsMyLocationButton={false}
+                followsUserLocation={Platform.OS === "ios" && isFollowing && phase === "active"}
+                onPanDrag={() => { if (isFollowing) setIsFollowing(false); }}
               >
                 {runPin && (
                   <Circle
@@ -591,6 +618,26 @@ export default function RunLiveScreen() {
                   Map not available on web
                 </Text>
               </View>
+            )}
+
+            {/* Back-to-me FAB — shown when user has panned away during active tracking */}
+            {phase === "active" && !isFollowing && Platform.OS !== "web" && (
+              <Pressable
+                style={s.backToMeBtn}
+                onPress={() => {
+                  setIsFollowing(true);
+                  if (Platform.OS !== "ios" && userLocation) {
+                    mapRef.current?.animateToRegion({
+                      latitude: userLocation.latitude,
+                      longitude: userLocation.longitude,
+                      latitudeDelta: 0.004,
+                      longitudeDelta: 0.004,
+                    }, 600);
+                  }
+                }}
+              >
+                <Feather name="navigation" size={16} color={C.primary} />
+              </Pressable>
             )}
 
             {presentToast && (
@@ -939,6 +986,14 @@ const s = StyleSheet.create({
     borderWidth: 2, borderColor: "#fff",
   },
   runnerDotText: { fontFamily: "Outfit_700Bold", fontSize: 12, color: "#fff" },
+  backToMeBtn: {
+    position: "absolute", bottom: 12, right: 12,
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
+    alignItems: "center", justifyContent: "center",
+    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4,
+    elevation: 4,
+  },
   toast: {
     position: "absolute", top: 12, alignSelf: "center",
     flexDirection: "row", alignItems: "center", gap: 6,

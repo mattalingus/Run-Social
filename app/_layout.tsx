@@ -129,27 +129,53 @@ function RootLayoutNav() {
     recoveryCheckedForUser.current = user.id;
     (async () => {
       try {
-        const key = `paceup_active_run_${user.id}`;
-        const raw = await AsyncStorage.getItem(key);
-        if (!raw) return;
-        const data = JSON.parse(raw);
-        const ts = new Date(data.timestamp).getTime();
-        const age = Number.isFinite(ts) ? Date.now() - ts : Infinity;
-        if (age > 24 * 60 * 60 * 1000) {
-          await AsyncStorage.removeItem(key);
-          return;
+        // Solo run recovery
+        const soloKey = `paceup_active_run_${user.id}`;
+        const soloRaw = await AsyncStorage.getItem(soloKey);
+        if (soloRaw) {
+          const data = JSON.parse(soloRaw);
+          const ts = new Date(data.timestamp).getTime();
+          const age = Number.isFinite(ts) ? Date.now() - ts : Infinity;
+          if (age > 24 * 60 * 60 * 1000) {
+            await AsyncStorage.removeItem(soloKey);
+          } else {
+            const dist = (data.distanceMi ?? 0).toFixed(2);
+            const mins = Math.floor((data.durationSeconds ?? 0) / 60);
+            const type = data.activityType === "ride" ? "ride" : data.activityType === "walk" ? "walk" : "run";
+            Alert.alert(
+              "Recover your last run?",
+              `It looks like PaceUp was closed while you were tracking a ${type} (${dist} mi, ${mins} min).`,
+              [
+                { text: "Discard", style: "destructive", onPress: () => AsyncStorage.removeItem(soloKey).catch(() => {}) },
+                { text: "Recover", onPress: () => router.push("/run-tracking?recover=1") },
+              ]
+            );
+            return;
+          }
         }
-        const dist = (data.distanceMi ?? 0).toFixed(2);
-        const mins = Math.floor((data.durationSeconds ?? 0) / 60);
-        const type = data.activityType === "ride" ? "ride" : data.activityType === "walk" ? "walk" : "run";
-        Alert.alert(
-          "Recover your last run?",
-          `It looks like PaceUp was closed while you were tracking a ${type} (${dist} mi, ${mins} min).`,
-          [
-            { text: "Discard", style: "destructive", onPress: () => AsyncStorage.removeItem(key).catch(() => {}) },
-            { text: "Recover", onPress: () => router.push("/run-tracking?recover=1") },
-          ]
-        );
+
+        // Group run recovery
+        const groupRaw = await AsyncStorage.getItem("paceup_group_active_run");
+        if (groupRaw) {
+          const data = JSON.parse(groupRaw);
+          const ts = new Date(data.timestamp).getTime();
+          const age = Number.isFinite(ts) ? Date.now() - ts : Infinity;
+          if (age > 4 * 60 * 60 * 1000) {
+            await AsyncStorage.removeItem("paceup_group_active_run");
+          } else if (data.runId) {
+            const dist = (data.distanceMi ?? 0).toFixed(2);
+            const mins = Math.floor((data.durationSeconds ?? 0) / 60);
+            const type = data.activityType === "ride" ? "ride" : data.activityType === "walk" ? "walk" : "run";
+            Alert.alert(
+              "Rejoin your group run?",
+              `It looks like PaceUp was closed while you were tracking a group ${type} (${dist} mi, ${mins} min).`,
+              [
+                { text: "Dismiss", style: "destructive", onPress: () => AsyncStorage.removeItem("paceup_group_active_run").catch(() => {}) },
+                { text: "Rejoin", onPress: () => router.push(`/run-live/${data.runId}`) },
+              ]
+            );
+          }
+        }
       } catch {}
     })();
   }, [user]);

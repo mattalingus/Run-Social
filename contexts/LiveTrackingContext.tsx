@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Alert, Linking, Platform } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 import {
   GROUP_LOCATION_TASK,
@@ -12,7 +13,7 @@ import { apiRequest } from "@/lib/query-client";
 
 type Phase = "idle" | "active" | "finishing";
 
-interface LiveTrackingContextValue {
+export interface LiveTrackingContextValue {
   runId: string | null;
   activityType: "run" | "ride" | "walk";
   phase: Phase;
@@ -21,10 +22,11 @@ interface LiveTrackingContextValue {
   isMinimized: boolean;
   presentConfirmed: boolean;
   hasBeenPresent: boolean;
+  userLocation: { latitude: number; longitude: number } | null;
   routePathRef: React.MutableRefObject<Array<{ latitude: number; longitude: number }>>;
   totalDistRef: React.MutableRefObject<number>;
   elapsedRef: React.MutableRefObject<number>;
-  startTracking: (runId: string, activityType: "run" | "ride" | "walk") => Promise<void>;
+  startTracking: (runId: string, activityType: "run" | "ride" | "walk", userId?: string) => Promise<void>;
   beginFinishing: () => void;
   resetTracking: () => void;
   recoverToActive: () => void;
@@ -60,8 +62,11 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
   const [presentConfirmed, setPresentConfirmed] = useState(false);
   const [hasBeenPresent, setHasBeenPresent] = useState(false);
 
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const persistIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const locationSubRef = useRef<Location.LocationSubscription | null>(null);
   const webWatchIdRef = useRef<number | null>(null);
   const lastCoordRef = useRef<{ latitude: number; longitude: number } | null>(null);
@@ -70,6 +75,8 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
   const routePathRef = useRef<Array<{ latitude: number; longitude: number }>>([]);
   const markedPresentRef = useRef(false);
   const activeRunIdRef = useRef<string | null>(null);
+  const activeUserIdRef = useRef<string | null>(null);
+  const activeActivityTypeRef = useRef<"run" | "ride" | "walk">("run");
 
   useEffect(() => {
     if (phase === "active") {
@@ -110,6 +117,7 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
 
   function handleCoord(latitude: number, longitude: number) {
     routePathRef.current = [...routePathRef.current, { latitude, longitude }];
+    setUserLocation({ latitude, longitude });
     if (lastCoordRef.current) {
       const d = haversineMi(
         lastCoordRef.current.latitude,
@@ -200,9 +208,13 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
       clearInterval(pingIntervalRef.current);
       pingIntervalRef.current = null;
     }
+    if (persistIntervalRef.current) {
+      clearInterval(persistIntervalRef.current);
+      persistIntervalRef.current = null;
+    }
   }
 
-  async function startTracking(rid: string, type: "run" | "ride" | "walk") {
+  async function startTracking(rid: string, type: "run" | "ride" | "walk", userId?: string) {
     lastCoordRef.current = null;
     totalDistRef.current = 0;
     elapsedRef.current = 0;
@@ -210,9 +222,12 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
     markedPresentRef.current = false;
     setDisplayDist(0);
     setElapsed(0);
+    setUserLocation(null);
     setPresentConfirmed(false);
     setRunId(rid);
     activeRunIdRef.current = rid;
+    activeUserIdRef.current = userId ?? null;
+    activeActivityTypeRef.current = type;
     setActivityType(type);
     setIsMinimized(false);
     setPhase("active");
@@ -238,15 +253,37 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
         await pingServer(lastCoordRef.current.latitude, lastCoordRef.current.longitude);
       }
     }, 10000);
+
+    // Persist tracking state to AsyncStorage every 10s for crash recovery
+    if (Platform.OS !== "web") {
+      persistIntervalRef.current = setInterval(() => {
+        AsyncStorage.setItem("paceup_group_active_run", JSON.stringify({
+          runId: activeRunIdRef.current,
+          activityType: activeActivityTypeRef.current,
+          userId: activeUserIdRef.current,
+          distanceMi: totalDistRef.current,
+          durationSeconds: elapsedRef.current,
+          timestamp: new Date().toISOString(),
+        })).catch(() => {});
+      }, 10000);
+    }
   }
 
   function beginFinishing() {
     setPhase("finishing");
     clearLocationAndPing();
+    // Clear crash recovery key when user intentionally finishes
+    if (Platform.OS !== "web") {
+      AsyncStorage.removeItem("paceup_group_active_run").catch(() => {});
+    }
   }
 
   function resetTracking() {
     clearLocationAndPing();
+    // Clear crash recovery key
+    if (Platform.OS !== "web") {
+      AsyncStorage.removeItem("paceup_group_active_run").catch(() => {});
+    }
     setPhase("idle");
     setRunId(null);
     activeRunIdRef.current = null;
@@ -260,6 +297,7 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
     markedPresentRef.current = false;
     setHasBeenPresent(false);
     setPresentConfirmed(false);
+    setUserLocation(null);
   }
 
   function recoverToActive() {
@@ -285,6 +323,7 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
         isMinimized,
         presentConfirmed,
         hasBeenPresent,
+        userLocation,
         routePathRef,
         totalDistRef,
         elapsedRef,

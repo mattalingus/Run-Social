@@ -3,6 +3,7 @@ import type { Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { scheduleWeeklySummary, scheduleStreakAtRiskCheck } from "./weekly-summary";
 import { scheduleLateStartMonitor } from "./late-start-monitor";
+import { scheduleGhostRunCleanup } from "./ghost-run-cleanup";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -266,6 +267,7 @@ function setupErrorHandler(app: express.Application) {
   scheduleWeeklySummary();
   scheduleStreakAtRiskCheck();
   scheduleLateStartMonitor();
+  scheduleGhostRunCleanup();
 
   const port = parseInt(process.env.PORT || "5000", 10);
   server.listen(

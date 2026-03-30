@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -41,6 +41,8 @@ export default function UserProfileScreen() {
   const s = useMemo(() => makeStyles(C), [C]);
   const { user: authUser } = useAuth();
   const qc = useQueryClient();
+  const [photoError, setPhotoError] = useState(false);
+  const [showAllAchievements, setShowAllAchievements] = useState(false);
 
   const topInset = Platform.OS === "web" ? 67 : insets.top;
 
@@ -123,8 +125,12 @@ export default function UserProfileScreen() {
         ) : profile ? (
           <>
             <View style={s.avatarWrap}>
-              {resolveImgUrl(profile.photo_url) ? (
-                <ExpoImage source={{ uri: resolveImgUrl(profile.photo_url)! }} style={s.avatar} />
+              {resolveImgUrl(profile.photo_url) && !photoError ? (
+                <ExpoImage
+                  source={{ uri: resolveImgUrl(profile.photo_url)! }}
+                  style={s.avatar}
+                  onError={() => setPhotoError(true)}
+                />
               ) : (
                 <View style={[s.avatar, s.avatarFallback]}>
                   <Text style={s.avatarLetter}>{profile.name?.[0]?.toUpperCase()}</Text>
@@ -191,7 +197,7 @@ export default function UserProfileScreen() {
               <View style={s.section}>
                 <Text style={s.sectionTitle}>Achievements</Text>
                 <View style={s.badgesRow}>
-                  {earned.slice(0, 6).map((slug) => {
+                  {(showAllAchievements ? earned : earned.slice(0, 6)).map((slug) => {
                     const ach = ACHIEVEMENTS.find((a) => a.slug === slug);
                     if (!ach) return null;
                     return (
@@ -202,6 +208,16 @@ export default function UserProfileScreen() {
                     );
                   })}
                 </View>
+                {earned.length > 6 && (
+                  <Pressable
+                    style={s.showAllBtn}
+                    onPress={() => setShowAllAchievements((v) => !v)}
+                  >
+                    <Text style={s.showAllText}>
+                      {showAllAchievements ? "Show Less" : `Show All ${earned.length}`}
+                    </Text>
+                  </Pressable>
+                )}
               </View>
             )}
           </>
@@ -280,6 +296,8 @@ function makeStyles(C: ColorScheme) {
     },
     badgeEmoji: { fontSize: 22 },
     badgeLabel: { fontSize: 10, fontFamily: "Outfit_400Regular", color: C.textSecondary, marginTop: 4, textAlign: "center" },
+    showAllBtn: { alignSelf: "center", marginTop: 12, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 12, borderWidth: 1, borderColor: C.border },
+    showAllText: { fontSize: 13, fontFamily: "Outfit_600SemiBold", color: C.primary },
     errorText: { fontSize: 16, fontFamily: "Outfit_400Regular", color: C.textSecondary, marginTop: 60 },
   });
 }

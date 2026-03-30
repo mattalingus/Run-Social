@@ -475,7 +475,29 @@ async function go(e){
 
   app.get("/api/users/:id/profile", requireAuth, async (req, res) => {
     try {
-      const profile = await storage.getPublicUserProfile(req.params.id as string);
+      const targetId = req.params.id as string;
+      const requesterId = req.session.userId!;
+
+      // Self — always allowed
+      if (targetId !== requesterId) {
+        // Check the target user's privacy setting
+        const privacyRow = await pool.query(
+          `SELECT profile_privacy FROM users WHERE id = $1`,
+          [targetId]
+        );
+        if (!privacyRow.rows.length) return res.status(404).json({ message: "User not found" });
+        const privacy = privacyRow.rows[0].profile_privacy ?? "public";
+
+        if (privacy === "private") {
+          // Check friendship
+          const friendship = await storage.getFriendshipStatus(requesterId, targetId);
+          if (friendship.status !== "friends") {
+            return res.status(403).json({ message: "This profile is private" });
+          }
+        }
+      }
+
+      const profile = await storage.getPublicUserProfile(targetId);
       if (!profile) return res.status(404).json({ message: "User not found" });
       res.json(profile);
     } catch (e: any) {
