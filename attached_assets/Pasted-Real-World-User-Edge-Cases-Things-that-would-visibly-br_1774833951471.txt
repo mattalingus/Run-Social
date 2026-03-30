@@ -1,0 +1,47 @@
+Real-World User Edge Cases
+Things that would visibly break for users
+1. Double-tapping "Join" sends two requests — app/run/[id].tsx:487
+The setJoining(true) flag prevents the button rendering again but the first request is already in-flight. Tap fast enough and you fire two join requests. Host sees two join notifications. Depending on DB constraint, second either errors silently or creates a duplicate.
+
+2. Leave run fails silently — app/run/[id].tsx:533-547
+User confirms "Leave Run", request fails, nothing happens — no error shown. They think they've left but are still a participant. No error handling on that apiRequest call at all.
+
+3. Run fills up between "I can join" check and actual join — server/routes.ts:1411-1413
+The capacity check and the join are two separate DB operations. If 19/20 spots, user A and B both see the button, user A gets the last spot, user B hits a confusing error that wasn't shown before they tapped.
+
+4. Completing a run defaults to 3 miles with no warning — run/[id].tsx:560, routes.ts:1519
+Both sides do parseFloat(miles || "3") / parseFloat(milesLogged) || 3. If the field is cleared or somehow invalid, it silently logs 3 miles. User runs 0.5 miles, logs it wrong, stats are off, and they're never told.
+
+5. Host marks run "Complete" but participants still see "Join Live Run" — run/[id].tsx:292
+is_active and is_completed are fetched once. No re-fetch when run state changes. Participants have to pull-to-refresh manually to see the rate/complete screen.
+
+6. Past runs show in the discover feed — app/(tabs)/index.tsx:1640-1663
+Feed filters by distance, pace, style — but not by whether the run has already happened. User sees a run, taps it, gets "This event has already taken place." Frustrating and common.
+
+7. Empty pace group modal with no escape — run/[id].tsx:1687
+If a crew run has no pace groups defined, the "Pick Your Pace Group" modal opens with an empty list. No "skip" or "cancel" visible in that state. User is trapped.
+
+8. Broadcast message limit is server-only — routes.ts:1498
+The 280 char limit is enforced on the backend only. No character counter in the UI. Host types a long message, hits send, gets a cryptic error telling them to cut it.
+
+9. Miles-logged input has no min/max validation
+User could submit "0" or "-5" miles for a completed run. Server accepts it.
+
+Things that would confuse users without obviously breaking
+10. Run that just passed is joinable for 2 hours — routes.ts:1358
+The 2-hour grace window is silent — there's no label like "This run ended 45 mins ago, still joinable." Users don't know why they can join a "past" run.
+
+11. Stale notification tokens — routes.ts:1376
+User reinstalls app, gets a new push token. Old token still in DB. They never receive notifications again and have no way to know — the failure is completely silent.
+
+12. Username can be pure emoji — routes.ts:96
+The regex [^\s@]{2,30} allows "🏃🏃" as a valid username. Search, @mention, display in small spaces — all potentially broken.
+
+13. Pace group with max < min can be created — create-run/index.tsx:147
+No client-side validation that minPace < maxPace. Inversed pace groups make the run appear in wrong search results (or none at all).
+
+14. Live tracking goes offline silently — run-live/[id].tsx:106
+5-second poll to get the live leaderboard. If network drops in a tunnel, the leaderboard just freezes. No "last updated X seconds ago" indicator.
+
+15. Long run titles overflow the Join/Leave buttons — run/[id].tsx:719
+No numberOfLines limit on the title Text. A 100-char title can push action buttons off screen.
