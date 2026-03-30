@@ -87,6 +87,7 @@ export default function RunDetailScreen() {
   const qc = useQueryClient();
   const pillPulse = useRef(new Animated.Value(1)).current;
   const wasLiveRef = useRef(false);
+  const joiningRef = useRef(false);
   const [joining, setJoining] = useState(false);
   const [fullToast, setFullToast] = useState(false);
   const [requestingJoin, setRequestingJoin] = useState(false);
@@ -352,6 +353,13 @@ export default function RunDetailScreen() {
     liveTracking.minimize();
   }, [isLive]);
 
+  // Poll run state every 15 s for participants so the screen auto-transitions
+  // when the host marks the run complete — without needing a manual pull-to-refresh.
+  useEffect(() => {
+    if (!isParticipant || isHost || run?.is_completed) return;
+    const timer = setInterval(() => { refetch(); }, 15_000);
+    return () => clearInterval(timer);
+  }, [isParticipant, isHost, run?.is_completed]);
 
   function handleOpenEdit() {
     if (!run) return;
@@ -484,6 +492,9 @@ export default function RunDetailScreen() {
       setShowPaceGroupSheet(true);
       return;
     }
+    // Double-tap guard: ref is synchronous, state update is not
+    if (joiningRef.current) return;
+    joiningRef.current = true;
     setJoining(true);
     try {
       const body_payload: Record<string, any> = {};
@@ -504,6 +515,7 @@ export default function RunDetailScreen() {
       Alert.alert("Can't Join", e.message || `Unable to join ${run?.activity_type === "ride" ? "ride" : run?.activity_type === "walk" ? "walk" : "run"}`);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
+      joiningRef.current = false;
       setJoining(false);
     }
   }
@@ -531,16 +543,26 @@ export default function RunDetailScreen() {
   }
 
   async function handleLeave() {
-    Alert.alert(`Leave ${run?.activity_type === "ride" ? "Ride" : run?.activity_type === "walk" ? "Walk" : "Run"}`, `Are you sure you want to leave this ${run?.activity_type === "ride" ? "ride" : run?.activity_type === "walk" ? "walk" : "run"}?`, [
+    const actLabel = run?.activity_type === "ride" ? "Ride" : run?.activity_type === "walk" ? "Walk" : "Run";
+    Alert.alert(`Leave ${actLabel}`, `Are you sure you want to leave this ${actLabel.toLowerCase()}?`, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Leave",
         style: "destructive",
         onPress: async () => {
-          await apiRequest("POST", `/api/runs/${id}/leave`);
-          qc.invalidateQueries({ queryKey: ["/api/runs", id, "participants"] });
-          qc.invalidateQueries({ queryKey: ["/api/runs"] });
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          try {
+            const res = await apiRequest("POST", `/api/runs/${id}/leave`);
+            if (!res.ok) {
+              const body = await res.json().catch(() => ({}));
+              throw new Error(body.message || "Unable to leave");
+            }
+            qc.invalidateQueries({ queryKey: ["/api/runs", id, "participants"] });
+            qc.invalidateQueries({ queryKey: ["/api/runs"] });
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          } catch (e: any) {
+            Alert.alert("Couldn't Leave", e.message || "Something went wrong. You're still in this run.");
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          }
         },
       },
     ]);
@@ -716,7 +738,7 @@ export default function RunDetailScreen() {
           </View>
         </View>
 
-        <Text style={styles.title}>{run.title}</Text>
+        <Text style={styles.title} numberOfLines={2} ellipsizeMode="tail">{run.title}</Text>
 
         <Pressable
           style={({ pressed }) => [styles.hostCard, { opacity: pressed ? 0.8 : 1 }]}

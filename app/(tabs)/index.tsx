@@ -1664,7 +1664,9 @@ export default function DiscoverScreen() {
         appliedTimes.includes(runTimeSlot(runHour));
 
       const matchActivity = (r.activity_type ?? "run") === activityFilter;
-      return matchSearch && matchPace && matchDist && matchProx && matchStyle && matchVisibility && matchDay && matchTime && matchActivity;
+      // Hide runs that ended more than 2 hours ago (mirrors the server-side grace window)
+      const matchFuture = !r.date || (Date.now() - new Date(r.date).getTime()) < 2 * 60 * 60 * 1000;
+      return matchSearch && matchPace && matchDist && matchProx && matchStyle && matchVisibility && matchDay && matchTime && matchActivity && matchFuture;
     });
 
     switch (sortOption) {
