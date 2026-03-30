@@ -115,7 +115,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!email || !password || !firstName || !lastName || !username) return res.status(400).json({ message: "All fields required" });
       if (gender && !["Man", "Woman", "Prefer not to say"].includes(gender)) return res.status(400).json({ message: "Invalid gender selection" });
       if (password.length < 6) return res.status(400).json({ message: "Password must be at least 6 characters" });
-      if (!/^[^\s@]{2,30}$/.test(username)) return res.status(400).json({ message: "Username cannot contain spaces or @ and must be 2–30 characters" });
+      if (!/^[^\s@]{2,30}$/.test(username) || !/[a-zA-Z0-9]/.test(username)) return res.status(400).json({ message: "Username must be 2–30 characters, contain no spaces or @, and include at least one letter or number" });
       const existing = await storage.getUserByEmail(email);
       if (existing) return res.status(400).json({ message: "Email already in use" });
       const existingUsername = await storage.getUserByUsername(username);

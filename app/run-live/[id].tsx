@@ -94,6 +94,8 @@ export default function RunLiveScreen() {
   const [promotedToHost, setPromotedToHost] = useState(false);
   const wasHostRef = useRef(false);
   const [tagAlongSending, setTagAlongSending] = useState<string | null>(null); // targetUserId being requested
+  const [secsAgo, setSecsAgo] = useState(0);
+  const lastFetchedRef = useRef<number>(Date.now());
 
   // ── Server data ───────────────────────────────────────────────────────────
 
@@ -114,6 +116,21 @@ export default function RunLiveScreen() {
       return res.json();
     },
   });
+
+  // Track liveState fetch time and compute staleness every second
+  useEffect(() => {
+    if (liveState !== undefined) {
+      lastFetchedRef.current = Date.now();
+      setSecsAgo(0);
+    }
+  }, [liveState]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSecsAgo(Math.floor((Date.now() - lastFetchedRef.current) / 1000));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Restore minimized state when screen mounts
   useEffect(() => {
@@ -666,6 +683,9 @@ export default function RunLiveScreen() {
 
           {showLeaderboard && (
             <View style={s.leaderboardPanel}>
+              <Text style={[s.leaderboardStaleness, secsAgo >= 30 ? { color: "#FF6B6B" } : secsAgo >= 10 ? { color: "#F5A623" } : { color: C.textMuted }]}>
+                {secsAgo === 0 ? "Live" : `Last updated ${secsAgo}s ago`}
+              </Text>
               {leaderboardRows.length === 0 ? (
                 <Text style={s.leaderboardEmpty}>No runners tracked yet</Text>
               ) : (
@@ -980,6 +1000,10 @@ const s = StyleSheet.create({
   leaderboardEmpty: {
     fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textMuted,
     textAlign: "center", padding: 16,
+  },
+  leaderboardStaleness: {
+    fontFamily: "Outfit_400Regular", fontSize: 11,
+    textAlign: "right", paddingHorizontal: 14, paddingTop: 8, paddingBottom: 2,
   },
   leaderboardRow: {
     flexDirection: "row", alignItems: "center", gap: 10,

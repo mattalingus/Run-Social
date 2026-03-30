@@ -290,6 +290,8 @@ export default function RunDetailScreen() {
   const hasPendingRequest = !!myParticipation && myParticipation.status === "pending";
   const isPastRun = run ? new Date(run.date) < new Date() : false;
   const isRunStartingSoon = run ? (new Date(run.date).getTime() - Date.now() < 2 * 60 * 60 * 1000) : false;
+  const isStillJoinable = run ? (isPastRun && !run.is_completed && new Date(run.date).getTime() > Date.now() - 2 * 60 * 60 * 1000) : false;
+  const minutesSinceRun = run ? Math.floor((Date.now() - new Date(run.date).getTime()) / 60000) : 0;
   const canRate = !!run?.is_completed && isParticipant && !isHost && !myRating;
   const hasConfirmed = myParticipation?.status === "confirmed";
   const isLive = !!run?.is_active && !run?.is_completed;
@@ -748,6 +750,15 @@ export default function RunDetailScreen() {
         </View>
 
         <Text style={styles.title} numberOfLines={2} ellipsizeMode="tail">{run.title}</Text>
+
+        {isStillJoinable && (
+          <View style={styles.stillJoinableRow}>
+            <Feather name="clock" size={13} color="#F5A623" />
+            <Text style={styles.stillJoinableTxt}>
+              Ended {minutesSinceRun < 60 ? `${minutesSinceRun}m` : `${Math.floor(minutesSinceRun / 60)}h ${minutesSinceRun % 60}m`} ago · Still joinable
+            </Text>
+          </View>
+        )}
 
         <Pressable
           style={({ pressed }) => [styles.hostCard, { opacity: pressed ? 0.8 : 1 }]}
@@ -1842,6 +1853,8 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   ratePrompt: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text, textAlign: "center", marginBottom: 8, marginTop: 4 },
   yourRunBadge: { backgroundColor: C.primaryMuted, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: C.primary + "44" },
   yourRunText: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.primary },
+  stillJoinableRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },
+  stillJoinableTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: "#F5A623" },
   infoGrid: { gap: 10, marginBottom: 16 },
   infoCard: { flexDirection: "row", alignItems: "flex-start", gap: 12, backgroundColor: C.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.border },
   infoValue: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text },

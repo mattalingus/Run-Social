@@ -4,7 +4,7 @@ import { Stack, router } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import * as Notifications from "@/lib/safeNotifications";
 import React, { useEffect, useRef } from "react";
-import { Alert, Platform } from "react-native";
+import { Alert, AppState, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
@@ -109,6 +109,17 @@ function RootLayoutNav() {
     if (!user) {
       pushRegistered.current = false;
     }
+  }, [user]);
+
+  // Re-register push token when app returns to foreground (replaces stale token)
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active" && user) {
+        registerPushToken(user.id);
+      }
+    });
+    return () => sub.remove();
   }, [user]);
 
   // Check for interrupted active run (crash recovery)

@@ -761,6 +761,10 @@ function RunCard({
   const spotsLeft = run.max_participants - run.participant_count;
   const badge = getHostBadge(run.host_hosted_runs);
   const isLiveNow = !!run.is_active && !run.is_completed;
+  const runMs = run.date ? new Date(run.date).getTime() : 0;
+  const nowMs = Date.now();
+  const isStillJoinableCard = runMs > 0 && runMs < nowMs && !run.is_completed && nowMs - runMs < 2 * 60 * 60 * 1000;
+  const minsAgoCard = runMs > 0 ? Math.floor((nowMs - runMs) / 60000) : 0;
   const pulseAnim = useRef(new Animated.Value(0.3)).current;
   const { data: weather } = useEventWeather(run.location_lat, run.location_lng, run.date);
 
@@ -858,8 +862,14 @@ function RunCard({
 
               <View style={s.cardMeta}>
                 <View style={s.metaItem}>
-                  <Feather name="calendar" size={11} color={C.textMuted} />
-                  <Text style={s.metaText}>{formatDate(run.date)} · {formatTime(run.date)}</Text>
+                  <Feather name="calendar" size={11} color={isStillJoinableCard ? "#F5A623" : C.textMuted} />
+                  {isStillJoinableCard ? (
+                    <Text style={[s.metaText, { color: "#F5A623", fontFamily: "Outfit_600SemiBold" }]}>
+                      Ended {minsAgoCard < 60 ? `${minsAgoCard}m` : `${Math.floor(minsAgoCard / 60)}h ${minsAgoCard % 60}m`} ago · Still joinable
+                    </Text>
+                  ) : (
+                    <Text style={s.metaText}>{formatDate(run.date)} · {formatTime(run.date)}</Text>
+                  )}
                 </View>
                 <View style={s.metaItem}>
                   <Feather name="map-pin" size={11} color={C.textMuted} />
