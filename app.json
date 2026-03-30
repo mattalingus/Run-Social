@@ -55,6 +55,7 @@
     },
     "android": {
       "package": "com.paceup",
+      "versionCode": 21,
       "minSdkVersion": 26,
       "adaptiveIcon": {
         "backgroundColor": "#080F0C",
@@ -132,7 +133,6 @@
         }
       ],
       "expo-audio",
-      "expo-av",
       "./plugins/with-live-activity",
       "./plugins/with-widget",
       "./plugins/with-android-widget",

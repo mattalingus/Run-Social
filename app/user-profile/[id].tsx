@@ -58,7 +58,6 @@ export default function UserProfileScreen() {
   }>({
     queryKey: ["/api/users", id, "profile"],
     enabled: !!id,
-    staleTime: 30000,
   });
 
   const { data: friendship } = useQuery<{
