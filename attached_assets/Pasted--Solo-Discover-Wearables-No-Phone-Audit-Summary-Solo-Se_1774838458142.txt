@@ -1,0 +1,42 @@
+## Solo, Discover, Wearables & No-Phone Audit — Summary
+
+### Solo Section
+
+1. **Stats AVG query runs on every solo run save** — `server/storage.ts:1361` — `recomputeUserAvgPace()` fires an aggregate on the user's full run history each time. Fine now, gets expensive fast.
+2. **PR tier uses 2–3 separate queries per save with no obvious indexes** — `server/storage.ts:1274-1296` — will slow down noticeably as users accumulate runs.
+3. **Soft delete inconsistency** — some queries filter `is_deleted IS NOT TRUE`, others don't. Deleted solo runs could still surface in stat queries that forget the check.
+4. **Mile splits not auto-calculated on wearable import** — stored as JSONB but only if explicitly provided. Wearable-imported runs just get total pace, no splits.
+5. **Same activity imported from two wearables = two solo run entries** — no cross-source deduplication. Garmin + Apple Health connected = every workout appears twice.
+6. **90-day re-sync re-attempts all old imports** — every sync re-fetches 90 days. Wasteful, and any activity near the boundary gets attempted repeatedly.
+
+---
+
+### Discover / Feed Section
+
+7. **Feed hard-capped at 200 public + 100 crew runs, no pagination** — newer runs don't appear when the cap fills. No infinite scroll, no offset.
+8. **Day/time filters are client-side only** — backend ignores them entirely. User filters to "Saturday mornings" but is still searching the same 200-run batch.
+10. **Past runs (up to 90 min old) still appear in feed** — user taps, gets "this event has already taken place."
+11. **"Nearest" sort happens client-side after fetching** — if the nearest run is result #201, the user never sees it.
+12. **"Crew" visibility filter not enforced on backend** — frontend sends `visibility: "crew"` but the server doesn't filter by crew membership in the main query.
+
+---
+
+### Wearables Section
+
+13. **Garmin token expiry = silent sync failure** — no refresh logic, no re-auth prompt. User just sees "0 imported" with no explanation.
+14. **`garminPendingTokens` is in-memory** — server restart during OAuth loses all pending states. User's auth flow breaks mid-connect.
+15. **Garmin tokens stored in plaintext** — `garmin_access_token` and `garmin_token_secret` sit unencrypted in the `users` table.
+16. **Garmin timezone not handled** — `startTimeInSeconds` treated as UTC. All activity times will be wrong for non-UTC users.
+17. **Apple Health / Health Connect — manual sync only** — no background sync, no auto-import when a workout ends on the watch. User has to remember to open the app and tap Sync.
+18. **`sourceName` (Apple Watch, Garmin Connect etc.) not stored as a queryable field** — only goes into the run title. Can't filter or query by device later.
+19. **Health Connect 60-second dedup window too aggressive** — two consecutive activities (warm-up + main run) within 60 seconds of each other get rejected as duplicates.
+20. **Strava is a button that does nothing** — shows a "coming soon" alert. No OAuth, no sync behind it. Looks unfinished.
+21. **Fitbit not in codebase at all.**
+22. **No Garmin webhook support** — all sync is pull-based. Garmin supports real-time push webhooks; not used.
+
+---
+
+### No-Phone / In-Person Check-In (New Feature Plan)
+
+23. **No mechanism for phone-less runners to get credit for group runs** — runner leaves phone in car, runs with the group, gets no stats, no leaderboard position, no completion credit.
+.
