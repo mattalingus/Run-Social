@@ -6,6 +6,8 @@ PaceUp is a mobile-first social running application designed to connect runners,
 ## User Preferences
 I prefer that the agent focuses on iterative development, delivering functional components rather than extensive, perfect solutions from the start. Prioritize clear, concise communication, and ask clarifying questions if anything is unclear. I also prefer that the agent provides regular updates on progress and potential challenges.
 
+**Always push an OTA update (`CI=1 EAS_SKIP_AUTO_FINGERPRINT=1 EXPO_TOKEN=$EXPO_TOKEN npx eas-cli@latest update --channel production --message "..."`) at the end of every completed task, before marking it done.** The user uses the App Store version of PaceUp and relies on OTA updates to see changes.
+
 ## System Architecture
 
 ### Frontend
