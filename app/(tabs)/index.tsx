@@ -686,6 +686,57 @@ function LiveCardExpansion({ runId }: { runId: string }) {
   );
 }
 
+// ─── Live Card Pulse Wrapper ──────────────────────────────────────────────────
+
+function LiveCardPulseWrapper({
+  isLive,
+  isExpanded,
+  children,
+}: {
+  isLive: boolean;
+  isExpanded: boolean;
+  children: React.ReactNode;
+}) {
+  const pulseAnim = useRef(new Animated.Value(0.3)).current;
+
+  useEffect(() => {
+    if (!isLive) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1, duration: 750, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 0.15, duration: 750, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [isLive]);
+
+  return (
+    <View style={{ position: "relative" }}>
+      {isLive && (
+        <Animated.View
+          style={{
+            position: "absolute",
+            top: -2, left: -2, right: -2, bottom: -2,
+            borderRadius: 16,
+            borderBottomLeftRadius: isExpanded ? 14 : 16,
+            borderBottomRightRadius: isExpanded ? 14 : 16,
+            borderWidth: 2,
+            borderColor: "#C0392B",
+            shadowColor: "#C0392B",
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 1,
+            shadowRadius: 10,
+            opacity: pulseAnim,
+          }}
+          pointerEvents="none"
+        />
+      )}
+      {children}
+    </View>
+  );
+}
+
 // ─── Weather helpers ──────────────────────────────────────────────────────────
 
 function wmoToEmoji(code: number): string {
@@ -744,6 +795,7 @@ function RunCard({
   isFriend,
   isCrew,
   walkthroughActive,
+  hidePulse,
 }: {
   run: Run;
   onPress: () => void;
@@ -753,6 +805,7 @@ function RunCard({
   isFriend?: boolean;
   walkthroughActive?: boolean;
   isCrew?: boolean;
+  hidePulse?: boolean;
 }) {
   const { C } = useTheme();
   const { user: cardUser } = useAuth();
@@ -782,7 +835,7 @@ function RunCard({
 
   return (
     <View style={{ position: "relative" }}>
-      {isLiveNow && (
+      {isLiveNow && !hidePulse && (
         <Animated.View style={[s.liveCardGlow, { opacity: pulseAnim }]} pointerEvents="none" />
       )}
       <View style={[s.card, isFriend && s.cardFriend, isCrew && s.cardCrew]}>
@@ -2006,32 +2059,37 @@ export default function DiscoverScreen() {
             </WalkthroughPulse>
             </View>
           }
-          renderItem={({ item, index }) => (
-            <View>
-              <WalkthroughPulse stepId={index === 0 ? "event-cards" : ""} style={{ borderRadius: 16 }}>
-              <RunCard
-                run={item}
-                distanceMi={userLocation ? distanceMap[item.id] : undefined}
-                isBookmarked={bookmarkedIds.has(item.id)}
-                isFriend={friendIdSet.has(item.host_id)}
-                isCrew={!!item.crew_id}
-                walkthroughActive={walkthroughActive}
-                onBookmark={user ? () => bookmarkMutation.mutate(item.id) : undefined}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  if (item.is_active && !item.is_completed) {
-                    setExpandedLiveId((prev) => prev === item.id ? null : item.id);
-                  } else {
-                    router.push(`/run/${item.id}`);
-                  }
-                }}
-              />
-              </WalkthroughPulse>
-              {item.is_active && !item.is_completed && expandedLiveId === item.id && (
-                <LiveCardExpansion runId={item.id} />
-              )}
-            </View>
-          )}
+          renderItem={({ item, index }) => {
+            const isLiveItem = !!item.is_active && !item.is_completed;
+            const isExpanded = isLiveItem && expandedLiveId === item.id;
+            return (
+              <LiveCardPulseWrapper isLive={isLiveItem} isExpanded={isExpanded}>
+                <WalkthroughPulse stepId={index === 0 ? "event-cards" : ""} style={{ borderRadius: 16 }}>
+                <RunCard
+                  run={item}
+                  distanceMi={userLocation ? distanceMap[item.id] : undefined}
+                  isBookmarked={bookmarkedIds.has(item.id)}
+                  isFriend={friendIdSet.has(item.host_id)}
+                  isCrew={!!item.crew_id}
+                  walkthroughActive={walkthroughActive}
+                  hidePulse={isLiveItem}
+                  onBookmark={user ? () => bookmarkMutation.mutate(item.id) : undefined}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    if (isLiveItem) {
+                      setExpandedLiveId((prev) => prev === item.id ? null : item.id);
+                    } else {
+                      router.push(`/run/${item.id}`);
+                    }
+                  }}
+                />
+                </WalkthroughPulse>
+                {isExpanded && (
+                  <LiveCardExpansion runId={item.id} />
+                )}
+              </LiveCardPulseWrapper>
+            );
+          }}
           ListEmptyComponent={
             search || isFiltered ? (
               <View style={s.empty}>
