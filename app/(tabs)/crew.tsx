@@ -898,6 +898,85 @@ function CrewAchievementsSection({
   );
 }
 
+// ─── Milestone constants (used by CrewDetailSheet and milestone popup components)
+const DISCOVERY_BOOST_MILESTONES = [10, 25, 50, 75];
+
+const milestoneStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  card: {
+    borderRadius: 20,
+    padding: 28,
+    width: "100%",
+    maxWidth: 360,
+    alignItems: "center",
+    gap: 12,
+  },
+  emoji: {
+    fontSize: 44,
+  },
+  title: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 22,
+    textAlign: "center",
+  },
+  body: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 15,
+    textAlign: "center",
+    lineHeight: 22,
+  },
+  primaryBtn: {
+    width: "100%",
+    height: 50,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 4,
+  },
+  primaryBtnTxt: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 16,
+    color: "#fff",
+  },
+  secondaryBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+  },
+  secondaryBtnTxt: {
+    fontFamily: "Outfit_500Medium",
+    fontSize: 15,
+  },
+});
+
+const CREW_PLANS: PaywallPlan[] = [
+  {
+    productId: "crew_growth_monthly",
+    entitlementId: "crew_growth",
+    title: "Crew Growth",
+    subtitle: "Remove the member cap",
+    emoji: "🚀",
+    color: "#4CAF50",
+    fallbackPrice: "$1.99",
+    features: ["Unlimited members (remove 100 cap)", "Priority support"],
+  },
+  {
+    productId: "crew_discovery_boost_monthly",
+    entitlementId: "crew_discovery_boost",
+    title: "Discovery Boost",
+    subtitle: "More visibility on PaceUp",
+    emoji: "⚡",
+    color: "#FF9800",
+    fallbackPrice: "$4.99",
+    features: ["~30% boost in Suggested Crews", "Public crew events featured", "Crew badge on discover page"],
+  },
+];
+
 // ─── Crew Detail Sheet ────────────────────────────────────────────────────────
 function CrewDetailSheet({
   crew,
@@ -1101,6 +1180,49 @@ function CrewDetailSheet({
   };
 
   const [eventsExpanded, setEventsExpanded] = useState(false);
+
+  const { hasEntitlement } = usePurchases();
+  const [activeMilestonePopup, setActiveMilestonePopup] = useState<"crew_plans" | { type: "discovery_boost"; milestone: number } | null>(null);
+  const [showMilestonePaywall, setShowMilestonePaywall] = useState<"crew_growth" | "crew_discovery_boost" | null>(null);
+  const milestoneEvaluatedForOpenRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!crew?.id || !isCreatorLocal || isMockCrew) {
+      milestoneEvaluatedForOpenRef.current = null;
+      return;
+    }
+    const openKey = crew.id + "_" + crew.member_count;
+    if (milestoneEvaluatedForOpenRef.current === openKey) return;
+    milestoneEvaluatedForOpenRef.current = openKey;
+
+    async function evaluateMilestones() {
+      const crewId = crew!.id;
+      const memberCount = crew!.member_count;
+
+      if (memberCount >= 90 && !hasEntitlement("crew_growth")) {
+        const key = crewPlansMilestoneKey(crewId);
+        const shown = await hasMilestonePopupBeenShown(key);
+        if (!shown) {
+          setActiveMilestonePopup("crew_plans");
+          return;
+        }
+      }
+
+      if (!hasEntitlement("crew_discovery_boost")) {
+        const reachedMilestones = [...DISCOVERY_BOOST_MILESTONES].reverse().filter((m) => memberCount >= m);
+        for (const milestone of reachedMilestones) {
+          const key = discoveryBoostMilestoneKey(crewId, milestone);
+          const shown = await hasMilestonePopupBeenShown(key);
+          if (!shown) {
+            setActiveMilestonePopup({ type: "discovery_boost", milestone });
+            return;
+          }
+        }
+      }
+    }
+
+    evaluateMilestones();
+  }, [crew?.id, crew?.member_count, isCreatorLocal, isMockCrew, hasEntitlement]);
 
   const { data: crewMessages = [], refetch: refetchMessages } = useQuery<any[]>({
     queryKey: ["/api/crews", crew?.id, "messages"],
@@ -1883,6 +2005,65 @@ function CrewDetailSheet({
           )}
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Crew Plans Milestone Popup (90 members) */}
+      <CrewPlansMilestonePopup
+        visible={activeMilestonePopup === "crew_plans"}
+        onClose={() => {
+          if (crew?.id) markMilestonePopupShown(crewPlansMilestoneKey(crew.id));
+          setActiveMilestonePopup(null);
+        }}
+        onUpgrade={() => {
+          if (crew?.id) markMilestonePopupShown(crewPlansMilestoneKey(crew.id));
+          setActiveMilestonePopup(null);
+          setShowMilestonePaywall("crew_growth");
+        }}
+      />
+
+      {/* Discovery Boost Milestone Popup */}
+      <DiscoveryBoostMilestonePopup
+        visible={typeof activeMilestonePopup === "object" && activeMilestonePopup !== null && activeMilestonePopup.type === "discovery_boost"}
+        milestone={typeof activeMilestonePopup === "object" && activeMilestonePopup !== null ? (activeMilestonePopup as { type: "discovery_boost"; milestone: number }).milestone : 10}
+        onClose={() => {
+          if (crew?.id && typeof activeMilestonePopup === "object" && activeMilestonePopup !== null) {
+            markMilestonePopupShown(discoveryBoostMilestoneKey(crew.id, (activeMilestonePopup as { type: "discovery_boost"; milestone: number }).milestone));
+          }
+          setActiveMilestonePopup(null);
+        }}
+        onUpgrade={() => {
+          if (crew?.id && typeof activeMilestonePopup === "object" && activeMilestonePopup !== null) {
+            markMilestonePopupShown(discoveryBoostMilestoneKey(crew.id, (activeMilestonePopup as { type: "discovery_boost"; milestone: number }).milestone));
+          }
+          setActiveMilestonePopup(null);
+          setShowMilestonePaywall("crew_discovery_boost");
+        }}
+      />
+
+      {/* Milestone Paywall — Crew Growth */}
+      {showMilestonePaywall === "crew_growth" && crew && (
+        <PaywallSheet
+          visible
+          onClose={() => setShowMilestonePaywall(null)}
+          plans={[CREW_PLANS[0]]}
+          crewId={crew.id}
+          onSuccess={() => {
+            setShowMilestonePaywall(null);
+          }}
+        />
+      )}
+
+      {/* Milestone Paywall — Discovery Boost */}
+      {showMilestonePaywall === "crew_discovery_boost" && crew && (
+        <PaywallSheet
+          visible
+          onClose={() => setShowMilestonePaywall(null)}
+          plans={[CREW_PLANS[1]]}
+          crewId={crew.id}
+          onSuccess={() => {
+            setShowMilestonePaywall(null);
+          }}
+        />
+      )}
     </>
   );
 }
@@ -1950,30 +2131,110 @@ function SuggestedCrewsSection() {
   );
 }
 
-// ─── Crew Plans Section ──────────────────────────────────────────────────────
-const CREW_PLANS: PaywallPlan[] = [
-  {
-    productId: "crew_growth_monthly",
-    entitlementId: "crew_growth",
-    title: "Crew Growth",
-    subtitle: "Remove the member cap",
-    emoji: "🚀",
-    color: "#4CAF50",
-    fallbackPrice: "$1.99",
-    features: ["Unlimited members (remove 100 cap)", "Priority support"],
-  },
-  {
-    productId: "crew_discovery_boost_monthly",
-    entitlementId: "crew_discovery_boost",
-    title: "Discovery Boost",
-    subtitle: "More visibility on PaceUp",
-    emoji: "⚡",
-    color: "#FF9800",
-    fallbackPrice: "$4.99",
-    features: ["~30% boost in Suggested Crews", "Public crew events featured", "Crew badge on discover page"],
-  },
-];
+// ─── Milestone Popup AsyncStorage Helpers ────────────────────────────────────
+async function hasMilestonePopupBeenShown(key: string): Promise<boolean> {
+  try {
+    const val = await AsyncStorage.getItem(key);
+    return val === "1";
+  } catch {
+    return false;
+  }
+}
 
+async function markMilestonePopupShown(key: string): Promise<void> {
+  try {
+    await AsyncStorage.setItem(key, "1");
+  } catch {}
+}
+
+function crewPlansMilestoneKey(crewId: string): string {
+  return `paceup_crew_plans_popup_90_${crewId}`;
+}
+
+function discoveryBoostMilestoneKey(crewId: string, milestone: number): string {
+  return `paceup_discovery_boost_popup_${milestone}_${crewId}`;
+}
+
+// ─── Crew Plans Milestone Popup ───────────────────────────────────────────────
+function CrewPlansMilestonePopup({
+  visible,
+  onClose,
+  onUpgrade,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onUpgrade: () => void;
+}) {
+  const { C } = useTheme();
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={milestoneStyles.overlay}>
+        <View style={[milestoneStyles.card, { backgroundColor: C.card }]}>
+          <Text style={milestoneStyles.emoji}>⚠️</Text>
+          <Text style={[milestoneStyles.title, { color: C.text }]}>Almost at your limit</Text>
+          <Text style={[milestoneStyles.body, { color: C.textSecondary }]}>
+            Your crew is at 90/100 members — just 10 away from the free-tier cap. Upgrade to Crew Growth for unlimited members.
+          </Text>
+          <TouchableOpacity
+            style={[milestoneStyles.primaryBtn, { backgroundColor: "#4CAF50" }]}
+            onPress={onUpgrade}
+            testID="crew-plans-milestone-upgrade-btn"
+          >
+            <Text style={milestoneStyles.primaryBtnTxt}>View Crew Growth</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={milestoneStyles.secondaryBtn} onPress={onClose} testID="crew-plans-milestone-dismiss-btn">
+            <Text style={[milestoneStyles.secondaryBtnTxt, { color: C.textMuted }]}>Not now</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// ─── Discovery Boost Milestone Popup ─────────────────────────────────────────
+function DiscoveryBoostMilestonePopup({
+  visible,
+  milestone,
+  onClose,
+  onUpgrade,
+}: {
+  visible: boolean;
+  milestone: number;
+  onClose: () => void;
+  onUpgrade: () => void;
+}) {
+  const { C } = useTheme();
+  const messages: Record<number, { emoji: string; body: string }> = {
+    10: { emoji: "🎉", body: "10 members strong! Boost your crew's visibility on PaceUp to attract even more runners." },
+    25: { emoji: "🔥", body: "25 members — your crew is growing! Get Discovery Boost to appear more in Suggested Crews." },
+    50: { emoji: "🚀", body: "50 members! Half a century strong. Supercharge your crew's reach with Discovery Boost." },
+    75: { emoji: "⚡", body: "75 members and climbing! Stand out on the discover page with a Discovery Boost." },
+  };
+  const { emoji, body } = messages[milestone] ?? messages[10];
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={milestoneStyles.overlay}>
+        <View style={[milestoneStyles.card, { backgroundColor: C.card }]}>
+          <Text style={milestoneStyles.emoji}>{emoji}</Text>
+          <Text style={[milestoneStyles.title, { color: C.text }]}>{milestone} Members!</Text>
+          <Text style={[milestoneStyles.body, { color: C.textSecondary }]}>{body}</Text>
+          <TouchableOpacity
+            style={[milestoneStyles.primaryBtn, { backgroundColor: "#FF9800" }]}
+            onPress={onUpgrade}
+            testID={`discovery-boost-milestone-upgrade-btn-${milestone}`}
+          >
+            <Text style={milestoneStyles.primaryBtnTxt}>Boost My Crew</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={milestoneStyles.secondaryBtn} onPress={onClose} testID={`discovery-boost-milestone-dismiss-btn-${milestone}`}>
+            <Text style={[milestoneStyles.secondaryBtnTxt, { color: C.textMuted }]}>Not now</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// ─── Crew Plans Section ──────────────────────────────────────────────────────
 function CrewPlansSection({ crewId }: { crewId: string }) {
   const { C } = useTheme();
   const s = useMemo(() => makeStyles(C), [C]);
