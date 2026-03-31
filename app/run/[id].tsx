@@ -7,6 +7,7 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
+  ActionSheetIOS,
   TextInput,
   Platform,
   Image,
@@ -235,21 +236,7 @@ export default function RunDetailScreen() {
     enabled: !!id,
   });
 
-  async function pickAndUploadPhoto() {
-    if (Platform.OS !== "web") {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert("Permission needed", "Please allow photo library access to upload run photos.");
-        return;
-      }
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.8,
-    });
-    if (result.canceled || !result.assets?.[0]) return;
-    const asset = result.assets[0];
+  async function uploadPhotoAsset(asset: ImagePicker.ImagePickerAsset) {
     const formData = new FormData();
     formData.append("photo", { uri: asset.uri, type: asset.mimeType || "image/jpeg", name: "photo.jpg" } as any);
     setUploadingPhoto(true);
@@ -266,6 +253,64 @@ export default function RunDetailScreen() {
       Alert.alert("Upload failed", e.message);
     } finally {
       setUploadingPhoto(false);
+    }
+  }
+
+  async function takePhoto() {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission needed", "Please allow camera access to take photos.");
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    await uploadPhotoAsset(result.assets[0]);
+  }
+
+  async function chooseFromLibrary() {
+    if (Platform.OS !== "web") {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission needed", "Please allow photo library access to upload run photos.");
+        return;
+      }
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    await uploadPhotoAsset(result.assets[0]);
+  }
+
+  function pickAndUploadPhoto() {
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ["Cancel", "Take Photo", "Choose from Library"],
+          cancelButtonIndex: 0,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 1) takePhoto();
+          else if (buttonIndex === 2) chooseFromLibrary();
+        }
+      );
+    } else {
+      Alert.alert(
+        "Add Photo",
+        "Choose a source",
+        [
+          { text: "Take Photo", onPress: takePhoto },
+          { text: "Choose from Library", onPress: chooseFromLibrary },
+          { text: "Cancel", style: "cancel" },
+        ],
+        { cancelable: true }
+      );
     }
   }
 
