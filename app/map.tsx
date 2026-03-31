@@ -1206,13 +1206,13 @@ function makeSStyles(C: ColorScheme) { return StyleSheet.create({
   },
   splitRow: {
     flexDirection: "row",
-    height: 86,
-    paddingTop: 8,
+    height: 106,
+    paddingTop: 10,
   },
   splitCol: {
     flex: 1,
     paddingHorizontal: 10,
-    gap: 6,
+    gap: 5,
     overflow: "hidden",
   },
   splitColBorder: {
