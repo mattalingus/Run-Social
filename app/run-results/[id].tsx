@@ -442,7 +442,7 @@ export default function RunResultsScreen() {
               distanceMi: myResult?.final_distance ?? run?.min_distance ?? 0,
               paceMinPerMile: myResult?.final_pace ?? null,
               durationSeconds: null,
-              routePath: [],
+              routePath: myResult?.route_path ?? run?.route_path ?? run?.saved_path_route ?? [],
               activityType: (run?.activity_type ?? "run") as "run" | "ride" | "walk",
               participantCount: isGroupRun ? results.length : undefined,
               finishRank: isGroupRun && myResult?.final_rank ? myResult.final_rank : undefined,

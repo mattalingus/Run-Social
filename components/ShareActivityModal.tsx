@@ -225,31 +225,37 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
         await fallbackShare(uri);
         return;
       }
-      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
       await saveToLibraryQuietly(uri);
 
       if (transparentMode && RNShare) {
-        await RNShare.shareSingle({
-          social: RNShare.Social?.INSTAGRAM_STORIES ?? "instagramstories",
-          stickerImage: `data:image/png;base64,${base64}`,
-          backgroundBottomColor: "#000000",
-          backgroundTopColor: "#000000",
-          appId: "com.paceup",
-        });
-      } else {
-        await Clipboard.setImageAsync(base64);
-        let opened = false;
-        try { await Linking.openURL("instagram-stories://share"); opened = true; } catch {}
-        if (!opened) {
-          try { await Linking.openURL("instagram://camera"); opened = true; } catch {}
-        }
-        if (!opened) {
-          Alert.alert("Instagram not found", "Install Instagram to share directly.", [
-            { text: "Share via…", onPress: () => fallbackShare(uri) },
-            { text: "OK", style: "cancel" },
-          ]);
+        try {
+          await RNShare.shareSingle({
+            social: RNShare.Social?.INSTAGRAM_STORIES ?? "instagramstories",
+            stickerImage: uri,
+            backgroundBottomColor: "#000000",
+            backgroundTopColor: "#000000",
+            appId: "com.paceup",
+          });
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           return;
+        } catch (rnErr: any) {
+          if (rnErr?.message?.includes("cancel")) return;
         }
+      }
+
+      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      await Clipboard.setImageAsync(base64);
+      let opened = false;
+      try { await Linking.openURL("instagram-stories://share"); opened = true; } catch {}
+      if (!opened) {
+        try { await Linking.openURL("instagram://camera"); opened = true; } catch {}
+      }
+      if (!opened) {
+        Alert.alert("Instagram not found", "Install Instagram to share directly.", [
+          { text: "Share via…", onPress: () => fallbackShare(uri) },
+          { text: "OK", style: "cancel" },
+        ]);
+        return;
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e: any) {
