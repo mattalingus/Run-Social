@@ -3503,7 +3503,7 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   statUnit: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted },
   statDiv: { width: 1, height: 24, backgroundColor: C.border },
   statPill: { flex: 1, alignItems: "center", gap: 2 },
-  statPillPace: { width: 84, alignItems: "center", gap: 2 },
+  statPillPace: { width: 96, alignItems: "center", gap: 2 },
   statPillValue: { fontFamily: "Outfit_700Bold", fontSize: 12, color: C.text },
   statPillLabel: { fontFamily: "Outfit_400Regular", fontSize: 10, color: C.textMuted, textTransform: "uppercase", letterSpacing: 0.3 },
 
