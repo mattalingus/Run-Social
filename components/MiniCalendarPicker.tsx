@@ -255,7 +255,7 @@ export default function MiniCalendarPicker({ value, onChange, minDate, maxDate }
                     <View
                       style={[
                         s.circle,
-                        isSelected && { backgroundColor: "#00D97E" },
+                        isSelected && { backgroundColor: "rgba(0,217,126,0.25)" },
                         !isSelected && isToday && {
                           backgroundColor: "rgba(0,217,126,0.15)",
                         },
@@ -269,7 +269,7 @@ export default function MiniCalendarPicker({ value, onChange, minDate, maxDate }
                               : "Outfit_400Regular",
                           fontSize: 14,
                           color: isSelected
-                            ? "#050C09"
+                            ? "#00D97E"
                             : isToday
                             ? "#00D97E"
                             : isDisabled

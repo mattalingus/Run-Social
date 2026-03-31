@@ -39,6 +39,7 @@ import { onOpenNotifications } from "@/contexts/NotificationBannerContext";
 import WebFAB from "@/components/WebFAB";
 import WalkthroughPulse from "@/components/WalkthroughPulse";
 import { useWalkthrough } from "@/contexts/WalkthroughContext";
+import MiniCalendarPicker from "@/components/MiniCalendarPicker";
 
 function formatDaysAgo(dateStr: string): string {
   const d = new Date(dateStr);
@@ -1263,8 +1264,8 @@ export default function DiscoverScreen() {
   const [showHostModal, setShowHostModal] = useState(false);
   const [hTitle, setHTitle] = useState("");
   const [hLocation, setHLocation] = useState("");
-  const [hDate, setHDate] = useState("");
-  const [hTime, setHTime] = useState("");
+  const [hDate, setHDate] = useState<Date>(() => { const d = new Date(); d.setDate(d.getDate() + 1); return d; });
+  const [hTime, setHTime] = useState("7:30");
   const [hPrivacy, setHPrivacy] = useState<"public" | "friends" | "crew">("public");
   const [hPassword, setHPassword] = useState("");
   const [hMaxParticipants, setHMaxParticipants] = useState(20);
@@ -1293,20 +1294,13 @@ export default function DiscoverScreen() {
   });
 
   function resetHostForm() {
-    setHTitle(""); setHLocation(""); setHDate(""); setHTime("");
+    const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+    setHTitle(""); setHLocation(""); setHDate(tomorrow); setHTime("7:30");
     setHPrivacy("public"); setHPassword(""); setHMaxParticipants(20);
     setHTags([]); setHDist("3"); setHMinPace(4); setHMaxPace(20);
     setHLocationLat(null); setHLocationLng(null); setPinCoord(null); setHostPage("form");
     setHAmPm("AM"); setHStrict(false); setHActivityType("run"); setHCrewId(null);
     setHSavedPathId(null); setHSavedPathName(null); setHRouteSearch(""); setHRouteFilter("recent");
-  }
-
-  function handleDateChange(text: string) {
-    const digits = text.replace(/\D/g, "").slice(0, 6);
-    let formatted = digits;
-    if (digits.length > 2) formatted = digits.slice(0, 2) + "/" + digits.slice(2);
-    if (digits.length > 4) formatted = digits.slice(0, 2) + "/" + digits.slice(2, 4) + "/" + digits.slice(4);
-    setHDate(formatted);
   }
 
   function autoFormatTime(digits: string): string {
@@ -1333,15 +1327,6 @@ export default function DiscoverScreen() {
   }
 
   // ─── Date / Time parse helpers ─────────────────────────────────────────────
-  function parseDMY(raw: string): Date | null {
-    const cleaned = raw.trim().replace(/\//g, "/");
-    const [m, d, y] = cleaned.split("/");
-    if (!m || !d || !y) return null;
-    const year = y.length === 2 ? 2000 + parseInt(y, 10) : parseInt(y, 10);
-    const date = new Date(year, parseInt(m, 10) - 1, parseInt(d, 10));
-    return isNaN(date.getTime()) ? null : date;
-  }
-
   function parseHHMMAMPM(raw: string, ampm: "AM" | "PM"): { hours: number; minutes: number } | null {
     const match = raw.trim().match(/^(\d{1,2}):(\d{2})$/);
     if (!match) return null;
@@ -1410,11 +1395,10 @@ export default function DiscoverScreen() {
       if (!hTitle.trim()) throw new Error("Run title is required");
       if (!hLocation.trim()) throw new Error("Location is required — tap the pin to set it on the map");
       if (hLocationLat === null || hLocationLng === null) throw new Error("Please pick a location on the map");
-      if (!hDate.trim() || !hTime.trim()) throw new Error("Date and time are required");
+      if (!hTime.trim()) throw new Error("Date and time are required");
       const distVal = parseFloat(hDist);
       if (!hDist.trim() || isNaN(distVal) || distVal <= 0) throw new Error("Planned distance is required (e.g. 3.1 miles)");
-      const parsedDate = parseDMY(hDate.trim());
-      if (!parsedDate) throw new Error("Invalid date — use MM/DD/YY (e.g. 06/25/25)");
+      const parsedDate = new Date(hDate);
       const parsedTime = parseHHMMAMPM(hTime.trim(), hAmPm);
       if (!parsedTime) throw new Error("Invalid time — use H:MM (e.g. 7:30)");
       parsedDate.setHours(parsedTime.hours, parsedTime.minutes, 0, 0);
@@ -2819,15 +2803,7 @@ export default function DiscoverScreen() {
             {/* Date + Time */}
             <Text style={s.hLabel}>Date & Time *</Text>
             <View style={{ flexDirection: "row", gap: 10 }}>
-              <TextInput
-                style={[s.hInput, { flex: 1 }]}
-                value={hDate}
-                onChangeText={handleDateChange}
-                placeholder="MM/DD/YY"
-                placeholderTextColor={C.textMuted}
-                keyboardType="number-pad"
-                maxLength={8}
-              />
+              <View style={{ flex: 1 }}><MiniCalendarPicker value={hDate} onChange={setHDate} /></View>
               <View style={{ flex: 1, flexDirection: "row", gap: 6 }}>
                 <TextInput
                   style={[s.hInput, { flex: 1 }]}
