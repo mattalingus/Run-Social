@@ -1479,8 +1479,9 @@ export default function DiscoverScreen() {
 
   const { data: runs = [], isLoading, refetch, isRefetching } = useQuery<Run[]>({
     queryKey: ["/api/runs"],
-    staleTime: 30_000,
-    refetchInterval: 30_000,
+    staleTime: 0,
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
   });
 
   useEffect(() => {
@@ -1596,6 +1597,8 @@ export default function DiscoverScreen() {
       );
       qc.invalidateQueries({ queryKey: ["/api/runs/planned"] });
       qc.invalidateQueries({ queryKey: ["/api/runs", runId, "status"] });
+      qc.invalidateQueries({ queryKey: ["/api/runs"] });
+      qc.invalidateQueries({ queryKey: ["/api/runs", runId] });
     },
     onError: () => {
       Alert.alert("Error", "Could not remove from planned runs. Please try again.");

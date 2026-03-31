@@ -218,6 +218,7 @@ export default function RunDetailScreen() {
       qc.invalidateQueries({ queryKey: ["/api/runs", id, "status"] });
       qc.invalidateQueries({ queryKey: ["/api/runs", id] });
       qc.invalidateQueries({ queryKey: ["/api/runs/planned"] });
+      qc.invalidateQueries({ queryKey: ["/api/runs"] });
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     },
   });
