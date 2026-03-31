@@ -77,6 +77,8 @@ export default function RunLiveScreen() {
     hasBeenPresent,
     presentConfirmed,
     startTracking,
+    pauseTracking,
+    resumeTracking,
     beginFinishing,
     resetTracking,
     recoverToActive,
@@ -620,8 +622,8 @@ export default function RunLiveScreen() {
               </View>
             )}
 
-            {/* Back-to-me FAB — shown when user has panned away during active tracking */}
-            {phase === "active" && !isFollowing && Platform.OS !== "web" && (
+            {/* Back-to-me FAB — shown when user has panned away during active or paused tracking */}
+            {(phase === "active" || phase === "paused") && !isFollowing && Platform.OS !== "web" && (
               <Pressable
                 style={s.backToMeBtn}
                 onPress={() => {
@@ -694,21 +696,29 @@ export default function RunLiveScreen() {
               </Text>
             </View>
           ) : (
-          <View style={s.statsStrip}>
-            <View style={s.statItem}>
-              <Text style={s.statValue}>{displayDist.toFixed(2)}</Text>
-              <Text style={s.statLabel}>mi</Text>
+          <View style={{ position: "relative" }}>
+            <View style={[s.statsStrip, phase === "paused" && s.statsStripPaused]}>
+              <View style={s.statItem}>
+                <Text style={s.statValue}>{displayDist.toFixed(2)}</Text>
+                <Text style={s.statLabel}>mi</Text>
+              </View>
+              <View style={s.statDivider} />
+              <View style={s.statItem}>
+                <Text style={s.statValue}>{formatElapsed(elapsed)}</Text>
+                <Text style={s.statLabel}>time</Text>
+              </View>
+              <View style={s.statDivider} />
+              <View style={s.statItem}>
+                <Text style={s.statValue}>{formatPaceStr(paceNum)}</Text>
+                <Text style={s.statLabel}>min/mi</Text>
+              </View>
             </View>
-            <View style={s.statDivider} />
-            <View style={s.statItem}>
-              <Text style={s.statValue}>{formatElapsed(elapsed)}</Text>
-              <Text style={s.statLabel}>time</Text>
-            </View>
-            <View style={s.statDivider} />
-            <View style={s.statItem}>
-              <Text style={s.statValue}>{formatPaceStr(paceNum)}</Text>
-              <Text style={s.statLabel}>min/mi</Text>
-            </View>
+            {phase === "paused" && (
+              <View style={s.pausedBadge} pointerEvents="none">
+                <Feather name="pause" size={11} color={C.text} />
+                <Text style={s.pausedBadgeTxt}>Paused</Text>
+              </View>
+            )}
           </View>
           )}
 
@@ -842,11 +852,23 @@ export default function RunLiveScreen() {
                 )}
               </View>
             )}
-            {phase === "active" && (
-              <Pressable style={({ pressed }) => [s.finishBtn, { opacity: pressed ? 0.85 : 1 }]} onPress={handleFinishRun}>
-                <Feather name="flag" size={20} color="#fff" />
-                <Text style={s.finishBtnText}>{run?.activity_type === "ride" ? "Finish My Ride" : run?.activity_type === "walk" ? "Finish My Walk" : "Finish My Run"}</Text>
-              </Pressable>
+            {(phase === "active" || phase === "paused") && (
+              <View style={s.actionRow}>
+                <Pressable
+                  style={({ pressed }) => [s.pauseResumeBtn, phase === "paused" && s.pauseResumeBtnActive, { opacity: pressed ? 0.85 : 1 }]}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    if (phase === "active") pauseTracking();
+                    else resumeTracking();
+                  }}
+                >
+                  <Feather name={phase === "active" ? "pause" : "play"} size={20} color={phase === "paused" ? C.bg : C.text} />
+                </Pressable>
+                <Pressable style={({ pressed }) => [s.finishBtn, s.finishBtnFlex, { opacity: pressed ? 0.85 : 1 }]} onPress={handleFinishRun}>
+                  <Feather name="flag" size={20} color="#fff" />
+                  <Text style={s.finishBtnText}>{run?.activity_type === "ride" ? "Finish My Ride" : run?.activity_type === "walk" ? "Finish My Walk" : "Finish My Run"}</Text>
+                </Pressable>
+              </View>
             )}
             {phase === "finishing" && (
               <View style={s.savingRow}>
@@ -1020,7 +1042,28 @@ const s = StyleSheet.create({
     backgroundColor: "#C0392B", borderRadius: 14, height: 52,
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
   },
+  finishBtnFlex: { flex: 1 },
   finishBtnText: { fontFamily: "Outfit_700Bold", fontSize: 16, color: "#fff" },
+  actionRow: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+  },
+  pauseResumeBtn: {
+    width: 52, height: 52, borderRadius: 14,
+    backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
+    alignItems: "center", justifyContent: "center",
+  },
+  pauseResumeBtnActive: {
+    backgroundColor: C.primary, borderColor: C.primary,
+  },
+  statsStripPaused: { opacity: 0.7 },
+  pausedBadge: {
+    position: "absolute", top: 8, right: 18,
+    flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: C.card + "EE", borderRadius: 8,
+    paddingHorizontal: 8, paddingVertical: 4,
+    borderWidth: 1, borderColor: C.orange + "88",
+  },
+  pausedBadgeTxt: { fontFamily: "Outfit_700Bold", fontSize: 10, color: C.text, letterSpacing: 0.5 },
   savingRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, height: 52 },
   savingText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.textSecondary },
   waitingColumn: { alignItems: "center", gap: 10 },

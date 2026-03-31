@@ -11,7 +11,7 @@ import {
 } from "@/lib/locationTasks";
 import { apiRequest } from "@/lib/query-client";
 
-type Phase = "idle" | "active" | "finishing";
+type Phase = "idle" | "active" | "paused" | "finishing";
 
 export interface LiveTrackingContextValue {
   runId: string | null;
@@ -27,6 +27,8 @@ export interface LiveTrackingContextValue {
   totalDistRef: React.MutableRefObject<number>;
   elapsedRef: React.MutableRefObject<number>;
   startTracking: (runId: string, activityType: "run" | "ride" | "walk", userId?: string) => Promise<void>;
+  pauseTracking: () => void;
+  resumeTracking: () => void;
   beginFinishing: () => void;
   resetTracking: () => void;
   recoverToActive: () => void;
@@ -77,6 +79,7 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
   const activeRunIdRef = useRef<string | null>(null);
   const activeUserIdRef = useRef<string | null>(null);
   const activeActivityTypeRef = useRef<"run" | "ride" | "walk">("run");
+  const isPausedRef = useRef(false);
 
   useEffect(() => {
     if (phase === "active") {
@@ -118,7 +121,7 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
   function handleCoord(latitude: number, longitude: number) {
     routePathRef.current = [...routePathRef.current, { latitude, longitude }];
     setUserLocation({ latitude, longitude });
-    if (lastCoordRef.current) {
+    if (!isPausedRef.current && lastCoordRef.current) {
       const d = haversineMi(
         lastCoordRef.current.latitude,
         lastCoordRef.current.longitude,
@@ -130,6 +133,7 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
         setDisplayDist(totalDistRef.current);
       }
     }
+    // Always keep lastCoord current so resume has no distance jump
     lastCoordRef.current = { latitude, longitude };
   }
 
@@ -249,6 +253,7 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
     }
 
     pingIntervalRef.current = setInterval(async () => {
+      if (isPausedRef.current) return;
       if (lastCoordRef.current) {
         await pingServer(lastCoordRef.current.latitude, lastCoordRef.current.longitude);
       }
@@ -269,6 +274,16 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
     }
   }
 
+  function pauseTracking() {
+    isPausedRef.current = true;
+    setPhase("paused");
+  }
+
+  function resumeTracking() {
+    isPausedRef.current = false;
+    setPhase("active");
+  }
+
   function beginFinishing() {
     setPhase("finishing");
     clearLocationAndPing();
@@ -280,6 +295,7 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
 
   function resetTracking() {
     clearLocationAndPing();
+    isPausedRef.current = false;
     // Clear crash recovery key
     if (Platform.OS !== "web") {
       AsyncStorage.removeItem("paceup_group_active_run").catch(() => {});
@@ -328,6 +344,8 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
         totalDistRef,
         elapsedRef,
         startTracking,
+        pauseTracking,
+        resumeTracking,
         beginFinishing,
         resetTracking,
         recoverToActive,
