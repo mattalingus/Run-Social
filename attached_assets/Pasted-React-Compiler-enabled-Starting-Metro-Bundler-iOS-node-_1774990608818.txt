@@ -1,0 +1,38 @@
+React Compiler enabled
+Starting Metro Bundler
+iOS node_modules/expo-router/entry.js ▓░░░░░░░░░░░░░░░  9.5% (15/59)
+iOS node_modules/expo-router/entry.js ▓▓▓▓▓▓▓░░░░░░░░░ 46.3% (487/720)
+iOS node_modules/expo-router/entry.js ▓▓▓▓▓▓▓▓▓▓░░░░░░ 67.7% (1064/1293)
+iOS Bundling failed 10921ms node_modules/expo-router/entry.js (2046 modules)
+Unable to resolve module expo-av from /Users/expo/workingdir/build/app/run-tracking.tsx: expo-av could not be found within the project or in these directories:
+  node_modules
+[0m [90m 20 |[39m [36mimport[39m [33mAsyncStorage[39m [36mfrom[39m [32m"@react-native-async-storage/async-storage"[39m[33m;[39m
+ [90m 21 |[39m [36mimport[39m [33m*[39m [36mas[39m [33mSpeech[39m [36mfrom[39m [32m"expo-speech"[39m[33m;[39m
+[31m[1m>[22m[39m[90m 22 |[39m [36mimport[39m { [33mAudio[39m[33m,[39m [33mInterruptionModeIOS[39m[33m,[39m [33mInterruptionModeAndroid[39m } [36mfrom[39m [32m"expo-av"[39m[33m;[39m
+ [90m    |[39m                                                                      [31m[1m^[22m[39m
+ [90m 23 |[39m [36mimport[39m [33m*[39m [36mas[39m [33mFileSystem[39m [36mfrom[39m [32m"expo-file-system/legacy"[39m[33m;[39m
+ [90m 24 |[39m [36mimport[39m [33mShareActivityModal[39m [36mfrom[39m [32m"@/components/ShareActivityModal"[39m[33m;[39m
+ [90m 25 |[39m [36mimport[39m [33mMileSplitsChart[39m[33m,[39m { [33mMileSplit[39m } [36mfrom[39m [32m"@/components/MileSplitsChart"[39m[33m;[39m[0m
+
+Import stack:
+
+ app/run-tracking.tsx
+ | import "expo-av"
+
+ app (require.context)
+Error: Unable to resolve module expo-av from /Users/expo/workingdir/build/app/run-tracking.tsx: expo-av could not be found within the project or in these directories:
+  node_modules
+[0m [90m 20 |[39m [36mimport[39m [33mAsyncStorage[39m [36mfrom[39m [32m"@react-native-async-storage/async-storage"[39m[33m;[39m
+ [90m 21 |[39m [36mimport[39m [33m*[39m [36mas[39m [33mSpeech[39m [36mfrom[39m [32m"expo-speech"[39m[33m;[39m
+[31m[1m>[22m[39m[90m 22 |[39m [36mimport[39m { [33mAudio[39m[33m,[39m [33mInterruptionModeIOS[39m[33m,[39m [33mInterruptionModeAndroid[39m } [36mfrom[39m [32m"expo-av"[39m[33m;[39m
+ [90m    |[39m                                                                      [31m[1m^[22m[39m
+ [90m 23 |[39m [36mimport[39m [33m*[39m [36mas[39m [33mFileSystem[39m [36mfrom[39m [32m"expo-file-system/legacy"[39m[33m;[39m
+ [90m 24 |[39m [36mimport[39m [33mShareActivityModal[39m [36mfrom[39m [32m"@/components/ShareActivityModal"[39m[33m;[39m
+ [90m 25 |[39m [36mimport[39m [33mMileSplitsChart[39m[33m,[39m { [33mMileSplit[39m } [36mfrom[39m [32m"@/components/MileSplitsChart"[39m[33m;[39m[0m
+
+Import stack:
+
+ app/run-tracking.tsx
+ | import "expo-av"
+
+ app (require.context)
