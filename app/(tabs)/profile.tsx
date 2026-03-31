@@ -439,8 +439,6 @@ function ProfileScreenInner() {
     enabled: !!user,
   });
 
-  const qc = useQueryClient();
-
   const actStats = React.useMemo(() => {
     const now = new Date();
     // Solo run stats
