@@ -263,6 +263,9 @@ function ProfileScreenInner() {
   const [shareRunData, setShareRunData] = useState<ShareRunData | null>(null);
   const [showFavorites, setShowFavorites] = useState(false);
   const [expandedFavId, setExpandedFavId] = useState<string | null>(null);
+  const [savePathRun, setSavePathRun] = useState<UnifiedHistoryItem | null>(null);
+  const [savePathName, setSavePathName] = useState("");
+  const [savingPath, setSavingPath] = useState(false);
   const [favActivityFilter, setFavActivityFilter] = useState<"run" | "ride" | "walk">("run");
   const [friendSearch, setFriendSearch] = useState("");
   const [showAddFriend, setShowAddFriend] = useState(false);
@@ -436,9 +439,12 @@ function ProfileScreenInner() {
     enabled: !!user,
   });
 
+  const qc = useQueryClient();
+
   const actStats = React.useMemo(() => {
-    const filtered = soloRuns.filter((r) => (r.activity_type ?? "run") === profileActivity && r.completed);
     const now = new Date();
+    // Solo run stats
+    const filtered = soloRuns.filter((r) => (r.activity_type ?? "run") === profileActivity && r.completed);
     const thisMonth = filtered.filter((r) => {
       const d = new Date(r.date);
       return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
@@ -460,8 +466,29 @@ function ProfileScreenInner() {
       const secs = (r as any).move_time_seconds ?? r.duration_seconds ?? 0;
       return s + secs;
     }, 0);
-    return { totalMiles, monthMiles, yearMiles, count: filtered.length, avgPace, totalMovingSeconds };
-  }, [soloRuns, profileActivity]);
+    // Group run stats — include completed runs where the user actually logged distance
+    const groupParticipated = runs.filter((r) => {
+      const isPast = new Date(r.date) < now;
+      return isPast && (r.my_final_distance ?? 0) > 0 && (r.activity_type ?? "run") === profileActivity;
+    });
+    const grpTotal = groupParticipated.reduce((s, r) => s + (r.my_final_distance ?? 0), 0);
+    const grpMonth = groupParticipated
+      .filter((r) => { const d = new Date(r.date); return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth(); })
+      .reduce((s, r) => s + (r.my_final_distance ?? 0), 0);
+    const grpYear = groupParticipated
+      .filter((r) => new Date(r.date).getFullYear() === now.getFullYear())
+      .reduce((s, r) => s + (r.my_final_distance ?? 0), 0);
+    const grpSeconds = groupParticipated.reduce((s, r) =>
+      s + (r.my_final_distance && r.my_final_pace ? r.my_final_distance * r.my_final_pace * 60 : 0), 0);
+    return {
+      totalMiles: totalMiles + grpTotal,
+      monthMiles: monthMiles + grpMonth,
+      yearMiles: yearMiles + grpYear,
+      count: filtered.length + groupParticipated.length,
+      avgPace,
+      totalMovingSeconds: totalMovingSeconds + grpSeconds,
+    };
+  }, [soloRuns, runs, profileActivity]);
 
 
   const computedTopRuns = React.useMemo(() => {
@@ -2109,24 +2136,42 @@ function ProfileScreenInner() {
                               {run.duration_seconds ? `  ·  Duration: ${formatDurationSolo(run.duration_seconds)}` : ""}
                             </Text>
                           )}
-                          <Pressable
-                            style={({ pressed }) => [styles.shareActivityBtn, { opacity: pressed ? 0.75 : 1, marginTop: 8 }]}
-                            onPress={() => {
-                              Haptics.selectionAsync();
-                              setShowSoloHistory(false);
-                              setShareRunData({
-                                distanceMi: run.my_final_distance ?? run.distance_miles,
-                                paceMinPerMile: run.my_final_pace ?? run.pace_min_per_mile,
-                                durationSeconds: run.duration_seconds,
-                                routePath: run.route_path ?? undefined,
-                                activityType: run.activity_type,
-                                eventTitle: run.title ?? undefined,
-                              });
-                            }}
-                          >
-                            <Feather name="share-2" size={14} color={C.primary} />
-                            <Text style={styles.shareActivityBtnTxt}>Share Activity</Text>
-                          </Pressable>
+                          <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
+                            <Pressable
+                              style={({ pressed }) => [styles.shareActivityBtn, { flex: 1, opacity: pressed ? 0.75 : 1 }]}
+                              onPress={() => {
+                                Haptics.selectionAsync();
+                                setShowSoloHistory(false);
+                                setShareRunData({
+                                  distanceMi: run.my_final_distance ?? run.distance_miles,
+                                  paceMinPerMile: run.my_final_pace ?? run.pace_min_per_mile,
+                                  durationSeconds: run.duration_seconds,
+                                  routePath: run.route_path ?? undefined,
+                                  activityType: run.activity_type,
+                                  eventTitle: run.title ?? undefined,
+                                });
+                              }}
+                            >
+                              <Feather name="share-2" size={14} color={C.primary} />
+                              <Text style={styles.shareActivityBtnTxt}>Share</Text>
+                            </Pressable>
+                            {run.route_path && run.route_path.length > 1 && (
+                              <Pressable
+                                style={({ pressed }) => [styles.shareActivityBtn, { flex: 1, opacity: pressed ? 0.75 : 1, borderColor: "#FF6B3555" }]}
+                                onPress={() => {
+                                  Haptics.selectionAsync();
+                                  const defaultName = run.title
+                                    ? run.title
+                                    : `${toDisplayDist(run.my_final_distance ?? run.distance_miles, distUnit)} ${run.activity_type === "ride" ? "Ride" : run.activity_type === "walk" ? "Walk" : "Run"}`;
+                                  setSavePathName(defaultName);
+                                  setSavePathRun(run);
+                                }}
+                              >
+                                <Feather name="bookmark" size={14} color="#FF6B35" />
+                                <Text style={[styles.shareActivityBtnTxt, { color: "#FF6B35" }]}>Save Route</Text>
+                              </Pressable>
+                            )}
+                          </View>
                         </View>
                       )}
                     </View>
@@ -2395,6 +2440,79 @@ function ProfileScreenInner() {
           runData={shareRunData}
         />
       )}
+
+      {/* ── Save Route Modal (group run → saved paths) ─────────────────────── */}
+      <Modal
+        visible={!!savePathRun}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSavePathRun(null)}
+      >
+        <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+          <View style={{ flex: 1, backgroundColor: "#00000088", justifyContent: "center", alignItems: "center", padding: 24 }}>
+            <View style={{ backgroundColor: C.surface, borderRadius: 18, padding: 22, width: "100%", gap: 14 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Feather name="bookmark" size={18} color="#FF6B35" />
+                <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 17, color: C.text }}>Save Route</Text>
+              </View>
+              <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary }}>
+                Save this GPS route to your saved paths for future runs.
+              </Text>
+              <TextInput
+                value={savePathName}
+                onChangeText={setSavePathName}
+                placeholder="Route name…"
+                placeholderTextColor={C.textMuted}
+                style={{
+                  fontFamily: "Outfit_400Regular", fontSize: 15, color: C.text,
+                  backgroundColor: C.card, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11,
+                  borderWidth: 1, borderColor: C.border,
+                }}
+                autoFocus
+                maxLength={80}
+              />
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <Pressable
+                  style={({ pressed }) => ({ flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: C.card, alignItems: "center", opacity: pressed ? 0.7 : 1 })}
+                  onPress={() => { setSavePathRun(null); setSavePathName(""); }}
+                >
+                  <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.textSecondary }}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  disabled={!savePathName.trim() || savingPath}
+                  style={({ pressed }) => ({ flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: "#FF6B35", alignItems: "center", opacity: (!savePathName.trim() || savingPath || pressed) ? 0.6 : 1 })}
+                  onPress={async () => {
+                    if (!savePathRun || !savePathName.trim()) return;
+                    setSavingPath(true);
+                    try {
+                      const cleanPath = (savePathRun.route_path ?? []).map((p: any) => ({ latitude: p.latitude, longitude: p.longitude }));
+                      await apiRequest("POST", "/api/saved-paths", {
+                        name: savePathName.trim(),
+                        routePath: cleanPath,
+                        distanceMiles: savePathRun.my_final_distance ?? savePathRun.distance_miles,
+                        activityType: savePathRun.activity_type,
+                      });
+                      qc.invalidateQueries({ queryKey: ["/api/saved-paths"] });
+                      setSavePathRun(null);
+                      setSavePathName("");
+                      Alert.alert("Route Saved", "Your route has been added to Saved Paths.");
+                    } catch (e: any) {
+                      Alert.alert("Error", e?.message ?? "Could not save route.");
+                    } finally {
+                      setSavingPath(false);
+                    }
+                  }}
+                >
+                  {savingPath
+                    ? <ActivityIndicator size="small" color="#fff" />
+                    : <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 15, color: "#fff" }}>Save</Text>
+                  }
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
     </ScrollView>
   );
