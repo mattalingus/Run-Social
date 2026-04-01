@@ -496,6 +496,61 @@ function withWidget(config) {
       mainGroupUUID
     );
 
+    // Embed extension in main app ("Embed App Extensions" build phase)
+    const fileRefs = project.hash.project.objects["PBXFileReference"] || {};
+    const productEntry = Object.entries(fileRefs).find(
+      ([k, v]) =>
+        !k.endsWith("_comment") &&
+        (v.path === `"${WIDGET_NAME}.appex"` ||
+          v.path === `${WIDGET_NAME}.appex`)
+    );
+    if (productEntry) {
+      const embedBuildFileUUID = project.generateUuid();
+      project.hash.project.objects["PBXBuildFile"] =
+        project.hash.project.objects["PBXBuildFile"] || {};
+      project.hash.project.objects["PBXBuildFile"][embedBuildFileUUID] = {
+        isa: "PBXBuildFile",
+        fileRef: productEntry[0],
+        settings: { ATTRIBUTES: ["RemoveHeadersOnCopy"] },
+      };
+      project.hash.project.objects["PBXBuildFile"][
+        `${embedBuildFileUUID}_comment`
+      ] = `${WIDGET_NAME}.appex in Embed App Extensions`;
+
+      const copyFilesPhases =
+        project.hash.project.objects["PBXCopyFilesBuildPhase"] || {};
+      let embedPhaseUUID = Object.keys(copyFilesPhases).find(
+        (k) =>
+          !k.endsWith("_comment") &&
+          copyFilesPhases[k].name === '"Embed App Extensions"'
+      );
+      if (!embedPhaseUUID) {
+        embedPhaseUUID = project.generateUuid();
+        copyFilesPhases[embedPhaseUUID] = {
+          isa: "PBXCopyFilesBuildPhase",
+          buildActionMask: "2147483647",
+          dstPath: '""',
+          dstSubfolderSpec: "13",
+          files: [],
+          name: '"Embed App Extensions"',
+          runOnlyForDeploymentPostprocessing: "0",
+        };
+        copyFilesPhases[`${embedPhaseUUID}_comment`] = "Embed App Extensions";
+        const mainTargetObj =
+          project.hash.project.objects["PBXNativeTarget"][mainTargetUUID];
+        if (mainTargetObj?.buildPhases) {
+          mainTargetObj.buildPhases.push({
+            value: embedPhaseUUID,
+            comment: "Embed App Extensions",
+          });
+        }
+      }
+      copyFilesPhases[embedPhaseUUID].files.push({
+        value: embedBuildFileUUID,
+        comment: `${WIDGET_NAME}.appex in Embed App Extensions`,
+      });
+    }
+
     return cfg;
   });
 

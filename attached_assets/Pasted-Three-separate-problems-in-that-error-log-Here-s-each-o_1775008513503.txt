@@ -1,0 +1,86 @@
+Three separate problems in that error log. Here's each one:
+
+---
+
+## Problem 1 — Provisioning profile missing App Groups + HealthKit
+The profile EAS auto-generated for `com.paceup` doesn't include these capabilities. No code change needed — fix it in Apple Developer Portal:
+
+1. Go to **developer.apple.com → Certificates, Identifiers & Profiles → Identifiers**
+2. Click **com.paceup**
+3. Scroll down, enable **App Groups** → add `group.com.paceup.app`
+4. Enable **HealthKit**
+5. Hit Save
+6. Then in your EAS project dashboard, delete the existing provisioning profile so EAS regenerates it fresh on the next build
+
+---
+
+## Problem 2 — WidgetKit extension targets not embedded in the main app
+Both plugins (`with-live-activity.js` and `with-widget.js`) create the extension targets but never add them to the main app's **"Embed App Extensions"** build phase. Xcode can't resolve the product type without that link.
+
+Tell Replit to add this block to **both** `plugins/with-live-activity.js` and `plugins/with-widget.js` — in each file, paste it right before the final `return cfg;` inside the `withXcodeProject` callback:
+
+**In `with-live-activity.js`** (paste before the `return cfg;` on the last line inside `withXcodeProject`):
+```js
+// Embed extension in main app
+const fileRefs = project.hash.project.objects["PBXFileReference"] || {};
+const productEntry = Object.entries(fileRefs).find(
+  ([k, v]) => !k.endsWith("_comment") && (v.path === `"${EXTENSION_NAME}.appex"` || v.path === `${EXTENSION_NAME}.appex`)
+);
+if (productEntry) {
+  const embedBuildFileUUID = project.generateUuid();
+  project.hash.project.objects["PBXBuildFile"] = project.hash.project.objects["PBXBuildFile"] || {};
+  project.hash.project.objects["PBXBuildFile"][embedBuildFileUUID] = {
+    isa: "PBXBuildFile",
+    fileRef: productEntry[0],
+    settings: { ATTRIBUTES: ["RemoveHeadersOnCopy"] },
+  };
+  project.hash.project.objects["PBXBuildFile"][`${embedBuildFileUUID}_comment`] =
+    `${EXTENSION_NAME}.appex in Embed App Extensions`;
+
+  const copyFilesPhases = project.hash.project.objects["PBXCopyFilesBuildPhase"] || {};
+  let embedPhaseUUID = Object.keys(copyFilesPhases).find(
+    (k) => !k.endsWith("_comment") && copyFilesPhases[k].name === '"Embed App Extensions"'
+  );
+  if (!embedPhaseUUID) {
+    embedPhaseUUID = project.generateUuid();
+    copyFilesPhases[embedPhaseUUID] = {
+      isa: "PBXCopyFilesBuildPhase",
+      buildActionMask: "2147483647",
+      dstPath: '""',
+      dstSubfolderSpec: "13",
+      files: [],
+      name: '"Embed App Extensions"',
+      runOnlyForDeploymentPostprocessing: "0",
+    };
+    copyFilesPhases[`${embedPhaseUUID}_comment`] = "Embed App Extensions";
+    const mainTargetObj =
+      project.hash.project.objects["PBXNativeTarget"][mainTargetUUID];
+    if (mainTargetObj?.buildPhases) {
+      mainTargetObj.buildPhases.push({
+        value: embedPhaseUUID,
+        comment: "Embed App Extensions",
+      });
+    }
+  }
+  copyFilesPhases[embedPhaseUUID].files.push({
+    value: embedBuildFileUUID,
+    comment: `${EXTENSION_NAME}.appex in Embed App Extensions`,
+  });
+}
+```
+
+Do the **exact same thing** in `plugins/with-widget.js` — same block, paste it before the final `return cfg;` in its `withXcodeProject` callback. The only difference is it references `WIDGET_NAME` instead of `EXTENSION_NAME`, so swap that:
+
+Replace every `EXTENSION_NAME` in the pasted block with `WIDGET_NAME`.
+
+---
+
+## Problem 3 — "Multiple commands produce" error
+This will go away automatically once Problem 2 is fixed. It's a downstream symptom of the two extension targets conflicting because they're not properly scoped.
+
+---
+
+## Order to fix
+1. Apple Developer Portal first (Problem 1) — takes 2 minutes
+2. Plugin code changes (Problem 2)
+3. Trigger new EAS build
