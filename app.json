@@ -100,6 +100,7 @@
       "expo-updates",
       "expo-font",
       "expo-web-browser",
+      "./plugins/with-main-application",
       [
         "expo-build-properties",
         {
