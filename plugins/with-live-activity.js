@@ -401,14 +401,17 @@ function withLiveActivity(config) {
         bc.buildSettings.WRAPPER_EXTENSION = "appex";
         bc.buildSettings.INFOPLIST_FILE = `"${EXTENSION_NAME}/Info.plist"`;
         bc.buildSettings.SWIFT_VERSION = "5.0";
-        bc.buildSettings.TARGETED_DEVICE_FAMILY = '"1"';
+        bc.buildSettings.TARGETED_DEVICE_FAMILY = '"1,2"';
         bc.buildSettings.IPHONEOS_DEPLOYMENT_TARGET = "16.2";
         bc.buildSettings.APPLICATION_EXTENSION_API_ONLY = "YES";
         bc.buildSettings.CODE_SIGN_ENTITLEMENTS = `"${EXTENSION_NAME}/${EXTENSION_NAME}.entitlements"`;
         bc.buildSettings.SKIP_INSTALL = "YES";
         bc.buildSettings.ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = "NO";
-        bc.buildSettings.SDKROOT = '"iphoneos"';
+        bc.buildSettings.SDKROOT = "iphoneos";
+        bc.buildSettings.PLATFORM_NAME = "iphoneos";
+        bc.buildSettings.SUPPORTED_PLATFORMS = '"iphoneos iphonesimulator"';
         bc.buildSettings.SUPPORTS_MACCATALYST = "NO";
+        bc.buildSettings.LD_RUNPATH_SEARCH_PATHS = '"$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"';
       }
     }
 
@@ -473,6 +476,45 @@ function withLiveActivity(config) {
       { target: mainTargetUUID },
       mainGroupUUID
     );
+
+    // ── Add extension as a dependency of the main app target ─────────────────
+    // This is critical: it gives Xcode the build context needed to resolve
+    // the widgetkit-extension product type spec for 'iphoneos' domain.
+    const containerItemProxyUUID = project.generateUuid();
+    project.hash.project.objects["PBXContainerItemProxy"] =
+      project.hash.project.objects["PBXContainerItemProxy"] || {};
+    project.hash.project.objects["PBXContainerItemProxy"][containerItemProxyUUID] = {
+      isa: "PBXContainerItemProxy",
+      containerPortal: project.getFirstProject().uuid,
+      proxyType: "1",
+      remoteGlobalIDString: extTarget.uuid,
+      remoteInfo: `"${EXTENSION_NAME}"`,
+    };
+    project.hash.project.objects["PBXContainerItemProxy"][
+      `${containerItemProxyUUID}_comment`
+    ] = "PBXContainerItemProxy";
+
+    const targetDependencyUUID = project.generateUuid();
+    project.hash.project.objects["PBXTargetDependency"] =
+      project.hash.project.objects["PBXTargetDependency"] || {};
+    project.hash.project.objects["PBXTargetDependency"][targetDependencyUUID] = {
+      isa: "PBXTargetDependency",
+      target: extTarget.uuid,
+      targetProxy: containerItemProxyUUID,
+    };
+    project.hash.project.objects["PBXTargetDependency"][
+      `${targetDependencyUUID}_comment`
+    ] = `"${EXTENSION_NAME}"`;
+
+    const mainTargetObj =
+      project.hash.project.objects["PBXNativeTarget"][mainTargetUUID];
+    if (mainTargetObj) {
+      mainTargetObj.dependencies = mainTargetObj.dependencies || [];
+      mainTargetObj.dependencies.push({
+        value: targetDependencyUUID,
+        comment: `"${EXTENSION_NAME}"`,
+      });
+    }
 
     // Embed extension in main app ("Embed App Extensions" build phase)
     const fileRefs = project.hash.project.objects["PBXFileReference"] || {};
