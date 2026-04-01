@@ -407,7 +407,7 @@ function withLiveActivity(config) {
         bc.buildSettings.CODE_SIGN_ENTITLEMENTS = `"${EXTENSION_NAME}/${EXTENSION_NAME}.entitlements"`;
         bc.buildSettings.SKIP_INSTALL = "YES";
         bc.buildSettings.ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = "NO";
-        bc.buildSettings.SDKROOT = "iphoneos";
+        bc.buildSettings.SDKROOT = '"iphoneos"';
         bc.buildSettings.SUPPORTS_MACCATALYST = "NO";
       }
     }

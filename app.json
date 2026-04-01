@@ -50,13 +50,14 @@
       },
       "entitlements": {
         "com.apple.developer.healthkit": true,
-        "com.apple.security.application-groups": ["group.com.paceup.app"]
+        "com.apple.security.application-groups": [
+          "group.com.paceup.app"
+        ]
       }
     },
     "android": {
       "package": "com.paceup",
       "versionCode": 21,
-      "minSdkVersion": 26,
       "adaptiveIcon": {
         "backgroundColor": "#080F0C",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -99,6 +100,14 @@
       "expo-updates",
       "expo-font",
       "expo-web-browser",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26
+          }
+        }
+      ],
       [
         "expo-location",
         {
@@ -152,7 +161,8 @@
           "healthSharePermission": "PaceUp uses Apple Health to import your runs, rides, and walks so all your activity appears in one place.",
           "healthUpdatePermission": "PaceUp saves completed workouts to Apple Health so they count toward your Activity rings."
         }
-      ]
+      ],
+      "expo-build-properties"
     ],
     "experiments": {
       "typedRoutes": true,

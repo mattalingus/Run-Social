@@ -448,7 +448,7 @@ function withWidget(config) {
         bc.buildSettings.CODE_SIGN_ENTITLEMENTS = `"${WIDGET_NAME}/${WIDGET_NAME}.entitlements"`;
         bc.buildSettings.SKIP_INSTALL = "YES";
         bc.buildSettings.ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = "NO";
-        bc.buildSettings.SDKROOT = "iphoneos";
+        bc.buildSettings.SDKROOT = '"iphoneos"';
         bc.buildSettings.SUPPORTS_MACCATALYST = "NO";
       }
     }
