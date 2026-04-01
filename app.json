@@ -145,6 +145,7 @@
       "expo-audio",
       "./plugins/with-live-activity",
       "./plugins/with-widget",
+      "./plugins/with-podfile-extension-fix",
       "./plugins/with-android-widget",
       [
         "react-native-health-connect",
