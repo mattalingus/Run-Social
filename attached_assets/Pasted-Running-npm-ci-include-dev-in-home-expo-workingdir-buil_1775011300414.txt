@@ -1,0 +1,129 @@
+Running "npm ci --include=dev" in /home/expo/workingdir/build directory
+npm warn EBADENGINE Unsupported engine {
+npm warn EBADENGINE   package: '@react-native/babel-plugin-codegen@0.81.5',
+npm warn EBADENGINE   required: { node: '>= 20.19.4' },
+npm warn EBADENGINE   current: { node: 'v20.19.2', npm: '10.8.2' }
+npm warn EBADENGINE }
+npm warn EBADENGINE Unsupported engine {
+npm warn EBADENGINE   package: '@react-native/babel-preset@0.81.5',
+npm warn EBADENGINE   required: { node: '>= 20.19.4' },
+npm warn EBADENGINE   current: { node: 'v20.19.2', npm: '10.8.2' }
+npm warn EBADENGINE }
+npm warn EBADENGINE Unsupported engine {
+npm warn EBADENGINE   package: '@react-native/codegen@0.81.5',
+npm warn EBADENGINE   required: { node: '>= 20.19.4' },
+npm warn EBADENGINE   current: { node: 'v20.19.2', npm: '10.8.2' }
+npm warn EBADENGINE }
+npm warn EBADENGINE Unsupported engine {
+npm warn EBADENGINE   package: '@react-native/debugger-frontend@0.81.5',
+npm warn EBADENGINE   required: { node: '>= 20.19.4' },
+npm warn EBADENGINE   current: { node: 'v20.19.2', npm: '10.8.2' }
+npm warn EBADENGINE }
+npm warn EBADENGINE Unsupported engine {
+npm warn EBADENGINE   package: '@react-native/dev-middleware@0.81.5',
+npm warn EBADENGINE   required: { node: '>= 20.19.4' },
+npm warn EBADENGINE   current: { node: 'v20.19.2', npm: '10.8.2' }
+npm warn EBADENGINE }
+npm warn EBADENGINE Unsupported engine {
+npm warn EBADENGINE   package: 'metro@0.83.3',
+npm warn EBADENGINE   required: { node: '>=20.19.4' },
+npm warn EBADENGINE   current: { node: 'v20.19.2', npm: '10.8.2' }
+npm warn EBADENGINE }
+npm warn EBADENGINE Unsupported engine {
+npm warn EBADENGINE   package: 'metro-babel-transformer@0.83.3',
+npm warn EBADENGINE   required: { node: '>=20.19.4' },
+npm warn EBADENGINE   current: { node: 'v20.19.2', npm: '10.8.2' }
+npm warn EBADENGINE }
+npm warn EBADENGINE Unsupported engine {
+npm warn EBADENGINE   package: 'metro-cache@0.83.3',
+npm warn EBADENGINE   required: { node: '>=20.19.4' },
+npm warn EBADENGINE   current: { node: 'v20.19.2', npm: '10.8.2' }
+npm warn EBADENGINE }
+npm warn EBADENGINE Unsupported engine {
+npm warn EBADENGINE   package: 'metro-cache-key@0.83.3',
+npm warn EBADENGINE   required: { node: '>=20.19.4' },
+npm warn EBADENGINE   current: { node: 'v20.19.2', npm: '10.8.2' }
+npm warn EBADENGINE }
+npm warn EBADENGINE Unsupported engine {
+npm warn EBADENGINE   package: 'metro-config@0.83.3',
+npm warn EBADENGINE   required: { node: '>=20.19.4' },
+npm warn EBADENGINE   current: { node: 'v20.19.2', npm: '10.8.2' }
+npm warn EBADENGINE }
+npm warn EBADENGINE Unsupported engine {
+npm warn EBADENGINE   package: 'metro-core@0.83.3',
+npm warn EBADENGINE   required: { node: '>=20.19.4' },
+npm warn EBADENGINE   current: { node: 'v20.19.2', npm: '10.8.2' }
+npm warn EBADENGINE }
+npm warn EBADENGINE Unsupported engine {
+npm warn EBADENGINE   package: 'metro-file-map@0.83.3',
+npm warn EBADENGINE   required: { node: '>=20.19.4' },
+npm warn EBADENGINE   current: { node: 'v20.19.2', npm: '10.8.2' }
+npm warn EBADENGINE }
+npm warn EBADENGINE Unsupported engine {
+npm warn EBADENGINE   package: 'metro-minify-terser@0.83.3',
+npm warn EBADENGINE   required: { node: '>=20.19.4' },
+npm warn EBADENGINE   current: { node: 'v20.19.2', npm: '10.8.2' }
+npm warn EBADENGINE }
+npm warn EBADENGINE Unsupported engine {
+npm warn EBADENGINE   package: 'metro-resolver@0.83.3',
+npm warn EBADENGINE   required: { node: '>=20.19.4' },
+npm warn EBADENGINE   current: { node: 'v20.19.2', npm: '10.8.2' }
+npm warn EBADENGINE }
+npm warn EBADENGINE Unsupported engine {
+npm warn EBADENGINE   package: 'metro-runtime@0.83.3',
+npm warn EBADENGINE   required: { node: '>=20.19.4' },
+npm warn EBADENGINE   current: { node: 'v20.19.2', npm: '10.8.2' }
+npm warn EBADENGINE }
+npm warn EBADENGINE Unsupported engine {
+npm warn EBADENGINE   package: 'metro-source-map@0.83.3',
+npm warn EBADENGINE   required: { node: '>=20.19.4' },
+npm warn EBADENGINE   current: { node: 'v20.19.2', npm: '10.8.2' }
+npm warn EBADENGINE }
+npm warn EBADENGINE Unsupported engine {
+npm warn EBADENGINE   package: 'metro-symbolicate@0.83.3',
+npm warn EBADENGINE   required: { node: '>=20.19.4' },
+npm warn EBADENGINE   current: { node: 'v20.19.2', npm: '10.8.2' }
+npm warn EBADENGINE }
+npm warn EBADENGINE Unsupported engine {
+npm warn EBADENGINE   package: 'metro-transform-plugins@0.83.3',
+npm warn EBADENGINE   required: { node: '>=20.19.4' },
+npm warn EBADENGINE   current: { node: 'v20.19.2', npm: '10.8.2' }
+npm warn EBADENGINE }
+npm warn EBADENGINE Unsupported engine {
+npm warn EBADENGINE   package: 'metro-transform-worker@0.83.3',
+npm warn EBADENGINE   required: { node: '>=20.19.4' },
+npm warn EBADENGINE   current: { node: 'v20.19.2', npm: '10.8.2' }
+npm warn EBADENGINE }
+npm warn EBADENGINE Unsupported engine {
+npm warn EBADENGINE   package: 'ob1@0.83.3',
+npm warn EBADENGINE   required: { node: '>=20.19.4' },
+npm warn EBADENGINE   current: { node: 'v20.19.2', npm: '10.8.2' }
+npm warn EBADENGINE }
+npm error code EUSAGE
+npm error
+npm error `npm ci` can only install packages when your package.json and package-lock.json or npm-shrinkwrap.json are in sync. Please update your lock file with `npm install` before continuing.
+npm error
+npm error Missing: expo-build-properties@1.0.10 from lock file
+npm error Missing: ajv@8.18.0 from lock file
+npm error Missing: semver@7.7.4 from lock file
+npm error Missing: fast-uri@3.1.0 from lock file
+npm error Missing: json-schema-traverse@1.0.0 from lock file
+npm error
+npm error Clean install a project
+npm error
+npm error Usage:
+npm error npm ci
+npm error
+npm error Options:
+npm error [--install-strategy <hoisted|nested|shallow|linked>] [--legacy-bundling]
+npm error [--global-style] [--omit <dev|optional|peer> [--omit <dev|optional|peer> ...]]
+npm error [--include <prod|dev|optional|peer> [--include <prod|dev|optional|peer> ...]]
+npm error [--strict-peer-deps] [--foreground-scripts] [--ignore-scripts] [--no-audit]
+npm error [--no-bin-links] [--no-fund] [--dry-run]
+npm error [-w|--workspace <workspace-name> [-w|--workspace <workspace-name> ...]]
+npm error [-ws|--workspaces] [--include-workspace-root] [--install-links]
+npm error
+npm error aliases: clean-install, ic, install-clean, isntall-clean
+npm error
+npm error Run "npm help ci" for more info
+npm error A complete log of this run can be found in: /home/expo/.npm/_logs/2026-04-01T02_39_49_599Z-debug-0.log
