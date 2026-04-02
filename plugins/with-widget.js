@@ -414,12 +414,46 @@ function withWidget(config) {
     if (alreadyAdded) return cfg;
 
     // ── Add widget extension target ─────────────────────────────────────────
+    // Capture main target info before addTarget so we can locate the
+    // "Copy Files" phase addTarget is about to auto-create.
+    const mainTargetInfo = project.getFirstTarget();
+    const mainTargetUUID = mainTargetInfo.uuid;
+    const mainTargetObj =
+      project.hash.project.objects["PBXNativeTarget"][mainTargetUUID];
+    const buildPhaseCountBefore = (mainTargetObj?.buildPhases || []).length;
+
     const widgetTarget = project.addTarget(
       WIDGET_NAME,
       "app_extension",
       WIDGET_NAME,
       WIDGET_BUNDLE_ID
     );
+
+    // addTarget("app_extension") already creates:
+    //   • a "Copy Files" build phase (dstSubfolderSpec=13) in the main target
+    //   • a PBXTargetDependency from main → extension
+    // We use that phase directly — no second embed phase needed.
+    // Just stamp RemoveHeadersOnCopy onto the build file it already created.
+    {
+      const buildPhasesAfter = mainTargetObj?.buildPhases || [];
+      const newPhaseRef = buildPhasesAfter[buildPhaseCountBefore]; // newly appended entry
+      if (newPhaseRef) {
+        const copyFilesSection =
+          project.hash.project.objects["PBXCopyFilesBuildPhase"] || {};
+        const autoCopyPhase = copyFilesSection[newPhaseRef.value];
+        if (autoCopyPhase) {
+          const buildFilesSection =
+            project.hash.project.objects["PBXBuildFile"] || {};
+          for (const fileRef of autoCopyPhase.files || []) {
+            const bf = buildFilesSection[fileRef.value];
+            if (bf) {
+              bf.settings = bf.settings || {};
+              bf.settings.ATTRIBUTES = ["RemoveHeadersOnCopy"];
+            }
+          }
+        }
+      }
+    }
 
     // Fix product type to widgetkit-extension
     const ntSection = project.hash.project.objects["PBXNativeTarget"];
@@ -485,9 +519,6 @@ function withWidget(config) {
     );
 
     // ── Add widget bridge files to main (first) app target ───────────────────
-    const mainTargetInfo = project.getFirstTarget();
-    const mainTargetUUID = mainTargetInfo.uuid;
-
     project.addSourceFile(
       "PaceUpWidgetBridge.m",
       { target: mainTargetUUID },
@@ -498,100 +529,6 @@ function withWidget(config) {
       { target: mainTargetUUID },
       mainGroupUUID
     );
-
-    // ── Add widget as a dependency of the main app target ────────────────────
-    // This is critical: it gives Xcode the build context needed to resolve
-    // the widgetkit-extension product type spec for 'iphoneos' domain.
-    const containerItemProxyUUID = project.generateUuid();
-    project.hash.project.objects["PBXContainerItemProxy"] =
-      project.hash.project.objects["PBXContainerItemProxy"] || {};
-    project.hash.project.objects["PBXContainerItemProxy"][containerItemProxyUUID] = {
-      isa: "PBXContainerItemProxy",
-      containerPortal: project.getFirstProject().uuid,
-      proxyType: "1",
-      remoteGlobalIDString: widgetTarget.uuid,
-      remoteInfo: `"${WIDGET_NAME}"`,
-    };
-    project.hash.project.objects["PBXContainerItemProxy"][
-      `${containerItemProxyUUID}_comment`
-    ] = "PBXContainerItemProxy";
-
-    const targetDependencyUUID = project.generateUuid();
-    project.hash.project.objects["PBXTargetDependency"] =
-      project.hash.project.objects["PBXTargetDependency"] || {};
-    project.hash.project.objects["PBXTargetDependency"][targetDependencyUUID] = {
-      isa: "PBXTargetDependency",
-      target: widgetTarget.uuid,
-      targetProxy: containerItemProxyUUID,
-    };
-    project.hash.project.objects["PBXTargetDependency"][
-      `${targetDependencyUUID}_comment`
-    ] = `"${WIDGET_NAME}"`;
-
-    const mainTargetObj =
-      project.hash.project.objects["PBXNativeTarget"][mainTargetUUID];
-    if (mainTargetObj) {
-      mainTargetObj.dependencies = mainTargetObj.dependencies || [];
-      mainTargetObj.dependencies.push({
-        value: targetDependencyUUID,
-        comment: `"${WIDGET_NAME}"`,
-      });
-    }
-
-    // Embed extension in main app ("Embed App Extensions" build phase)
-    const fileRefs = project.hash.project.objects["PBXFileReference"] || {};
-    const productEntry = Object.entries(fileRefs).find(
-      ([k, v]) =>
-        !k.endsWith("_comment") &&
-        (v.path === `"${WIDGET_NAME}.appex"` ||
-          v.path === `${WIDGET_NAME}.appex`)
-    );
-    if (productEntry) {
-      const embedBuildFileUUID = project.generateUuid();
-      project.hash.project.objects["PBXBuildFile"] =
-        project.hash.project.objects["PBXBuildFile"] || {};
-      project.hash.project.objects["PBXBuildFile"][embedBuildFileUUID] = {
-        isa: "PBXBuildFile",
-        fileRef: productEntry[0],
-        settings: { ATTRIBUTES: ["RemoveHeadersOnCopy"] },
-      };
-      project.hash.project.objects["PBXBuildFile"][
-        `${embedBuildFileUUID}_comment`
-      ] = `${WIDGET_NAME}.appex in Embed App Extensions`;
-
-      const copyFilesPhases =
-        project.hash.project.objects["PBXCopyFilesBuildPhase"] || {};
-      let embedPhaseUUID = Object.keys(copyFilesPhases).find(
-        (k) =>
-          !k.endsWith("_comment") &&
-          copyFilesPhases[k].name === '"Embed App Extensions"'
-      );
-      if (!embedPhaseUUID) {
-        embedPhaseUUID = project.generateUuid();
-        copyFilesPhases[embedPhaseUUID] = {
-          isa: "PBXCopyFilesBuildPhase",
-          buildActionMask: "2147483647",
-          dstPath: '""',
-          dstSubfolderSpec: "13",
-          files: [],
-          name: '"Embed App Extensions"',
-          runOnlyForDeploymentPostprocessing: "0",
-        };
-        copyFilesPhases[`${embedPhaseUUID}_comment`] = "Embed App Extensions";
-        const mainTargetObj =
-          project.hash.project.objects["PBXNativeTarget"][mainTargetUUID];
-        if (mainTargetObj?.buildPhases) {
-          mainTargetObj.buildPhases.push({
-            value: embedPhaseUUID,
-            comment: "Embed App Extensions",
-          });
-        }
-      }
-      copyFilesPhases[embedPhaseUUID].files.push({
-        value: embedBuildFileUUID,
-        comment: `${WIDGET_NAME}.appex in Embed App Extensions`,
-      });
-    }
 
     return cfg;
   });
