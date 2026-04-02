@@ -1,0 +1,89 @@
+You are repeatedly failing the iOS Expo build because the Xcode project contains broken WidgetKit extension targets and duplicate build tasks. Stop trying incremental fixes. Perform the following EXACT steps in order.
+
+GOAL  
+Fix Expo EAS iOS build errors:  
+- Unexpected duplicate tasks  
+- Multiple commands produce UninstalledProducts/iphoneos  
+- unable to resolve product type com.apple.product-type.widgetkit-extension  
+- PaceUpWidget / PaceUpLiveActivity build failures  
+
+ROOT CAUSE  
+The ios native project contains invalid WidgetKit extension targets that Expo does not manage. These must be removed and the ios project regenerated.
+
+STEPS
+
+1. DELETE THE ENTIRE IOS PROJECT  
+Run:
+
+rm -rf ios
+
+2. CLEAR DEPENDENCIES
+
+rm -rf node_modules  
+rm package-lock.json  
+npm install
+
+3. VERIFY NO WIDGET EXTENSIONS EXIST
+
+Search the repo and confirm these folders DO NOT EXIST:
+
+ios/PaceUpWidget  
+ios/PaceUpLiveActivity
+
+If they exist anywhere in the repo, delete them.
+
+4. CHECK app.json / app.config.js
+
+Remove ANY references to:
+
+PaceUpWidget  
+PaceUpLiveActivity  
+widgetkit  
+liveActivity  
+widget-extension  
+
+The Expo config must not declare any iOS extensions.
+
+5. REGENERATE THE NATIVE PROJECT
+
+Run:
+
+npx expo prebuild --clean
+
+This must generate a fresh ios directory.
+
+6. VERIFY XCODE TARGETS
+
+Open ios/PaceUp.xcodeproj and confirm ONLY ONE target exists:
+
+PaceUp
+
+There should be NO targets named:
+
+PaceUpWidget  
+PaceUpLiveActivity
+
+7. CLEAN BUILD ARTIFACTS
+
+Run:
+
+rm -rf ~/Library/Developer/Xcode/DerivedData
+
+8. BUILD WITH EAS CACHE CLEARED
+
+Run:
+
+eas build -p ios --clear-cache
+
+IMPORTANT RULES
+
+- Do NOT create WidgetKit extensions
+- Do NOT modify Xcode targets
+- Do NOT add Live Activities until the base build succeeds
+- Expo managed workflow must only have one iOS target
+
+EXPECTED RESULT
+
+The EAS build should complete successfully without any widgetkit-extension errors.
+
+Only after a successful build should Live Activities or widgets be reintroduced using a proper Expo config plugin.
