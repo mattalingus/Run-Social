@@ -414,13 +414,8 @@ function withWidget(config) {
     if (alreadyAdded) return cfg;
 
     // ── Add widget extension target ─────────────────────────────────────────
-    // Capture main target info before addTarget so we can locate the
-    // "Copy Files" phase addTarget is about to auto-create.
     const mainTargetInfo = project.getFirstTarget();
     const mainTargetUUID = mainTargetInfo.uuid;
-    const mainTargetObj =
-      project.hash.project.objects["PBXNativeTarget"][mainTargetUUID];
-    const buildPhaseCountBefore = (mainTargetObj?.buildPhases || []).length;
 
     const widgetTarget = project.addTarget(
       WIDGET_NAME,
@@ -433,20 +428,22 @@ function withWidget(config) {
     //   • a "Copy Files" build phase (dstSubfolderSpec=13) in the main target
     //   • a PBXTargetDependency from main → extension
     // We use that phase directly — no second embed phase needed.
-    // Just stamp RemoveHeadersOnCopy onto the build file it already created.
+    // Explicitly locate every Copy Files phase (dstSubfolderSpec=13) in the
+    // main target and stamp RemoveHeadersOnCopy on any build file that lacks it.
     {
-      const buildPhasesAfter = mainTargetObj?.buildPhases || [];
-      const newPhaseRef = buildPhasesAfter[buildPhaseCountBefore]; // newly appended entry
-      if (newPhaseRef) {
-        const copyFilesSection =
-          project.hash.project.objects["PBXCopyFilesBuildPhase"] || {};
-        const autoCopyPhase = copyFilesSection[newPhaseRef.value];
-        if (autoCopyPhase) {
-          const buildFilesSection =
-            project.hash.project.objects["PBXBuildFile"] || {};
-          for (const fileRef of autoCopyPhase.files || []) {
+      const mainPbxTarget =
+        project.hash.project.objects["PBXNativeTarget"][mainTargetUUID];
+      const copyFilesSection =
+        project.hash.project.objects["PBXCopyFilesBuildPhase"] || {};
+      const buildFilesSection =
+        project.hash.project.objects["PBXBuildFile"] || {};
+
+      for (const phaseRef of mainPbxTarget?.buildPhases || []) {
+        const phase = copyFilesSection[phaseRef.value];
+        if (phase && phase.dstSubfolderSpec === "13") {
+          for (const fileRef of phase.files || []) {
             const bf = buildFilesSection[fileRef.value];
-            if (bf) {
+            if (bf && !bf.settings?.ATTRIBUTES) {
               bf.settings = bf.settings || {};
               bf.settings.ATTRIBUTES = ["RemoveHeadersOnCopy"];
             }
