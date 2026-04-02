@@ -683,9 +683,12 @@ function withPaceUpWidgetExtension(config) {
 
     // ── Create extension target ──────────────────────────────────────────────
     // addTarget("app_extension") creates:
-    //   • PBXNativeTarget with productType app-extension (we override below)
+    //   • PBXNativeTarget with productType app-extension
     //   • "Copy Files" build phase (dstSubfolderSpec=13) in the main target
     //   • PBXTargetDependency from main → extension
+    // NOTE: we do NOT override productType to widgetkit-extension — the xcode
+    // npm library cannot reliably serialize that value. The extension is
+    // declared as WidgetKit via NSExtensionPointIdentifier in Info.plist.
     const extTarget = project.addTarget(
       EXTENSION_NAME,
       "app_extension",
@@ -693,12 +696,7 @@ function withPaceUpWidgetExtension(config) {
       EXTENSION_BUNDLE_ID
     );
 
-    // ── Override productType → widgetkit-extension ───────────────────────────
     const ntSection = project.hash.project.objects["PBXNativeTarget"];
-    if (ntSection[extTarget.uuid]) {
-      ntSection[extTarget.uuid].productType =
-        '"com.apple.product-type.widgetkit-extension"';
-    }
 
     // ── Stamp RemoveHeadersOnCopy on the auto-created Copy Files phase ───────
     {
