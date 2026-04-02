@@ -1,0 +1,140 @@
+1"}
+The clean iOS build succeeded. Now implement HealthKit and Live Activity support correctly without corrupting the Xcode project.
+
+Requirements:
+• Use Expo config plugins
+• Do NOT modify the Podfile
+• Do NOT create targets using "app_extension"
+• Only create one WidgetKit extension target
+
+Architecture required by Apple:
+
+Targets in the project should be:
+
+PaceUp
+PaceUpWidgetExtension
+
+The widget extension must support BOTH:
+• Home Screen Widget
+• Live Activity (Dynamic Island)
+
+------------------------------------------------
+
+STEP 1 — HEALTHKIT SUPPORT
+
+Install the correct package:
+
+npx expo install react-native-health
+
+Add the HealthKit entitlement in a config plugin:
+
+ios.entitlements:
+
+com.apple.developer.healthkit = true
+com.apple.developer.healthkit.access = ["workout"]
+
+Also add to Info.plist:
+
+NSHealthShareUsageDescription = "PaceUp reads workouts and health data to track your runs."
+NSHealthUpdateUsageDescription = "PaceUp saves workout activity to Apple Health."
+
+------------------------------------------------
+
+STEP 2 — CREATE WIDGET / LIVE ACTIVITY EXTENSION
+
+Create a config plugin:
+
+plugins/with-paceup-widget-extension.js
+
+Use withXcodeProject to create ONE extension target.
+
+The target must be created with this product type:
+
+com.apple.product-type.widgetkit-extension
+
+Target name:
+
+PaceUpWidgetExtension
+
+Do NOT create multiple targets.
+
+------------------------------------------------
+
+STEP 3 — BUILD PHASE
+
+After creating the target:
+
+Locate the automatically created "Copy Files" build phase with:
+
+dstSubfolderSpec = 13
+
+Attach the extension .appex to this phase.
+
+Do NOT create a second "Embed App Extensions" phase.
+
+Do NOT create manual PBXTargetDependency entries.
+
+------------------------------------------------
+
+STEP 4 — SWIFT FILES
+
+Create these Swift files in the extension:
+
+PaceUpWidget.swift
+PaceUpLiveActivity.swift
+PaceUpAttributes.swift
+
+Imports required:
+
+import WidgetKit
+import SwiftUI
+import ActivityKit
+
+------------------------------------------------
+
+STEP 5 — ENTITLEMENTS
+
+Extension entitlements must include:
+
+NSSupportsLiveActivities = true
+
+------------------------------------------------
+
+STEP 6 — EXTENSION INFO.PLIST
+
+Add:
+
+NSExtension
+  NSExtensionPointIdentifier = com.apple.widgetkit-extension
+
+------------------------------------------------
+
+STEP 7 — REGISTER PLUGIN
+
+Add to app.json:
+
+"plugins": [
+  "./plugins/with-paceup-widget-extension"
+]
+
+------------------------------------------------
+
+STEP 8 — REGENERATE NATIVE PROJECT
+
+rm -rf ios
+npx expo prebuild --clean
+
+------------------------------------------------
+
+STEP 9 — BUILD
+
+eas build -p ios --clear-cache
+
+Expected result:
+
+The Xcode project contains exactly two targets:
+
+PaceUp
+PaceUpWidgetExtension
+
+No duplicate build phases and no widgetkit-extension erro
