@@ -738,7 +738,7 @@ function withPaceUpWidgetExtension(config) {
         bc.buildSettings.INFOPLIST_FILE = `"${EXTENSION_NAME}/Info.plist"`;
         bc.buildSettings.SWIFT_VERSION = "5.0";
         bc.buildSettings.TARGETED_DEVICE_FAMILY = '"1,2"';
-        bc.buildSettings.IPHONEOS_DEPLOYMENT_TARGET = "16.2";
+        bc.buildSettings.IPHONEOS_DEPLOYMENT_TARGET = "16.1";
         bc.buildSettings.APPLICATION_EXTENSION_API_ONLY = "YES";
         bc.buildSettings.CODE_SIGN_ENTITLEMENTS = `"${EXTENSION_NAME}/${EXTENSION_NAME}.entitlements"`;
         bc.buildSettings.SKIP_INSTALL = "YES";
