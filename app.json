@@ -144,6 +144,7 @@
       ],
       "expo-audio",
       "./plugins/with-android-widget",
+      "./plugins/with-paceup-widget-extension",
       [
         "react-native-health-connect",
         {
