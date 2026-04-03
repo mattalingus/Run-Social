@@ -8,7 +8,7 @@ const RUBY_INJECT = `
   ${MARKER}
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
-      config.build_settings['DEVELOPMENT_TEAM'] = ENV['DEVELOPMENT_TEAM'] || 'AUTO'
+      config.build_settings['DEVELOPMENT_TEAM'] = ENV['DEVELOPMENT_TEAM']
     end
   end
 `;
@@ -36,15 +36,15 @@ module.exports = function withPodfileExtensionFix(config) {
       // Find the existing post_install block and inject before its closing 'end'
       const postInstallIdx = contents.indexOf("post_install do |installer|");
       if (postInstallIdx !== -1) {
-        // Find the last 'end' after the post_install block
-        const lastEnd = contents.lastIndexOf("\nend");
-        if (lastEnd !== -1) {
+        // Find the FIRST '  end' (2-space indent) after the post_install opening —
+        // that is the closing end of the post_install block itself, not the outermost end.
+        const postInstallEnd = contents.indexOf("\n  end", postInstallIdx);
+        if (postInstallEnd !== -1) {
           contents =
-            contents.slice(0, lastEnd) +
+            contents.slice(0, postInstallEnd) +
             "\n" +
             RUBY_INJECT +
-            "\nend" +
-            contents.slice(lastEnd + 4);
+            contents.slice(postInstallEnd);
         }
       } else {
         // No post_install block at all — create one
