@@ -3,25 +3,30 @@ const fs = require("fs");
 const path = require("path");
 
 const MARKER =
-  "# [PaceUp] Disable signing for resource bundle targets (pods + main project)";
+  "# [PaceUp] Disable signing for bundle targets (Pods + PaceUp.xcodeproj)";
 
 const RUBY_INJECT = `
   ${MARKER}
-  installer.target_installation_results.pod_target_installation_results.each do |_pod_name, target_installation_result|
-    target_installation_result.resource_bundle_targets.each do |resource_bundle_target|
-      resource_bundle_target.build_configurations.each do |config|
-        config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+  installer.pods_project.targets.each do |target|
+    if target.respond_to?(:product_type) && target.product_type == "com.apple.product-type.bundle"
+      target.build_configurations.each do |config|
+        config.build_settings["CODE_SIGNING_ALLOWED"] = "NO"
+        config.build_settings["CODE_SIGNING_REQUIRED"] = "NO"
+        config.build_settings["EXPANDED_CODE_SIGN_IDENTITY"] = ""
       end
     end
   end
-  installer.generated_projects.each do |project|
-    project.targets.each do |target|
-      if target.respond_to?(:product_type) && target.product_type == 'com.apple.product-type.bundle'
+  installer.aggregate_targets.map(&:user_project).uniq(&:path).each do |user_project|
+    user_project.targets.each do |target|
+      if target.respond_to?(:product_type) && target.product_type == "com.apple.product-type.bundle"
         target.build_configurations.each do |config|
-          config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+          config.build_settings["CODE_SIGNING_ALLOWED"] = "NO"
+          config.build_settings["CODE_SIGNING_REQUIRED"] = "NO"
+          config.build_settings["EXPANDED_CODE_SIGN_IDENTITY"] = ""
         end
       end
     end
+    user_project.save
   end
 `;
 
