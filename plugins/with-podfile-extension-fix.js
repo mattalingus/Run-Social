@@ -8,7 +8,6 @@ const RUBY_INJECT = `
   ${MARKER}
   installer.pods_project.build_configurations.each do |config|
     config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
-    config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
   end
 `;
 
