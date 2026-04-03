@@ -1,0 +1,87 @@
+We need to fix the CocoaPods signing issue while staying on Xcode 16 (React Native 0.81 requires Xcode >= 16.1).
+
+Implement the following changes exactly.
+
+------------------------------------------------
+
+STEP 1 — Restore the Xcode 16 builder
+
+Open eas.json.
+
+Set the iOS build image back to the Xcode 16 environment.
+
+Change:
+
+"image": "macos-sonoma-14.5-xcode-15.4"
+
+TO:
+
+"image": "macos-sequoia-15.3-xcode-16.2"
+
+Do not modify anything else in eas.json.
+
+------------------------------------------------
+
+STEP 2 — Replace the Podfile signing patch
+
+Open:
+
+plugins/with-podfile-extension-fix.js
+
+Replace the entire Ruby injection block with this code:
+
+# [PaceUp] Disable signing for Pods project (Xcode 16 fix)
+installer.pods_project.build_configurations.each do |config|
+  config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+  config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
+end
+
+Important:
+
+• Remove ALL previous signing fixes
+• Remove DEVELOPMENT_TEAM logic
+• Remove bundle-target iteration logic
+• Remove any CODE_SIGNING_ALLOWED patches applied per-target
+• Only keep the pods_project.build_configurations patch above
+
+Leave the injection logic itself unchanged (the code that inserts before the final "end" of post_install).
+
+------------------------------------------------
+
+STEP 3 — Regenerate the native project
+
+Run:
+
+rm -rf ios
+npx expo prebuild --clean
+
+------------------------------------------------
+
+STEP 4 — Verify the Podfile
+
+Open ios/Podfile.
+
+Inside the post_install block confirm that it contains:
+
+[PaceUp] Disable signing for Pods project (Xcode 16 fix)
+
+and that no other signing patches remain.
+
+------------------------------------------------
+
+STEP 5 — Run the build
+
+Submit a clean build:
+
+eas build -p ios --clear-cache --profile production --non-interactive
+
+------------------------------------------------
+
+Expected result:
+
+The build should progress past the previous archive failure and continue through:
+
+CompileSwiftSources
+Linking PaceUpWidgetExtension.appex
+Archive succeeded
+Uploading IPA to App Store Connect
