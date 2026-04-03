@@ -1,0 +1,79 @@
+Stop changing Podfile signing logic. Stop changing HealthKit.
+
+We already isolated the issue:
+- HealthKit ON, widget OFF = passes
+- widget ON, HealthKit OFF = fails
+
+That means the widget extension setup/signing is the actual archive blocker, and the generic “resource bundles are signed by default” message is likely masking an extension signing/configuration issue.
+
+New plan:
+
+1. Check the widget extension bundle identifier.
+It must be unique and separate from the main app.
+Example:
+- main app: com.paceup
+- widget extension: com.paceup.widget
+
+2. Check the widget target name in the generated Xcode project.
+It should be exactly:
+- PaceUpWidgetExtension
+
+3. Update app.json or app.config so EAS explicitly knows about the extension target for iOS signing/provisioning.
+
+Add the EAS app extension config for the widget target using the correct target name and bundle identifier.
+
+Use this structure:
+
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "build": {
+          "experimental": {
+            "ios": {
+              "appExtensions": [
+                {
+                  "targetName": "PaceUpWidgetExtension",
+                  "bundleIdentifier": "PUT_THE_WIDGET_BUNDLE_ID_HERE"
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+Replace PUT_THE_WIDGET_BUNDLE_ID_HERE with the actual widget bundle identifier.
+
+4. Verify Apple signing setup assumptions in the project:
+- main app bundle identifier
+- widget extension bundle identifier
+- target name
+- that the extension target is using the widget bundle identifier, not the main app bundle identifier
+
+5. Do NOT change the widget architecture yet.
+Do NOT remove the widget.
+Do NOT change HealthKit.
+Do NOT change Podfile signing patches right now.
+
+6. After updating the EAS extension config, regenerate native files cleanly:
+
+rm -rf ios
+npx expo prebuild --clean
+
+7. Before building, print:
+- the main app bundle identifier
+- the widget extension bundle identifier
+- the target name
+- the exact app.json/app.config extension config block that was added
+
+8. Then run a clean build:
+
+eas build -p ios --clear-cache --profile production --non-interactive
+
+Goal:
+Make EAS explicitly provision and sign the widget extension target instead of only the main app target.
+
+If this still fails, the next step is to temporarily reduce the widget extension to a minimal plain WidgetKit widget with no Live Activity code, but do not do that yet until the extension signing/config is verified.
