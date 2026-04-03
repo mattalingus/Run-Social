@@ -28,7 +28,7 @@
       },
       "ios": {
         "resourceClass": "m-medium",
-        "image": "latest"
+        "image": "macos-ventura-13.6-xcode-15.4"
       }
     }
   },
