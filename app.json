@@ -101,6 +101,7 @@
       "expo-font",
       "expo-web-browser",
       "./plugins/with-main-application",
+      "./plugins/with-podfile-extension-fix",
       [
         "expo-build-properties",
         {
