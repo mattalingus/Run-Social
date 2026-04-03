@@ -1,0 +1,81 @@
+Creating Gymfile
+Gymfile created
+Successfully loaded '/Users/expo/workingdir/build/ios/Gymfile' 📄
++---------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                                                                  Detected Values from './Gymfile'                                                                   |
++-----------------------+---------------------------------------------------------------------------------------------------------------------------------------------+
+| suppress_xcode_output | true                                                                                                                                        |
+| clean                 | false                                                                                                                                       |
+| scheme                | PaceUp                                                                                                                                      |
+| configuration         | Release                                                                                                                                     |
+| export_options        |                                                                                                                                             |
+| export_xcargs         | OTHER_CODE_SIGN_FLAGS="--keychain /var/folders/5_/4knlryn57n39p2c_jw8567z00000gn/T/eas-build-3bc6f5e7-6455-4ffb-9407-3567e21cbb3d.keychain" |
+| disable_xcpretty      | true                                                                                                                                        |
+| buildlog_path         | /Users/expo/workingdir/logs                                                                                                                 |
+| output_directory      | ./build                                                                                                                                     |
++-----------------------+---------------------------------------------------------------------------------------------------------------------------------------------+
+Resolving Swift Package Manager dependencies...
+$ xcodebuild -resolvePackageDependencies -workspace ./PaceUp.xcworkspace -scheme PaceUp -configuration Release
+▸ Command line invocation:
+▸     /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -resolvePackageDependencies -workspace ./PaceUp.xcworkspace -scheme PaceUp -configuration Release
+▸ resolved source packages:
+$ xcodebuild -showBuildSettings -workspace ./PaceUp.xcworkspace -scheme PaceUp -configuration Release 2>&1
+Detected provisioning profile mapping: {:"com.paceup"=>"0f1ae796-ba70-4bea-b9f7-523794ef9d8a"}
+
++----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                                                                                   Summary for gym 2.228.0                                                                                    |
++------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------+
+| workspace                                      | ./PaceUp.xcworkspace                                                                                                                        |
+| scheme                                         | PaceUp                                                                                                                                      |
+| clean                                          | false                                                                                                                                       |
+| output_directory                               | ./build                                                                                                                                     |
+| output_name                                    | PaceUp                                                                                                                                      |
+| configuration                                  | Release                                                                                                                                     |
+| silent                                         | false                                                                                                                                       |
+| skip_package_ipa                               | false                                                                                                                                       |
+| skip_package_pkg                               | false                                                                                                                                       |
+| export_options.method                          | app-store                                                                                                                                   |
+| export_options.provisioningProfiles.com.paceup | 0f1ae796-ba70-4bea-b9f7-523794ef9d8a                                                                                                        |
+| export_xcargs                                  | OTHER_CODE_SIGN_FLAGS="--keychain /var/folders/5_/4knlryn57n39p2c_jw8567z00000gn/T/eas-build-3bc6f5e7-6455-4ffb-9407-3567e21cbb3d.keychain" |
+| build_path                                     | /Users/expo/Library/Developer/Xcode/Archives/2026-04-03                                                                                     |
+| result_bundle                                  | false                                                                                                                                       |
+| buildlog_path                                  | /Users/expo/workingdir/logs                                                                                                                 |
+| destination                                    | generic/platform=iOS                                                                                                                        |
+| suppress_xcode_output                          | true                                                                                                                                        |
+| xcodebuild_formatter                           | xcpretty                                                                                                                                    |
+| build_timing_summary                           | false                                                                                                                                       |
+| disable_xcpretty                               | true                                                                                                                                        |
+| skip_profile_detection                         | false                                                                                                                                       |
+| xcodebuild_command                             | xcodebuild                                                                                                                                  |
+| skip_package_dependencies_resolution           | false                                                                                                                                       |
+| disable_package_automatic_updates              | false                                                                                                                                       |
+| use_system_scm                                 | false                                                                                                                                       |
+| xcode_path                                     | /Applications/Xcode.app                                                                                                                     |
++------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------+
+$ set -o pipefail && xcodebuild -workspace ./PaceUp.xcworkspace -scheme PaceUp -configuration Release -destination 'generic/platform=iOS' -archivePath /Users/expo/Library/Developer/Xcode/Archives/2026-04-03/PaceUp\ 2026-04-03\ 11.51.41.xcarchive archive | tee /Users/expo/workingdir/logs/PaceUp-PaceUp.log > /dev/null
+    Run script build phase '[CP-User] Generate updates resources for expo-updates' will be run during every build because it does not specify any outputs. To address this issue, either add output dependencies to the script phase, or configure it to run in every build by unchecking "Based on dependency analysis" in the script phase. (in target 'EXUpdates' from project 'Pods')
+    Run script build phase '[CP-User] [Hermes] Replace Hermes for the right configuration, if needed' will be run during every build because it does not specify any outputs. To address this issue, either add output dependencies to the script phase, or configure it to run in every build by unchecking "Based on dependency analysis" in the script phase. (in target 'hermes-engine' from project 'Pods')
+▸ ** ARCHIVE FAILED **
+▸ The following build commands failed:
+▸ 	Archiving workspace PaceUp with scheme PaceUp
+▸ (1 failure)
+Exit status: 65
+
++---------------------------------------+
+|           Build environment           |
++-------------+-------------------------+
+| xcode_path  | /Applications/Xcode.app |
+| gym_version | 2.228.0                 |
+| sdk         | iPhoneOS26.0.sdk        |
++-------------+-------------------------+
+Looks like fastlane ran into a build/archive error with your project
+It's hard to tell what's causing the error, so we wrote some guides on how
+to troubleshoot build and signing issues: https://docs.fastlane.tools/codesigning/getting-started/
+Before submitting an issue on GitHub, please follow the guide above and make
+sure your project is set up correctly.
+fastlane uses `xcodebuild` commands to generate your binary, you can see the
+the full commands printed out in yellow in the above log.
+Make sure to inspect the output above, as usually you'll find more error information there
+[!] Error building the application - see the log above
+Error: Starting from Xcode 14, resource bundles are signed by default, which requires setting the development team for each resource bundle target.
+To resolve this issue, downgrade to an older Xcode version using the "image" field in eas.json, or upgrade to SDK 46 or higher.
