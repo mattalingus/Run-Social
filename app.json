@@ -174,7 +174,19 @@
         "origin": "https://paceupapp.com"
       },
       "eas": {
-        "projectId": "650ed19c-3588-4b86-a01e-ae0ec83096c4"
+        "projectId": "650ed19c-3588-4b86-a01e-ae0ec83096c4",
+        "build": {
+          "experimental": {
+            "ios": {
+              "appExtensions": [
+                {
+                  "targetName": "PaceUpWidgetExtension",
+                  "bundleIdentifier": "com.paceup.PaceUpWidgetExtension"
+                }
+              ]
+            }
+          }
+        }
       }
     }
   }
