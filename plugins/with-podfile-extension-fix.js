@@ -2,13 +2,13 @@ const { withDangerousMod } = require("@expo/config-plugins");
 const fs = require("fs");
 const path = require("path");
 
-const MARKER = "# [PaceUp] CocoaPods signing fix (Xcode 14+)";
+const MARKER = "# [PaceUp] CODE_SIGNING_ALLOWED fix (Xcode 14+)";
 
 const RUBY_INJECT = `
   ${MARKER}
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
-      config.build_settings['DEVELOPMENT_TEAM'] = ENV['DEVELOPMENT_TEAM']
+      config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
     end
   end
 `;
