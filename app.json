@@ -145,23 +145,7 @@
       ],
       "expo-audio",
       "./plugins/with-android-widget",
-      [
-        "react-native-health-connect",
-        {
-          "permissions": [
-            "ExerciseSession",
-            "Distance",
-            "TotalCaloriesBurned"
-          ]
-        }
-      ],
-      [
-        "react-native-health",
-        {
-          "healthSharePermission": "PaceUp uses Apple Health to import your runs, rides, and walks so all your activity appears in one place.",
-          "healthUpdatePermission": "PaceUp saves completed workouts to Apple Health so they count toward your Activity rings."
-        }
-      ],
+      "./plugins/with-paceup-widget-extension",
       "expo-build-properties"
     ],
     "experiments": {
