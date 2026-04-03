@@ -28,7 +28,7 @@
       },
       "ios": {
         "resourceClass": "m-medium",
-        "image": "macos-sequoia-15.6-xcode-16.4"
+        "image": "sdk-54"
       }
     }
   },
