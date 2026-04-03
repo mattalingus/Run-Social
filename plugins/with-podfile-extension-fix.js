@@ -2,12 +2,16 @@ const { withDangerousMod } = require("@expo/config-plugins");
 const fs = require("fs");
 const path = require("path");
 
-const MARKER = "# [PaceUp] Disable signing for Pods project (Xcode 16 fix)";
+const MARKER = "# [PaceUp] Disable signing for CocoaPods resource bundles";
 
 const RUBY_INJECT = `
   ${MARKER}
-  installer.pods_project.build_configurations.each do |config|
-    config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+  installer.target_installation_results.pod_target_installation_results.each do |_pod_name, target_installation_result|
+    target_installation_result.resource_bundle_targets.each do |resource_bundle_target|
+      resource_bundle_target.build_configurations.each do |config|
+        config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+      end
+    end
   end
 `;
 
