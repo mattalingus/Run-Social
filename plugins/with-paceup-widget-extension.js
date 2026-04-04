@@ -79,8 +79,8 @@ class PaceUpActivityBridge: NSObject {
 
   @objc func startActivity(
     _ data: NSDictionary,
-    resolver resolve: @escaping RCTPromiseResolveBlock,
-    rejecter _: @escaping RCTPromiseRejectBlock
+    resolver resolve: @escaping (Any?) -> Void,
+    rejecter _: @escaping (String, String, Error?) -> Void
   ) {
     guard #available(iOS 16.2, *) else { resolve(nil); return }
     guard ActivityAuthorizationInfo().areActivitiesEnabled else { resolve(nil); return }
@@ -105,8 +105,8 @@ class PaceUpActivityBridge: NSObject {
 
   @objc func updateActivity(
     _ data: NSDictionary,
-    resolver resolve: @escaping RCTPromiseResolveBlock,
-    rejecter _: @escaping RCTPromiseRejectBlock
+    resolver resolve: @escaping (Any?) -> Void,
+    rejecter _: @escaping (String, String, Error?) -> Void
   ) {
     guard #available(iOS 16.2, *) else { resolve(nil); return }
     guard let activity = _currentActivity else { resolve(nil); return }
@@ -122,8 +122,8 @@ class PaceUpActivityBridge: NSObject {
 
   @objc func endActivity(
     _ data: NSDictionary,
-    resolver resolve: @escaping RCTPromiseResolveBlock,
-    rejecter _: @escaping RCTPromiseRejectBlock
+    resolver resolve: @escaping (Any?) -> Void,
+    rejecter _: @escaping (String, String, Error?) -> Void
   ) {
     guard #available(iOS 16.2, *) else { resolve(nil); return }
     guard let activity = _currentActivity else { resolve(nil); return }
@@ -166,8 +166,8 @@ class PaceUpWidgetBridge: NSObject {
 
   @objc func writeWidgetJson(
     _ jsonString: String,
-    resolver resolve: @escaping RCTPromiseResolveBlock,
-    rejecter reject: @escaping RCTPromiseRejectBlock
+    resolver resolve: @escaping (Any?) -> Void,
+    rejecter reject: @escaping (String, String, Error?) -> Void
   ) {
     guard
       let containerURL = FileManager.default.containerURL(
