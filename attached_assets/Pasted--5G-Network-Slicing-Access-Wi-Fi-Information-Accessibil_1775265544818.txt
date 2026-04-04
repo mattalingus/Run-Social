@@ -1,0 +1,270 @@
+
+5G Network Slicing
+	
+Access Wi-Fi Information
+	
+Accessibility Merchant API Control
+	
+Accessory Data Provider (development)
+	
+Accessory Setup Extension
+	
+Accessory Transport Extension
+	
+Accessory Transport Security (development)
+	
+Account Creation Requires Phone Number
+	
+App Attest
+	
+App Attest Opt-In
+	
+App Groups
+Edit
+Enabled App Groups (1)
+	
+App Identifier for OS Data Transfer
+Configure
+	
+Apple Pay Payment Processing
+Configure
+	
+Associated Domains
+	
+AutoFill Credential Provider
+	
+Background GPU Access
+	
+Carrier-Constrained Network Category and Optimized
+	
+ClassKit
+	
+Communication Notifications
+	
+Critical Messaging
+	
+Custom Network Protocol
+	
+Data Protection
+
+Complete Protection
+
+Protected Unless Open
+
+Protected Until First User Authentication
+	
+Declared Age Range
+	
+Default Calling App
+	
+Default Carrier Messaging App
+	
+Default Dialer App
+	
+Default Messaging App
+	
+Default Navigation App
+	
+Default Translation App
+	
+Device Discovery Pairing Access
+	
+Digital Credentials API - Mobile Document Provider
+	
+DriverKit (development)
+Development only. Learn more
+Provisioning support required.
+	
+DriverKit Allow Any UserClient (development)
+Development only. Learn more
+Provisioning support required.
+	
+DriverKit Allow Third Party UserClients
+	
+DriverKit Communicates with Drivers
+	
+DriverKit Family Audio (development)
+Development only. Learn more
+Provisioning support required.
+	
+DriverKit Family HID Device (development)
+Development only. Learn more
+Provisioning support required.
+	
+DriverKit Family HID EventService (development)
+Development only. Learn more
+Provisioning support required.
+	
+DriverKit Family MIDI (development)
+Development only. Learn more
+Provisioning support required.
+	
+DriverKit Family Networking (development)
+Development only. Learn more
+Provisioning support required.
+	
+DriverKit Family SCSIController (development)
+Development only. Learn more
+Provisioning support required.
+	
+DriverKit Family Serial (development)
+Development only. Learn more
+Provisioning support required.
+	
+DriverKit PCI (development)
+	
+DriverKit Transport HID (development)
+Development only. Learn more
+Provisioning support required.
+	
+DriverKit USB Transport (development)
+Development only. Learn more
+Provisioning support required.
+	
+EnergyKit (Development Only)
+	
+Enhanced Security
+	
+Extended Virtual Addressing
+	
+Family Controls (Development)
+Development only.
+	
+Family Controls App and Website Usage
+	
+FileProvider Testing Mode
+	
+FinanceKit Transaction Picker UI
+	
+Fonts
+	
+Foveated Streaming Session
+	
+FSKit Module
+	
+Game Center
+	
+Group Activities
+	
+Head Pose
+	
+HealthKit
+	
+HealthKit Estimate Recalibration
+	
+HLS Interstitial Previews
+	
+HomeKit
+	
+Hotspot
+	
+iCloud
+
+Include CloudKit support (requires Xcode 6)
+
+Compatible with Xcode 5
+Configure
+	
+iCloud Extended Share Access
+	
+ID Verifier - Display Only
+	
+In-App Purchase
+	
+Increased Debugging Memory Limit
+	
+Increased Memory Limit
+	
+Inter-App Audio
+	
+Journaling Suggestions
+	
+Location Push Service Extension
+	
+Low Latency HLS
+	
+Low-Latency Streaming
+	
+Manage Thread Network Credentials (development)
+Development only. Learn more
+Provisioning support required.
+	
+Managed App Installation UI
+	
+Maps
+	
+Matter Allow Setup Payload
+	
+MDM Managed Associated Domains
+	
+Media Device Discovery
+	
+Media Extension Format Reader
+	
+Media Extension Video Decoder
+	
+Messages Collaboration
+	
+Multipath
+	
+Multitasking Camera Access
+	
+Nearby Interaction DL-TDoA (development)
+	
+Network Extensions
+	
+NFC Tag Reading
+	
+On Demand Install Capable for App Clip Extensions
+	
+Personal VPN
+	
+Push Notifications
+
+Broadcast Capability
+Configure
+	
+Push to Talk
+	
+Sensitive Content Analysis
+	
+Shallow Depth and Pressure
+	
+Shared with You
+	
+Side Button Access
+	
+Sign In with Apple
+Configure
+	
+SIM Inserted for Wireless Carriers
+	
+Siri
+	
+Spatial Audio Profile
+	
+StoreKit External Purchases or Offers
+	
+Sustained Execution
+	
+System Extension
+	
+Time Sensitive Notifications
+	
+User Management
+	
+VMNet
+	
+Wallet
+	
+WeatherKit
+	
+Wi-Fi Aware
+	
+Wi-Fi Network Sharing
+	
+Wireless Accessory Configuration
+	
+Wireless Insights Service Predictions
+	
+Mac Catalyst (Existing Apps Only)
