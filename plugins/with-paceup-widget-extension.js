@@ -770,18 +770,21 @@ function withPaceUpWidgetExtension(config) {
     }
 
     // ── Add Swift source files → extension target ─────────────────────────────
+    // Use bare filenames — the group already has path = EXTENSION_NAME so Xcode
+    // resolves: ios/PaceUpWidgetExtension/<filename>. Prefixing with EXTENSION_NAME
+    // would create a double-nested path and cause "Build input files cannot be found".
     project.addSourceFile(
-      `${EXTENSION_NAME}/PaceUpAttributes.swift`,
+      `PaceUpAttributes.swift`,
       { target: extTarget.uuid },
       extGroupUUID
     );
     project.addSourceFile(
-      `${EXTENSION_NAME}/PaceUpLiveActivity.swift`,
+      `PaceUpLiveActivity.swift`,
       { target: extTarget.uuid },
       extGroupUUID
     );
     project.addSourceFile(
-      `${EXTENSION_NAME}/PaceUpWidget.swift`,
+      `PaceUpWidget.swift`,
       { target: extTarget.uuid },
       extGroupUUID
     );
