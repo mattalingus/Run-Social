@@ -25,7 +25,7 @@ const path = require("path");
 const fs = require("fs");
 
 const EXTENSION_NAME = "PaceUpWidgetExtension";
-const EXTENSION_BUNDLE_ID = "com.paceup.PaceUpWidgetExtension";
+const EXTENSION_BUNDLE_ID = "com.paceup.PaceUpWidget";
 const APP_GROUP = "group.com.paceup.app";
 
 // ─── ObjC/Swift bridge files (written to ios/ → added to main app target) ────

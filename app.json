@@ -181,7 +181,7 @@
               "appExtensions": [
                 {
                   "targetName": "PaceUpWidgetExtension",
-                  "bundleIdentifier": "com.paceup.PaceUpWidgetExtension"
+                  "bundleIdentifier": "com.paceup.PaceUpWidget"
                 }
               ]
             }
