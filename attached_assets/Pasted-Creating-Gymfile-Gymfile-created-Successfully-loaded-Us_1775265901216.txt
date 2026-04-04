@@ -1,0 +1,153 @@
+Creating Gymfile
+Gymfile created
+Successfully loaded '/Users/expo/workingdir/build/ios/Gymfile' 📄
++---------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                                                                  Detected Values from './Gymfile'                                                                   |
++-----------------------+---------------------------------------------------------------------------------------------------------------------------------------------+
+| suppress_xcode_output | true                                                                                                                                        |
+| clean                 | false                                                                                                                                       |
+| scheme                | PaceUp                                                                                                                                      |
+| configuration         | Release                                                                                                                                     |
+| export_options        |                                                                                                                                             |
+| export_xcargs         | OTHER_CODE_SIGN_FLAGS="--keychain /var/folders/m1/8_w9962s3b79dqm00nnlm85m0000gn/T/eas-build-83ab2de5-0fa3-4579-beff-ab2c073f692b.keychain" |
+| disable_xcpretty      | true                                                                                                                                        |
+| buildlog_path         | /Users/expo/workingdir/logs                                                                                                                 |
+| output_directory      | ./build                                                                                                                                     |
++-----------------------+---------------------------------------------------------------------------------------------------------------------------------------------+
+Resolving Swift Package Manager dependencies...
+$ xcodebuild -resolvePackageDependencies -workspace ./PaceUp.xcworkspace -scheme PaceUp -configuration Release
+▸ Command line invocation:
+▸     /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -resolvePackageDependencies -workspace ./PaceUp.xcworkspace -scheme PaceUp -configuration Release
+▸ User defaults from command line:
+▸     IDEPackageSupportUseBuiltinSCM = YES
+▸ resolved source packages:
+$ xcodebuild -showBuildSettings -workspace ./PaceUp.xcworkspace -scheme PaceUp -configuration Release 2>&1
+Detected provisioning profile mapping: {:"com.paceup"=>"0f1ae796-ba70-4bea-b9f7-523794ef9d8a", :"com.paceup.PaceUpWidget"=>"b78d2d1a-cc32-49f7-85bd-30543f134a4d"}
+
++-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                                                                                          Summary for gym 2.226.0                                                                                          |
++-------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------+
+| workspace                                                   | ./PaceUp.xcworkspace                                                                                                                        |
+| scheme                                                      | PaceUp                                                                                                                                      |
+| clean                                                       | false                                                                                                                                       |
+| output_directory                                            | ./build                                                                                                                                     |
+| output_name                                                 | PaceUp                                                                                                                                      |
+| configuration                                               | Release                                                                                                                                     |
+| silent                                                      | false                                                                                                                                       |
+| skip_package_ipa                                            | false                                                                                                                                       |
+| skip_package_pkg                                            | false                                                                                                                                       |
+| export_options.method                                       | app-store                                                                                                                                   |
+| export_options.provisioningProfiles.com.paceup              | 0f1ae796-ba70-4bea-b9f7-523794ef9d8a                                                                                                        |
+| export_options.provisioningProfiles.com.paceup.PaceUpWidget | b78d2d1a-cc32-49f7-85bd-30543f134a4d                                                                                                        |
+| export_xcargs                                               | OTHER_CODE_SIGN_FLAGS="--keychain /var/folders/m1/8_w9962s3b79dqm00nnlm85m0000gn/T/eas-build-83ab2de5-0fa3-4579-beff-ab2c073f692b.keychain" |
+| build_path                                                  | /Users/expo/Library/Developer/Xcode/Archives/2026-04-03                                                                                     |
+| result_bundle                                               | false                                                                                                                                       |
+| buildlog_path                                               | /Users/expo/workingdir/logs                                                                                                                 |
+| destination                                                 | generic/platform=iOS                                                                                                                        |
+| suppress_xcode_output                                       | true                                                                                                                                        |
+| xcodebuild_formatter                                        | xcpretty                                                                                                                                    |
+| build_timing_summary                                        | false                                                                                                                                       |
+| disable_xcpretty                                            | true                                                                                                                                        |
+| skip_profile_detection                                      | false                                                                                                                                       |
+| xcodebuild_command                                          | xcodebuild                                                                                                                                  |
+| skip_package_dependencies_resolution                        | false                                                                                                                                       |
+| disable_package_automatic_updates                           | false                                                                                                                                       |
+| use_system_scm                                              | false                                                                                                                                       |
+| xcode_path                                                  | /Applications/Xcode.app                                                                                                                     |
++-------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------+
+$ set -o pipefail && xcodebuild -workspace ./PaceUp.xcworkspace -scheme PaceUp -configuration Release -destination 'generic/platform=iOS' -archivePath /Users/expo/Library/Developer/Xcode/Archives/2026-04-03/PaceUp\ 2026-04-03\ 18.23.26.xcarchive archive | tee /Users/expo/workingdir/logs/PaceUp-PaceUp.log > /dev/null
+› Executing react-native Pods/hermes-engine » [CP-User] [Hermes] Replace Hermes for the right configuration, if needed
+› Executing react-native Pods/ReactNativeDependencies » [CP-User] [RNDeps] Replace React Native Dependencies for the right configuration, if needed
+› Executing react-native Pods/hermes-engine » [CP] Copy XCFrameworks
+› Preparing Pods/react-native-maps-ReactNativeMapsPrivacy » ResourceBundle-ReactNativeMapsPrivacy-react-native-maps-Info.plist
+› Copying   ../../../Users/expo/Library/Developer/Xcode/DerivedData/PaceUp-blabsbrvkrtlqhbfqvumcwozqtqh/Build/Intermediates.noindex/ArchiveIntermediates/PaceUp/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/ReactNativeMapsPrivacy.bundle/PrivacyInfo.xcprivacy ➜ ../../../Users/expo/workingdir/build/node_modules/react-native-maps/ios/PrivacyInfo.xcprivacy
+› Preparing expo-image Pods/SDWebImage-SDWebImage » ResourceBundle-SDWebImage-SDWebImage-Info.plist
+› Copying   expo-image ../../../Users/expo/Library/Developer/Xcode/DerivedData/PaceUp-blabsbrvkrtlqhbfqvumcwozqtqh/Build/Intermediates.noindex/ArchiveIntermediates/PaceUp/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/SDWebImage.bundle/PrivacyInfo.xcprivacy ➜ ../../../Users/expo/workingdir/build/ios/Pods/SDWebImage/WebImage/PrivacyInfo.xcprivacy
+› Creating  ReactNativeMapsPrivacy.bundle
+› Preparing react-native-purchases Pods/RevenueCat-RevenueCat » ResourceBundle-RevenueCat-RevenueCat-Info.plist
+› Copying   react-native-purchases ../../../Users/expo/Library/Developer/Xcode/DerivedData/PaceUp-blabsbrvkrtlqhbfqvumcwozqtqh/Build/Intermediates.noindex/ArchiveIntermediates/PaceUp/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/RevenueCat.bundle/PrivacyInfo.xcprivacy ➜ ../../../Users/expo/workingdir/build/ios/Pods/RevenueCat/Sources/PrivacyInfo.xcprivacy
+› Creating  expo-image Pods/SDWebImage-SDWebImage » SDWebImage.bundle
+› Preparing Pods/React-cxxreact-React-cxxreact_privacy » ResourceBundle-React-cxxreact_privacy-React-cxxreact-Info.plist
+› Copying   ../../../Users/expo/Library/Developer/Xcode/DerivedData/PaceUp-blabsbrvkrtlqhbfqvumcwozqtqh/Build/Intermediates.noindex/ArchiveIntermediates/PaceUp/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/React-cxxreact_privacy.bundle/PrivacyInfo.xcprivacy ➜ ../../../Users/expo/workingdir/build/node_modules/react-native/ReactCommon/cxxreact/PrivacyInfo.xcprivacy
+› Preparing Pods/React-Core-React-Core_privacy » ResourceBundle-React-Core_privacy-React-Core-Info.plist
+› Copying   ../../../Users/expo/Library/Developer/Xcode/DerivedData/PaceUp-blabsbrvkrtlqhbfqvumcwozqtqh/Build/Intermediates.noindex/ArchiveIntermediates/PaceUp/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/React-Core_privacy.bundle/PrivacyInfo.xcprivacy ➜ ../../../Users/expo/workingdir/build/node_modules/react-native/React/Resources/PrivacyInfo.xcprivacy
+› Creating  react-native-purchases Pods/RevenueCat-RevenueCat » RevenueCat.bundle
+› Preparing expo-updates Pods/ReachabilitySwift-ReachabilitySwift » ResourceBundle-ReachabilitySwift-ReachabilitySwift-Info.plist
+› Copying   expo-updates ../../../Users/expo/Library/Developer/Xcode/DerivedData/PaceUp-blabsbrvkrtlqhbfqvumcwozqtqh/Build/Intermediates.noindex/ArchiveIntermediates/PaceUp/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/ReachabilitySwift.bundle/PrivacyInfo.xcprivacy ➜ ../../../Users/expo/workingdir/build/ios/Pods/ReachabilitySwift/Sources/PrivacyInfo.xcprivacy
+› Creating  Pods/React-cxxreact-React-cxxreact_privacy » React-cxxreact_privacy.bundle
+› Creating  Pods/React-Core-React-Core_privacy » React-Core_privacy.bundle
+› Preparing Pods/RNSVG-RNSVGFilters » ResourceBundle-RNSVGFilters-RNSVG-Info.plist
+› Copying   ../../../Users/expo/Library/Developer/Xcode/DerivedData/PaceUp-blabsbrvkrtlqhbfqvumcwozqtqh/Build/Intermediates.noindex/ArchiveIntermediates/PaceUp/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/RNSVGFilters.bundle/RNSVGCompositeXor.iphoneos.metallib ➜ ../../../Users/expo/workingdir/build/node_modules/react-native-svg/apple/Filters/MetalCI/RNSVGCompositeXor.iphoneos.metallib
+› Copying   ../../../Users/expo/Library/Developer/Xcode/DerivedData/PaceUp-blabsbrvkrtlqhbfqvumcwozqtqh/Build/Intermediates.noindex/ArchiveIntermediates/PaceUp/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/RNSVGFilters.bundle/RNSVGArithmeticFilter.iphoneos.metallib ➜ ../../../Users/expo/workingdir/build/node_modules/react-native-svg/apple/Filters/MetalCI/RNSVGArithmeticFilter.iphoneos.metallib
+› Preparing Pods/RNCAsyncStorage-RNCAsyncStorage_resources » ResourceBundle-RNCAsyncStorage_resources-RNCAsyncStorage-Info.plist
+› Copying   ../../../Users/expo/Library/Developer/Xcode/DerivedData/PaceUp-blabsbrvkrtlqhbfqvumcwozqtqh/Build/Intermediates.noindex/ArchiveIntermediates/PaceUp/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/RNCAsyncStorage_resources.bundle/PrivacyInfo.xcprivacy ➜ ../../../Users/expo/workingdir/build/node_modules/@react-native-async-storage/async-storage/ios/PrivacyInfo.xcprivacy
+› Creating  expo-updates Pods/ReachabilitySwift-ReachabilitySwift » ReachabilitySwift.bundle
+› Copying   react-native-purchases ../../../Users/expo/Library/Developer/Xcode/DerivedData/PaceUp-blabsbrvkrtlqhbfqvumcwozqtqh/Build/Intermediates.noindex/ArchiveIntermediates/PaceUp/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/PurchasesHybridCommon.bundle/PrivacyInfo.xcprivacy ➜ ../../../Users/expo/workingdir/build/ios/Pods/PurchasesHybridCommon/ios/PurchasesHybridCommon/PurchasesHybridCommon/PrivacyInfo.xcprivacy
+› Creating  Pods/RNSVG-RNSVGFilters » RNSVGFilters.bundle
+› Creating  Pods/RNCAsyncStorage-RNCAsyncStorage_resources » RNCAsyncStorage_resources.bundle
+› Preparing PaceUp/PaceUpWidgetExtension » Info.plist
+› Creating  react-native-purchases Pods/PurchasesHybridCommon-PurchasesHybridCommon » PurchasesHybridCommon.bundle
+› Preparing Pods/ExpoSystemUI-ExpoSystemUI_privacy » ResourceBundle-ExpoSystemUI_privacy-ExpoSystemUI-Info.plist
+› Copying   ../../../Users/expo/Library/Developer/Xcode/DerivedData/PaceUp-blabsbrvkrtlqhbfqvumcwozqtqh/Build/Intermediates.noindex/ArchiveIntermediates/PaceUp/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/ExpoSystemUI_privacy.bundle/PrivacyInfo.xcprivacy ➜ ../../../Users/expo/workingdir/build/node_modules/expo-system-ui/ios/PrivacyInfo.xcprivacy
+› Preparing Pods/ExpoMediaLibrary-ExpoMediaLibrary_privacy » ResourceBundle-ExpoMediaLibrary_privacy-ExpoMediaLibrary-Info.plist
+› Copying   ../../../Users/expo/Library/Developer/Xcode/DerivedData/PaceUp-blabsbrvkrtlqhbfqvumcwozqtqh/Build/Intermediates.noindex/ArchiveIntermediates/PaceUp/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/ExpoMediaLibrary_privacy.bundle/PrivacyInfo.xcprivacy ➜ ../../../Users/expo/workingdir/build/node_modules/expo-media-library/ios/PrivacyInfo.xcprivacy
+› Preparing Pods/ExpoFileSystem-ExpoFileSystem_privacy » ResourceBundle-ExpoFileSystem_privacy-ExpoFileSystem-Info.plist
+› Copying   ../../../Users/expo/Library/Developer/Xcode/DerivedData/PaceUp-blabsbrvkrtlqhbfqvumcwozqtqh/Build/Intermediates.noindex/ArchiveIntermediates/PaceUp/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/ExpoFileSystem_privacy.bundle/PrivacyInfo.xcprivacy ➜ ../../../Users/expo/workingdir/build/node_modules/expo-file-system/ios/PrivacyInfo.xcprivacy
+› Creating  Pods/ExpoSystemUI-ExpoSystemUI_privacy » ExpoSystemUI_privacy.bundle
+› Creating  Pods/ExpoMediaLibrary-ExpoMediaLibrary_privacy » ExpoMediaLibrary_privacy.bundle
+› Preparing expo-updates Pods/EXUpdates-EXUpdates » ResourceBundle-EXUpdates-EXUpdates-Info.plist
+› Preparing Pods/EXTaskManager-ExpoTaskManager_privacy » ResourceBundle-ExpoTaskManager_privacy-EXTaskManager-Info.plist
+› Copying   ../../../Users/expo/Library/Developer/Xcode/DerivedData/PaceUp-blabsbrvkrtlqhbfqvumcwozqtqh/Build/Intermediates.noindex/ArchiveIntermediates/PaceUp/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/ExpoTaskManager_privacy.bundle/PrivacyInfo.xcprivacy ➜ ../../../Users/expo/workingdir/build/node_modules/expo-task-manager/ios/PrivacyInfo.xcprivacy
+› Creating  Pods/ExpoFileSystem-ExpoFileSystem_privacy » ExpoFileSystem_privacy.bundle
+› Creating  expo-updates Pods/EXUpdates-EXUpdates » EXUpdates.bundle
+› Preparing Pods/EXNotifications-ExpoNotifications_privacy » ResourceBundle-ExpoNotifications_privacy-EXNotifications-Info.plist
+› Copying   ../../../Users/expo/Library/Developer/Xcode/DerivedData/PaceUp-blabsbrvkrtlqhbfqvumcwozqtqh/Build/Intermediates.noindex/ArchiveIntermediates/PaceUp/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/ExpoNotifications_privacy.bundle/PrivacyInfo.xcprivacy ➜ ../../../Users/expo/workingdir/build/node_modules/expo-notifications/ios/PrivacyInfo.xcprivacy
+› Creating  ExpoTaskManager_privacy.bundle
+› Preparing Pods/EXConstants-ExpoConstants_privacy » ResourceBundle-ExpoConstants_privacy-EXConstants-Info.plist
+› Copying   ../../../Users/expo/Library/Developer/Xcode/DerivedData/PaceUp-blabsbrvkrtlqhbfqvumcwozqtqh/Build/Intermediates.noindex/ArchiveIntermediates/PaceUp/IntermediateBuildFilesPath/UninstalledProducts/iphoneos/ExpoConstants_privacy.bundle/PrivacyInfo.xcprivacy ➜ ../../../Users/expo/workingdir/build/node_modules/expo-constants/ios/PrivacyInfo.xcprivacy
+› Preparing expo-constants Pods/EXConstants-EXConstants » ResourceBundle-EXConstants-EXConstants-Info.plist
+› Creating  Pods/EXNotifications-ExpoNotifications_privacy » ExpoNotifications_privacy.bundle
+› Preparing Pods/EXApplication-ExpoApplication_privacy » ResourceBundle-ExpoApplication_privacy-EXApplication-Info.plist
+› Creating  Pods/EXConstants-ExpoConstants_privacy » ExpoConstants_privacy.bundle
+› Creating  expo-constants Pods/EXConstants-EXConstants » EXConstants.bundle
+› Creating  Pods/EXApplication-ExpoApplication_privacy » ExpoApplication_privacy.bundle
+› Executing react-native Pods/ReactNativeDependencies » [CP] Copy XCFrameworks
+
+❌  error: Build input files cannot be found: '/Users/expo/workingdir/build/ios/PaceUpWidgetExtension/PaceUpWidgetExtension/PaceUpAttributes.swift', '/Users/expo/workingdir/build/ios/PaceUpWidgetExtension/PaceUpWidgetExtension/PaceUpLiveActivity.swift', '/Users/expo/workingdir/build/ios/PaceUpWidgetExtension/PaceUpWidgetExtension/PaceUpWidget.swift'. Did you forget to declare these files as outputs of any script phases or custom build rules which produce them? (in target 'PaceUpWidgetExtension' from project 'PaceUp')
+
+
+    Run script build phase '[CP-User] [Hermes] Replace Hermes for the right configuration, if needed' will be run during every build because it does not specify any outputs. To address this issue, either add output dependencies to the script phase, or configure it to run in every build by unchecking "Based on dependency analysis" in the script phase. (in target 'hermes-engine' from project 'Pods')
+    Run script build phase '[CP-User] Generate updates resources for expo-updates' will be run during every build because it does not specify any outputs. To address this issue, either add output dependencies to the script phase, or configure it to run in every build by unchecking "Based on dependency analysis" in the script phase. (in target 'EXUpdates' from project 'Pods')
+▸ ** ARCHIVE FAILED **
+▸ The following build commands failed:
+▸ 	SwiftDriver\ Compilation\ Requirements PaceUpWidgetExtension normal arm64 com.apple.xcode.tools.swift.compiler (in target 'PaceUpWidgetExtension' from project 'PaceUp')
+▸ 	Archiving workspace PaceUp with scheme PaceUp
+▸ (2 failures)
+** ARCHIVE FAILED **
+
+
+The following build commands failed:
+	SwiftDriver\ Compilation\ Requirements PaceUpWidgetExtension normal arm64 com.apple.xcode.tools.swift.compiler (in target 'PaceUpWidgetExtension' from project 'PaceUp')
+	Archiving workspace PaceUp with scheme PaceUp
+(2 failures)
+Exit status: 65
+
++---------------------------------------+
+|           Build environment           |
++-------------+-------------------------+
+| xcode_path  | /Applications/Xcode.app |
+| gym_version | 2.226.0                 |
+| sdk         | iPhoneOS18.2.sdk        |
++-------------+-------------------------+
+Looks like fastlane ran into a build/archive error with your project
+It's hard to tell what's causing the error, so we wrote some guides on how
+to troubleshoot build and signing issues: https://docs.fastlane.tools/codesigning/getting-started/
+Before submitting an issue on GitHub, please follow the guide above and make
+sure your project is set up correctly.
+fastlane uses `xcodebuild` commands to generate your binary, you can see the
+the full commands printed out in yellow in the above log.
+Make sure to inspect the output above, as usually you'll find more error information there
+[!] Error building the application - see the log above
+Error: The "Run fastlane" step failed because of an error in the Xcode build process. We automatically detected following errors in your Xcode build logs:
+- Build input files cannot be found: '/Users/expo/workingdir/build/ios/PaceUpWidgetExtension/PaceUpWidgetExtension/PaceUpAttributes.swift', '/Users/expo/workingdir/build/ios/PaceUpWidgetExtension/PaceUpWidgetExtension/PaceUpLiveActivity.swift', '/Users/expo/workingdir/build/ios/PaceUpWidgetExtension/PaceUpWidgetExtension/PaceUpWidget.swift'. Did you forget to declare these files as outputs of any script phases or custom build rules which produce them? (in target 'PaceUpWidgetExtension' from project 'PaceUp')
+Refer to "Xcode Logs" below for additional, more detailed logs.
