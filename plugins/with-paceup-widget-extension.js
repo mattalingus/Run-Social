@@ -632,8 +632,6 @@ const EXTENSION_ENTITLEMENTS = `\
     <array>
         <string>${APP_GROUP}</string>
     </array>
-    <key>NSSupportsLiveActivities</key>
-    <true/>
 </dict>
 </plist>
 `;
