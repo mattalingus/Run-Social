@@ -27,7 +27,7 @@ function getHealthKit(): any {
 }
 
 export function isHealthKitAvailable(): boolean {
-  return Platform.OS === "ios" && getHealthKit() !== null;
+  return Platform.OS === "ios" && !Platform.isPad && getHealthKit() !== null;
 }
 
 function buildPermissions(): object {

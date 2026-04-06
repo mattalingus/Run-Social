@@ -191,8 +191,8 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
   const [hcSyncMsg, setHcSyncMsg] = useState<string | null>(null);
 
   async function handleConnectAppleHealth() {
-    if (Platform.OS !== "ios") {
-      Alert.alert("Apple Health", "Apple Health is only available on iPhone.");
+    if (Platform.OS !== "ios" || Platform.isPad) {
+      Alert.alert("Apple Health", "Apple Health is only available on iPhone, not iPad.");
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
