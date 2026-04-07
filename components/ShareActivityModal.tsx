@@ -222,7 +222,7 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
       const uri = await captureCard();
       if (!uri) return;
       if (Platform.OS === "web") {
-        await fallbackShare(uri);
+        try { await Linking.openURL("instagram-stories://share"); } catch {}
         return;
       }
       await saveToLibraryQuietly(uri);
@@ -251,22 +251,18 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
         try { await Linking.openURL("instagram://camera"); opened = true; } catch {}
       }
       if (!opened) {
-        Alert.alert("Instagram not found", "Install Instagram to share directly.", [
-          { text: "Share via…", onPress: () => fallbackShare(uri) },
-          { text: "OK", style: "cancel" },
-        ]);
+        Alert.alert("Instagram not found", "Install Instagram to share directly.");
         return;
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e: any) {
-      if (!e.message?.includes("cancel")) {
-        const uri2 = await captureCard();
-        await fallbackShare(uri2);
+      if (!(e as any)?.message?.includes("cancel")) {
+        console.warn("Instagram share failed:", (e as any)?.message);
       }
     } finally {
       setActiveAction(null);
     }
-  }, [captureCard, fallbackShare, saveToLibraryQuietly]);
+  }, [captureCard, saveToLibraryQuietly]);
 
   const shareToSnapchat = useCallback(async () => {
     setActiveAction("share");

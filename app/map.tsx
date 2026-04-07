@@ -11,8 +11,11 @@ import {
   ScrollView,
   Platform,
   TextInput,
+  Dimensions,
 } from "react-native";
+
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+
 import MapView, { Marker, Polyline, Region } from "react-native-maps";
 import * as Location from "expo-location";
 import * as Haptics from "expo-haptics";
@@ -37,6 +40,8 @@ function resolveImgUrl(url?: string | null): string | null {
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
+
+const { height: WIN_H } = Dimensions.get("window");
 
 const INITIAL_DELTA = 0.06;
 
@@ -581,7 +586,7 @@ export default function MapScreen() {
       </View>
 
       {/* ─── Map card ────────────────────────────────────────────────────── */}
-      <View style={s.mapCard}>
+      <View style={[s.mapCard, { height: WIN_H - topPad - insets.bottom - 174 }]}>
 
         {/* Map */}
         <MapView
@@ -1057,7 +1062,6 @@ function makeSStyles(C: ColorScheme) { return StyleSheet.create({
   },
 
   mapCard: {
-    flex: 1,
     marginHorizontal: 10,
     marginBottom: 0,
     borderRadius: 20,
