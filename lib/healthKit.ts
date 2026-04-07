@@ -15,11 +15,13 @@ let AppleHealthKit: any = null;
 let hkInitialized = false;
 
 function getHealthKit(): any {
-  if (Platform.OS !== "ios") return null;
+  if (Platform.OS !== "ios" || Platform.isPad) return null;
   if (AppleHealthKit) return AppleHealthKit;
   try {
     const mod = require("react-native-health");
-    AppleHealthKit = mod.default ?? mod;
+    const hk = mod.default ?? mod;
+    if (!hk || typeof hk.initHealthKit !== "function") return null;
+    AppleHealthKit = hk;
     return AppleHealthKit;
   } catch {
     return null;
