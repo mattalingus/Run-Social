@@ -154,10 +154,10 @@ function formatDurationSolo(seconds: number) {
 
 type RoutePoint = { latitude: number; longitude: number };
 
-function parseRoutePath(raw: RoutePoint[] | null | undefined): RoutePoint[] {
+function parseRoutePath(raw: RoutePoint[] | string | null | undefined): RoutePoint[] {
   if (!raw) return [];
-  if (typeof (raw as unknown) === "string") {
-    try { return JSON.parse(raw as unknown as string) as RoutePoint[]; } catch { return []; }
+  if (typeof raw === "string") {
+    try { return JSON.parse(raw) as RoutePoint[]; } catch { return []; }
   }
   if (Array.isArray(raw)) {
     return raw.map((p) => ({ latitude: Number(p.latitude), longitude: Number(p.longitude) }));

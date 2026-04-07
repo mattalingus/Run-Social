@@ -72,10 +72,10 @@ interface SavedPath {
 
 type RoutePoint = { latitude: number; longitude: number };
 
-function parseRoutePath(raw: RoutePoint[] | null | undefined): RoutePoint[] {
+function parseRoutePath(raw: RoutePoint[] | string | null | undefined): RoutePoint[] {
   if (!raw) return [];
-  if (typeof (raw as unknown) === "string") {
-    try { return JSON.parse(raw as unknown as string) as RoutePoint[]; } catch { return []; }
+  if (typeof raw === "string") {
+    try { return JSON.parse(raw) as RoutePoint[]; } catch { return []; }
   }
   if (Array.isArray(raw)) {
     return raw.map((p) => ({ latitude: Number(p.latitude), longitude: Number(p.longitude) }));
@@ -553,7 +553,7 @@ export default function SoloScreen() {
   const [saveRunPathTarget, setSaveRunPathTarget] = useState<SoloRun | null>(null);
   const [saveRunPathName, setSaveRunPathName] = useState("");
   const [savingRunPath, setSavingRunPath] = useState(false);
-  const [savedRunPathIds, setSavedRunPathIds] = useState<Set<number>>(new Set());
+  const [savedRunPathIds, setSavedRunPathIds] = useState<Set<string>>(new Set());
 
   // Goals display period (UI toggle only — not saved separately)
   const [period, setPeriod] = useState<"monthly" | "yearly">("monthly");
