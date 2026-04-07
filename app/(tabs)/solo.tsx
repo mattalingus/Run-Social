@@ -72,6 +72,17 @@ interface SavedPath {
 
 type RoutePoint = { latitude: number; longitude: number };
 
+function parseRoutePath(raw: RoutePoint[] | null | undefined): RoutePoint[] {
+  if (!raw) return [];
+  if (typeof (raw as unknown) === "string") {
+    try { return JSON.parse(raw as unknown as string) as RoutePoint[]; } catch { return []; }
+  }
+  if (Array.isArray(raw)) {
+    return raw.map((p) => ({ latitude: Number(p.latitude), longitude: Number(p.longitude) }));
+  }
+  return [];
+}
+
 function MiniRouteMap({ path, height = 200 }: { path: RoutePoint[]; height?: number }) {
   if (!path || path.length < 2) return null;
   const lats = path.map((p) => p.latitude);
@@ -834,13 +845,8 @@ export default function SoloScreen() {
     const badge = runBadges[run.id];
     const label = run.title || `${toDisplayDist(run.distance_miles, distUnit)} ${run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run"}`;
     const isExpanded = expandedRunId === run.id;
-    const rawRoutePath = run.route_path as any;
-    const parsedRoutePath: Array<{ latitude: number; longitude: number }> = rawRoutePath
-      ? (typeof rawRoutePath === "string"
-        ? (() => { try { return JSON.parse(rawRoutePath); } catch { return []; } })()
-        : rawRoutePath)
-      : [];
-    const hasRoutePath = Array.isArray(parsedRoutePath) && parsedRoutePath.length > 1;
+    const parsedRoutePath = parseRoutePath(run.route_path);
+    const hasRoutePath = parsedRoutePath.length > 1;
     return (
       <View style={s.historyCard}>
         <View style={s.historyRow}>
@@ -1476,11 +1482,7 @@ export default function SoloScreen() {
                     if (!saveRunPathTarget || !saveRunPathName.trim()) return;
                     setSavingRunPath(true);
                     try {
-                      const rawPath = saveRunPathTarget.route_path as any;
-                      const pathArr = typeof rawPath === "string"
-                        ? (() => { try { return JSON.parse(rawPath); } catch { return []; } })()
-                        : (rawPath ?? []);
-                      const cleanPath = (pathArr as any[]).map((p: any) => ({ latitude: p.latitude, longitude: p.longitude }));
+                      const cleanPath = parseRoutePath(saveRunPathTarget.route_path);
                       await apiRequest("POST", "/api/saved-paths", {
                         name: saveRunPathName.trim(),
                         routePath: cleanPath,

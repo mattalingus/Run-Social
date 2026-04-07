@@ -1011,7 +1011,7 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
                           qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
                           refreshUser();
                         }
-                      } catch (_e: any) {
+                      } catch {
                         Alert.alert("Coming Soon", "Facebook integration will be available in a future update.");
                       }
                     }}

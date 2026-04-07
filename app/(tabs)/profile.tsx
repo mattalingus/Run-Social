@@ -154,6 +154,17 @@ function formatDurationSolo(seconds: number) {
 
 type RoutePoint = { latitude: number; longitude: number };
 
+function parseRoutePath(raw: RoutePoint[] | null | undefined): RoutePoint[] {
+  if (!raw) return [];
+  if (typeof (raw as unknown) === "string") {
+    try { return JSON.parse(raw as unknown as string) as RoutePoint[]; } catch { return []; }
+  }
+  if (Array.isArray(raw)) {
+    return raw.map((p) => ({ latitude: Number(p.latitude), longitude: Number(p.longitude) }));
+  }
+  return [];
+}
+
 function ProfileMiniRouteMap({ path }: { path: RoutePoint[] | null | undefined }) {
   if (Platform.OS === "web") return null;
   if (!path || path.length < 2) return null;
@@ -2537,11 +2548,7 @@ function ProfileScreenInner() {
                     if (!savePathRun || !savePathName.trim()) return;
                     setSavingPath(true);
                     try {
-                      const rawPath = savePathRun.route_path as any;
-                      const pathArr = typeof rawPath === "string"
-                        ? (() => { try { return JSON.parse(rawPath); } catch { return []; } })()
-                        : (rawPath ?? []);
-                      const cleanPath = (pathArr as any[]).map((p: any) => ({ latitude: p.latitude, longitude: p.longitude }));
+                      const cleanPath = parseRoutePath(savePathRun.route_path);
                       await apiRequest("POST", "/api/saved-paths", {
                         name: savePathName.trim(),
                         routePath: cleanPath,
