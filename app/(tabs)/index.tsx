@@ -1355,25 +1355,10 @@ export default function DiscoverScreen() {
     }
   }
 
-  const PACE_STEP_30S = 0.5; // 30 seconds in minutes
-
   function formatPaceMM(pace: number): string {
     const mins = Math.floor(pace);
     const secs = Math.round((pace % 1) * 60);
     return `${mins}:${secs.toString().padStart(2, "0")}`;
-  }
-
-  function stepMinPace(dir: 1 | -1) {
-    const next = Math.round((hMinPace + dir * PACE_STEP_30S) * 10) / 10;
-    const floor = hActivityType === "ride" ? 2 : hActivityType === "walk" ? 2 : 4;
-    setHMinPace(Math.max(floor, Math.min(hMaxPace - PACE_STEP_30S, next)));
-    Haptics.selectionAsync();
-  }
-
-  function stepMaxPace(dir: 1 | -1) {
-    const next = Math.round((hMaxPace + dir * PACE_STEP_30S) * 10) / 10;
-    setHMaxPace(Math.max(hMinPace + PACE_STEP_30S, Math.min(20, next)));
-    Haptics.selectionAsync();
   }
 
   function stepParticipants(dir: 1 | -1) {
@@ -2955,36 +2940,23 @@ export default function DiscoverScreen() {
             </View>
 
             {/* Pace Range */}
-            <Text style={s.hLabel}>{hActivityType === "ride" ? "Pace Range For Riders (Min/Mile)" : hActivityType === "walk" ? "Pace Range For Walkers (Min/Mile)" : "Pace Range For Runners (Min/Mile)"}</Text>
-            <View style={{ gap: 8 }}>
-              <View style={s.hPaceRow}>
-                <Text style={s.hPaceLabel}>Slowest</Text>
-                <View style={s.hStepper}>
-                  <Pressable style={s.hStepBtn} onPress={() => stepMaxPace(-1)}>
-                    <Feather name="minus" size={18} color={C.primary} />
-                  </Pressable>
-                  <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 20, color: C.text, minWidth: 64, textAlign: "center" }}>
-                    {formatPaceMM(hMaxPace)}
-                  </Text>
-                  <Pressable style={s.hStepBtn} onPress={() => stepMaxPace(1)}>
-                    <Feather name="plus" size={18} color={C.primary} />
-                  </Pressable>
-                </View>
-              </View>
-              <View style={s.hPaceRow}>
-                <Text style={s.hPaceLabel}>Fastest</Text>
-                <View style={s.hStepper}>
-                  <Pressable style={s.hStepBtn} onPress={() => stepMinPace(-1)}>
-                    <Feather name="minus" size={18} color={C.primary} />
-                  </Pressable>
-                  <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 20, color: C.text, minWidth: 64, textAlign: "center" }}>
-                    {formatPaceMM(hMinPace)}
-                  </Text>
-                  <Pressable style={s.hStepBtn} onPress={() => stepMinPace(1)}>
-                    <Feather name="plus" size={18} color={C.primary} />
-                  </Pressable>
-                </View>
-              </View>
+            <View style={fm.sectionHead}>
+              <Text style={s.hLabel}>
+                {hActivityType === "ride" ? "Pace Range (Min/Mile) · Riders" : hActivityType === "walk" ? "Pace Range (Min/Mile) · Walkers" : "Pace Range (Min/Mile) · Runners"}
+              </Text>
+              <Text style={fm.sectionValue}>{formatPaceMM(hMinPace)} – {formatPaceMM(hMaxPace)}</Text>
+            </View>
+            <RangeSlider
+              min={4} max={20} step={0.5}
+              low={hMinPace} high={hMaxPace}
+              onLowChange={(v) => setHMinPace(v)}
+              onHighChange={(v) => setHMaxPace(v)}
+              color={C.primary}
+              trackColor={C.border}
+            />
+            <View style={fm.edgeRow}>
+              <Text style={fm.edgeLabel}>4:00</Text>
+              <Text style={fm.edgeLabel}>20:00</Text>
             </View>
 
             {/* Host Style */}
