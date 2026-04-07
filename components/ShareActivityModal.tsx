@@ -227,7 +227,7 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
       }
       await saveToLibraryQuietly(uri);
 
-      if (transparentMode && RNShare) {
+      if (RNShare) {
         try {
           await RNShare.shareSingle({
             social: RNShare.Social?.INSTAGRAM_STORIES ?? "instagramstories",
@@ -266,7 +266,7 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
     } finally {
       setActiveAction(null);
     }
-  }, [captureCard, fallbackShare, saveToLibraryQuietly, transparentMode]);
+  }, [captureCard, fallbackShare, saveToLibraryQuietly]);
 
   const shareToSnapchat = useCallback(async () => {
     setActiveAction("share");

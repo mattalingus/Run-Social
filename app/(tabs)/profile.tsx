@@ -266,6 +266,7 @@ function ProfileScreenInner() {
   const [savePathRun, setSavePathRun] = useState<UnifiedHistoryItem | null>(null);
   const [savePathName, setSavePathName] = useState("");
   const [savingPath, setSavingPath] = useState(false);
+  const [showProfileSavedPaths, setShowProfileSavedPaths] = useState(false);
   const [favActivityFilter, setFavActivityFilter] = useState<"run" | "ride" | "walk">("run");
   const [friendSearch, setFriendSearch] = useState("");
   const [showAddFriend, setShowAddFriend] = useState(false);
@@ -439,6 +440,14 @@ function ProfileScreenInner() {
     enabled: !!user,
   });
 
+  const { data: profileSavedPaths = [] } = useQuery<Array<{
+    id: string; name: string; distance_miles: number | null;
+    activity_type?: string | null; created_at: string;
+  }>>({
+    queryKey: ["/api/saved-paths"],
+    enabled: !!user,
+  });
+
   const actStats = React.useMemo(() => {
     const now = new Date();
     // Solo run stats
@@ -490,18 +499,26 @@ function ProfileScreenInner() {
 
 
   const computedTopRuns = React.useMemo(() => {
+    const now = new Date();
     const completed = soloRuns.filter((r) => (r.activity_type ?? "run") === profileActivity && r.completed);
-    const longest = [...completed]
-      .sort((a, b) => b.distance_miles - a.distance_miles)
-      .slice(0, 5)
-      .map((r) => ({ dist: r.distance_miles, pace: r.pace_min_per_mile, date: r.date, title: null, run_type: "solo" as const }));
+    const completedGroup = runs.filter((r) => {
+      const isPast = new Date(r.date) < now;
+      return isPast && (r.my_final_distance ?? 0) > 0 && (r.activity_type ?? "run") === profileActivity;
+    });
+    const allForLongest: TopRun[] = [
+      ...completed.map((r) => ({ dist: r.distance_miles, pace: r.pace_min_per_mile ?? null, date: r.date, title: null, run_type: "solo" as const })),
+      ...completedGroup.map((r) => ({ dist: r.my_final_distance ?? 0, pace: r.my_final_pace ?? null, date: r.date, title: r.title ?? null, run_type: "group" as const })),
+    ];
+    const longest = [...allForLongest]
+      .sort((a, b) => (b.dist ?? 0) - (a.dist ?? 0))
+      .slice(0, 5);
     const fastest = [...completed]
       .filter((r) => r.pace_min_per_mile != null && r.pace_min_per_mile >= 2.0 && r.distance_miles > 0.5)
       .sort((a, b) => (a.pace_min_per_mile ?? 99) - (b.pace_min_per_mile ?? 99))
       .slice(0, 5)
-      .map((r) => ({ dist: r.distance_miles, pace: r.pace_min_per_mile, date: r.date, title: null, run_type: "solo" as const }));
+      .map((r) => ({ dist: r.distance_miles, pace: r.pace_min_per_mile ?? null, date: r.date, title: null, run_type: "solo" as const }));
     return { longest, fastest };
-  }, [soloRuns, profileActivity]);
+  }, [soloRuns, runs, profileActivity]);
 
   const combinedHistory = React.useMemo((): UnifiedHistoryItem[] => {
     const now = new Date();
@@ -992,6 +1009,28 @@ function ProfileScreenInner() {
         </Text>
         <Feather name="chevron-right" size={16} color={C.primary} />
       </Pressable>
+
+      {/* ── Saved Routes shortcut ─────────────────────────────────────────── */}
+      {profileSavedPaths.filter((p) => (p.activity_type ?? "run") === profileActivity).length > 0 && (
+        <Pressable
+          style={({ pressed }) => [styles.viewPastBtn, { opacity: pressed ? 0.8 : 1, borderColor: "#FF6B3544" }]}
+          onPress={() => {
+            setShowProfileSavedPaths(true);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          }}
+        >
+          <Feather name="bookmark" size={16} color="#FF6B35" />
+          <Text style={[styles.viewPastBtnTxt, { color: "#FF6B35" }]}>
+            {profileActivity === "ride" ? "Saved Ride Routes" : profileActivity === "walk" ? "Saved Walk Routes" : "Saved Run Routes"}
+          </Text>
+          <View style={[styles.histEventBadge, { backgroundColor: "#FF6B3522", marginRight: 4 }]}>
+            <Text style={[styles.histEventBadgeTxt, { color: "#FF6B35" }]}>
+              {profileSavedPaths.filter((p) => (p.activity_type ?? "run") === profileActivity).length}
+            </Text>
+          </View>
+          <Feather name="chevron-right" size={16} color="#FF6B35" />
+        </Pressable>
+      )}
 
       {/* ── My Stats ──────────────────────────────────────────────────────── */}
       <View style={styles.section}>
@@ -2483,7 +2522,11 @@ function ProfileScreenInner() {
                     if (!savePathRun || !savePathName.trim()) return;
                     setSavingPath(true);
                     try {
-                      const cleanPath = (savePathRun.route_path ?? []).map((p: any) => ({ latitude: p.latitude, longitude: p.longitude }));
+                      const rawPath = savePathRun.route_path as any;
+                      const pathArr = typeof rawPath === "string"
+                        ? (() => { try { return JSON.parse(rawPath); } catch { return []; } })()
+                        : (rawPath ?? []);
+                      const cleanPath = (pathArr as any[]).map((p: any) => ({ latitude: p.latitude, longitude: p.longitude }));
                       await apiRequest("POST", "/api/saved-paths", {
                         name: savePathName.trim(),
                         routePath: cleanPath,
@@ -2510,6 +2553,51 @@ function ProfileScreenInner() {
             </View>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── Saved Routes Viewer Modal ──────────────────────────────────────── */}
+      <Modal visible={showProfileSavedPaths} transparent animationType="slide" onRequestClose={() => setShowProfileSavedPaths(false)}>
+        <View style={{ flex: 1, backgroundColor: "#00000088", justifyContent: "flex-end" }}>
+          <View style={{ backgroundColor: C.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: insets.bottom + 24, maxHeight: "80%" }}>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Feather name="bookmark" size={18} color="#FF6B35" />
+                <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text }}>
+                  {profileActivity === "ride" ? "Saved Ride Routes" : profileActivity === "walk" ? "Saved Walk Routes" : "Saved Run Routes"}
+                </Text>
+              </View>
+              <Pressable onPress={() => setShowProfileSavedPaths(false)} hitSlop={12}>
+                <Feather name="x" size={22} color={C.textSecondary} />
+              </Pressable>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {profileSavedPaths.filter((p) => (p.activity_type ?? "run") === profileActivity).length === 0 ? (
+                <View style={{ alignItems: "center", paddingVertical: 32 }}>
+                  <Feather name="map" size={32} color={C.textMuted} />
+                  <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 15, color: C.textMuted, marginTop: 12, textAlign: "center" }}>
+                    No saved routes yet.{"\n"}Save a route from your run history.
+                  </Text>
+                </View>
+              ) : (
+                profileSavedPaths
+                  .filter((p) => (p.activity_type ?? "run") === profileActivity)
+                  .map((path) => (
+                    <View key={path.id} style={{ flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: C.card, borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: C.border }}>
+                      <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: "#FF6B3522", alignItems: "center", justifyContent: "center" }}>
+                        <Feather name="bookmark" size={16} color="#FF6B35" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text }} numberOfLines={1}>{path.name}</Text>
+                        <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary, marginTop: 2 }}>
+                          {path.distance_miles ? `${toDisplayDist(path.distance_miles, distUnit)}` : "Distance unknown"}
+                        </Text>
+                      </View>
+                    </View>
+                  ))
+              )}
+            </ScrollView>
+          </View>
+        </View>
       </Modal>
 
     </ScrollView>

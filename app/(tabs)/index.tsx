@@ -121,7 +121,7 @@ function sortTagsByCategory(tags: string[]): string[] {
     return ai - bi;
   });
 }
-const PROX_STEPS  = [1, 5, 10, 25, 50]; // miles (null = Nationwide)
+const PROX_STEPS  = [1, 5, 10, 25, 50, 100, 250]; // miles (null = Nationwide)
 
 interface FilterState {
   paceMin: number;
@@ -2804,7 +2804,7 @@ export default function DiscoverScreen() {
             <Text style={s.hLabel}>Date & Time *</Text>
             <View style={{ flexDirection: "row", gap: 10 }}>
               <View style={{ flex: 1 }}><MiniCalendarPicker value={hDate} onChange={setHDate} /></View>
-              <View style={{ flex: 1, flexDirection: "row", gap: 6 }}>
+              <View style={{ flex: 1, flexDirection: "row", gap: 6, alignSelf: "flex-start" }}>
                 <TextInput
                   style={[s.hInput, { flex: 1 }]}
                   value={hTime}

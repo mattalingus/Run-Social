@@ -256,21 +256,15 @@ export default function MiniCalendarPicker({ value, onChange, minDate, maxDate }
                       style={[
                         s.circle,
                         isSelected && { backgroundColor: "rgba(0,217,126,0.25)" },
-                        !isSelected && isToday && {
-                          backgroundColor: "rgba(0,217,126,0.15)",
-                        },
                       ]}
                     >
                       <Text
                         style={{
-                          fontFamily:
-                            isSelected || isToday
-                              ? "Outfit_600SemiBold"
-                              : "Outfit_400Regular",
+                          fontFamily: isSelected
+                            ? "Outfit_600SemiBold"
+                            : "Outfit_400Regular",
                           fontSize: 14,
                           color: isSelected
-                            ? "#00D97E"
-                            : isToday
                             ? "#00D97E"
                             : isDisabled
                             ? C.textMuted

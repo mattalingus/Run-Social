@@ -470,7 +470,7 @@ export default function CreateRunScreen() {
             <View style={{ flex: 1 }}>
               <MiniCalendarPicker value={date} onChange={setDate} />
             </View>
-            <View style={{ flex: 1, flexDirection: "row", gap: 6 }}>
+            <View style={{ flex: 1, flexDirection: "row", gap: 6, alignSelf: "flex-start" }}>
               <TextInput
                 style={[styles.input, { flex: 1 }]}
                 value={time}

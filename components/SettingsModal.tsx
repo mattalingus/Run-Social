@@ -1011,12 +1011,8 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
                           qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
                           refreshUser();
                         }
-                      } catch (e: any) {
-                        if (e.message?.includes("501") || e.message?.includes("not configured")) {
-                          Alert.alert("Coming Soon", "Facebook integration will be available in a future update.");
-                        } else {
-                          Alert.alert("Error", e.message || "Could not connect Facebook");
-                        }
+                      } catch (_e: any) {
+                        Alert.alert("Coming Soon", "Facebook integration will be available in a future update.");
                       }
                     }}
                   >

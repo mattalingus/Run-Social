@@ -842,7 +842,7 @@ export default function MapScreen() {
       </View>{/* ── end mapCard ──────────────────────────────────────────────── */}
 
       {/* ─── Split bottom strip: Events (left) + Paths (right) + Insights — fixed height */}
-      <View style={[s.splitStrip, { paddingBottom: insets.bottom + 4 }]}>
+      <View style={[s.splitStrip, { paddingBottom: insets.bottom + 4, minHeight: 116 + insets.bottom }]}>
 
         {/* Cards row */}
         {!selectedRun && !selectedCommunityPath && (visibleRuns.length > 0 || visiblePaths.length > 0) && (

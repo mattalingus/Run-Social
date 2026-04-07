@@ -409,19 +409,12 @@ async function scheduleRunNotifications(runDate: Date, label: string, activityTy
     if (status !== "granted") return;
 
     const oneHour = new Date(runDate.getTime() - 60 * 60 * 1000);
-    const tenMin = new Date(runDate.getTime() - 10 * 60 * 1000);
     const now = new Date();
 
     if (oneHour > now) {
       await Notifications.scheduleNotificationAsync({
         content: { title: isRide ? "🚴 Ride in 1 hour" : "🏃 Run in 1 hour", body: `${label} — get warmed up!` },
         trigger: { date: oneHour } as any,
-      });
-    }
-    if (tenMin > now) {
-      await Notifications.scheduleNotificationAsync({
-        content: { title: isRide ? "🚴 Starting soon!" : "🏃 Starting soon!", body: `${label} — 10 minutes to go.` },
-        trigger: { date: tenMin } as any,
       });
     }
   } catch (_) {}
@@ -546,6 +539,9 @@ export default function SoloScreen() {
   const [scheduledTitleDraft, setScheduledTitleDraft] = useState("");
   const [editingPathName, setEditingPathName] = useState(false);
   const [pathNameDraft, setPathNameDraft] = useState("");
+  const [saveRunPathTarget, setSaveRunPathTarget] = useState<SoloRun | null>(null);
+  const [saveRunPathName, setSaveRunPathName] = useState("");
+  const [savingRunPath, setSavingRunPath] = useState(false);
 
   // Goals display period (UI toggle only — not saved separately)
   const [period, setPeriod] = useState<"monthly" | "yearly">("monthly");
@@ -837,6 +833,13 @@ export default function SoloScreen() {
     const badge = runBadges[run.id];
     const label = run.title || `${toDisplayDist(run.distance_miles, distUnit)} ${run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run"}`;
     const isExpanded = expandedRunId === run.id;
+    const rawRoutePath = run.route_path as any;
+    const parsedRoutePath: Array<{ latitude: number; longitude: number }> = rawRoutePath
+      ? (typeof rawRoutePath === "string"
+        ? (() => { try { return JSON.parse(rawRoutePath); } catch { return []; } })()
+        : rawRoutePath)
+      : [];
+    const hasRoutePath = Array.isArray(parsedRoutePath) && parsedRoutePath.length > 1;
     return (
       <View style={s.historyCard}>
         <View style={s.historyRow}>
@@ -972,9 +975,29 @@ export default function SoloScreen() {
             </Text>
           </View>
         )}
+        {isExpanded && run.completed && hasRoutePath && (
+          <View style={{ paddingHorizontal: 12, paddingBottom: 14 }}>
+            <Pressable
+              style={({ pressed }) => ({
+                flexDirection: "row", alignItems: "center", gap: 6,
+                backgroundColor: "#FF6B3511", borderRadius: 10,
+                paddingHorizontal: 12, paddingVertical: 8,
+                alignSelf: "flex-start", opacity: pressed ? 0.7 : 1,
+              })}
+              onPress={() => {
+                Haptics.selectionAsync();
+                setSaveRunPathTarget(run);
+                setSaveRunPathName(run.title || "");
+              }}
+            >
+              <Feather name="bookmark" size={13} color="#FF6B35" />
+              <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: "#FF6B35" }}>Save Route</Text>
+            </Pressable>
+          </View>
+        )}
       </View>
     );
-  }, [expandedRunId, runBadges, distUnit, C, s, setShareRunData, starMutation]);
+  }, [expandedRunId, runBadges, distUnit, C, s, setShareRunData, starMutation, setSaveRunPathTarget, setSaveRunPathName]);
 
   const renderSectionHeader = useCallback(({ section }: { section: { title: string } }) => (
     <View style={[s.monthHeader, { backgroundColor: C.bg }]}>
@@ -1237,7 +1260,7 @@ export default function SoloScreen() {
 
         {/* ─── Rankings ────────────────────────────────────────────────── */}
         {rankings.length > 0 && (
-          <View style={s.section}>
+          <View style={[s.section, { marginTop: 16 }]}>
             <Text style={s.sectionTitle}>Performance Rankings</Text>
             {rankings.map((cat) => (
               <View key={cat.label} style={s.rankCard}>
@@ -1406,6 +1429,78 @@ export default function SoloScreen() {
         />
       )}
 
+      {/* ─── Save Route Modal (solo run → saved paths) ────────────────── */}
+      <Modal visible={!!saveRunPathTarget} transparent animationType="fade" onRequestClose={() => setSaveRunPathTarget(null)}>
+        <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+          <View style={{ flex: 1, backgroundColor: "#00000088", justifyContent: "center", alignItems: "center", padding: 24 }}>
+            <View style={{ backgroundColor: C.surface, borderRadius: 18, padding: 22, width: "100%", gap: 14 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Feather name="bookmark" size={18} color="#FF6B35" />
+                <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 17, color: C.text }}>Save Route</Text>
+              </View>
+              <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary }}>
+                Save this GPS route to your saved paths for future runs.
+              </Text>
+              <TextInput
+                value={saveRunPathName}
+                onChangeText={setSaveRunPathName}
+                placeholder="Route name…"
+                placeholderTextColor={C.textMuted}
+                style={{
+                  fontFamily: "Outfit_400Regular", fontSize: 15, color: C.text,
+                  backgroundColor: C.card, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11,
+                  borderWidth: 1, borderColor: C.border,
+                }}
+                autoFocus
+                maxLength={80}
+              />
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <Pressable
+                  style={({ pressed }) => ({ flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: C.card, alignItems: "center", opacity: pressed ? 0.7 : 1 })}
+                  onPress={() => { setSaveRunPathTarget(null); setSaveRunPathName(""); }}
+                >
+                  <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.textSecondary }}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  disabled={!saveRunPathName.trim() || savingRunPath}
+                  style={({ pressed }) => ({ flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: "#FF6B35", alignItems: "center", opacity: (!saveRunPathName.trim() || savingRunPath || pressed) ? 0.6 : 1 })}
+                  onPress={async () => {
+                    if (!saveRunPathTarget || !saveRunPathName.trim()) return;
+                    setSavingRunPath(true);
+                    try {
+                      const rawPath = saveRunPathTarget.route_path as any;
+                      const pathArr = typeof rawPath === "string"
+                        ? (() => { try { return JSON.parse(rawPath); } catch { return []; } })()
+                        : (rawPath ?? []);
+                      const cleanPath = (pathArr as any[]).map((p: any) => ({ latitude: p.latitude, longitude: p.longitude }));
+                      await apiRequest("POST", "/api/saved-paths", {
+                        name: saveRunPathName.trim(),
+                        routePath: cleanPath,
+                        distanceMiles: saveRunPathTarget.distance_miles,
+                        activityType: saveRunPathTarget.activity_type,
+                      });
+                      qc.invalidateQueries({ queryKey: ["/api/saved-paths"] });
+                      setSaveRunPathTarget(null);
+                      setSaveRunPathName("");
+                      Alert.alert("Route Saved", "Your route has been added to Saved Paths.");
+                    } catch (e: any) {
+                      Alert.alert("Error", e?.message ?? "Could not save route.");
+                    } finally {
+                      setSavingRunPath(false);
+                    }
+                  }}
+                >
+                  {savingRunPath
+                    ? <ActivityIndicator size="small" color="#fff" />
+                    : <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 15, color: "#fff" }}>Save</Text>
+                  }
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
       {/* ─── Edit Goals Modal ─────────────────────────────────────────── */}
       <Modal visible={showGoals} transparent animationType="slide" onRequestClose={() => setShowGoals(false)}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
@@ -1495,7 +1590,7 @@ export default function SoloScreen() {
               <View style={{ flex: 1 }}>
                 <MiniCalendarPicker value={pDate} onChange={setPDate} />
               </View>
-              <View style={{ flex: 1, flexDirection: "row", gap: 6 }}>
+              <View style={{ flex: 1, flexDirection: "row", gap: 6, alignSelf: "flex-start" }}>
                 <TextInput
                   style={[s.input, { flex: 1, marginBottom: 0 }]}
                   value={pTime}
@@ -1556,7 +1651,7 @@ export default function SoloScreen() {
                   {pNotify && <Feather name="check" size={12} color={C.bg} />}
                 </View>
                 <Text style={s.notifyLabel}>
-                  Remind me 1 hour &amp; 10 minutes before
+                  Remind me 1 hour before
                 </Text>
               </Pressable>
             )}
