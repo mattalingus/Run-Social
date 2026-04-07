@@ -542,6 +542,7 @@ export default function SoloScreen() {
   const [saveRunPathTarget, setSaveRunPathTarget] = useState<SoloRun | null>(null);
   const [saveRunPathName, setSaveRunPathName] = useState("");
   const [savingRunPath, setSavingRunPath] = useState(false);
+  const [savedRunPathIds, setSavedRunPathIds] = useState<Set<number>>(new Set());
 
   // Goals display period (UI toggle only — not saved separately)
   const [period, setPeriod] = useState<"monthly" | "yearly">("monthly");
@@ -977,27 +978,34 @@ export default function SoloScreen() {
         )}
         {isExpanded && run.completed && hasRoutePath && (
           <View style={{ paddingHorizontal: 12, paddingBottom: 14 }}>
-            <Pressable
-              style={({ pressed }) => ({
-                flexDirection: "row", alignItems: "center", gap: 6,
-                backgroundColor: "#FF6B3511", borderRadius: 10,
-                paddingHorizontal: 12, paddingVertical: 8,
-                alignSelf: "flex-start", opacity: pressed ? 0.7 : 1,
-              })}
-              onPress={() => {
-                Haptics.selectionAsync();
-                setSaveRunPathTarget(run);
-                setSaveRunPathName(run.title || "");
-              }}
-            >
-              <Feather name="bookmark" size={13} color="#FF6B35" />
-              <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: "#FF6B35" }}>Save Route</Text>
-            </Pressable>
+            {savedRunPathIds.has(run.id) ? (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 4, paddingVertical: 8, alignSelf: "flex-start" }}>
+                <Feather name="bookmark" size={13} color="#FF6B35" />
+                <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: "#FF6B35" }}>Route Saved</Text>
+              </View>
+            ) : (
+              <Pressable
+                style={({ pressed }) => ({
+                  flexDirection: "row", alignItems: "center", gap: 6,
+                  backgroundColor: "#FF6B3511", borderRadius: 10,
+                  paddingHorizontal: 12, paddingVertical: 8,
+                  alignSelf: "flex-start", opacity: pressed ? 0.7 : 1,
+                })}
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  setSaveRunPathTarget(run);
+                  setSaveRunPathName(run.title || "");
+                }}
+              >
+                <Feather name="bookmark" size={13} color="#FF6B35" />
+                <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: "#FF6B35" }}>Save Route</Text>
+              </Pressable>
+            )}
           </View>
         )}
       </View>
     );
-  }, [expandedRunId, runBadges, distUnit, C, s, setShareRunData, starMutation, setSaveRunPathTarget, setSaveRunPathName]);
+  }, [expandedRunId, runBadges, distUnit, C, s, setShareRunData, starMutation, setSaveRunPathTarget, setSaveRunPathName, savedRunPathIds]);
 
   const renderSectionHeader = useCallback(({ section }: { section: { title: string } }) => (
     <View style={[s.monthHeader, { backgroundColor: C.bg }]}>
@@ -1480,6 +1488,8 @@ export default function SoloScreen() {
                         activityType: saveRunPathTarget.activity_type,
                       });
                       qc.invalidateQueries({ queryKey: ["/api/saved-paths"] });
+                      const savedId = saveRunPathTarget.id;
+                      setSavedRunPathIds((prev) => new Set([...prev, savedId]));
                       setSaveRunPathTarget(null);
                       setSaveRunPathName("");
                       Alert.alert("Route Saved", "Your route has been added to Saved Paths.");

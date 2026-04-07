@@ -267,6 +267,7 @@ function ProfileScreenInner() {
   const [savePathName, setSavePathName] = useState("");
   const [savingPath, setSavingPath] = useState(false);
   const [showProfileSavedPaths, setShowProfileSavedPaths] = useState(false);
+  const [savedPathRunKeys, setSavedPathRunKeys] = useState<Set<string>>(new Set());
   const [favActivityFilter, setFavActivityFilter] = useState<"run" | "ride" | "walk">("run");
   const [friendSearch, setFriendSearch] = useState("");
   const [showAddFriend, setShowAddFriend] = useState(false);
@@ -1800,15 +1801,17 @@ function ProfileScreenInner() {
               setFbConnecting(true);
               try {
                 const res = await apiRequest("GET", "/api/auth/facebook/start");
-                const data = await res.json();
+                const data = await res.json().catch(() => ({}));
                 if (data.url) {
                   await WebBrowser.openBrowserAsync(data.url);
                   qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
                   qc.invalidateQueries({ queryKey: ["/api/friends/facebook-suggestions"] });
                   refreshUser();
+                } else {
+                  Alert.alert("Coming Soon", "Facebook friend discovery is not yet available. Check back soon!");
                 }
-              } catch (e: any) {
-                Alert.alert("Error", e.message || "Could not connect Facebook. Please try again.");
+              } catch {
+                Alert.alert("Coming Soon", "Facebook friend discovery is not yet available. Check back soon!");
               } finally {
                 setFbConnecting(false);
               }
@@ -2198,20 +2201,27 @@ function ProfileScreenInner() {
                               <Text style={styles.shareActivityBtnTxt}>Share</Text>
                             </Pressable>
                             {run.route_path && run.route_path.length > 1 && (
-                              <Pressable
-                                style={({ pressed }) => [styles.shareActivityBtn, { flex: 1, opacity: pressed ? 0.75 : 1, borderColor: "#FF6B3555" }]}
-                                onPress={() => {
-                                  Haptics.selectionAsync();
-                                  const defaultName = run.title
-                                    ? run.title
-                                    : `${toDisplayDist(run.my_final_distance ?? run.distance_miles, distUnit)} ${run.activity_type === "ride" ? "Ride" : run.activity_type === "walk" ? "Walk" : "Run"}`;
-                                  setSavePathName(defaultName);
-                                  setSavePathRun(run);
-                                }}
-                              >
-                                <Feather name="bookmark" size={14} color="#FF6B35" />
-                                <Text style={[styles.shareActivityBtnTxt, { color: "#FF6B35" }]}>Save Route</Text>
-                              </Pressable>
+                              savedPathRunKeys.has(`${run.id}_${run.type}`) ? (
+                                <View style={[styles.shareActivityBtn, { flex: 1, borderColor: "#FF6B3555", justifyContent: "center" }]}>
+                                  <Feather name="bookmark" size={14} color="#FF6B35" />
+                                  <Text style={[styles.shareActivityBtnTxt, { color: "#FF6B35" }]}>Route Saved</Text>
+                                </View>
+                              ) : (
+                                <Pressable
+                                  style={({ pressed }) => [styles.shareActivityBtn, { flex: 1, opacity: pressed ? 0.75 : 1, borderColor: "#FF6B3555" }]}
+                                  onPress={() => {
+                                    Haptics.selectionAsync();
+                                    const defaultName = run.title
+                                      ? run.title
+                                      : `${toDisplayDist(run.my_final_distance ?? run.distance_miles, distUnit)} ${run.activity_type === "ride" ? "Ride" : run.activity_type === "walk" ? "Walk" : "Run"}`;
+                                    setSavePathName(defaultName);
+                                    setSavePathRun(run);
+                                  }}
+                                >
+                                  <Feather name="bookmark" size={14} color="#FF6B35" />
+                                  <Text style={[styles.shareActivityBtnTxt, { color: "#FF6B35" }]}>Save Route</Text>
+                                </Pressable>
+                              )
                             )}
                           </View>
                         </View>
@@ -2539,6 +2549,8 @@ function ProfileScreenInner() {
                         activityType: savePathRun.activity_type,
                       });
                       qc.invalidateQueries({ queryKey: ["/api/saved-paths"] });
+                      const savedKey = `${savePathRun.id}_${savePathRun.type}`;
+                      setSavedPathRunKeys((prev) => new Set([...prev, savedKey]));
                       setSavePathRun(null);
                       setSavePathName("");
                       Alert.alert("Route Saved", "Your route has been added to Saved Paths.");
