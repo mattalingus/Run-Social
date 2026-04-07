@@ -1,0 +1,15 @@
+Paceup minor fixes
+On profile section:
+- longest workout (run/ride/walk) only accounts for solo workouts… should be just your longest workout even if it was in a crew or hosted 
+- Mileage goals should also add in the group workouts as well to the total.
+- Find friends from contacts does not work, shows “property ‘crypto’ does not exist” when pressed
+- Find facebook friends also does not work
+- In profile I would like a bar button underneath view past runs that is for saved routes there’s no location for them anywhere, and workout history in solo page should have the option to save route not just in profile section. 
+- When I select save route in past workouts nothing happens. It give haptic feedback like the button got pressed but nothing happens and it’s store nowhere and the bookmark icon color does not fill in.
+Solo page
+- the spacing between Run Solo button and “performance rankings” needs to widen. They are almost touching 
+- If I share a run, the instagram sticker feature works finally! The issue is before it opens instagram the regular share iOS menu opens up and it only take you to the correct instagram sticker story path if you tap out of the iOS menu. If I select share and select instagram it should open instagram immediately and not the iOS share menu.
+- In the “plan run (or ride/walk)” button menu, the remind me 1 hour & 10 minutes before is weird just have it set to remind me 1 hour before
+- The date and time selector menu I like the date selector, issue is that on opening it has two green dots pre selected, it needs to JUST be the current date selected, then user can tap a different date and the green dot goes to that date selected. Also when the calendar opens up to do the selection it also drags the time selector with it and it looks off. Only the calendar should drop down as it is now the time box needs to stay the size it is. 
+- In filters it’s very weird, the distance from me goes 1-50 and then jumps to nation wide. Maybe add 100 miles , 250, state national 
+- Map view, in map view the map changes size wether there is a map pin visible or not, the map needs to stay the size it is when there is a map pin visible so it’s not jumping around as user moves through the map. 
