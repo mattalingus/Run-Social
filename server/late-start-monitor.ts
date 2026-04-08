@@ -23,8 +23,8 @@ async function checkLateStarts(): Promise<void> {
          AND r.is_completed = false
          AND (r.is_deleted IS NULL OR r.is_deleted = false)
          AND r.notif_late_start_sent = false
-         AND r.date < NOW() - INTERVAL '60 minutes'
-         AND r.date > NOW() - INTERVAL '90 minutes'`
+         AND r.date < NOW() - INTERVAL '25 minutes'
+         AND r.date > NOW() - INTERVAL '35 minutes'`
     );
 
     if (result.rows.length > 0) {
@@ -43,7 +43,7 @@ async function checkLateStarts(): Promise<void> {
           await sendPushNotification(
             run.host_push_token,
             `⏰ Start your ${type} soon`,
-            `"${run.title}" was scheduled 1 hour ago. Start it now or it will be automatically removed in 30 minutes.`,
+            `"${run.title}" was scheduled 30 minutes ago. Start it now or it will be automatically removed in 30 minutes.`,
             { screen: "run", runId: run.id }
           );
         }
@@ -55,7 +55,7 @@ async function checkLateStarts(): Promise<void> {
   }
 }
 
-// Auto-delete runs that are 90+ minutes past scheduled time and were never started
+// Auto-delete runs that are 60+ minutes past scheduled time and were never started
 async function cleanupUnstartedRuns(): Promise<void> {
   try {
     const result = await pool.query(
@@ -64,7 +64,7 @@ async function cleanupUnstartedRuns(): Promise<void> {
        WHERE is_active = false
          AND is_completed = false
          AND (is_deleted IS NULL OR is_deleted = false)
-         AND date < NOW() - INTERVAL '90 minutes'
+         AND date < NOW() - INTERVAL '60 minutes'
        RETURNING id, title`
     );
     if (result.rowCount && result.rowCount > 0) {
