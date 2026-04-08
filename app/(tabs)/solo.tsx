@@ -25,6 +25,7 @@ import { router } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
+import { resolvePhotoUrl } from "@/lib/photoUrl";
 import { darkColors as C, type ColorScheme } from "@/constants/colors";
 import { useTheme } from "@/contexts/ThemeContext";
 import MiniCalendarPicker from "@/components/MiniCalendarPicker";
@@ -283,7 +284,7 @@ function SoloRunPhotos({ runId }: { runId: string }) {
       ) : (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
           {photos.map((p: any) => (
-            <Image key={p.id} source={{ uri: p.photo_url }} style={soloPhotoStyles.thumb} />
+            <Image key={p.id} source={{ uri: resolvePhotoUrl(p.photo_url) }} style={soloPhotoStyles.thumb} />
           ))}
         </ScrollView>
       )}

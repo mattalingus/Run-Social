@@ -1614,7 +1614,7 @@ export default function RunTrackingScreen() {
           runData={{
             distanceMi: totalDistRef.current,
             paceMinPerMile: pace,
-            durationSeconds: elapsed,
+            durationSeconds: elapsedRef.current,
             routePath: routePathRef.current,
             activityType: activityFilter,
           }}

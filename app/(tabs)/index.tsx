@@ -919,7 +919,9 @@ function RunCard({
                   <Feather name="calendar" size={11} color={isStillJoinableCard ? "#F5A623" : C.textMuted} />
                   {isStillJoinableCard ? (
                     <Text style={[s.metaText, { color: "#F5A623", fontFamily: "Outfit_600SemiBold" }]}>
-                      Ended {minsAgoCard < 60 ? `${minsAgoCard}m` : `${Math.floor(minsAgoCard / 60)}h ${minsAgoCard % 60}m`} ago · Still joinable
+                      {isLiveNow
+                        ? `Started ${minsAgoCard < 60 ? `${minsAgoCard}m` : `${Math.floor(minsAgoCard / 60)}h ${minsAgoCard % 60}m`} ago · Live`
+                        : `Ended ${minsAgoCard < 60 ? `${minsAgoCard}m` : `${Math.floor(minsAgoCard / 60)}h ${minsAgoCard % 60}m`} ago · Still joinable`}
                     </Text>
                   ) : (
                     <Text style={s.metaText}>{formatDate(run.date)} · {formatTime(run.date)}</Text>

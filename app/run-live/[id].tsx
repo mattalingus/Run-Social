@@ -86,6 +86,39 @@ export default function RunLiveScreen() {
     restore,
   } = tracking;
 
+  // ── Nearby proximity state (for chat unlock independent of tracking) ─────
+  const [canChatNearby, setCanChatNearby] = useState(false);
+
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    if (run?.location_lat == null || run?.location_lng == null) return;
+    const THRESHOLD_KM = 0.1524;
+    let sub: Location.LocationSubscription | null = null;
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") return;
+      sub = await Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.Balanced, distanceInterval: 20 },
+        (loc) => {
+          const R = 6371;
+          const toRad = (d: number) => (d * Math.PI) / 180;
+          const dLat = toRad(loc.coords.latitude - run.location_lat);
+          const dLon = toRad(loc.coords.longitude - run.location_lng);
+          const a =
+            Math.sin(dLat / 2) ** 2 +
+            Math.cos(toRad(run.location_lat)) *
+              Math.cos(toRad(loc.coords.latitude)) *
+              Math.sin(dLon / 2) ** 2;
+          const distKm = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          if (distKm <= THRESHOLD_KM) {
+            setCanChatNearby(true);
+          }
+        }
+      );
+    })();
+    return () => { sub?.remove(); };
+  }, [run?.location_lat, run?.location_lng]);
+
   // ── Local UI state ────────────────────────────────────────────────────────
   const [presentToast, setPresentToast] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -213,6 +246,11 @@ export default function RunLiveScreen() {
   // Use liveState.hostId so host detection updates every 5s (auto-promotion)
   const isHost = (liveState?.hostId ?? run?.host_id) === user?.id;
   const { setActivityFilter } = useActivity();
+
+  // Host always has chat access
+  useEffect(() => {
+    if (isHost) setCanChatNearby(true);
+  }, [isHost]);
 
   // Detect host promotion and show banner
   useEffect(() => {
@@ -881,7 +919,7 @@ export default function RunLiveScreen() {
       ) : (
         <KAV style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}>
           <View style={s.chatContainer}>
-            {!hasBeenPresent ? (
+            {!(canChatNearby || hasBeenPresent) ? (
               <View style={s.notPresentContainer}>
                 <Text style={s.notPresentText}>
                   You'll be able to chat once you arrive at the start point 📍

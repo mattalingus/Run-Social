@@ -225,8 +225,6 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
         try { await Linking.openURL("instagram-stories://share"); } catch {}
         return;
       }
-      await saveToLibraryQuietly(uri);
-
       if (RNShare) {
         try {
           await RNShare.shareSingle({

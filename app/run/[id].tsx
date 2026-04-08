@@ -33,6 +33,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { formatDistance } from "@/lib/formatDistance";
 import { toDisplayDist, toDisplayPace, unitLabel, type DistanceUnit } from "@/lib/units";
 import HostProfileSheet from "@/components/HostProfileSheet";
+import { resolvePhotoUrl } from "@/lib/photoUrl";
 
 function haversineKmDetail(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371;
@@ -617,42 +618,25 @@ export default function RunDetailScreen() {
   }
 
   async function handleConfirmComplete() {
-    Alert.prompt(
-      "Log Miles",
-      "How many miles did you run?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Confirm",
-          onPress: async (miles: string | undefined) => {
-            const parsed = parseFloat(miles ?? "");
-            if (!isFinite(parsed) || parsed <= 0) {
-              Alert.alert(
-                "Invalid Distance",
-                "Please enter a positive number of miles (e.g. 3.1).",
-                [{ text: "Try Again", onPress: handleConfirmComplete }]
-              );
-              return;
-            }
-            setConfirming(true);
-            try {
-              await apiRequest("POST", `/api/runs/${id}/complete`, { milesLogged: parsed });
-              await refreshUser();
-              qc.invalidateQueries({ queryKey: ["/api/runs/mine"] });
-              qc.invalidateQueries({ queryKey: ["/api/users/me/achievements"] });
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              Alert.alert("Great job!", "Run logged successfully. Check your achievements!");
-            } catch (e: any) {
-              Alert.alert("Error", e.message);
-            } finally {
-              setConfirming(false);
-            }
-          },
-        },
-      ],
-      "plain-text",
-      run?.min_distance?.toString() || "3"
-    );
+    const isActiveTracking =
+      liveTracking.runId === id &&
+      liveTracking.phase === "active";
+    const milesLogged = isActiveTracking
+      ? liveTracking.totalDistRef.current
+      : (run?.min_distance ?? 0);
+    setConfirming(true);
+    try {
+      await apiRequest("POST", `/api/runs/${id}/complete`, { milesLogged });
+      await refreshUser();
+      qc.invalidateQueries({ queryKey: ["/api/runs/mine"] });
+      qc.invalidateQueries({ queryKey: ["/api/users/me/achievements"] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert("Great job!", "Run logged successfully. Check your achievements!");
+    } catch (e: any) {
+      Alert.alert("Error", e.message);
+    } finally {
+      setConfirming(false);
+    }
   }
 
   if (isLoading) {
@@ -801,7 +785,9 @@ export default function RunDetailScreen() {
           <View style={styles.stillJoinableRow}>
             <Feather name="clock" size={13} color="#F5A623" />
             <Text style={styles.stillJoinableTxt}>
-              Ended {minutesSinceRun < 60 ? `${minutesSinceRun}m` : `${Math.floor(minutesSinceRun / 60)}h ${minutesSinceRun % 60}m`} ago · Still joinable
+              {isLive
+                ? `Started ${minutesSinceRun < 60 ? `${minutesSinceRun}m` : `${Math.floor(minutesSinceRun / 60)}h ${minutesSinceRun % 60}m`} ago · Live`
+                : `Ended ${minutesSinceRun < 60 ? `${minutesSinceRun}m` : `${Math.floor(minutesSinceRun / 60)}h ${minutesSinceRun % 60}m`} ago · Still joinable`}
             </Text>
           </View>
         )}
@@ -1237,8 +1223,8 @@ export default function RunDetailScreen() {
             ) : (
               <View style={styles.photosGrid}>
                 {runPhotos.map((p: any) => (
-                  <Pressable key={p.id} onPress={() => setViewingPhoto(p.photo_url)}>
-                    <Image source={{ uri: p.photo_url }} style={styles.photoGridImg} />
+                  <Pressable key={p.id} onPress={() => setViewingPhoto(resolvePhotoUrl(p.photo_url))}>
+                    <Image source={{ uri: resolvePhotoUrl(p.photo_url) }} style={styles.photoGridImg} />
                   </Pressable>
                 ))}
               </View>
