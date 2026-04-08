@@ -210,37 +210,47 @@ const PRE_RUN_PHRASES = [
 
 async function checkPreRunReminders(): Promise<void> {
   try {
+    // Atomically claim qualifying runs so concurrent/restart-duplicate fires are impossible
     const result = await pool.query<{
       id: string;
       title: string;
       activity_type: string;
       host_id: string;
     }>(
-      `SELECT r.id, r.title, r.activity_type, r.host_id
-       FROM runs r
-       WHERE r.is_active = false
-         AND r.is_completed = false
-         AND (r.is_deleted IS NULL OR r.is_deleted = false)
-         AND r.notif_pre_run_sent = false
-         AND r.date > NOW() + INTERVAL '25 minutes'
-         AND r.date < NOW() + INTERVAL '35 minutes'`
+      `UPDATE runs
+       SET notif_pre_run_sent = true
+       WHERE is_active = false
+         AND is_completed = false
+         AND (is_deleted IS NULL OR is_deleted = false)
+         AND notif_pre_run_sent = false
+         AND date > NOW() + INTERVAL '25 minutes'
+         AND date < NOW() + INTERVAL '35 minutes'
+       RETURNING id, title, activity_type, host_id`
     );
 
     if (!result.rows.length) return;
-
-    const ids = result.rows.map((r) => r.id);
-    await pool.query(
-      `UPDATE runs SET notif_pre_run_sent = true WHERE id = ANY($1)`,
-      [ids]
-    );
 
     for (const run of result.rows) {
       const type = run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run";
       const phraseIdx = Math.floor(Math.random() * PRE_RUN_PHRASES.length);
       const body = PRE_RUN_PHRASES[phraseIdx](type, run.title);
       const title = `⏱ ${run.title} starts soon`;
+      const data = { screen: "run", runId: run.id };
 
-      const participants = await pool.query<{
+      // Fetch host token directly (host may not yet have a run_participants row)
+      const hostRes = await pool.query<{
+        push_token: string | null;
+        notifications_enabled: boolean;
+        notif_run_reminders: boolean;
+      }>(
+        `SELECT push_token, notifications_enabled, notif_run_reminders
+         FROM users WHERE id = $1`,
+        [run.host_id]
+      );
+      const host = hostRes.rows[0];
+
+      // Fetch participant tokens (status joined or confirmed, not the host to avoid dup)
+      const participantsRes = await pool.query<{
         push_token: string | null;
         notifications_enabled: boolean;
         notif_run_reminders: boolean;
@@ -250,18 +260,39 @@ async function checkPreRunReminders(): Promise<void> {
          JOIN users u ON u.id = rp.user_id
          WHERE rp.run_id = $1
            AND rp.status IN ('joined', 'confirmed')
+           AND rp.user_id != $2
            AND u.push_token IS NOT NULL`,
-        [run.id]
+        [run.id, run.host_id]
       );
 
-      const tokens = participants.rows
-        .filter((p) => p.notifications_enabled !== false && p.notif_run_reminders !== false && p.push_token)
-        .map((p) => p.push_token as string);
+      const tokenSet = new Set<string>();
 
-      if (tokens.length > 0) {
-        await sendPushNotification(tokens, title, body, { screen: "run", runId: run.id });
+      // Include host if eligible
+      if (
+        host?.push_token &&
+        host.notifications_enabled !== false &&
+        host.notif_run_reminders !== false &&
+        host.push_token.startsWith("ExponentPushToken[")
+      ) {
+        tokenSet.add(host.push_token);
       }
-      console.log(`[pre-run] Sent reminder for run ${run.id} ("${run.title}") to ${tokens.length} participant(s)`);
+
+      // Include participants if eligible
+      for (const p of participantsRes.rows) {
+        if (
+          p.push_token &&
+          p.notifications_enabled !== false &&
+          p.notif_run_reminders !== false
+        ) {
+          tokenSet.add(p.push_token);
+        }
+      }
+
+      const tokens = Array.from(tokenSet);
+      if (tokens.length > 0) {
+        await sendPushNotification(tokens, title, body, data);
+      }
+      console.log(`[pre-run] Sent reminder for run ${run.id} ("${run.title}") to ${tokens.length} recipient(s)`);
     }
   } catch (err) {
     console.error("[pre-run] Check failed:", err);
