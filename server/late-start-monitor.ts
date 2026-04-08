@@ -195,6 +195,79 @@ async function cleanupStaleActiveRuns(): Promise<void> {
   }
 }
 
+const PRE_RUN_PHRASES = [
+  (type: string, title: string) => `Lace up — your ${type} starts in 30 minutes! 👟`,
+  (type: string, title: string) => `30 min to go. Your crew is counting on you 💪`,
+  (type: string, title: string) => `Time to get moving — "${title}" kicks off in 30!`,
+  (type: string, title: string) => `Head out now so you make it to the start on time 🏃`,
+  (type: string, title: string) => `Your ${type} is almost here. Don't leave your crew hanging!`,
+  (type: string, title: string) => `30 minutes until "${title}" — get those miles ready 🔥`,
+  (type: string, title: string) => `Almost time! "${title}" starts in 30. See you out there 🌟`,
+  (type: string, title: string) => `Your ${type} is starting soon — warm up and head over!`,
+  (type: string, title: string) => `30-minute warning: "${title}" is about to begin. Let's go! 🚀`,
+  (type: string, title: string) => `Rise and roll — "${title}" kicks off in 30 minutes ⚡`,
+];
+
+async function checkPreRunReminders(): Promise<void> {
+  try {
+    const result = await pool.query<{
+      id: string;
+      title: string;
+      activity_type: string;
+      host_id: string;
+    }>(
+      `SELECT r.id, r.title, r.activity_type, r.host_id
+       FROM runs r
+       WHERE r.is_active = false
+         AND r.is_completed = false
+         AND (r.is_deleted IS NULL OR r.is_deleted = false)
+         AND r.notif_pre_run_sent = false
+         AND r.date > NOW() + INTERVAL '25 minutes'
+         AND r.date < NOW() + INTERVAL '35 minutes'`
+    );
+
+    if (!result.rows.length) return;
+
+    const ids = result.rows.map((r) => r.id);
+    await pool.query(
+      `UPDATE runs SET notif_pre_run_sent = true WHERE id = ANY($1)`,
+      [ids]
+    );
+
+    for (const run of result.rows) {
+      const type = run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run";
+      const phraseIdx = Math.floor(Math.random() * PRE_RUN_PHRASES.length);
+      const body = PRE_RUN_PHRASES[phraseIdx](type, run.title);
+      const title = `⏱ ${run.title} starts soon`;
+
+      const participants = await pool.query<{
+        push_token: string | null;
+        notifications_enabled: boolean;
+        notif_run_reminders: boolean;
+      }>(
+        `SELECT u.push_token, u.notifications_enabled, u.notif_run_reminders
+         FROM run_participants rp
+         JOIN users u ON u.id = rp.user_id
+         WHERE rp.run_id = $1
+           AND rp.status IN ('joined', 'confirmed')
+           AND u.push_token IS NOT NULL`,
+        [run.id]
+      );
+
+      const tokens = participants.rows
+        .filter((p) => p.notifications_enabled !== false && p.notif_run_reminders !== false && p.push_token)
+        .map((p) => p.push_token as string);
+
+      if (tokens.length > 0) {
+        await sendPushNotification(tokens, title, body, { screen: "run", runId: run.id });
+      }
+      console.log(`[pre-run] Sent reminder for run ${run.id} ("${run.title}") to ${tokens.length} participant(s)`);
+    }
+  } catch (err) {
+    console.error("[pre-run] Check failed:", err);
+  }
+}
+
 // Auto-promote a new host when the current host hasn't pinged in 5+ minutes during an active run
 async function checkAndPromoteHost(): Promise<void> {
   try {
@@ -246,11 +319,13 @@ async function checkAndPromoteHost(): Promise<void> {
 export function scheduleLateStartMonitor(): void {
   console.log("[late-start] Monitor started — checking every 5 minutes");
   setInterval(() => {
+    checkPreRunReminders();
     checkLateStarts();
     cleanupStaleActiveRuns();
     cleanupUnstartedRuns();
     checkAndPromoteHost();
   }, CHECK_INTERVAL_MS);
+  checkPreRunReminders();
   checkLateStarts();
   cleanupStaleActiveRuns();
   cleanupUnstartedRuns();

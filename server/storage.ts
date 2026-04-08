@@ -114,6 +114,7 @@ export async function initDb() {
     ALTER TABLE runs ADD COLUMN IF NOT EXISTS run_style TEXT DEFAULT NULL;
     ALTER TABLE runs ADD COLUMN IF NOT EXISTS activity_type TEXT DEFAULT 'run';
     ALTER TABLE runs ADD COLUMN IF NOT EXISTS notif_late_start_sent BOOLEAN DEFAULT false;
+    ALTER TABLE runs ADD COLUMN IF NOT EXISTS notif_pre_run_sent BOOLEAN DEFAULT false;
     ALTER TABLE runs ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT false;
     ALTER TABLE users ALTER COLUMN avg_pace SET DEFAULT NULL;
     ALTER TABLE users ALTER COLUMN avg_distance SET DEFAULT NULL;
@@ -1705,7 +1706,7 @@ export async function updateRunDateTime(runId: string, userId: string, newDate: 
   if (!run.rows.length) throw new Error("Run not found");
   if (run.rows[0].host_id !== userId) throw new Error("Only the host can edit this run");
   const updated = await pool.query(
-    `UPDATE runs SET date = $2, notif_late_start_sent = false WHERE id = $1 RETURNING *`,
+    `UPDATE runs SET date = $2, notif_late_start_sent = false, notif_pre_run_sent = false WHERE id = $1 RETURNING *`,
     [runId, newDate]
   );
   return updated.rows[0];
