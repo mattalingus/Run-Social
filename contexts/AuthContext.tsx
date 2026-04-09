@@ -90,9 +90,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function fetchMe() {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000);
     try {
       const baseUrl = getApiUrl();
-      const res = await fetch(new URL("/api/auth/me", baseUrl).toString(), { credentials: "include" });
+      const res = await fetch(new URL("/api/auth/me", baseUrl).toString(), {
+        credentials: "include",
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
       if (res.ok) {
         const data = await res.json();
         setUser(data);
@@ -101,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(restored);
       }
     } catch {
+      clearTimeout(timer);
       const restored = await tryRestoreSession();
       setUser(restored);
     } finally {

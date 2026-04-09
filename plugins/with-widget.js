@@ -15,7 +15,7 @@
 const {
   withXcodeProject,
   withDangerousMod,
-} = require("@expo/config-plugins");
+} = require("./_resolve-config-plugins");
 const path = require("path");
 const fs = require("fs");
 

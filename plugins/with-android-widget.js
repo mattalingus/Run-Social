@@ -24,7 +24,7 @@
  *  9. Injects <service> + permissions into AndroidManifest.xml
  */
 
-const { withAndroidManifest, withDangerousMod, withMainApplication } = require("@expo/config-plugins");
+const { withAndroidManifest, withDangerousMod, withMainApplication } = require("./_resolve-config-plugins");
 const path = require("path");
 const fs = require("fs");
 

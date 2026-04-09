@@ -1,4 +1,4 @@
-const { withInfoPlist, withEntitlementsPlist } = require("@expo/config-plugins");
+const { withInfoPlist, withEntitlementsPlist } = require("./_resolve-config-plugins");
 
 const SHARE_USAGE = "PaceUp uses Apple Health to import your runs, rides, and walks so all your activity appears in one place.";
 const UPDATE_USAGE = "PaceUp saves completed workouts to Apple Health so they count toward your Activity rings.";
