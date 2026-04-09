@@ -43,26 +43,43 @@ export default function OnboardingScreen() {
   const [monthlyGoal, setMonthlyGoal] = useState("50");
   const [yearlyGoal, setYearlyGoal] = useState("500");
   const [loading, setLoading] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const firstName = user?.name?.split(" ")[0] ?? "there";
 
+  function parseGoal(raw: string, fallback: number): number {
+    const n = parseFloat(raw);
+    return Number.isFinite(n) && n > 0 ? n : fallback;
+  }
+
   async function handleGetStarted() {
+    setSaveError(null);
     setLoading(true);
     try {
       const url = new URL("/api/users/me/onboarding", getApiUrl()).toString();
-      await fetch(url, {
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
           activityType: selectedActivity,
-          monthlyGoal: parseFloat(monthlyGoal) || 50,
-          yearlyGoal: parseFloat(yearlyGoal) || 500,
+          monthlyGoal: parseGoal(monthlyGoal, 50),
+          yearlyGoal: parseGoal(yearlyGoal, 500),
         }),
       });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setSaveError((body as any).message || "Failed to save. Please try again.");
+        setLoading(false);
+        return;
+      }
       setActivityFilter(selectedActivity);
-      if (refreshUser) await refreshUser();
-    } catch (_) {}
+      await refreshUser();
+    } catch (_) {
+      setSaveError("Network error. Please try again.");
+      setLoading(false);
+      return;
+    }
     setLoading(false);
     router.replace("/(tabs)");
     startWalkthrough();
@@ -71,14 +88,16 @@ export default function OnboardingScreen() {
   async function handleSkip() {
     try {
       const url = new URL("/api/users/me/onboarding", getApiUrl()).toString();
-      await fetch(url, {
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ activityType: selectedActivity }),
       });
-      setActivityFilter(selectedActivity);
-      if (refreshUser) await refreshUser();
+      if (res.ok) {
+        setActivityFilter(selectedActivity);
+        await refreshUser();
+      }
     } catch (_) {}
     router.replace("/(tabs)");
   }
@@ -107,7 +126,7 @@ export default function OnboardingScreen() {
         </View>
 
         {/* Welcome */}
-        <Text style={styles.welcome}>Welcome, {firstName}!</Text>
+        <Text style={styles.welcome}>Welcome to PaceUp, {firstName}!</Text>
         <Text style={styles.subtitle}>Let's set up your experience</Text>
 
         {/* Activity picker */}
@@ -176,6 +195,11 @@ export default function OnboardingScreen() {
           </View>
           <Ionicons name="chevron-forward" size={18} color="#3D6B52" />
         </TouchableOpacity>
+
+        {/* Error message */}
+        {saveError !== null && (
+          <Text style={styles.errorText}>{saveError}</Text>
+        )}
 
         {/* CTA */}
         <TouchableOpacity
@@ -369,5 +393,12 @@ const styles = StyleSheet.create({
     fontFamily: "Outfit_400Regular",
     fontSize: 14,
     color: "#3D6B52",
+  },
+  errorText: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 13,
+    color: "#FF6B35",
+    textAlign: "center",
+    marginBottom: 12,
   },
 });
