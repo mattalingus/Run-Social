@@ -120,7 +120,7 @@ export default function CreateRunScreen() {
   const [title, setTitle] = useState(params.pathName ? `${params.activityType === "ride" ? "Ride on" : params.activityType === "walk" ? "Walk on" : "Run on"} ${params.pathName}` : "");
   const [description, setDescription] = useState("");
   const [privacy, setPrivacy] = useState("public");
-  const [date, setDate] = useState<Date>(() => { const d = new Date(); d.setDate(d.getDate() + 1); return d; });
+  const [date, setDate] = useState<Date>(() => new Date());
   const [time, setTime] = useState("7:30");
   const [locationName, setLocationName] = useState(params.pathName ?? "");
   const [locationLat, setLocationLat] = useState(params.pathLat ?? "");
