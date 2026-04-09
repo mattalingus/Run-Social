@@ -70,35 +70,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const token = await AsyncStorage.getItem(REMEMBER_TOKEN_KEY);
       if (!token) return null;
       const baseUrl = getApiUrl();
-      const res = await fetch(new URL("/api/auth/restore-session", baseUrl).toString(), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token }),
-        credentials: "include",
-      });
-      if (!res.ok) {
-        await clearToken();
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 8000);
+      try {
+        const res = await fetch(new URL("/api/auth/restore-session", baseUrl).toString(), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token }),
+          credentials: "include",
+          signal: controller.signal,
+        });
+        clearTimeout(timer);
+        if (!res.ok) {
+          await clearToken();
+          return null;
+        }
+        const data = await res.json();
+        if (data.rememberToken) await storeToken(data.rememberToken);
+        const { rememberToken: _t, ...userOnly } = data;
+        return userOnly as User;
+      } catch {
+        clearTimeout(timer);
         return null;
       }
-      const data = await res.json();
-      if (data.rememberToken) await storeToken(data.rememberToken);
-      const { rememberToken: _t, ...userOnly } = data;
-      return userOnly as User;
     } catch {
       return null;
     }
   }
 
   async function fetchMe() {
+    // Hard bail: no matter what happens, loading clears within 10 seconds
+    const emergencyTimer = setTimeout(() => setIsLoading(false), 10000);
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 12000);
+    const abortTimer = setTimeout(() => controller.abort(), 8000);
     try {
       const baseUrl = getApiUrl();
       const res = await fetch(new URL("/api/auth/me", baseUrl).toString(), {
         credentials: "include",
         signal: controller.signal,
       });
-      clearTimeout(timer);
+      clearTimeout(abortTimer);
       if (res.ok) {
         const data = await res.json();
         setUser(data);
@@ -107,10 +118,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(restored);
       }
     } catch {
-      clearTimeout(timer);
+      clearTimeout(abortTimer);
       const restored = await tryRestoreSession();
       setUser(restored);
     } finally {
+      clearTimeout(emergencyTimer);
       setIsLoading(false);
     }
   }
