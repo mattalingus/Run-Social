@@ -377,6 +377,29 @@ async function go(e){
     }
   });
 
+  app.post("/api/users/me/onboarding", requireAuth, async (req, res) => {
+    try {
+      const { activityType, monthlyGoal, yearlyGoal } = req.body;
+      const activity = ["run", "ride", "walk"].includes(activityType) ? activityType : "run";
+      await storage.updateUser(req.session.userId!, { defaultActivity: activity, onboardingComplete: true });
+      if (monthlyGoal !== undefined || yearlyGoal !== undefined) {
+        const mGoal = monthlyGoal !== undefined ? parseFloat(monthlyGoal) : undefined;
+        const yGoal = yearlyGoal !== undefined ? parseFloat(yearlyGoal) : undefined;
+        await storage.updateGoals(
+          req.session.userId!,
+          mGoal && !isNaN(mGoal) ? mGoal : undefined,
+          yGoal && !isNaN(yGoal) ? yGoal : undefined,
+          undefined
+        );
+      }
+      const user = await storage.getUserById(req.session.userId!);
+      const { password: _, ...safeUser } = user;
+      res.json(safeUser);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.post("/api/users/me/push-token", requireAuth, async (req, res) => {
     try {
       const { token } = req.body;

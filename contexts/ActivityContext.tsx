@@ -1,6 +1,9 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useState, useEffect } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export type ActivityType = "run" | "ride" | "walk";
+
+const ACTIVITY_STORAGE_KEY = "@paceup_default_activity";
 
 interface ActivityContextValue {
   activityFilter: ActivityType;
@@ -13,7 +16,25 @@ const ActivityContext = createContext<ActivityContextValue>({
 });
 
 export function ActivityProvider({ children }: { children: React.ReactNode }) {
-  const [activityFilter, setActivityFilter] = useState<ActivityType>("run");
+  const [activityFilter, setActivityFilterState] = useState<ActivityType>("run");
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem(ACTIVITY_STORAGE_KEY)
+      .then((stored) => {
+        if (stored === "run" || stored === "ride" || stored === "walk") {
+          setActivityFilterState(stored);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoaded(true));
+  }, []);
+
+  function setActivityFilter(v: ActivityType) {
+    setActivityFilterState(v);
+    AsyncStorage.setItem(ACTIVITY_STORAGE_KEY, v).catch(() => {});
+  }
+
   return (
     <ActivityContext.Provider value={{ activityFilter, setActivityFilter }}>
       {children}

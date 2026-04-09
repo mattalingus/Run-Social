@@ -96,6 +96,8 @@ function RootLayoutNav() {
       }
       if (!user) {
         router.replace("/(auth)/login");
+      } else if (user.onboarding_complete === false) {
+        router.replace("/onboarding" as any);
       }
     }
   }, [isLoading, fontsLoaded, fontError, user]);
@@ -218,6 +220,7 @@ function RootLayoutNav() {
       <StatusBar style={theme === "dark" ? "light" : "dark"} />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.bg } }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="onboarding" options={{ headerShown: false }} />
         <Stack.Screen
           name="(auth)"
           options={{ presentation: "modal", headerShown: false }}

@@ -60,7 +60,7 @@ export default function RegisterScreen() {
     try {
       await register(email.trim(), password, firstName.trim(), lastName.trim(), username.trim(), gender);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.replace("/(tabs)");
+      router.replace("/onboarding" as any);
     } catch (e: any) {
       setError(e.message || "Registration failed");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);

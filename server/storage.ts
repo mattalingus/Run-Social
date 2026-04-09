@@ -345,6 +345,8 @@ export async function initDb() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS garmin_token_secret TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS apple_health_connected BOOLEAN DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS health_connect_connected BOOLEAN DEFAULT false;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_complete BOOLEAN DEFAULT true;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS default_activity TEXT DEFAULT 'run';
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS garmin_activity_id TEXT UNIQUE;
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS apple_health_id TEXT UNIQUE;
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS health_connect_id TEXT UNIQUE;
@@ -831,7 +833,7 @@ export async function getUserByEmailOrUsername(identifier: string) {
 export async function createUser(data: { email: string; password: string; name: string; username?: string; gender?: string | null }) {
   const hashedPassword = await bcrypt.hash(data.password, 10);
   const result = await pool.query(
-    `INSERT INTO users (email, password, name, username, avg_pace, avg_distance, gender) VALUES ($1, $2, $3, $4, NULL, NULL, $5) RETURNING *`,
+    `INSERT INTO users (email, password, name, username, avg_pace, avg_distance, gender, onboarding_complete) VALUES ($1, $2, $3, $4, NULL, NULL, $5, false) RETURNING *`,
     [data.email.toLowerCase(), hashedPassword, data.name, data.username?.toLowerCase() ?? null, data.gender ?? null]
   );
   return result.rows[0];

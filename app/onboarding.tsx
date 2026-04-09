@@ -1,0 +1,370 @@
+import React, { useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TextInput,
+  TouchableOpacity,
+  Linking,
+  Platform,
+  ActivityIndicator,
+} from "react-native";
+import { router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAuth } from "@/contexts/AuthContext";
+import { useActivity, ActivityType } from "@/contexts/ActivityContext";
+import { getApiUrl } from "@/lib/query-client";
+
+type ActivityOption = {
+  type: ActivityType;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  emoji: string;
+};
+
+const ACTIVITIES: ActivityOption[] = [
+  { type: "run", label: "Running", icon: "walk", emoji: "🏃" },
+  { type: "ride", label: "Cycling", icon: "bicycle", emoji: "🚴" },
+  { type: "walk", label: "Walking", icon: "footsteps", emoji: "🚶" },
+];
+
+const APP_STORE_URL = "https://apps.apple.com/us/app/paceup-move-together/id6760092871";
+
+export default function OnboardingScreen() {
+  const insets = useSafeAreaInsets();
+  const { user, refreshUser } = useAuth();
+  const { setActivityFilter } = useActivity();
+
+  const [selectedActivity, setSelectedActivity] = useState<ActivityType>("run");
+  const [monthlyGoal, setMonthlyGoal] = useState("50");
+  const [yearlyGoal, setYearlyGoal] = useState("500");
+  const [loading, setLoading] = useState(false);
+
+  const firstName = user?.name?.split(" ")[0] ?? "there";
+
+  async function handleGetStarted() {
+    setLoading(true);
+    try {
+      const url = new URL("/api/users/me/onboarding", getApiUrl()).toString();
+      await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          activityType: selectedActivity,
+          monthlyGoal: parseFloat(monthlyGoal) || 50,
+          yearlyGoal: parseFloat(yearlyGoal) || 500,
+        }),
+      });
+      setActivityFilter(selectedActivity);
+      if (refreshUser) await refreshUser();
+    } catch (_) {}
+    setLoading(false);
+    router.replace("/(tabs)");
+  }
+
+  async function handleSkip() {
+    try {
+      const url = new URL("/api/users/me/onboarding", getApiUrl()).toString();
+      await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ activityType: selectedActivity }),
+      });
+      setActivityFilter(selectedActivity);
+      if (refreshUser) await refreshUser();
+    } catch (_) {}
+    router.replace("/(tabs)");
+  }
+
+  function handleInvite() {
+    const msg = encodeURIComponent(
+      `Hey! Join me on PaceUp — the app for group runs, rides & walks. Download it here: ${APP_STORE_URL} 🏃`
+    );
+    Linking.openURL(`sms:?body=${msg}`).catch(() => {});
+  }
+
+  const topPad = Platform.OS === "web" ? 67 : insets.top;
+  const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
+
+  return (
+    <View style={[styles.root, { paddingTop: topPad }]}>
+      <ScrollView
+        contentContainerStyle={[styles.scroll, { paddingBottom: bottomPad + 32 }]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Logo mark */}
+        <View style={styles.logoRow}>
+          <Text style={styles.logoText}>PACE</Text>
+          <Text style={[styles.logoText, styles.logoGreen]}>UP</Text>
+        </View>
+
+        {/* Welcome */}
+        <Text style={styles.welcome}>Welcome, {firstName}!</Text>
+        <Text style={styles.subtitle}>Let's set up your experience</Text>
+
+        {/* Activity picker */}
+        <Text style={styles.sectionLabel}>What's your main focus?</Text>
+        <View style={styles.activityRow}>
+          {ACTIVITIES.map((a) => {
+            const selected = selectedActivity === a.type;
+            return (
+              <TouchableOpacity
+                key={a.type}
+                style={[styles.activityCard, selected && styles.activityCardSelected]}
+                onPress={() => setSelectedActivity(a.type)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.activityEmoji}>{a.emoji}</Text>
+                <Text style={[styles.activityLabel, selected && styles.activityLabelSelected]}>
+                  {a.label}
+                </Text>
+                {selected && (
+                  <View style={styles.checkBadge}>
+                    <Ionicons name="checkmark" size={12} color="#050C09" />
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* Goals */}
+        <Text style={styles.sectionLabel}>Set your goals</Text>
+        <View style={styles.goalsRow}>
+          <View style={styles.goalInput}>
+            <Text style={styles.goalLabel}>Monthly Miles</Text>
+            <TextInput
+              style={styles.input}
+              value={monthlyGoal}
+              onChangeText={setMonthlyGoal}
+              keyboardType="numeric"
+              placeholder="50"
+              placeholderTextColor="#3D6B52"
+              selectTextOnFocus
+            />
+          </View>
+          <View style={styles.goalInput}>
+            <Text style={styles.goalLabel}>Annual Miles</Text>
+            <TextInput
+              style={styles.input}
+              value={yearlyGoal}
+              onChangeText={setYearlyGoal}
+              keyboardType="numeric"
+              placeholder="500"
+              placeholderTextColor="#3D6B52"
+              selectTextOnFocus
+            />
+          </View>
+        </View>
+
+        {/* Invite friends */}
+        <TouchableOpacity style={styles.inviteCard} onPress={handleInvite} activeOpacity={0.8}>
+          <View style={styles.inviteIconWrap}>
+            <Ionicons name="share-outline" size={22} color="#00D97E" />
+          </View>
+          <View style={styles.inviteText}>
+            <Text style={styles.inviteHeadline}>Better together</Text>
+            <Text style={styles.inviteBody}>Invite your friends to move with you</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color="#3D6B52" />
+        </TouchableOpacity>
+
+        {/* CTA */}
+        <TouchableOpacity
+          style={[styles.ctaBtn, loading && styles.ctaBtnDisabled]}
+          onPress={handleGetStarted}
+          activeOpacity={0.85}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#050C09" />
+          ) : (
+            <Text style={styles.ctaLabel}>Let's Go →</Text>
+          )}
+        </TouchableOpacity>
+
+        {/* Skip */}
+        <TouchableOpacity onPress={handleSkip} style={styles.skipBtn}>
+          <Text style={styles.skipLabel}>Skip for now</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: "#050C09",
+  },
+  scroll: {
+    paddingHorizontal: 24,
+    paddingTop: 24,
+  },
+  logoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 32,
+  },
+  logoText: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 22,
+    letterSpacing: 3,
+    color: "#FFFFFF",
+  },
+  logoGreen: {
+    color: "#00D97E",
+  },
+  welcome: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 30,
+    color: "#FFFFFF",
+    marginBottom: 6,
+  },
+  subtitle: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 16,
+    color: "#6FAB84",
+    marginBottom: 32,
+  },
+  sectionLabel: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 13,
+    color: "#6FAB84",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    marginBottom: 12,
+  },
+  activityRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 32,
+  },
+  activityCard: {
+    flex: 1,
+    backgroundColor: "#0D1510",
+    borderRadius: 16,
+    paddingVertical: 20,
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: "#1A2E20",
+    position: "relative",
+  },
+  activityCardSelected: {
+    borderColor: "#00D97E",
+    backgroundColor: "#0F1F14",
+  },
+  activityEmoji: {
+    fontSize: 28,
+    marginBottom: 8,
+  },
+  activityLabel: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 13,
+    color: "#6FAB84",
+  },
+  activityLabelSelected: {
+    color: "#00D97E",
+  },
+  checkBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#00D97E",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  goalsRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 24,
+  },
+  goalInput: {
+    flex: 1,
+  },
+  goalLabel: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 12,
+    color: "#6FAB84",
+    marginBottom: 6,
+  },
+  input: {
+    backgroundColor: "#0D1510",
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#1A2E20",
+    color: "#FFFFFF",
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    textAlign: "center",
+  },
+  inviteCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#0D1510",
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: "#1A2E20",
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    marginBottom: 32,
+    gap: 12,
+  },
+  inviteIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#132019",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  inviteText: {
+    flex: 1,
+  },
+  inviteHeadline: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 15,
+    color: "#FFFFFF",
+    marginBottom: 2,
+  },
+  inviteBody: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 13,
+    color: "#6FAB84",
+  },
+  ctaBtn: {
+    backgroundColor: "#00D97E",
+    borderRadius: 16,
+    paddingVertical: 18,
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  ctaBtnDisabled: {
+    opacity: 0.7,
+  },
+  ctaLabel: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 17,
+    color: "#050C09",
+    letterSpacing: 0.3,
+  },
+  skipBtn: {
+    alignItems: "center",
+    paddingVertical: 8,
+  },
+  skipLabel: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 14,
+    color: "#3D6B52",
+  },
+});

@@ -29,6 +29,8 @@ interface User {
   distance_goal?: number;
   goal_period?: string;
   gender?: string | null;
+  onboarding_complete?: boolean;
+  default_activity?: string;
 }
 
 interface AuthContextValue {
