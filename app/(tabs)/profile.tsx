@@ -41,9 +41,7 @@ import * as WebBrowser from "expo-web-browser";
 import { Linking } from "react-native";
 import { requestContactsPermission, scanContacts, type ContactMatch, type NonMemberContact, type ContactScanResult } from "@/lib/contactsDiscovery";
 import WalkthroughPulse from "@/components/WalkthroughPulse";
-const APP_SHARE_URL = Platform.OS === "ios"
-  ? "https://apps.apple.com/us/app/paceup-move-together/id6760092871"
-  : "https://paceupapp.com";
+import { getAppShareUrl, buildAppInviteSmsUrl, buildAppInviteMessage } from "@/lib/shareLinks";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1779,12 +1777,8 @@ function ProfileScreenInner() {
                         style={({ pressed }) => [styles.inviteSmsBtnSmall, { opacity: pressed ? 0.75 : 1 }]}
                         onPress={() => {
                           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                          const body = encodeURIComponent(`Hey! Join me on PaceUp for group runs & rides: ${APP_SHARE_URL}`);
                           const phone = c.phone.replace(/\D/g, "");
-                          const smsUrl = Platform.OS === "ios"
-                            ? `sms:${phone}&body=${body}`
-                            : `sms:${phone}?body=${body}`;
-                          Linking.openURL(smsUrl).catch(() => {});
+                          Linking.openURL(buildAppInviteSmsUrl(phone)).catch(() => {});
                         }}
                       >
                         <Feather name="message-circle" size={13} color={C.primary} />
@@ -1963,8 +1957,8 @@ function ProfileScreenInner() {
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 Share.share({
-                  message: `Join me on PaceUp — discover group runs & rides! Download it here: ${APP_SHARE_URL}`,
-                  url: APP_SHARE_URL,
+                  message: buildAppInviteMessage(),
+                  url: getAppShareUrl(),
                 });
               }}
             >

@@ -29,6 +29,13 @@ try {
 
 import ShareCard, { ShareCardProps } from "./ShareCard";
 import { useTheme } from "@/contexts/ThemeContext";
+import {
+  getInstagramStoriesScheme,
+  getInstagramScheme,
+  getSnapchatScheme,
+  getFacebookStoriesScheme,
+  getFacebookScheme,
+} from "@/lib/shareLinks";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -222,7 +229,7 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
       const uri = await captureCard();
       if (!uri) return;
       if (Platform.OS === "web") {
-        try { await Linking.openURL("instagram-stories://share"); } catch {}
+        try { await Linking.openURL(getInstagramStoriesScheme()); } catch {}
         return;
       }
       if (RNShare) {
@@ -244,9 +251,9 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
       const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
       await Clipboard.setImageAsync(base64);
       let opened = false;
-      try { await Linking.openURL("instagram-stories://share"); opened = true; } catch {}
+      try { await Linking.openURL(getInstagramStoriesScheme()); opened = true; } catch {}
       if (!opened) {
-        try { await Linking.openURL("instagram://camera"); opened = true; } catch {}
+        try { await Linking.openURL(getInstagramScheme()); opened = true; } catch {}
       }
       if (!opened) {
         Alert.alert("Instagram not found", "Install Instagram to share directly.");
@@ -271,12 +278,12 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
         await fallbackShare(uri);
         return;
       }
-      const canOpen = await Linking.canOpenURL("snapchat://");
+      const canOpen = await Linking.canOpenURL(getSnapchatScheme());
       if (canOpen) {
         const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
         await Clipboard.setImageAsync(base64);
         await saveToLibraryQuietly(uri);
-        await Linking.openURL("snapchat://");
+        await Linking.openURL(getSnapchatScheme());
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Alert.alert("Ready to Share", "Your activity card has been copied and saved. Paste it into your Snapchat Snap.");
       } else {
@@ -304,15 +311,15 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
         await fallbackShare(uri);
         return;
       }
-      const canOpen = await Linking.canOpenURL("fb://");
+      const canOpen = await Linking.canOpenURL(getFacebookScheme());
       if (canOpen) {
         const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
         await Clipboard.setImageAsync(base64);
         await saveToLibraryQuietly(uri);
         try {
-          await Linking.openURL("facebook-stories://share");
+          await Linking.openURL(getFacebookStoriesScheme());
         } catch {
-          await Linking.openURL("fb://");
+          await Linking.openURL(getFacebookScheme());
         }
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Alert.alert("Ready to Share", "Your activity card has been copied and saved. Paste it into your Facebook Story.");

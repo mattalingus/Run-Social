@@ -21,6 +21,7 @@ import * as WebBrowser from "expo-web-browser";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
+import { getAppStoreUrl, getAppShareUrl, buildAppInviteMessage } from "@/lib/shareLinks";
 import { router } from "expo-router";
 import { usePurchases } from "@/contexts/PurchasesContext";
 
@@ -1043,10 +1044,7 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
               sublabel="Share PaceUp with your crew"
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                const appLink = Platform.OS === "ios"
-                  ? "https://apps.apple.com/us/app/paceup-move-together/id6760092871"
-                  : "https://paceupapp.com";
-                const msg = `Join me on PaceUp — discover group runs & rides! Download it here: ${appLink}`;
+                const msg = buildAppInviteMessage();
                 if (Platform.OS === "web") {
                   (navigator as any).clipboard?.writeText(msg);
                   Alert.alert("Copied!", "Invite link copied to clipboard.");

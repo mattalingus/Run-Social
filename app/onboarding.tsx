@@ -17,6 +17,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useActivity, ActivityType } from "@/contexts/ActivityContext";
 import { useWalkthrough } from "@/contexts/WalkthroughContext";
 import { getApiUrl } from "@/lib/query-client";
+import { buildOnboardingInviteSmsUrl } from "@/lib/shareLinks";
 
 type ActivityOption = {
   type: ActivityType;
@@ -30,8 +31,6 @@ const ACTIVITIES: ActivityOption[] = [
   { type: "ride", label: "Cycling", icon: "bicycle", emoji: "🚴" },
   { type: "walk", label: "Walking", icon: "footsteps", emoji: "🚶" },
 ];
-
-const APP_STORE_URL = "https://apps.apple.com/us/app/paceup-move-together/id6760092871";
 
 export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
@@ -103,10 +102,7 @@ export default function OnboardingScreen() {
   }
 
   function handleInvite() {
-    const msg = encodeURIComponent(
-      `Hey! Join me on PaceUp — the app for group runs, rides & walks. Download it here: ${APP_STORE_URL} 🏃`
-    );
-    Linking.openURL(`sms:?body=${msg}`).catch(() => {});
+    Linking.openURL(buildOnboardingInviteSmsUrl()).catch(() => {});
   }
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
