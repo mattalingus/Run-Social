@@ -15,6 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActivity, ActivityType } from "@/contexts/ActivityContext";
+import { useWalkthrough } from "@/contexts/WalkthroughContext";
 import { getApiUrl } from "@/lib/query-client";
 
 type ActivityOption = {
@@ -36,6 +37,7 @@ export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
   const { user, refreshUser } = useAuth();
   const { setActivityFilter } = useActivity();
+  const { startWalkthrough } = useWalkthrough();
 
   const [selectedActivity, setSelectedActivity] = useState<ActivityType>("run");
   const [monthlyGoal, setMonthlyGoal] = useState("50");
@@ -63,6 +65,7 @@ export default function OnboardingScreen() {
     } catch (_) {}
     setLoading(false);
     router.replace("/(tabs)");
+    startWalkthrough();
   }
 
   async function handleSkip() {

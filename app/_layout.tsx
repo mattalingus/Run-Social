@@ -97,7 +97,7 @@ function RootLayoutNav() {
       if (!user) {
         router.replace("/(auth)/login");
       } else if (user.onboarding_complete === false) {
-        router.replace("/onboarding" as any);
+        router.replace("/onboarding");
       }
     }
   }, [isLoading, fontsLoaded, fontError, user]);

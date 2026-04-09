@@ -1,9 +1,14 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useAuth } from "@/contexts/AuthContext";
 
 export type ActivityType = "run" | "ride" | "walk";
 
 const ACTIVITY_STORAGE_KEY = "@paceup_default_activity";
+
+function isValidActivity(v: string | null | undefined): v is ActivityType {
+  return v === "run" || v === "ride" || v === "walk";
+}
 
 interface ActivityContextValue {
   activityFilter: ActivityType;
@@ -16,22 +21,34 @@ const ActivityContext = createContext<ActivityContextValue>({
 });
 
 export function ActivityProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
   const [activityFilter, setActivityFilterState] = useState<ActivityType>("run");
-  const [loaded, setLoaded] = useState(false);
+  const [storageChecked, setStorageChecked] = useState(false);
+  const [storedValue, setStoredValue] = useState<ActivityType | null>(null);
 
   useEffect(() => {
     AsyncStorage.getItem(ACTIVITY_STORAGE_KEY)
       .then((stored) => {
-        if (stored === "run" || stored === "ride" || stored === "walk") {
+        if (isValidActivity(stored)) {
+          setStoredValue(stored);
           setActivityFilterState(stored);
         }
       })
       .catch(() => {})
-      .finally(() => setLoaded(true));
+      .finally(() => setStorageChecked(true));
   }, []);
+
+  useEffect(() => {
+    if (!storageChecked) return;
+    if (storedValue !== null) return;
+    if (user && isValidActivity(user.default_activity)) {
+      setActivityFilterState(user.default_activity);
+    }
+  }, [storageChecked, storedValue, user]);
 
   function setActivityFilter(v: ActivityType) {
     setActivityFilterState(v);
+    setStoredValue(v);
     AsyncStorage.setItem(ACTIVITY_STORAGE_KEY, v).catch(() => {});
   }
 
