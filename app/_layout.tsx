@@ -81,7 +81,7 @@ async function registerPushToken(userId: string) {
 function RootLayoutNav() {
   const { user, isLoading } = useAuth();
   const { C, theme } = useTheme();
-  useFonts({ Outfit_400Regular, Outfit_600SemiBold, Outfit_700Bold, PlayfairDisplay_700Bold, DancingScript_700Bold, Nunito_800ExtraBold }); // loads in background; does NOT gate the render
+  useFonts({ Outfit_400Regular, Outfit_600SemiBold, Outfit_700Bold, PlayfairDisplay_700Bold, DancingScript_700Bold, Nunito_800ExtraBold });
   const splashHidden = useRef(false);
   const pushRegistered = useRef(false);
 
