@@ -3,7 +3,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack, router } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import * as Notifications from "@/lib/safeNotifications";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
 import { Alert, AppState, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -81,22 +81,16 @@ async function registerPushToken(userId: string) {
 function RootLayoutNav() {
   const { user, isLoading } = useAuth();
   const { C, theme } = useTheme();
-  const [fontsLoaded, fontError] = useFonts({ Outfit_400Regular, Outfit_600SemiBold, Outfit_700Bold, PlayfairDisplay_700Bold, DancingScript_700Bold, Nunito_800ExtraBold });
-  const [fontFallback, setFontFallback] = useState(false);
+  useFonts({ Outfit_400Regular, Outfit_600SemiBold, Outfit_700Bold, PlayfairDisplay_700Bold, DancingScript_700Bold, Nunito_800ExtraBold });
   const splashHidden = useRef(false);
   const pushRegistered = useRef(false);
-
-  // Safety valve: if fonts haven't loaded or errored within 5 s, proceed anyway
-  useEffect(() => {
-    const t = setTimeout(() => setFontFallback(true), 5000);
-    return () => clearTimeout(t);
-  }, []);
 
   // Keep home screen widget data current after every API fetch
   useWidgetSync();
 
+  // Splash gates only on auth — fonts load in the background and don't block
   useEffect(() => {
-    if (!isLoading && (fontsLoaded || fontError || fontFallback)) {
+    if (!isLoading) {
       if (!splashHidden.current) {
         splashHidden.current = true;
         SplashScreen.hideAsync();
@@ -107,7 +101,7 @@ function RootLayoutNav() {
         router.replace("/onboarding");
       }
     }
-  }, [isLoading, fontsLoaded, fontError, fontFallback, user]);
+  }, [isLoading, user]);
 
   // Register push token once when user logs in
   useEffect(() => {
