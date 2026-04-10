@@ -986,14 +986,14 @@ function RunCard({
                   <Text style={s.joinCrewCtaTxt}>Join crew to participate</Text>
                   <Feather name="chevron-right" size={12} color={C.primary} />
                 </Pressable>
-              ) : parseInt(run.plan_count ?? "0") > 0 ? (
+              ) : (
                 <View style={s.metaItem}>
-                  <Feather name="calendar" size={11} color={C.textMuted} />
+                  <Feather name="users" size={11} color={C.textMuted} />
                   <Text style={s.metaText}>
-                    {run.plan_count} {parseInt(run.plan_count ?? "0") === 1 ? "person" : "people"} planning to {run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run"}
+                    {run.participant_count ?? 1} {parseInt(run.participant_count ?? "1") === 1 ? "person" : "people"} going
                   </Text>
                 </View>
-              ) : null}
+              )}
             </Pressable>
 
             {/* Tags outside Pressable — scroll works, still inside right column so divider spans them */}
