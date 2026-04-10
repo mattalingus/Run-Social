@@ -172,26 +172,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const restoreResult = await tryRestoreSession();
 
       if (restoreResult && restoreResult !== "network_error") {
-        // Server accepted the token — session re-established
+        // Server accepted the token — session re-established, update user and cache
         const freshUser = restoreResult as User;
         setUser(freshUser);
         await storeCachedUser(freshUser);
-      } else if (restoreResult === "network_error") {
-        // Network/timeout failure — NOT a definitive rejection.
-        // Keep the cached user logged in. Their PostgreSQL session is likely still valid
-        // and the iOS session cookie is preserved. Individual API calls will work.
-        // Only log out if the server sends a definitive 401 (handled above).
-        if (!cached) {
-          // No cached user either — nothing to show, must go to login
-          setUser(null);
-        }
-        // If we have a cached user, they stay logged in (setUser(cached) already called in Step 1)
-      } else {
-        // restoreResult === null — server explicitly rejected the token (401/400)
-        // This is a definitive logout signal
-        await clearCachedUser();
+      } else if (!cached) {
+        // No cached user AND restore did not return a fresh user → must go to login
+        // (covers: no token, network error, 5xx, and definitive 401/400 rejection)
         setUser(null);
       }
+      // else: we have a cached user — keep them logged in regardless of why restore failed.
+      // Their iOS session cookie is preserved in NSHTTPCookieStorage and the PostgreSQL
+      // session is likely still valid. clearCachedUser is ONLY called from logout().
     } finally {
       clearTimeout(emergencyTimer);
       setIsLoading(false);
