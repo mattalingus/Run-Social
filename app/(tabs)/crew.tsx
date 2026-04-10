@@ -693,7 +693,7 @@ function MemberProfileSheet({
   function friendBtnLabel() {
     if (fStatus === "friends") return "Friends";
     if (fStatus === "pending_sent") return "Request Sent";
-    if (fStatus === "pending_received") return "Accept";
+    if (fStatus === "pending_received") return "Pending";
     return "Add Friend";
   }
   function friendBtnIcon(): any {
