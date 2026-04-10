@@ -136,11 +136,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Step 2: Verify session with server in background.
       // If cached user was set above, the app is already visible — this just refreshes data.
+      // When there is no cached user, use a bounded timeout so restore-session can still run
+      // as a fallback even if /api/auth/me hangs.
       const baseUrl = getApiUrl();
       try {
+        const meController = new AbortController();
+        const meTimer = cached ? null : setTimeout(() => meController.abort(), 6000);
         const res = await fetch(new URL("/api/auth/me", baseUrl).toString(), {
           credentials: "include",
+          signal: meController.signal,
         });
+        if (meTimer) clearTimeout(meTimer);
         if (res.ok) {
           const fresh = await res.json();
           setUser(fresh);
