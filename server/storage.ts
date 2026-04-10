@@ -3306,33 +3306,62 @@ export async function deleteSoloRunPhoto(photoId: string, userId: string) {
 
 export async function getPublicUserProfile(userId: string) {
   const userRes = await pool.query(
-    `SELECT id, name, photo_url, avg_pace, avg_distance, hosted_runs, completed_runs, total_miles, avg_rating
-     FROM users WHERE id = $1`,
+    `SELECT id, name, photo_url, avg_rating FROM users WHERE id = $1`,
     [userId]
   );
   if (!userRes.rows.length) return null;
   const u = userRes.rows[0];
 
-  const friendsRes = await pool.query(
-    `SELECT COUNT(*) as cnt FROM friends
-     WHERE (requester_id = $1 OR addressee_id = $1) AND status = 'accepted'`,
-    [userId]
-  );
+  const [friendsRes, achievementsRes, liveStatsRes] = await Promise.all([
+    pool.query(
+      `SELECT COUNT(*) as cnt FROM friends
+       WHERE (requester_id = $1 OR addressee_id = $1) AND status = 'accepted'`,
+      [userId]
+    ),
+    pool.query(`SELECT slug FROM achievements WHERE user_id = $1`, [userId]),
+    pool.query(`
+      SELECT
+        COALESCE(
+          (SELECT SUM(sr.distance_miles) FROM solo_runs sr
+           WHERE sr.user_id = $1 AND sr.completed = true AND sr.is_deleted IS NOT TRUE),
+          0
+        ) + COALESCE(
+          (SELECT SUM(rp.final_distance) FROM run_participants rp
+           WHERE rp.user_id = $1 AND rp.final_distance IS NOT NULL),
+          0
+        ) AS total_miles,
+        COALESCE(
+          (SELECT COUNT(*) FROM solo_runs sr
+           WHERE sr.user_id = $1 AND sr.completed = true AND sr.is_deleted IS NOT TRUE),
+          0
+        ) + COALESCE(
+          (SELECT COUNT(*) FROM run_participants rp
+           WHERE rp.user_id = $1 AND rp.final_distance IS NOT NULL),
+          0
+        ) AS completed_runs,
+        COALESCE(
+          (SELECT COUNT(*) FROM runs r
+           WHERE r.host_id = $1 AND r.is_completed = true AND r.is_deleted IS NOT TRUE),
+          0
+        ) AS hosted_runs,
+        COALESCE(
+          (SELECT AVG(NULLIF(sr.pace_min_per_mile, 0)) FROM solo_runs sr
+           WHERE sr.user_id = $1 AND sr.completed = true AND sr.is_deleted IS NOT TRUE),
+          0
+        ) AS avg_pace
+    `, [userId]),
+  ]);
 
-  const achievementsRes = await pool.query(
-    `SELECT slug FROM achievements WHERE user_id = $1`,
-    [userId]
-  );
+  const live = liveStatsRes.rows[0];
 
   return {
     id: u.id,
     name: u.name,
     photo_url: u.photo_url,
-    avg_pace: parseFloat(u.avg_pace ?? 10),
-    avg_distance: parseFloat(u.avg_distance ?? 3),
-    hosted_runs: u.hosted_runs ?? 0,
-    completed_runs: u.completed_runs ?? 0,
-    total_miles: parseFloat(u.total_miles ?? 0),
+    avg_pace: parseFloat(live?.avg_pace ?? 0),
+    hosted_runs: parseInt(live?.hosted_runs ?? 0),
+    completed_runs: parseInt(live?.completed_runs ?? 0),
+    total_miles: parseFloat(live?.total_miles ?? 0),
     avg_rating: parseFloat(u.avg_rating ?? 0),
     friends_count: parseInt(friendsRes.rows[0]?.cnt ?? "0"),
     earned_slugs: achievementsRes.rows.map((r: any) => r.slug as string),
@@ -3641,7 +3670,14 @@ export async function getCrewById(crewId: string) {
   if (!crew.rows[0]) return null;
   const row = crew.rows[0];
   const members = await pool.query(
-    `SELECT cm.*, u.name, u.photo_url, u.avg_pace, u.hosted_runs FROM crew_members cm
+    `SELECT cm.*, u.name, u.photo_url, u.hosted_runs, u.default_activity,
+       COALESCE((
+         SELECT AVG(NULLIF(sr.pace_min_per_mile, 0))
+         FROM solo_runs sr
+         WHERE sr.user_id = u.id AND sr.completed = true AND sr.is_deleted IS NOT TRUE
+         AND sr.activity_type = COALESCE(u.default_activity, 'run')
+       ), 0) AS avg_pace
+     FROM crew_members cm
      JOIN users u ON u.id = cm.user_id
      WHERE cm.crew_id = $1 AND cm.status = 'member'
      ORDER BY cm.joined_at ASC`,

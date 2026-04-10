@@ -638,6 +638,8 @@ function MemberProfileSheet({
   const distUnit: DistanceUnit = ((authUser as any)?.distance_unit ?? "miles") as DistanceUnit;
   const qc = useQueryClient();
 
+  const [activityTab, setActivityTab] = useState<"run" | "ride" | "walk">("run");
+
   const { data: profile, isLoading: profileLoading } = useQuery<{
     id: string; name: string; photo_url?: string; avg_pace?: number;
     total_miles?: number; completed_runs?: number; hosted_runs?: number; friends_count?: number;
@@ -645,6 +647,18 @@ function MemberProfileSheet({
     queryKey: ["/api/users", userId, "profile"],
     queryFn: async () => {
       const res = await fetch(new URL(`/api/users/${userId}/profile`, getApiUrl()).toString(), { credentials: "include" });
+      return res.json();
+    },
+    enabled: !!userId && visible,
+    staleTime: 30000,
+  });
+
+  const { data: activityStats } = useQuery<{ total_miles: number; count: number; avg_pace: number }>({
+    queryKey: ["/api/users", userId, "stats", activityTab],
+    queryFn: async () => {
+      const url = new URL(`/api/users/${userId}/stats`, getApiUrl());
+      url.searchParams.set("activityType", activityTab);
+      const res = await fetch(url.toString(), { credentials: "include" });
       return res.json();
     },
     enabled: !!userId && visible,
@@ -677,15 +691,25 @@ function MemberProfileSheet({
   const fStatus = friendship?.status;
 
   function friendBtnLabel() {
-    if (fStatus === "accepted") return "Friends";
-    if (fStatus === "pending") return "Request Sent";
+    if (fStatus === "friends") return "Friends";
+    if (fStatus === "pending_sent") return "Request Sent";
+    if (fStatus === "pending_received") return "Accept";
     return "Add Friend";
   }
   function friendBtnIcon(): any {
-    if (fStatus === "accepted") return "people-outline";
-    if (fStatus === "pending") return "time-outline";
+    if (fStatus === "friends") return "people-outline";
+    if (fStatus === "pending_sent" || fStatus === "pending_received") return "time-outline";
     return "person-add-outline";
   }
+
+  const isFriend = fStatus === "friends";
+  const isPending = fStatus === "pending_sent" || fStatus === "pending_received";
+
+  const ACT_TABS: { key: "run" | "ride" | "walk"; label: string }[] = [
+    { key: "run", label: "Runs" },
+    { key: "ride", label: "Rides" },
+    { key: "walk", label: "Walks" },
+  ];
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -714,11 +738,11 @@ function MemberProfileSheet({
               </View>
               <Text style={s.miniName}>{profile.name}</Text>
 
-              {/* Stats row */}
+              {/* Overall stats row */}
               <View style={s.miniStatsRow}>
                 {[
                   { label: "Miles", value: (profile.total_miles ?? 0).toFixed(1) },
-                  { label: "Runs", value: String(profile.completed_runs ?? 0) },
+                  { label: "Activities", value: String(profile.completed_runs ?? 0) },
                   { label: "Hosted", value: String(profile.hosted_runs ?? 0) },
                   { label: "Friends", value: String(profile.friends_count ?? 0) },
                 ].map((stat) => (
@@ -729,9 +753,40 @@ function MemberProfileSheet({
                 ))}
               </View>
 
-              {profile.avg_pace && profile.avg_pace > 0 ? (
-                <Text style={s.miniPace}>{toDisplayPace(profile.avg_pace, distUnit)} avg pace</Text>
-              ) : null}
+              {/* Activity type tabs */}
+              <View style={[rStyles.toggleRow, { backgroundColor: C.surface, borderColor: C.border, marginHorizontal: 16, marginTop: 8, marginBottom: 4 }]}>
+                {ACT_TABS.map((t) => (
+                  <TouchableOpacity
+                    key={t.key}
+                    style={[rStyles.togglePill, activityTab === t.key && { backgroundColor: C.primary }]}
+                    onPress={() => setActivityTab(t.key)}
+                  >
+                    <Text style={[rStyles.togglePillTxt, { color: activityTab === t.key ? C.bg : C.textMuted, fontFamily: "Outfit_600SemiBold" }]}>
+                      {t.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Per-activity stats */}
+              {activityStats && (
+                <View style={{ flexDirection: "row", justifyContent: "space-around", paddingHorizontal: 16, paddingVertical: 8 }}>
+                  <View style={{ alignItems: "center" }}>
+                    <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 17, color: C.primary }}>{toDisplayDist(activityStats.total_miles, distUnit)} {unitLabel(distUnit)}</Text>
+                    <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted }}>Total</Text>
+                  </View>
+                  <View style={{ alignItems: "center" }}>
+                    <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 17, color: C.text }}>{activityStats.count}</Text>
+                    <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted }}>Count</Text>
+                  </View>
+                  {activityStats.avg_pace > 0 && (
+                    <View style={{ alignItems: "center" }}>
+                      <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 17, color: C.text }}>{toDisplayPace(activityStats.avg_pace, distUnit)}</Text>
+                      <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted }}>Avg Pace</Text>
+                    </View>
+                  )}
+                </View>
+              )}
 
               {/* Action buttons */}
               {!isMe && (
@@ -740,13 +795,13 @@ function MemberProfileSheet({
                   <Pressable
                     style={[
                       s.miniActionBtn,
-                      fStatus === "accepted" && { backgroundColor: C.primaryMuted },
+                      isFriend && { backgroundColor: C.primaryMuted },
                     ]}
-                    disabled={fStatus === "accepted" || fStatus === "pending" || friendLoading || friendMutation.isPending}
+                    disabled={isFriend || isPending || friendLoading || friendMutation.isPending}
                     onPress={() => friendMutation.mutate()}
                   >
-                    <Ionicons name={friendBtnIcon()} size={16} color={fStatus === "accepted" ? C.primary : C.bg} />
-                    <Text style={[s.miniActionBtnTxt, fStatus === "accepted" && { color: C.primary }]}>
+                    <Ionicons name={friendBtnIcon()} size={16} color={isFriend ? C.primary : C.bg} />
+                    <Text style={[s.miniActionBtnTxt, isFriend && { color: C.primary }]}>
                       {friendMutation.isPending ? "Sending…" : friendBtnLabel()}
                     </Text>
                   </Pressable>
@@ -2446,19 +2501,22 @@ function RankingsModal({ visible, onClose, myCrewIds, myCrewId }: { visible: boo
   const { user: authUser } = useAuth();
   const distUnit: DistanceUnit = ((authUser as any)?.distance_unit ?? "miles") as DistanceUnit;
   const insets = useSafeAreaInsets();
-  const [activityType, setActivityType] = useState<"run" | "ride" | "walk">("run");
-  const [period, setPeriod] = useState<"week" | "month" | "all">("all");
+  const [activityType, setActivityType] = useState<"run" | "ride" | "walk" | "mixed">("run");
   const [rankingTab, setRankingTab] = useState<"national" | "state" | "metro">("national");
 
-  // Get user's preferred metro/state if available
-  const userMetro = (authUser as any)?.home_metro || "Houston";
-  const userState = (authUser as any)?.home_state || "TX";
+  const userMetro = (authUser as any)?.home_metro || "";
+  const userState = (authUser as any)?.home_state || "";
 
-  const rankingsUrl = `/api/crews/rankings?type=${rankingTab}&value=${rankingTab === 'state' ? userState : rankingTab === 'metro' ? userMetro : ''}`;
-  const { data: rankings, isLoading } = useQuery<RankedCrew[]>({
-    queryKey: ["/api/crews/rankings", rankingTab, userMetro, userState],
+  const scopeValue = rankingTab === "state" ? userState : rankingTab === "metro" ? userMetro : "";
+
+  const { data: rankings, isLoading } = useQuery<{ rank: number; id: string; name: string; emoji: string; image_url?: string; member_count: number; total_miles: number }[]>({
+    queryKey: ["/api/crews/rankings", rankingTab, activityType, scopeValue],
     queryFn: async () => {
-      const res = await apiRequest("GET", rankingsUrl);
+      const url = new URL("/api/crews/rankings", getApiUrl());
+      url.searchParams.set("activityType", activityType);
+      url.searchParams.set("scope", rankingTab);
+      if (scopeValue) url.searchParams.set("value", scopeValue);
+      const res = await fetch(url.toString(), { credentials: "include" });
       return res.json();
     },
     enabled: visible,
@@ -2476,10 +2534,17 @@ function RankingsModal({ visible, onClose, myCrewIds, myCrewId }: { visible: boo
     return `${toDisplayDist(m ?? 0, distUnit)} ${unitLabel(distUnit)}`;
   }
 
-  const TABS: { key: "national" | "state" | "metro"; label: string }[] = [
+  const SCOPE_TABS: { key: "national" | "state" | "metro"; label: string }[] = [
     { key: "metro", label: "Local" },
     { key: "state", label: "State" },
     { key: "national", label: "National" },
+  ];
+
+  const ACT_TABS: { key: "run" | "ride" | "walk" | "mixed"; label: string }[] = [
+    { key: "run", label: "Runs" },
+    { key: "ride", label: "Rides" },
+    { key: "walk", label: "Walks" },
+    { key: "mixed", label: "Mixed" },
   ];
 
   return (
@@ -2489,22 +2554,37 @@ function RankingsModal({ visible, onClose, myCrewIds, myCrewId }: { visible: boo
         <View style={[rStyles.rankHeader, { paddingTop: insets.top > 0 ? 16 : 20 }]}>
           <View>
             <Text style={[rStyles.rankTitle, { color: C.text, fontFamily: "Outfit_700Bold" }]}>Crew Rankings</Text>
-            <Text style={[rStyles.rankSub, { color: C.textMuted, fontFamily: "Outfit_400Regular" }]}>Ranked by participation, miles & events</Text>
+            <Text style={[rStyles.rankSub, { color: C.textMuted, fontFamily: "Outfit_400Regular" }]}>Total miles logged by all members</Text>
           </View>
           <TouchableOpacity onPress={onClose} hitSlop={12}>
             <Ionicons name="close" size={24} color={C.textMuted} />
           </TouchableOpacity>
         </View>
 
-        {/* Tab toggle */}
-        <View style={[rStyles.toggleRow, { backgroundColor: C.surface, borderColor: C.border, marginBottom: 16 }]}>
-          {TABS.map((t) => (
+        {/* Scope toggle: Local / State / National */}
+        <View style={[rStyles.toggleRow, { backgroundColor: C.surface, borderColor: C.border, marginBottom: 8 }]}>
+          {SCOPE_TABS.map((t) => (
             <TouchableOpacity
               key={t.key}
               style={[rStyles.togglePill, rankingTab === t.key && { backgroundColor: C.primary }]}
               onPress={() => setRankingTab(t.key)}
             >
               <Text style={[rStyles.togglePillTxt, { color: rankingTab === t.key ? C.bg : C.textMuted, fontFamily: "Outfit_600SemiBold" }]}>
+                {t.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Activity type toggle: Runs / Rides / Walks / Mixed */}
+        <View style={[rStyles.toggleRow, { backgroundColor: C.surface, borderColor: C.border, marginBottom: 16 }]}>
+          {ACT_TABS.map((t) => (
+            <TouchableOpacity
+              key={t.key}
+              style={[rStyles.togglePill, activityType === t.key && { backgroundColor: C.card }]}
+              onPress={() => setActivityType(t.key)}
+            >
+              <Text style={[rStyles.togglePillTxt, { color: activityType === t.key ? C.primary : C.textMuted, fontFamily: activityType === t.key ? "Outfit_600SemiBold" : "Outfit_400Regular" }]}>
                 {t.label}
               </Text>
             </TouchableOpacity>
@@ -2519,9 +2599,9 @@ function RankingsModal({ visible, onClose, myCrewIds, myCrewId }: { visible: boo
         ) : (rankings ?? []).length === 0 ? (
           <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 10, paddingHorizontal: 40 }}>
             <Ionicons name="trophy-outline" size={48} color={C.textMuted} />
-            <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text, textAlign: "center" }}>No rankings found</Text>
+            <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text, textAlign: "center" }}>No rankings yet</Text>
             <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textMuted, textAlign: "center" }}>
-              Be the first crew to log activity in this category!
+              Be the first crew to log miles in this category!
             </Text>
           </View>
         ) : (
@@ -2548,15 +2628,14 @@ function RankingsModal({ visible, onClose, myCrewIds, myCrewId }: { visible: boo
                   <View style={{ flex: 1 }}>
                     <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.text }} numberOfLines={1}>{item.name}</Text>
                     <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted }}>
-                      {item.active_members ?? item.member_count} active • {item.qualifying_events ?? 0} event{(item.qualifying_events ?? 0) !== 1 ? "s" : ""}
+                      {item.member_count} member{item.member_count !== 1 ? "s" : ""}
                     </Text>
                     {isMyC && (
                       <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.primary }}>Your Crew</Text>
                     )}
                   </View>
                   <View style={{ alignItems: "flex-end" }}>
-                    <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 16, color: C.primary }}>{Number(item.crew_score ?? 0).toFixed(0)}</Text>
-                    <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 10, color: C.textMuted }}>pts</Text>
+                    <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 16, color: C.primary }}>{formatMiles(item.total_miles)}</Text>
                   </View>
                 </View>
               );
@@ -2916,7 +2995,7 @@ export default function CrewScreen() {
                 testID="view-rankings-btn"
               >
                 <Ionicons name="trophy-outline" size={18} color={C.primary} />
-                <Text style={[s.rankingsBtnTxt, { color: C.primary }]}>National Rankings</Text>
+                <Text style={[s.rankingsBtnTxt, { color: C.primary }]}>Crew Rankings</Text>
                 <Ionicons name="chevron-forward" size={16} color={C.primary + "99"} />
               </TouchableOpacity>
               </WalkthroughPulse>

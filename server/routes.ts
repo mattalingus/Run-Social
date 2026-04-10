@@ -532,6 +532,52 @@ async function go(e){
     }
   });
 
+  app.get("/api/users/:id/stats", requireAuth, async (req, res) => {
+    try {
+      const targetId = req.params.id as string;
+      const activityType = String(req.query.activityType || "run");
+      const result = await pool.query(`
+        SELECT
+          COALESCE(
+            (SELECT SUM(sr.distance_miles) FROM solo_runs sr
+             WHERE sr.user_id = $1 AND sr.completed = true AND sr.is_deleted IS NOT TRUE
+             AND ($2 = 'mixed' OR sr.activity_type = $2)),
+            0
+          ) + COALESCE(
+            (SELECT SUM(rp.final_distance) FROM run_participants rp
+             JOIN runs r ON r.id = rp.run_id
+             WHERE rp.user_id = $1 AND rp.final_distance IS NOT NULL
+             AND ($2 = 'mixed' OR r.activity_type = $2)),
+            0
+          ) AS total_miles,
+          COALESCE(
+            (SELECT COUNT(*) FROM solo_runs sr
+             WHERE sr.user_id = $1 AND sr.completed = true AND sr.is_deleted IS NOT TRUE
+             AND ($2 = 'mixed' OR sr.activity_type = $2)),
+            0
+          ) + COALESCE(
+            (SELECT COUNT(*) FROM run_participants rp
+             JOIN runs r ON r.id = rp.run_id
+             WHERE rp.user_id = $1 AND rp.final_distance IS NOT NULL
+             AND ($2 = 'mixed' OR r.activity_type = $2)),
+            0
+          ) AS count,
+          COALESCE(
+            (SELECT AVG(NULLIF(sr.pace_min_per_mile, 0)) FROM solo_runs sr
+             WHERE sr.user_id = $1 AND sr.completed = true AND sr.is_deleted IS NOT TRUE
+             AND ($2 = 'mixed' OR sr.activity_type = $2)),
+            0
+          ) AS avg_pace
+      `, [targetId, activityType]);
+      const row = result.rows[0];
+      res.json({
+        total_miles: parseFloat(row?.total_miles ?? 0),
+        count: parseInt(row?.count ?? 0),
+        avg_pace: parseFloat(row?.avg_pace ?? 0),
+      });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
   // ─── Block / Unblock ──────────────────────────────────────────────────────
 
   app.get("/api/users/:id/block-status", requireAuth, async (req, res) => {
@@ -2221,73 +2267,73 @@ async function go(e){
 
   app.get("/api/crews/rankings", requireAuth, async (req, res) => {
     try {
-      const activityType = String(req.query.activityType as string || "run");
-      const period = String(req.query.period as string || "all");
+      const activityType = String(req.query.activityType || "run");
+      const scope = String(req.query.scope || "national");
+      const value = String(req.query.value || "");
 
-      let dateFilter = "";
-      if (period === "week") {
-        dateFilter = `AND r.date >= NOW() - INTERVAL '7 days'`;
-      } else if (period === "month") {
-        dateFilter = `AND r.date >= NOW() - INTERVAL '30 days'`;
+      const params: any[] = [activityType];
+      let scopeFilter = "";
+      if (scope === "state" && value) {
+        params.push(value);
+        scopeFilter = `AND c.home_state = $${params.length}`;
+      } else if (scope === "metro" && value) {
+        params.push(value);
+        scopeFilter = `AND c.home_metro = $${params.length}`;
       }
 
-      const myCrewId = req.query.myCrewId as string ? String(req.query.myCrewId as string) : null;
-
-      const allRankedResult = await pool.query(`
-        SELECT
-          c.id,
-          c.name,
-          c.emoji,
-          c.image_url,
-          COUNT(DISTINCT cm.user_id)::int AS member_count,
-          COALESCE(SUM(rp.final_distance), 0)::real AS total_miles,
-          COUNT(DISTINCT r.id)::int AS total_runs
-        FROM crews c
-        LEFT JOIN crew_members cm ON cm.crew_id = c.id
-        LEFT JOIN runs r ON r.crew_id = c.id
-          AND r.is_completed = true
-          AND r.activity_type = $1
-          AND r.is_deleted IS NOT TRUE
-          ${dateFilter}
-        LEFT JOIN run_participants rp ON rp.run_id = r.id AND rp.final_distance IS NOT NULL
-        GROUP BY c.id, c.name, c.emoji, c.image_url
-        HAVING COALESCE(SUM(rp.final_distance), 0) > 0
+      const result = await pool.query(`
+        WITH crew_miles AS (
+          SELECT
+            c.id,
+            c.name,
+            c.emoji,
+            c.image_url,
+            c.home_state,
+            c.home_metro,
+            COUNT(DISTINCT cm.user_id)::int AS member_count,
+            (
+              COALESCE((
+                SELECT SUM(sr.distance_miles)
+                FROM solo_runs sr
+                JOIN crew_members cm2 ON cm2.user_id = sr.user_id AND cm2.crew_id = c.id AND cm2.status = 'member'
+                WHERE sr.completed = true AND sr.is_deleted IS NOT TRUE
+                AND ($1 = 'mixed' OR sr.activity_type = $1)
+              ), 0)
+              +
+              COALESCE((
+                SELECT SUM(rp.final_distance)
+                FROM run_participants rp
+                JOIN runs r ON r.id = rp.run_id
+                JOIN crew_members cm3 ON cm3.user_id = rp.user_id AND cm3.crew_id = c.id AND cm3.status = 'member'
+                WHERE rp.final_distance IS NOT NULL
+                AND ($1 = 'mixed' OR r.activity_type = $1)
+              ), 0)
+            ) AS total_miles
+          FROM crews c
+          LEFT JOIN crew_members cm ON cm.crew_id = c.id AND cm.status = 'member'
+          WHERE 1=1 ${scopeFilter}
+          GROUP BY c.id, c.name, c.emoji, c.image_url, c.home_state, c.home_metro
+        )
+        SELECT * FROM crew_miles
+        WHERE total_miles > 0
         ORDER BY total_miles DESC
-      `, [activityType]);
+        LIMIT 100
+      `, params);
 
-      const allRanked = allRankedResult.rows.map((row: any, idx: number) => ({
+      const ranked = result.rows.map((row: any, idx: number) => ({
         rank: idx + 1,
         id: row.id,
         name: row.name,
         emoji: row.emoji,
         image_url: row.image_url,
+        home_state: row.home_state,
+        home_metro: row.home_metro,
         member_count: row.member_count,
-        total_miles: parseFloat(row.total_miles),
-        total_runs: row.total_runs,
+        total_miles: parseFloat(row.total_miles ?? 0),
       }));
 
-      const top100 = allRanked.slice(0, 100);
-      const inTop100 = myCrewId ? top100.some((c: any) => c.id === myCrewId) : false;
-      let myCrew = null;
-      if (myCrewId && !inTop100) {
-        myCrew = allRanked.find((c: any) => c.id === myCrewId) ?? null;
-      }
-
-      res.json({ top100, myCrew });
+      res.json(ranked);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
-  });
-
-  app.get("/api/crews/rankings", requireAuth, async (req, res) => {
-    try {
-      const { type, value } = req.query;
-      if (!type || !["national", "state", "metro"].includes(type as string)) {
-        return res.status(400).json({ message: "Invalid ranking type" });
-      }
-      const rankings = await storage.getCrewRankings(type as any, value as string);
-      res.json(rankings);
-    } catch (e: any) {
-      res.status(500).json({ message: e.message });
-    }
   });
 
   app.get("/api/metro-areas", (req, res) => {
