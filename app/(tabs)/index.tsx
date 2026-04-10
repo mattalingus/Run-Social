@@ -1149,6 +1149,7 @@ export default function DiscoverScreen() {
   const qc = useQueryClient();
   const { C } = useTheme();
   const s = useMemo(() => makeStyles(C), [C]);
+  const fm = useMemo(() => makeFmStyles(C), [C]);
   const { isActive: walkthroughActive } = useWalkthrough();
 
   const [search, setSearch] = useState("");
