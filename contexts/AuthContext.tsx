@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode, useMe
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { fetch } from "expo/fetch";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SplashScreen from "expo-splash-screen";
 
 const REMEMBER_TOKEN_KEY = "paceup_remember_token";
 const CACHED_USER_KEY = "paceup_cached_user";
@@ -144,6 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (cached) {
         setUser(cached);
         setIsLoading(false);
+        SplashScreen.hideAsync().catch(() => {});
       }
 
       // Step 2: Verify session with server in background.
@@ -190,6 +192,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       clearTimeout(emergencyTimer);
       setIsLoading(false);
+      SplashScreen.hideAsync().catch(() => {});
     }
   }
 
