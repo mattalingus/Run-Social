@@ -3672,10 +3672,20 @@ export async function getCrewById(crewId: string) {
   const members = await pool.query(
     `SELECT cm.*, u.name, u.photo_url, u.hosted_runs, u.default_activity,
        COALESCE((
-         SELECT AVG(NULLIF(sr.pace_min_per_mile, 0))
-         FROM solo_runs sr
-         WHERE sr.user_id = u.id AND sr.completed = true AND sr.is_deleted IS NOT TRUE
-         AND sr.activity_type = COALESCE(u.default_activity, 'run')
+         SELECT AVG(p) FROM (
+           SELECT NULLIF(sr.pace_min_per_mile, 0) AS p
+           FROM solo_runs sr
+           WHERE sr.user_id = u.id AND sr.completed = true AND sr.is_deleted IS NOT TRUE
+           AND sr.activity_type = COALESCE(u.default_activity, 'run')
+           AND sr.pace_min_per_mile IS NOT NULL AND sr.pace_min_per_mile > 0
+           UNION ALL
+           SELECT NULLIF(rp.final_pace, 0) AS p
+           FROM run_participants rp
+           JOIN runs r ON r.id = rp.run_id
+           WHERE rp.user_id = u.id AND rp.final_pace IS NOT NULL AND rp.final_pace > 0
+           AND r.is_completed = true AND r.is_deleted IS NOT TRUE
+           AND r.activity_type = COALESCE(u.default_activity, 'run')
+         ) paces
        ), 0) AS avg_pace
      FROM crew_members cm
      JOIN users u ON u.id = cm.user_id

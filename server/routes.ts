@@ -535,6 +535,23 @@ async function go(e){
   app.get("/api/users/:id/stats", requireAuth, async (req, res) => {
     try {
       const targetId = req.params.id as string;
+      const requesterId = req.session.userId!;
+      if (targetId !== requesterId) {
+        const blocked = await storage.isBlockedBy(requesterId, targetId);
+        if (blocked) return res.status(404).json({ message: "User not found" });
+        const privacyRow = await pool.query(
+          `SELECT profile_privacy FROM users WHERE id = $1`,
+          [targetId]
+        );
+        if (!privacyRow.rows.length) return res.status(404).json({ message: "User not found" });
+        const privacy = privacyRow.rows[0].profile_privacy ?? "public";
+        if (privacy === "private") {
+          const friendship = await storage.getFriendshipStatus(requesterId, targetId);
+          if (friendship.status !== "friends") {
+            return res.status(403).json({ message: "This profile is private" });
+          }
+        }
+      }
       const activityType = String(req.query.activityType || "run");
       const result = await pool.query(`
         SELECT
