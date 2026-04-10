@@ -346,6 +346,8 @@ export default function RunTrackingScreen() {
   const [coachEnabled, setCoachEnabled] = useState(true);
   const [coachInterval, setCoachInterval] = useState<"0.5" | "1" | "2">("1");
   const [coachVoice, setCoachVoice] = useState<"nova" | "onyx" | "shimmer">("nova");
+  const [previewingVoice, setPreviewingVoice] = useState<"nova" | "onyx" | "shimmer" | null>(null);
+  const previewSoundRef = useRef<Audio.Sound | null>(null);
   const coachEnabledRef = useRef(true);
   const coachIntervalRef = useRef<"0.5" | "1" | "2">("1");
   const coachVoiceRef = useRef<"nova" | "onyx" | "shimmer">("nova");
@@ -483,6 +485,62 @@ export default function RunTrackingScreen() {
     try {
       await AsyncStorage.setItem("@paceup_coach_voice", val);
     } catch (e) {}
+  };
+
+  const PREVIEW_PHRASES: Record<"nova" | "onyx" | "shimmer", string> = {
+    nova: "Ready to crush it? Let's go!",
+    onyx: "Stay focused. You've got this.",
+    shimmer: "You're doing great, keep it up!",
+  };
+
+  const playCoachPreview = async (voice: "nova" | "onyx" | "shimmer") => {
+    if (Platform.OS === "web") return;
+    try {
+      if (previewSoundRef.current) {
+        await previewSoundRef.current.stopAsync().catch(() => {});
+        await previewSoundRef.current.unloadAsync().catch(() => {});
+        previewSoundRef.current = null;
+      }
+    } catch (_) {}
+    setPreviewingVoice(voice);
+    try {
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        interruptionModeIOS: InterruptionModeIOS.DuckOthers,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
+        shouldDuckAndroid: true,
+      });
+      const res = await apiRequest("POST", "/api/tts", { text: PREVIEW_PHRASES[voice], voice });
+      if (res.ok) {
+        const blob = await res.blob();
+        const reader = new FileReader();
+        reader.onload = async () => {
+          try {
+            const base64 = (reader.result as string).split(",")[1];
+            const filename = `${FileSystem.cacheDirectory}coach_preview_${voice}.mp3`;
+            await FileSystem.writeAsStringAsync(filename, base64, { encoding: FileSystem.EncodingType.Base64 });
+            const { sound } = await Audio.Sound.createAsync({ uri: filename });
+            previewSoundRef.current = sound;
+            sound.setOnPlaybackStatusUpdate((status: any) => {
+              if (status.didJustFinish) {
+                setPreviewingVoice(null);
+                sound.unloadAsync().catch(() => {});
+                previewSoundRef.current = null;
+              }
+            });
+            await sound.playAsync();
+          } catch (_) {
+            setPreviewingVoice(null);
+          }
+        };
+        reader.onerror = () => setPreviewingVoice(null);
+        reader.readAsDataURL(blob);
+        return;
+      }
+    } catch (_) {}
+    setPreviewingVoice(null);
   };
 
   const audioModeConfiguredRef = useRef(false);
@@ -1931,14 +1989,18 @@ export default function RunTrackingScreen() {
                           t.coachPersonaCard,
                           coachVoice === persona.voice && t.coachPersonaCardActive,
                         ]}
-                        onPress={() => updateCoachVoice(persona.voice)}
+                        onPress={() => { updateCoachVoice(persona.voice); playCoachPreview(persona.voice); }}
                       >
                         <Text style={[t.coachPersonaName, coachVoice === persona.voice && t.coachPersonaNameActive]}>
                           {persona.name}
                         </Text>
-                        <Text style={t.coachPersonaBlurb} numberOfLines={2}>
-                          {persona.blurb}
-                        </Text>
+                        {previewingVoice === persona.voice ? (
+                          <ActivityIndicator size="small" color={C.primary} style={{ marginTop: 2 }} />
+                        ) : (
+                          <Text style={t.coachPersonaBlurb} numberOfLines={2}>
+                            {persona.blurb}
+                          </Text>
+                        )}
                       </Pressable>
                     ))}
                   </View>

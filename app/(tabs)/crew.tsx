@@ -2531,7 +2531,7 @@ function RankingsModal({ visible, onClose, myCrewIds, myCrewId }: { visible: boo
   }
 
   function formatMiles(m: number | null | undefined) {
-    return `${toDisplayDist(m ?? 0, distUnit)} ${unitLabel(distUnit)}`;
+    return toDisplayDist(m ?? 0, distUnit);
   }
 
   const SCOPE_TABS: { key: "national" | "state" | "metro"; label: string }[] = [
@@ -2814,7 +2814,7 @@ export default function CrewScreen() {
       {crews.length > 0 && (
         <WalkthroughPulse stepId="crew-cta" style={{ borderRadius: 16, marginHorizontal: 20 }}>
         <TouchableOpacity
-          style={[s.createCrewBtn, { marginHorizontal: 0 }]}
+          style={s.createCrewBtn}
           onPress={() => setShowCreate(true)}
           testID="open-create-crew"
           activeOpacity={0.88}

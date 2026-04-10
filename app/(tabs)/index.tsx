@@ -950,7 +950,7 @@ function RunCard({
                         : `${toDisplayPace(run.min_pace, distUnit).replace(/ \/(mi|km)$/, "")}–${toDisplayPace(run.max_pace, distUnit).replace(/ \/(mi|km)$/, "")}`}
                     </Text>
                   )}
-                  <Text style={s.statPillLabel}>Pace {distUnit === "km" ? "min/km" : "min/mi"}</Text>
+                  <Text numberOfLines={1} style={s.statPillLabel}>Pace {distUnit === "km" ? "min/km" : "min/mi"}</Text>
                 </View>
                 <View style={s.statDiv} />
                 <View style={s.statPill}>
@@ -959,7 +959,7 @@ function RunCard({
                       ? toDisplayDist(run.min_distance, distUnit)
                       : `${toDisplayDist(run.min_distance, distUnit)}–${toDisplayDist(run.max_distance, distUnit)}`}
                   </Text>
-                  <Text style={s.statPillLabel}>Distance</Text>
+                  <Text numberOfLines={1} style={s.statPillLabel}>Dist</Text>
                 </View>
                 <View style={s.statDiv} />
                 <View style={s.statPill}>
@@ -973,7 +973,7 @@ function RunCard({
                           : `${run.participant_count}/${run.max_participants}`}
                     </Text>
                   </View>
-                  <Text style={s.statPillLabel}>{run.is_active ? "Arrived" : "Going"}</Text>
+                  <Text numberOfLines={1} style={s.statPillLabel}>{run.is_active ? "Arrived" : "Going"}</Text>
                 </View>
               </View>
 
@@ -3317,6 +3317,7 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     borderWidth: 1.5, borderColor: C.border,
     alignItems: "center", justifyContent: "center",
     marginLeft: "auto" as any,
+    ...(Platform.OS === "android" && { marginRight: -8 }),
   },
 
   list: { paddingHorizontal: 16, paddingTop: 10, gap: 10 },
