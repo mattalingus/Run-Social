@@ -88,36 +88,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function tryRestoreSession(): Promise<User | null> {
+  // Returns:
+  //   User         — server accepted the token, session re-established
+  //   null         — server EXPLICITLY rejected the token (401/400/500) — safe to log out
+  //   "network_error" — request timed out / fetch threw / network unavailable — keep cached user
+  async function tryRestoreSession(): Promise<User | null | "network_error"> {
+    let token: string | null = null;
     try {
-      const token = await AsyncStorage.getItem(REMEMBER_TOKEN_KEY);
-      if (!token) return null;
-      const baseUrl = getApiUrl();
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 8000);
-      try {
-        const res = await fetch(new URL("/api/auth/restore-session", baseUrl).toString(), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token }),
-          credentials: "include",
-          signal: controller.signal,
-        });
-        clearTimeout(timer);
-        if (!res.ok) {
-          await clearToken();
-          return null;
-        }
-        const data = await res.json();
-        if (data.rememberToken) await storeToken(data.rememberToken);
-        const { rememberToken: _t, ...userOnly } = data;
-        return userOnly as User;
-      } catch {
-        clearTimeout(timer);
+      token = await AsyncStorage.getItem(REMEMBER_TOKEN_KEY);
+    } catch {
+      return "network_error";
+    }
+    if (!token) return null;
+
+    const baseUrl = getApiUrl();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    try {
+      const res = await fetch(new URL("/api/auth/restore-session", baseUrl).toString(), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+        credentials: "include",
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (!res.ok) {
+        // Server explicitly rejected the token — it's invalid, clear it
+        await clearToken();
         return null;
       }
+      const data = await res.json();
+      if (data.rememberToken) await storeToken(data.rememberToken);
+      const { rememberToken: _t, ...userOnly } = data;
+      return userOnly as User;
     } catch {
-      return null;
+      // Fetch threw (timeout, network unreachable, AbortError) — not a definitive rejection
+      clearTimeout(timer);
+      return "network_error";
     }
   }
 
@@ -136,8 +144,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Step 2: Verify session with server in background.
       // If cached user was set above, the app is already visible — this just refreshes data.
-      // When there is no cached user, use a bounded timeout so restore-session can still run
-      // as a fallback even if /api/auth/me hangs.
+      // When there is no cached user, use a bounded timeout so restore-session can still run.
       const baseUrl = getApiUrl();
       try {
         const meController = new AbortController();
@@ -157,13 +164,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } catch {}
 
-      // Step 3: Session expired — try remember-token to re-establish HTTP session.
-      const restored = await tryRestoreSession();
-      if (restored) {
-        setUser(restored);
-        await storeCachedUser(restored);
+      // Step 3: /api/auth/me failed — try remember-token to re-establish HTTP session.
+      const restoreResult = await tryRestoreSession();
+
+      if (restoreResult && restoreResult !== "network_error") {
+        // Server accepted the token — session re-established
+        const freshUser = restoreResult as User;
+        setUser(freshUser);
+        await storeCachedUser(freshUser);
+      } else if (restoreResult === "network_error") {
+        // Network/timeout failure — NOT a definitive rejection.
+        // Keep the cached user logged in. Their PostgreSQL session is likely still valid
+        // and the iOS session cookie is preserved. Individual API calls will work.
+        // Only log out if the server sends a definitive 401 (handled above).
+        if (!cached) {
+          // No cached user either — nothing to show, must go to login
+          setUser(null);
+        }
+        // If we have a cached user, they stay logged in (setUser(cached) already called in Step 1)
       } else {
-        // Both failed — clear cache and send to login
+        // restoreResult === null — server explicitly rejected the token (401/400)
+        // This is a definitive logout signal
         await clearCachedUser();
         setUser(null);
       }
