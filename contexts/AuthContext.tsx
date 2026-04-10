@@ -4,6 +4,7 @@ import { fetch } from "expo/fetch";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const REMEMBER_TOKEN_KEY = "paceup_remember_token";
+const CACHED_USER_KEY = "paceup_cached_user";
 
 interface User {
   id: string;
@@ -65,6 +66,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {}
   }
 
+  async function storeCachedUser(u: User) {
+    try {
+      await AsyncStorage.setItem(CACHED_USER_KEY, JSON.stringify(u));
+    } catch {}
+  }
+
+  async function clearCachedUser() {
+    try {
+      await AsyncStorage.removeItem(CACHED_USER_KEY);
+    } catch {}
+  }
+
+  async function readCachedUser(): Promise<User | null> {
+    try {
+      const raw = await AsyncStorage.getItem(CACHED_USER_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw) as User;
+    } catch {
+      return null;
+    }
+  }
+
   async function tryRestoreSession(): Promise<User | null> {
     try {
       const token = await AsyncStorage.getItem(REMEMBER_TOKEN_KEY);
@@ -99,28 +122,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function fetchMe() {
-    // Hard bail: no matter what happens, loading clears within 10 seconds
+    // Safety net: clear loading after 10s no matter what (last resort only)
     const emergencyTimer = setTimeout(() => setIsLoading(false), 10000);
-    const controller = new AbortController();
-    const abortTimer = setTimeout(() => controller.abort(), 8000);
+
     try {
-      const baseUrl = getApiUrl();
-      const res = await fetch(new URL("/api/auth/me", baseUrl).toString(), {
-        credentials: "include",
-        signal: controller.signal,
-      });
-      clearTimeout(abortTimer);
-      if (res.ok) {
-        const data = await res.json();
-        setUser(data);
-      } else {
-        const restored = await tryRestoreSession();
-        setUser(restored);
+      // Step 1: Read locally cached user — instant (~20ms), no network needed.
+      // This clears the splash screen immediately on every reopen after first login.
+      const cached = await readCachedUser();
+      if (cached) {
+        setUser(cached);
+        setIsLoading(false);
       }
-    } catch {
-      clearTimeout(abortTimer);
+
+      // Step 2: Verify session with server in background.
+      // If cached user was set above, the app is already visible — this just refreshes data.
+      const baseUrl = getApiUrl();
+      try {
+        const res = await fetch(new URL("/api/auth/me", baseUrl).toString(), {
+          credentials: "include",
+        });
+        if (res.ok) {
+          const fresh = await res.json();
+          setUser(fresh);
+          await storeCachedUser(fresh);
+          clearTimeout(emergencyTimer);
+          if (!cached) setIsLoading(false);
+          return;
+        }
+      } catch {}
+
+      // Step 3: Session expired — try remember-token to re-establish HTTP session.
       const restored = await tryRestoreSession();
-      setUser(restored);
+      if (restored) {
+        setUser(restored);
+        await storeCachedUser(restored);
+      } else {
+        // Both failed — clear cache and send to login
+        await clearCachedUser();
+        setUser(null);
+      }
     } finally {
       clearTimeout(emergencyTimer);
       setIsLoading(false);
@@ -132,6 +172,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = await res.json();
     if (data.rememberToken) await storeToken(data.rememberToken);
     const { rememberToken: _t, ...userOnly } = data;
+    await storeCachedUser(userOnly);
     setUser(userOnly);
   }
 
@@ -140,6 +181,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = await res.json();
     if (data.rememberToken) await storeToken(data.rememberToken);
     const { rememberToken: _t, ...userOnly } = data;
+    await storeCachedUser(userOnly);
     setUser(userOnly);
   }
 
@@ -149,6 +191,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await apiRequest("POST", "/api/auth/logout", { rememberToken: token ?? undefined });
     } catch {}
     await clearToken();
+    await clearCachedUser();
     setUser(null);
   }
 
@@ -157,7 +200,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   function updateUser(updates: Partial<User>) {
-    setUser((prev) => (prev ? { ...prev, ...updates } : prev));
+    setUser((prev) => {
+      if (!prev) return prev;
+      const updated = { ...prev, ...updates };
+      storeCachedUser(updated);
+      return updated;
+    });
   }
 
   const value = useMemo(() => ({ user, isLoading, login, register, logout, refreshUser, updateUser }), [user, isLoading]);
