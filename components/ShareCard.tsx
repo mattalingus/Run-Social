@@ -453,9 +453,9 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
 
   const photoRouteOverlay = hasRoute && (() => {
     if (layoutIndex === 0) return <RouteSvg points={svgSmallLg} w={ROUTE_SM_LG} h={ROUTE_SM_LG} color="rgba(255,255,255,0.55)" strokeW={3} showDots={false} coords={routePath} posStyle={{ position: "absolute", bottom: 60, alignSelf: "center" }} />;
-    if (layoutIndex === 1) return <RouteSvg points={svgLeft} w={ROUTE_LEFT_W} h={CARD_H} color="rgba(255,255,255,0.45)" strokeW={3} showDots={false} coords={routePath} posStyle={{ position: "absolute", top: 0, left: 0 }} />;
+    if (layoutIndex === 1) return <RouteSvg points={svgLeft} w={ROUTE_LEFT_W} h={CARD_H} color="rgba(255,255,255,0.55)" strokeW={3} showDots={false} coords={routePath} posStyle={{ position: "absolute", top: 0, left: 0 }} />;
     if (layoutIndex === 2) return <RouteSvg points={svgTop} w={CARD_W} h={ROUTE_TOP_H} color="rgba(255,255,255,0.55)" strokeW={3.5} showDots={false} coords={routePath} posStyle={{ position: "absolute", top: 0, left: 0 }} />;
-    return <RouteSvg points={svgFull} w={CARD_W} h={CARD_H} color="rgba(255,255,255,0.35)" strokeW={3} showDots={false} coords={routePath} />;
+    return <RouteSvg points={svgFull} w={CARD_W} h={CARD_H} color="rgba(255,255,255,0.55)" strokeW={5.5} showDots={false} coords={routePath} />;
   })();
 
   if (backgroundPhoto) {
@@ -489,7 +489,7 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
       return (
         <View ref={ref} style={[st.card, { backgroundColor: "transparent" }]}>
           {hasRoute ? (
-            <RouteSvg points={svgSmallLg} w={ROUTE_SM_LG} h={ROUTE_SM_LG} color="#FFFFFF" strokeW={3} showDots={true} coords={routePath}
+            <RouteSvg points={svgSmallLg} w={ROUTE_SM_LG} h={ROUTE_SM_LG} color="#FFFFFF" strokeW={3} showDots={false} coords={routePath}
               posStyle={{ position: "absolute", bottom: 60, alignSelf: "center" }} />
           ) : <NoRouteOverlay white />}
           <View style={st.centerBlock}>
@@ -510,7 +510,7 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
       return (
         <View ref={ref} style={[st.card, { backgroundColor: "transparent" }]}>
           {hasRoute ? (
-            <RouteSvg points={svgLeft} w={ROUTE_LEFT_W} h={CARD_H} color="rgba(255,255,255,0.35)" strokeW={3} showDots={true} coords={routePath}
+            <RouteSvg points={svgLeft} w={ROUTE_LEFT_W} h={CARD_H} color="#FFFFFF" strokeW={3} showDots={false} coords={routePath}
               posStyle={{ position: "absolute", top: 0, left: 0 }} />
           ) : <NoRouteOverlay white />}
           <View style={st.rightStatsBlock}>
@@ -539,7 +539,7 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
       return (
         <View ref={ref} style={[st.card, { backgroundColor: "transparent" }]}>
           {hasRoute ? (
-            <RouteSvg points={svgTop} w={CARD_W} h={ROUTE_TOP_H} color="#FFFFFF" strokeW={3.5} showDots={true} coords={routePath}
+            <RouteSvg points={svgTop} w={CARD_W} h={ROUTE_TOP_H} color="#FFFFFF" strokeW={3.5} showDots={false} coords={routePath}
               posStyle={{ position: "absolute", top: 0, left: 0 }} />
           ) : <NoRouteOverlay white />}
           <View style={st.bottomBlock}>
@@ -567,7 +567,7 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
     return (
       <View ref={ref} style={[st.card, { backgroundColor: "transparent" }]}>
         {hasRoute ? (
-          <RouteSvg points={svgFull} w={CARD_W} h={CARD_H} color="rgba(255,255,255,0.25)" strokeW={2.5} showDots={true} coords={routePath} />
+          <RouteSvg points={svgFull} w={CARD_W} h={CARD_H} color="#FFFFFF" strokeW={4.5} showDots={false} coords={routePath} />
         ) : <NoRouteOverlay white />}
         <View style={st.bottomBlock}>
           <View style={st.stackedStatsBlock}>
@@ -604,7 +604,7 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
             h={ROUTE_SM_LG}
             color={PRIMARY + "40"}
             strokeW={3}
-            showDots={true}
+            showDots={false}
             coords={routePath}
             posStyle={{ position: "absolute", bottom: 60, alignSelf: "center" }}
           />
@@ -639,9 +639,9 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
             points={svgLeft}
             w={ROUTE_LEFT_W}
             h={CARD_H}
-            color={PRIMARY + "35"}
+            color={PRIMARY + "40"}
             strokeW={3}
-            showDots={true}
+            showDots={false}
             coords={routePath}
             posStyle={{ position: "absolute", top: 0, left: 0 }}
           />
@@ -686,7 +686,7 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
             h={ROUTE_TOP_H}
             color={PRIMARY + "30"}
             strokeW={3}
-            showDots={true}
+            showDots={false}
             coords={routePath}
             posStyle={{ position: "absolute", top: 0, left: 0 }}
           />
@@ -724,7 +724,7 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
     <View ref={ref} style={st.card}>
       <View style={[StyleSheet.absoluteFillObject, { backgroundColor: CARD_BG }]} />
       {hasRoute ? (
-        <RouteSvg points={svgFull} w={CARD_W} h={CARD_H} color={PRIMARY + "18"} strokeW={2.5} showDots={true} coords={routePath} />
+        <RouteSvg points={svgFull} w={CARD_W} h={CARD_H} color={PRIMARY + "40"} strokeW={4.5} showDots={false} coords={routePath} />
       ) : (
         <NoRouteOverlay />
       )}
