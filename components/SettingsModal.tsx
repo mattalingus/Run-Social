@@ -12,6 +12,7 @@ import {
   Linking,
   ActivityIndicator,
   Share,
+  Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons, FontAwesome5 } from "@expo/vector-icons";
@@ -24,6 +25,8 @@ import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { getAppStoreUrl, getAppShareUrl, buildAppInviteMessage } from "@/lib/shareLinks";
 import { router } from "expo-router";
 import { usePurchases } from "@/contexts/PurchasesContext";
+import { MARKER_ICONS } from "@/constants/markerIcons";
+import { pickAndUploadImage } from "@/lib/uploadImage";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -147,6 +150,35 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [garminSyncing, setGarminSyncing] = useState(false);
   const [garminSyncMsg, setGarminSyncMsg] = useState<string | null>(null);
+  const [showMapPinPicker, setShowMapPinPicker] = useState(false);
+  const [uploadingPin, setUploadingPin] = useState(false);
+
+  const markerIcon: string | null | undefined = (user as any)?.marker_icon;
+  const hasPinPhoto = !!(markerIcon && (markerIcon.startsWith("http") || markerIcon.startsWith("/api/objects")));
+
+  const iconMutation = useMutation({
+    mutationFn: async (icon: string | null) => {
+      await apiRequest("PATCH", "/api/users/me/marker-icon", { icon });
+    },
+    onSuccess: () => { refreshUser(); setShowMapPinPicker(false); },
+    onError: (e: any) => Alert.alert("Error", e.message),
+  });
+
+  async function handleChangePinPhoto() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      setUploadingPin(true);
+      const url = await pickAndUploadImage("pin");
+      if (!url) return;
+      await apiRequest("PATCH", "/api/users/me/marker-icon", { icon: url });
+      await refreshUser();
+      setShowMapPinPicker(false);
+    } catch (e: any) {
+      Alert.alert("Upload Failed", e.message || "Could not upload photo");
+    } finally {
+      setUploadingPin(false);
+    }
+  }
 
   // Listen for the deep link fired after Garmin OAuth completes in the in-app browser.
   // The callback page redirects to paceup://garmin-connected which triggers this listener.
@@ -715,6 +747,28 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
                 />
               }
             />
+            <Divider C={C} />
+            <SettingRow
+              C={C}
+              iconBg="#1A2E1A"
+              icon={<Ionicons name="location" size={18} color={C.primary} />}
+              label="Map Pin"
+              sublabel={hasPinPhoto ? "Custom photo" : markerIcon ? "Custom icon" : "Profile photo or initial"}
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowMapPinPicker(true); }}
+              right={
+                hasPinPhoto ? (
+                  <Image source={{ uri: markerIcon! }} style={{ width: 32, height: 32, borderRadius: 16, borderWidth: 1.5, borderColor: C.primary + "44" }} />
+                ) : markerIcon ? (
+                  <Text style={{ fontSize: 24 }}>{markerIcon}</Text>
+                ) : user?.photo_url ? (
+                  <Image source={{ uri: user.photo_url }} style={{ width: 32, height: 32, borderRadius: 16, borderWidth: 1.5, borderColor: C.primary + "44" }} />
+                ) : (
+                  <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: C.primary + "22", alignItems: "center", justifyContent: "center" }}>
+                    <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 14, color: C.primary }}>{user?.name?.charAt(0)?.toUpperCase() ?? "?"}</Text>
+                  </View>
+                )
+              }
+            />
           </SectionCard>
 
           {/* ── NOTIFICATIONS ────────────────────────────────────────────── */}
@@ -1147,6 +1201,76 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
           <View style={{ height: 20 }} />
         </ScrollView>
       </View>
+
+      {/* ── Map Pin Picker Modal ──────────────────────────────────────────── */}
+      <Modal visible={showMapPinPicker} transparent animationType="slide" onRequestClose={() => setShowMapPinPicker(false)}>
+        <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.55)" }} onPress={() => setShowMapPinPicker(false)} />
+        <View style={{ backgroundColor: C.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 24, paddingBottom: insets.bottom + 32 }}>
+          <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text, marginBottom: 4 }}>Customize Map Pin</Text>
+          <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textMuted, marginBottom: 20 }}>
+            Shown on the map when you host a run
+          </Text>
+
+          <Pressable
+            style={{ flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: C.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.border, marginBottom: 16, opacity: uploadingPin ? 0.6 : 1 }}
+            onPress={handleChangePinPhoto}
+            disabled={uploadingPin}
+          >
+            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: C.primary + "22", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+              {uploadingPin ? (
+                <ActivityIndicator color={C.primary} size="small" />
+              ) : hasPinPhoto ? (
+                <Image source={{ uri: markerIcon! }} style={{ width: 40, height: 40, borderRadius: 20 }} />
+              ) : (
+                <Feather name="upload" size={18} color={C.primary} />
+              )}
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.text }}>
+                {hasPinPhoto ? "Change photo" : "Upload a photo"}
+              </Text>
+              <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted }}>Use a custom image as your pin</Text>
+            </View>
+            <Feather name="chevron-right" size={16} color={C.textMuted} />
+          </Pressable>
+
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 16 }}>
+            <View style={{ flex: 1, height: 1, backgroundColor: C.border }} />
+            <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted }}>or choose an icon</Text>
+            <View style={{ flex: 1, height: 1, backgroundColor: C.border }} />
+          </View>
+
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            <Pressable
+              style={{ alignItems: "center", width: 70, paddingVertical: 10, borderRadius: 12, borderWidth: 1.5, borderColor: !markerIcon ? C.primary : C.border, backgroundColor: !markerIcon ? C.primary + "18" : C.card }}
+              onPress={() => iconMutation.mutate(null)}
+            >
+              <View style={{ width: 36, height: 36, borderRadius: 18, overflow: "hidden", alignItems: "center", justifyContent: "center", backgroundColor: C.surface, marginBottom: 4 }}>
+                {user?.photo_url ? (
+                  <Image source={{ uri: user.photo_url }} style={{ width: 36, height: 36 }} />
+                ) : (
+                  <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 16, color: C.primary }}>{user?.name?.charAt(0)?.toUpperCase() ?? "?"}</Text>
+                )}
+              </View>
+              <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 10, color: C.textSecondary }}>{user?.photo_url ? "Profile" : "Initial"}</Text>
+            </Pressable>
+            {MARKER_ICONS.map((item) => (
+              <Pressable
+                key={item.emoji}
+                style={{ alignItems: "center", width: 70, paddingVertical: 10, borderRadius: 12, borderWidth: 1.5, borderColor: markerIcon === item.emoji ? C.primary : C.border, backgroundColor: markerIcon === item.emoji ? C.primary + "18" : C.card }}
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); iconMutation.mutate(item.emoji); }}
+              >
+                <Text style={{ fontSize: 26, marginBottom: 4 }}>{item.emoji}</Text>
+                <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 10, color: C.textSecondary }}>{item.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+
+          {iconMutation.isPending && (
+            <ActivityIndicator color={C.primary} style={{ marginTop: 16 }} />
+          )}
+        </View>
+      </Modal>
 
       {/* ── Terms of Service Modal ────────────────────────────────────────── */}
       <Modal visible={showTerms} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowTerms(false)}>

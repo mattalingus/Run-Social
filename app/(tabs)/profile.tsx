@@ -29,7 +29,6 @@ import { apiRequest } from "@/lib/query-client";
 import { useTheme } from "@/contexts/ThemeContext";
 import ShareActivityModal, { ShareRunData } from "@/components/ShareActivityModal";
 import { darkColors as C } from "@/constants/colors";
-import { MARKER_ICONS } from "@/constants/markerIcons";
 import { ACHIEVEMENTS, type AchievementDef } from "@/constants/achievements";
 import { formatDistance } from "@/lib/formatDistance";
 import { toDisplayDist, toDisplayPace, unitLabel, type DistanceUnit } from "@/lib/units";
@@ -62,10 +61,6 @@ const MILESTONE_ICONS: Record<number, string> = {
   1000: "activity",
 };
 
-function isPhotoUrl(v: string | null | undefined): boolean {
-  if (!v) return false;
-  return v.startsWith("http") || v.startsWith("/api/objects");
-}
 
 function ProgressBar({ value, total, color }: { value: number; total: number; color?: string }) {
   const { C: TC } = useTheme();
@@ -262,9 +257,7 @@ function ProfileScreenInner() {
   const [gender, setGender] = useState(user?.gender || "");
   const [devTaps, setDevTaps] = useState(0);
   const [showDevMode, setShowDevMode] = useState(false);
-  const [showIconPicker, setShowIconPicker] = useState(false);
   const [uploadingProfile, setUploadingProfile] = useState(false);
-  const [uploadingPin, setUploadingPin] = useState(false);
   const [topRunsModal, setTopRunsModal] = useState<"longest" | "fastest" | null>(null);
   const [showSoloHistory, setShowSoloHistory] = useState(false);
   const [historyActivityFilter, setHistoryActivityFilter] = useState<"run" | "ride" | "walk">("run");
@@ -278,6 +271,8 @@ function ProfileScreenInner() {
   const [savingPath, setSavingPath] = useState(false);
   const [showProfileSavedPaths, setShowProfileSavedPaths] = useState(false);
   const [savedPathRunKeys, setSavedPathRunKeys] = useState<Set<string>>(new Set());
+  const [expandedPathId, setExpandedPathId] = useState<string | null>(null);
+  const [expandedPathActivity, setExpandedPathActivity] = useState<"run" | "ride" | "walk">("run");
   const [favActivityFilter, setFavActivityFilter] = useState<"run" | "ride" | "walk">("run");
   const [friendSearch, setFriendSearch] = useState("");
   const [showAddFriend, setShowAddFriend] = useState(false);
@@ -320,22 +315,6 @@ function ProfileScreenInner() {
     }
   }
 
-  async function handleChangePinPhoto() {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    try {
-      setUploadingPin(true);
-      const url = await pickAndUploadImage("pin");
-      if (!url) return;
-      await apiRequest("PATCH", "/api/users/me/marker-icon", { icon: url });
-      await refreshUser();
-      setShowIconPicker(false);
-    } catch (e: any) {
-      Alert.alert("Upload Failed", e.message || "Could not upload photo");
-    } finally {
-      setUploadingPin(false);
-    }
-  }
-
   function handleVersionTap() {
     const next = devTaps + 1;
     setDevTaps(next);
@@ -356,14 +335,6 @@ function ProfileScreenInner() {
       qc.invalidateQueries({ queryKey: ["/api/runs"] });
       Alert.alert("Done", "Generated 20 fresh runs on the map.");
     },
-    onError: (e: any) => Alert.alert("Error", e.message),
-  });
-
-  const iconMutation = useMutation({
-    mutationFn: async (icon: string | null) => {
-      await apiRequest("PATCH", "/api/users/me/marker-icon", { icon });
-    },
-    onSuccess: () => { refreshUser(); setShowIconPicker(false); },
     onError: (e: any) => Alert.alert("Error", e.message),
   });
 
@@ -454,6 +425,7 @@ function ProfileScreenInner() {
   const { data: profileSavedPaths = [] } = useQuery<Array<{
     id: string; name: string; distance_miles: number | null;
     activity_type?: string | null; created_at: string;
+    route_path?: Array<{ latitude: number; longitude: number }> | null;
   }>>({
     queryKey: ["/api/saved-paths"],
     enabled: !!user,
@@ -663,7 +635,6 @@ function ProfileScreenInner() {
   if (!user) return <View style={styles.container}><ActivityIndicator color={C.primary} /></View>;
 
   const nextMilestone = milestones.find((m) => !earnedIds.has(m));
-  const hasPinPhoto = isPhotoUrl(user.marker_icon);
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
@@ -1097,44 +1068,6 @@ function ProfileScreenInner() {
         </View>
       </View>
 
-      {/* ── Map Marker ────────────────────────────────────────────────────── */}
-      <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Map Pin</Text>
-            <Pressable onPress={() => setShowIconPicker(true)} style={styles.editBtn}>
-              <Feather name="edit-2" size={14} color={C.primary} />
-              <Text style={styles.editBtnText}>Change</Text>
-            </Pressable>
-          </View>
-          <Pressable style={styles.markerPreview} onPress={() => setShowIconPicker(true)}>
-            <View style={styles.markerCircle}>
-              {hasPinPhoto ? (
-                <Image source={{ uri: user.marker_icon! }} style={styles.markerPhoto} />
-              ) : user.marker_icon ? (
-                <Text style={styles.markerEmoji}>{user.marker_icon}</Text>
-              ) : user.photo_url ? (
-                <Image source={{ uri: user.photo_url }} style={styles.markerPhoto} />
-              ) : (
-                <Text style={styles.markerInitial}>{user.name?.charAt(0)?.toUpperCase() ?? "?"}</Text>
-              )}
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.markerLabel}>
-                {hasPinPhoto ? "Custom photo" : user.marker_icon ? "Custom icon" : user.photo_url ? "Profile photo" : "Profile initial"}
-              </Text>
-              <Text style={styles.markerSub}>
-                {hasPinPhoto
-                  ? "Your runs show this photo on the map"
-                  : user.marker_icon
-                  ? "Your runs show this icon on the map"
-                  : user.photo_url
-                  ? "Your profile photo is used as your pin"
-                  : "Tap to choose a custom map pin"}
-              </Text>
-            </View>
-            <Feather name="chevron-right" size={18} color={C.textMuted} />
-          </Pressable>
-        </View>
       </WalkthroughPulse>
 
       {/* ── Mileage Goals ─────────────────────────────────────────────────── */}
@@ -1419,78 +1352,6 @@ function ProfileScreenInner() {
           </Pressable>
         </View>
         </KeyboardAvoidingView>
-      </Modal>
-
-      {/* ── Map Pin Picker Modal ───────────────────────────────────────────── */}
-      <Modal visible={showIconPicker} transparent animationType="slide" onRequestClose={() => setShowIconPicker(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setShowIconPicker(false)} />
-        <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 24 }]}>
-          <Text style={styles.modalTitle}>Customize Map Pin</Text>
-          <Text style={[styles.modalLabel, { marginBottom: 16 }]}>
-            This appears on the map when you host a run
-          </Text>
-
-          {/* Upload photo option */}
-          <Pressable
-            style={[styles.uploadPhotoBtn, uploadingPin && { opacity: 0.6 }]}
-            onPress={handleChangePinPhoto}
-            disabled={uploadingPin}
-          >
-            {uploadingPin ? (
-              <ActivityIndicator color={C.primary} size="small" />
-            ) : hasPinPhoto ? (
-              <Image source={{ uri: user.marker_icon! }} style={styles.uploadPhotoBtnThumb} />
-            ) : (
-              <Feather name="upload" size={18} color={C.primary} />
-            )}
-            <View style={{ flex: 1 }}>
-              <Text style={styles.uploadPhotoLabel}>
-                {hasPinPhoto ? "Change photo" : "Upload a photo"}
-              </Text>
-              <Text style={styles.uploadPhotoSub}>Use a custom image as your pin</Text>
-            </View>
-            <Feather name="chevron-right" size={16} color={C.textMuted} />
-          </Pressable>
-
-          <View style={styles.divider}>
-            <View style={styles.divLine} />
-            <Text style={styles.divText}>or choose an icon</Text>
-            <View style={styles.divLine} />
-          </View>
-
-          <View style={styles.iconGrid}>
-            <Pressable
-              style={[styles.iconCell, !user?.marker_icon && styles.iconCellActive]}
-              onPress={() => iconMutation.mutate(null)}
-            >
-              {user?.photo_url ? (
-                <Image source={{ uri: user.photo_url }} style={styles.iconProfileThumb} />
-              ) : (
-                <Text style={styles.iconInitial}>{user?.name?.charAt(0)?.toUpperCase() ?? "?"}</Text>
-              )}
-              <Text style={styles.iconLabel}>{user?.photo_url ? "Profile" : "Initial"}</Text>
-            </Pressable>
-            {MARKER_ICONS.map((item) => (
-              <Pressable
-                key={item.emoji}
-                style={[
-                  styles.iconCell,
-                  user?.marker_icon === item.emoji && styles.iconCellActive,
-                ]}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  iconMutation.mutate(item.emoji);
-                }}
-              >
-                <Text style={styles.iconEmoji}>{item.emoji}</Text>
-                <Text style={styles.iconLabel}>{item.label}</Text>
-              </Pressable>
-            ))}
-          </View>
-          {iconMutation.isPending && (
-            <ActivityIndicator color={C.primary} style={{ marginTop: 16 }} />
-          )}
-        </View>
       </Modal>
 
       {/* ── Friend List Modal ──────────────────────────────────────────────── */}
@@ -2600,19 +2461,130 @@ function ProfileScreenInner() {
               ) : (
                 profileSavedPaths
                   .filter((p) => (p.activity_type ?? "run") === profileActivity)
-                  .map((path) => (
-                    <View key={path.id} style={{ flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: C.card, borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: C.border }}>
-                      <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: "#FF6B3522", alignItems: "center", justifyContent: "center" }}>
-                        <Feather name="bookmark" size={16} color="#FF6B35" />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text }} numberOfLines={1}>{path.name}</Text>
-                        <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary, marginTop: 2 }}>
-                          {path.distance_miles ? `${toDisplayDist(path.distance_miles, distUnit)}` : "Distance unknown"}
-                        </Text>
-                      </View>
-                    </View>
-                  ))
+                  .map((path) => {
+                    const coords = Array.isArray(path.route_path) ? path.route_path : [];
+                    const isExpanded = expandedPathId === path.id;
+                    const region = coords.length > 0 ? (() => {
+                      const lats = coords.map(c => c.latitude);
+                      const lons = coords.map(c => c.longitude);
+                      const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+                      const minLon = Math.min(...lons), maxLon = Math.max(...lons);
+                      return {
+                        latitude: (minLat + maxLat) / 2,
+                        longitude: (minLon + maxLon) / 2,
+                        latitudeDelta: Math.max(maxLat - minLat, 0.005) * 1.5,
+                        longitudeDelta: Math.max(maxLon - minLon, 0.005) * 1.5,
+                      };
+                    })() : null;
+                    return (
+                      <Pressable
+                        key={path.id}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setExpandedPathId(isExpanded ? null : path.id);
+                          setExpandedPathActivity(profileActivity as "run" | "ride" | "walk");
+                        }}
+                        style={{ backgroundColor: C.card, borderRadius: 14, marginBottom: 10, borderWidth: 1, borderColor: isExpanded ? C.primary + "55" : C.border, overflow: "hidden" }}
+                      >
+                        {/* Map thumbnail */}
+                        {Platform.OS !== "web" && region && coords.length > 1 ? (
+                          <View style={{ height: 100, borderTopLeftRadius: 14, borderTopRightRadius: 14, overflow: "hidden" }}>
+                            <MapView
+                              style={{ flex: 1 }}
+                              region={region}
+                              mapType={MAP_TYPE}
+                              customMapStyle={MAP_STYLE}
+                              scrollEnabled={false}
+                              zoomEnabled={false}
+                              rotateEnabled={false}
+                              pitchEnabled={false}
+                              pointerEvents="none"
+                            >
+                              <Polyline
+                                coordinates={coords}
+                                strokeColor={C.primary}
+                                strokeWidth={3}
+                              />
+                            </MapView>
+                          </View>
+                        ) : null}
+                        {/* Route info row */}
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: 12 }}>
+                          <View style={{ width: 34, height: 34, borderRadius: 9, backgroundColor: "#FF6B3522", alignItems: "center", justifyContent: "center" }}>
+                            <Feather name="bookmark" size={15} color="#FF6B35" />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text }} numberOfLines={1}>{path.name}</Text>
+                            <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary, marginTop: 1 }}>
+                              {path.distance_miles ? toDisplayDist(path.distance_miles, distUnit) : "Distance unknown"}
+                            </Text>
+                          </View>
+                          <Ionicons name={isExpanded ? "chevron-up" : "chevron-down"} size={16} color={C.textMuted} />
+                        </View>
+                        {/* Plan-a-run expandable section */}
+                        {isExpanded && (
+                          <View style={{ paddingHorizontal: 12, paddingBottom: 14, borderTopWidth: 1, borderTopColor: C.border }}>
+                            <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.textMuted, marginTop: 12, marginBottom: 10, letterSpacing: 0.4, textTransform: "uppercase" }}>Plan a {expandedPathActivity}</Text>
+                            {/* Activity toggle */}
+                            <View style={{ flexDirection: "row", backgroundColor: C.surface, borderRadius: 8, padding: 3, gap: 3, marginBottom: 12, borderWidth: 1, borderColor: C.border }}>
+                              {(["run", "ride", "walk"] as const).map((tab) => (
+                                <Pressable
+                                  key={tab}
+                                  style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingVertical: 7, borderRadius: 6, backgroundColor: expandedPathActivity === tab ? C.primary : "transparent" }}
+                                  onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setExpandedPathActivity(tab); }}
+                                >
+                                  <Ionicons
+                                    name={tab === "ride" ? "bicycle" : tab === "walk" ? "footsteps" : "walk"}
+                                    size={12}
+                                    color={expandedPathActivity === tab ? C.bg : C.textMuted}
+                                  />
+                                  <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 11, color: expandedPathActivity === tab ? C.bg : C.textMuted }}>
+                                    {tab === "run" ? "Run" : tab === "ride" ? "Ride" : "Walk"}
+                                  </Text>
+                                </Pressable>
+                              ))}
+                            </View>
+                            {/* Destination buttons */}
+                            <View style={{ flexDirection: "row", gap: 8 }}>
+                              <Pressable
+                                style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 4, backgroundColor: C.surface, borderRadius: 10, paddingVertical: 10, borderWidth: 1, borderColor: C.border }}
+                                onPress={() => {
+                                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                                  setShowProfileSavedPaths(false);
+                                  setTimeout(() => router.push("/"), 100);
+                                }}
+                              >
+                                <Ionicons name="compass" size={18} color={C.primary} />
+                                <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.text }}>Discover</Text>
+                              </Pressable>
+                              <Pressable
+                                style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 4, backgroundColor: C.surface, borderRadius: 10, paddingVertical: 10, borderWidth: 1, borderColor: C.border }}
+                                onPress={() => {
+                                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                                  setShowProfileSavedPaths(false);
+                                  setTimeout(() => router.push("/(tabs)/solo"), 100);
+                                }}
+                              >
+                                <Ionicons name="walk" size={18} color={C.primary} />
+                                <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.text }}>Solo</Text>
+                              </Pressable>
+                              <Pressable
+                                style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 4, backgroundColor: C.surface, borderRadius: 10, paddingVertical: 10, borderWidth: 1, borderColor: C.border }}
+                                onPress={() => {
+                                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                                  setShowProfileSavedPaths(false);
+                                  setTimeout(() => router.push("/(tabs)/crew"), 100);
+                                }}
+                              >
+                                <Ionicons name="people" size={18} color={C.primary} />
+                                <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.text }}>Crew</Text>
+                              </Pressable>
+                            </View>
+                          </View>
+                        )}
+                      </Pressable>
+                    );
+                  })
               )}
             </ScrollView>
           </View>

@@ -2481,7 +2481,8 @@ async function go(e){
 
   app.get("/api/crews/:id", requireAuth, async (req, res) => {
     try {
-      const crew = await storage.getCrewById(req.params.id as string);
+      const activityType = (req.query.activityType as string) || 'run';
+      const crew = await storage.getCrewById(req.params.id as string, activityType);
       if (!crew) return res.status(404).json({ message: "Crew not found" });
       res.json(crew);
     } catch (e: any) { res.status(500).json({ message: e.message }); }

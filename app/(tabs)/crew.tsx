@@ -1057,7 +1057,13 @@ function CrewDetailSheet({
   const isMockCrew = crew?.id?.startsWith("walkthrough-mock-") ?? false;
 
   const { data: detail, isLoading: detailLoading } = useQuery<CrewDetail>({
-    queryKey: ["/api/crews", crew?.id],
+    queryKey: ["/api/crews", crew?.id, activityFilter],
+    queryFn: async () => {
+      const url = new URL(`/api/crews/${crew!.id}?activityType=${activityFilter}`, getApiUrl());
+      const res = await fetch(url.toString(), { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      return res.json();
+    },
     enabled: !!crew?.id && !isMockCrew,
   });
 
@@ -2974,7 +2980,7 @@ export default function CrewScreen() {
                     </View>
                   </>
                 )}
-                <TouchableOpacity style={[s.createCrewBtn, { marginBottom: 12 }]} onPress={() => setShowCreate(true)} testID="create-first-crew" activeOpacity={0.88}>
+                <TouchableOpacity style={[s.createCrewBtn, { marginBottom: 12, marginHorizontal: 0 }]} onPress={() => setShowCreate(true)} testID="create-first-crew" activeOpacity={0.88}>
                   <Ionicons name="people" size={20} color={C.bg} />
                   <Text style={s.createCrewBtnTxt}>Create a Crew</Text>
                 </TouchableOpacity>
@@ -4526,6 +4532,7 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     borderColor: C.primary + "30",
     borderRadius: 14,
     backgroundColor: C.surface,
+    marginHorizontal: 16,
   },
   requestCountBadge: {
     backgroundColor: C.danger,

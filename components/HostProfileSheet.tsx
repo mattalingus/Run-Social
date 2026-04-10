@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { formatDistance } from "@/lib/formatDistance";
 import {
   View,
@@ -10,11 +10,12 @@ import {
   ActivityIndicator,
   ScrollView,
   Platform,
+  TouchableOpacity,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/query-client";
+import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { useTheme } from "@/contexts/ThemeContext";
 import { type ColorScheme } from "@/constants/colors";
 import { ACHIEVEMENTS } from "@/constants/achievements";
@@ -56,6 +57,7 @@ export default function HostProfileSheet({ hostId, onClose }: Props) {
   const qc = useQueryClient();
   const { C } = useTheme();
   const s = useMemo(() => makeStyles(C), [C]);
+  const [activityTab, setActivityTab] = useState<"run" | "ride" | "walk">("run");
 
   const { data: profile, isLoading: profileLoading } = useQuery<any>({
     queryKey: [`/api/users/${hostId}/profile`],
@@ -69,6 +71,17 @@ export default function HostProfileSheet({ hostId, onClose }: Props) {
 
   const { data: starredRuns } = useQuery<any[]>({
     queryKey: [`/api/users/${hostId}/starred-runs`],
+    enabled: !!hostId,
+  });
+
+  const { data: actStats } = useQuery<{ total_miles: number; count: number; avg_pace: number }>({
+    queryKey: [`/api/users/${hostId}/stats?activityType=${activityTab}`],
+    queryFn: async () => {
+      const url = new URL(`/api/users/${hostId}/stats?activityType=${activityTab}`, getApiUrl());
+      const res = await fetch(url.toString(), { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      return res.json();
+    },
     enabled: !!hostId,
   });
 
@@ -186,27 +199,69 @@ export default function HostProfileSheet({ hostId, onClose }: Props) {
               )}
             </View>
 
+            {/* Static summary stats */}
             <View style={s.statsRow}>
               <View style={s.statBox}>
-                <Text style={s.statVal}>{formatPace(profile.avg_pace)}</Text>
-                <Text style={s.statLabel}>Avg Pace</Text>
-              </View>
-              <View style={s.statDivider} />
-              <View style={s.statBox}>
-                <Text style={s.statVal}>
-                  {profile.avg_distance ? `${formatDistance(profile.avg_distance)} mi` : "—"}
-                </Text>
-                <Text style={s.statLabel}>Avg Distance</Text>
-              </View>
-              <View style={s.statDivider} />
-              <View style={s.statBox}>
                 <Text style={s.statVal}>{profile.hosted_runs}</Text>
-                <Text style={s.statLabel}>Runs Hosted</Text>
+                <Text style={s.statLabel}>Hosted</Text>
               </View>
               <View style={s.statDivider} />
               <View style={s.statBox}>
                 <Text style={s.statVal}>{profile.friends_count}</Text>
                 <Text style={s.statLabel}>Friends</Text>
+              </View>
+              <View style={s.statDivider} />
+              <View style={s.statBox}>
+                <Text style={s.statVal}>
+                  {actStats?.total_miles != null ? `${actStats.total_miles.toFixed(1)}` : "—"}
+                </Text>
+                <Text style={s.statLabel}>Miles</Text>
+              </View>
+              <View style={s.statDivider} />
+              <View style={s.statBox}>
+                <Text style={s.statVal}>{actStats?.count ?? "—"}</Text>
+                <Text style={s.statLabel}>Activities</Text>
+              </View>
+            </View>
+
+            {/* Activity toggle */}
+            <View style={s.toggleRow}>
+              {(["run", "ride", "walk"] as const).map((tab) => (
+                <TouchableOpacity
+                  key={tab}
+                  style={[s.toggleBtn, activityTab === tab && s.toggleBtnActive]}
+                  onPress={() => setActivityTab(tab)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name={tab === "ride" ? "bicycle" : tab === "walk" ? "footsteps" : "walk"}
+                    size={13}
+                    color={activityTab === tab ? C.bg : C.textMuted}
+                  />
+                  <Text style={[s.toggleTxt, activityTab === tab && s.toggleTxtActive]}>
+                    {tab === "run" ? "Runs" : tab === "ride" ? "Rides" : "Walks"}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Per-activity stats */}
+            <View style={s.actStatsRow}>
+              <View style={s.actStatBox}>
+                <Text style={s.actStatVal}>{formatPace(actStats?.avg_pace ?? 0)}</Text>
+                <Text style={s.actStatLabel}>Avg Pace</Text>
+              </View>
+              <View style={s.statDivider} />
+              <View style={s.actStatBox}>
+                <Text style={s.actStatVal}>
+                  {actStats?.total_miles != null ? `${actStats.total_miles.toFixed(1)} mi` : "—"}
+                </Text>
+                <Text style={s.actStatLabel}>Total Miles</Text>
+              </View>
+              <View style={s.statDivider} />
+              <View style={s.actStatBox}>
+                <Text style={s.actStatVal}>{actStats?.count ?? "—"}</Text>
+                <Text style={s.actStatLabel}>{activityTab === "ride" ? "Rides" : activityTab === "walk" ? "Walks" : "Runs"}</Text>
               </View>
             </View>
 
@@ -218,7 +273,7 @@ export default function HostProfileSheet({ hostId, onClose }: Props) {
                 <View style={s.achieveGrid}>
                   {earnedAchievements.map((a) => (
                     <View key={a.slug} style={s.achieveChip}>
-                      <Text style={s.achieveIcon}>{a.icon}</Text>
+                      <Ionicons name={a.icon as any} size={14} color={a.iconColor} />
                       <Text style={s.achieveName}>{a.name}</Text>
                     </View>
                   ))}
@@ -281,7 +336,7 @@ function makeStyles(C: ColorScheme) {
       borderTopRightRadius: 22,
       paddingHorizontal: 20,
       paddingTop: 12,
-      maxHeight: "80%",
+      maxHeight: "85%",
     },
     handle: {
       width: 38,
@@ -408,7 +463,7 @@ function makeStyles(C: ColorScheme) {
       backgroundColor: C.surface,
       borderRadius: 14,
       paddingVertical: 16,
-      marginBottom: 20,
+      marginBottom: 12,
       borderWidth: 1,
       borderColor: C.border,
     },
@@ -428,6 +483,60 @@ function makeStyles(C: ColorScheme) {
       color: C.text,
     },
     statLabel: {
+      fontFamily: "Outfit_400Regular",
+      fontSize: 11,
+      color: C.textMuted,
+    },
+    toggleRow: {
+      flexDirection: "row",
+      backgroundColor: C.surface,
+      borderRadius: 10,
+      padding: 3,
+      gap: 3,
+      marginBottom: 10,
+      borderWidth: 1,
+      borderColor: C.border,
+    },
+    toggleBtn: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 5,
+      paddingVertical: 8,
+      borderRadius: 8,
+    },
+    toggleBtnActive: {
+      backgroundColor: C.primary,
+    },
+    toggleTxt: {
+      fontFamily: "Outfit_600SemiBold",
+      fontSize: 12,
+      color: C.textMuted,
+    },
+    toggleTxtActive: {
+      color: C.bg,
+    },
+    actStatsRow: {
+      flexDirection: "row",
+      backgroundColor: C.surface,
+      borderRadius: 14,
+      paddingVertical: 14,
+      marginBottom: 20,
+      borderWidth: 1,
+      borderColor: C.border,
+    },
+    actStatBox: {
+      flex: 1,
+      alignItems: "center",
+      gap: 3,
+    },
+    actStatVal: {
+      fontFamily: "Outfit_700Bold",
+      fontSize: 14,
+      color: C.primary,
+    },
+    actStatLabel: {
       fontFamily: "Outfit_400Regular",
       fontSize: 11,
       color: C.textMuted,
@@ -458,9 +567,6 @@ function makeStyles(C: ColorScheme) {
       paddingVertical: 6,
       borderWidth: 1,
       borderColor: C.border,
-    },
-    achieveIcon: {
-      fontSize: 14,
     },
     achieveName: {
       fontFamily: "Outfit_600SemiBold",

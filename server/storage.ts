@@ -3658,7 +3658,8 @@ export async function respondToCrewJoinRequest(crewId: string, requesterId: stri
   }
 }
 
-export async function getCrewById(crewId: string) {
+export async function getCrewById(crewId: string, activityType: string = 'run') {
+  const safeActivity = ['run', 'ride', 'walk', 'mixed'].includes(activityType) ? activityType : 'run';
   const crew = await pool.query(
     `SELECT c.*, u.name AS created_by_name,
        (SELECT COUNT(*) FROM crew_members WHERE crew_id = c.id AND status = 'member') AS member_count
@@ -3676,7 +3677,7 @@ export async function getCrewById(crewId: string) {
            SELECT NULLIF(sr.pace_min_per_mile, 0) AS p
            FROM solo_runs sr
            WHERE sr.user_id = u.id AND sr.completed = true AND sr.is_deleted IS NOT TRUE
-           AND sr.activity_type = COALESCE(u.default_activity, 'run')
+           AND sr.activity_type = $2
            AND sr.pace_min_per_mile IS NOT NULL AND sr.pace_min_per_mile > 0
            UNION ALL
            SELECT NULLIF(rp.final_pace, 0) AS p
@@ -3684,14 +3685,14 @@ export async function getCrewById(crewId: string) {
            JOIN runs r ON r.id = rp.run_id
            WHERE rp.user_id = u.id AND rp.final_pace IS NOT NULL AND rp.final_pace > 0
            AND r.is_completed = true AND r.is_deleted IS NOT TRUE
-           AND r.activity_type = COALESCE(u.default_activity, 'run')
+           AND r.activity_type = $2
          ) paces
        ), 0) AS avg_pace
      FROM crew_members cm
      JOIN users u ON u.id = cm.user_id
      WHERE cm.crew_id = $1 AND cm.status = 'member'
      ORDER BY cm.joined_at ASC`,
-    [crewId]
+    [crewId, safeActivity]
   );
   return { ...row, member_count: parseInt(row.member_count ?? "0"), members: members.rows };
 }
