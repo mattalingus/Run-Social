@@ -1920,11 +1920,11 @@ export default function RunTrackingScreen() {
                     ))}
                   </View>
                   <View style={t.coachPersonaRow}>
-                    {(([
+                    {[
                       { voice: "nova" as const, name: "Max", blurb: "Energetic & motivating" },
                       { voice: "onyx" as const, name: "Jordan", blurb: "Calm & authoritative" },
                       { voice: "shimmer" as const, name: "Sam", blurb: "Clear & encouraging" },
-                    ]) ).map((persona) => (
+                    ].map((persona) => (
                       <Pressable
                         key={persona.voice}
                         style={[
