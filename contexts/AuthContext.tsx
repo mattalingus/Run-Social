@@ -177,13 +177,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(freshUser);
         await storeCachedUser(freshUser);
       } else if (!cached) {
-        // No cached user AND restore did not return a fresh user → must go to login
-        // (covers: no token, network error, 5xx, and definitive 401/400 rejection)
+        // No cached user AND restore did not return a fresh user → must go to login.
+        // (covers: no token, network error, 5xx, definitive 401/400 rejection)
         setUser(null);
       }
       // else: we have a cached user — keep them logged in regardless of why restore failed.
-      // Their iOS session cookie is preserved in NSHTTPCookieStorage and the PostgreSQL
-      // session is likely still valid. clearCachedUser is ONLY called from logout().
+      // POLICY: the only way to log a user out is explicit logout() — not background failures.
+      // Rationale: the iOS session cookie persists in NSHTTPCookieStorage and the PostgreSQL
+      // session is likely still valid. restore-session POST is known to silently fail on iOS
+      // (confirmed: zero production server hits) so a network failure here is NOT a signal
+      // that credentials are invalid. clearCachedUser() is ONLY ever called from logout().
     } finally {
       clearTimeout(emergencyTimer);
       setIsLoading(false);
