@@ -15,6 +15,7 @@ import {
   Share,
 } from "react-native";
 import MapView, { Polyline } from "react-native-maps";
+const MAP_TYPE = Platform.OS === "ios" ? ("mutedStandard" as const) : ("standard" as const);
 import MAP_STYLE from "@/lib/mapStyle";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -179,7 +180,7 @@ function ProfileMiniRouteMap({ path }: { path: RoutePoint[] | null | undefined }
       style={{ height: 130, borderRadius: 14, marginTop: 12, overflow: "hidden" }}
       initialRegion={{ latitude: (minLat + maxLat) / 2, longitude: (minLng + maxLng) / 2, latitudeDelta: latDelta, longitudeDelta: lngDelta }}
       customMapStyle={MAP_STYLE}
-      mapType="mutedStandard"
+      mapType={MAP_TYPE}
       scrollEnabled={false}
       zoomEnabled={false}
       rotateEnabled={false}

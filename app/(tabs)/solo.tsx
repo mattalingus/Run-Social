@@ -33,6 +33,7 @@ import { formatDistance } from "@/lib/formatDistance";
 import { toDisplayDist, toDisplayPace, unitLabel, type DistanceUnit } from "@/lib/units";
 import MAP_STYLE from "@/lib/mapStyle";
 import MapView, { Polyline } from "react-native-maps";
+const MAP_TYPE = Platform.OS === "ios" ? ("mutedStandard" as const) : ("standard" as const);
 import Svg, { Polyline as SvgPolyline, Circle as SvgCircle } from "react-native-svg";
 import MileSplitsChart from "@/components/MileSplitsChart";
 import ShareActivityModal, { ShareRunData } from "@/components/ShareActivityModal";
@@ -105,7 +106,7 @@ function MiniRouteMap({ path, height = 200 }: { path: RoutePoint[]; height?: num
         longitudeDelta: lngDelta,
       }}
       customMapStyle={MAP_STYLE}
-      mapType="mutedStandard"
+      mapType={MAP_TYPE}
       scrollEnabled={false}
       zoomEnabled={false}
       rotateEnabled={false}

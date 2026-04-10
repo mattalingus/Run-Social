@@ -17,6 +17,7 @@ import {
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 
 import MapView, { Marker, Polyline, Region } from "react-native-maps";
+const MAP_TYPE = Platform.OS === "ios" ? ("mutedStandard" as const) : ("standard" as const);
 import * as Location from "expo-location";
 import * as Haptics from "expo-haptics";
 import { Feather, Ionicons } from "@expo/vector-icons";
@@ -593,7 +594,7 @@ export default function MapScreen() {
           ref={mapRef}
           style={StyleSheet.absoluteFillObject}
           initialRegion={HOUSTON}
-          mapType="mutedStandard"
+          mapType={MAP_TYPE}
           customMapStyle={MAP_STYLE}
           showsUserLocation={!!userLoc}
           showsMyLocationButton={false}
