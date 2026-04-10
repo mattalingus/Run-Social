@@ -153,7 +153,7 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
   const [showMapPinPicker, setShowMapPinPicker] = useState(false);
   const [uploadingPin, setUploadingPin] = useState(false);
 
-  const markerIcon: string | null | undefined = (user as any)?.marker_icon;
+  const markerIcon: string | null | undefined = user?.marker_icon;
   const hasPinPhoto = !!(markerIcon && (markerIcon.startsWith("http") || markerIcon.startsWith("/api/objects")));
 
   const iconMutation = useMutation({
