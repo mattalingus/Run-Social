@@ -922,12 +922,19 @@ async function go(e){
     }
   });
 
+  // POST /api/users/find-by-contacts — registered before any wildcard/catch-all routes;
+  // returns 401 for unauthenticated callers (verified reachable). Input is hardened to
+  // accept only well-formed SHA-256 hex strings so the pg ANY($1::text[]) cast never fails.
   app.post("/api/users/find-by-contacts", requireAuth, async (req, res) => {
     try {
       const { phoneHashes } = req.body;
       if (!Array.isArray(phoneHashes) || phoneHashes.length === 0)
         return res.status(400).json({ message: "phoneHashes array required" });
-      const limited = phoneHashes.filter((h: unknown) => typeof h === "string" && h.length > 0).slice(0, 5000);
+      const SHA256_RE = /^[0-9a-f]{64}$/i;
+      const limited = phoneHashes
+        .filter((h: unknown): h is string => typeof h === "string" && SHA256_RE.test(h))
+        .slice(0, 5000);
+      if (limited.length === 0) return res.json([]);
       const result = await pool.query(
         `SELECT u.id, u.name, u.username, u.photo_url, u.total_miles, u.phone_hash
          FROM users u

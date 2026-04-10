@@ -1458,7 +1458,7 @@ function CrewDetailSheet({
 
                 {/* Join Requests — crew chief only */}
                 {isCreatorLocal && joinRequests.length > 0 && (
-                  <View style={[s.detailSection, s.requestsSection]}>
+                  <View style={s.requestsSection}>
                     <View style={s.detailSectionHeader}>
                       <Text style={s.detailSectionTitle}>
                         Join Requests
@@ -2951,9 +2951,9 @@ export default function CrewScreen() {
                 <ActivityIndicator color={C.primary} size="large" />
               </View>
             ) : (
-              <View style={s.emptyState}>
+              <>
                 {!ghostCrewDone && (
-                  <>
+                  <View style={s.emptyState}>
                     <View style={s.ghostCrewCard}>
                       <View style={s.crewCardLeft}>
                         <View style={s.ghostCrewEmoji}>
@@ -2978,17 +2978,17 @@ export default function CrewScreen() {
                       <Feather name="info" size={11} color={C.textMuted} />
                       <Text style={s.ghostCrewTipTxt}>Join a crew to train, achieve, and grow together</Text>
                     </View>
-                  </>
+                  </View>
                 )}
                 <TouchableOpacity style={[s.createCrewBtn, { marginBottom: 12, marginHorizontal: 0 }]} onPress={() => setShowCreate(true)} testID="create-first-crew" activeOpacity={0.88}>
                   <Ionicons name="people" size={20} color={C.bg} />
                   <Text style={s.createCrewBtnTxt}>Create a Crew</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[s.joinCrewBtn, { alignSelf: "stretch" }]} onPress={() => { setSearchActive(true); setTimeout(() => searchInputRef.current?.focus(), 100); }} activeOpacity={0.88}>
+                <TouchableOpacity style={[s.joinCrewBtn, { marginHorizontal: 0 }]} onPress={() => { setSearchActive(true); setTimeout(() => searchInputRef.current?.focus(), 100); }} activeOpacity={0.88}>
                   <Ionicons name="search" size={20} color={C.primary} />
                   <Text style={s.joinCrewBtnTxt}>Join a Crew</Text>
                 </TouchableOpacity>
-              </View>
+              </>
             )
           }
           ListFooterComponent={() => (
@@ -4528,11 +4528,15 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     color: C.primary,
   },
   requestsSection: {
+    paddingHorizontal: 16,
+    paddingTop: 20,
+    paddingBottom: 14,
+    marginTop: 4,
+    marginBottom: 4,
     borderWidth: 1,
     borderColor: C.primary + "30",
     borderRadius: 14,
     backgroundColor: C.surface,
-    marginHorizontal: 16,
   },
   requestCountBadge: {
     backgroundColor: C.danger,
