@@ -348,6 +348,7 @@ export default function RunTrackingScreen() {
   const [coachVoice, setCoachVoice] = useState<"nova" | "onyx" | "shimmer">("nova");
   const [previewingVoice, setPreviewingVoice] = useState<"nova" | "onyx" | "shimmer" | null>(null);
   const previewSoundRef = useRef<Audio.Sound | null>(null);
+  const previewTokenRef = useRef(0);
   const coachEnabledRef = useRef(true);
   const coachIntervalRef = useRef<"0.5" | "1" | "2">("1");
   const coachVoiceRef = useRef<"nova" | "onyx" | "shimmer">("nova");
@@ -495,6 +496,7 @@ export default function RunTrackingScreen() {
 
   const playCoachPreview = async (voice: "nova" | "onyx" | "shimmer") => {
     if (Platform.OS === "web") return;
+    const token = ++previewTokenRef.current;
     try {
       if (previewSoundRef.current) {
         await previewSoundRef.current.stopAsync().catch(() => {});
@@ -513,35 +515,45 @@ export default function RunTrackingScreen() {
         shouldDuckAndroid: true,
       });
       const res = await apiRequest("POST", "/api/tts", { text: PREVIEW_PHRASES[voice], voice });
-      if (res.ok) {
-        const blob = await res.blob();
-        const reader = new FileReader();
-        reader.onload = async () => {
-          try {
-            const base64 = (reader.result as string).split(",")[1];
-            const filename = `${FileSystem.cacheDirectory}coach_preview_${voice}.mp3`;
-            await FileSystem.writeAsStringAsync(filename, base64, { encoding: FileSystem.EncodingType.Base64 });
-            const { sound } = await Audio.Sound.createAsync({ uri: filename });
-            previewSoundRef.current = sound;
-            sound.setOnPlaybackStatusUpdate((status: any) => {
-              if (status.didJustFinish) {
-                setPreviewingVoice(null);
-                sound.unloadAsync().catch(() => {});
-                previewSoundRef.current = null;
-              }
-            });
-            await sound.playAsync();
-          } catch (_) {
-            setPreviewingVoice(null);
-          }
-        };
-        reader.onerror = () => setPreviewingVoice(null);
-        reader.readAsDataURL(blob);
-        return;
-      }
+      if (!res.ok || previewTokenRef.current !== token) { setPreviewingVoice(null); return; }
+      const blob = await res.blob();
+      const reader = new FileReader();
+      reader.onload = async () => {
+        if (previewTokenRef.current !== token) { setPreviewingVoice(null); return; }
+        try {
+          const base64 = (reader.result as string).split(",")[1];
+          const filename = `${FileSystem.cacheDirectory}coach_preview_${voice}.mp3`;
+          await FileSystem.writeAsStringAsync(filename, base64, { encoding: FileSystem.EncodingType.Base64 });
+          if (previewTokenRef.current !== token) { setPreviewingVoice(null); return; }
+          const { sound } = await Audio.Sound.createAsync({ uri: filename });
+          previewSoundRef.current = sound;
+          sound.setOnPlaybackStatusUpdate((status: any) => {
+            if (status.didJustFinish) {
+              setPreviewingVoice(null);
+              sound.unloadAsync().catch(() => {});
+              if (previewSoundRef.current === sound) previewSoundRef.current = null;
+            }
+          });
+          await sound.playAsync();
+        } catch (_) {
+          setPreviewingVoice(null);
+        }
+      };
+      reader.onerror = () => setPreviewingVoice(null);
+      reader.readAsDataURL(blob);
+      return;
     } catch (_) {}
     setPreviewingVoice(null);
   };
+
+  useEffect(() => {
+    return () => {
+      previewTokenRef.current = -1;
+      previewSoundRef.current?.stopAsync().catch(() => {});
+      previewSoundRef.current?.unloadAsync().catch(() => {});
+      previewSoundRef.current = null;
+    };
+  }, []);
 
   const audioModeConfiguredRef = useRef(false);
 
