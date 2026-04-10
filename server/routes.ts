@@ -927,7 +927,7 @@ async function go(e){
       const { phoneHashes } = req.body;
       if (!Array.isArray(phoneHashes) || phoneHashes.length === 0)
         return res.status(400).json({ message: "phoneHashes array required" });
-      const limited = phoneHashes.slice(0, 5000);
+      const limited = phoneHashes.filter((h: unknown) => typeof h === "string" && h.length > 0).slice(0, 5000);
       const result = await pool.query(
         `SELECT u.id, u.name, u.username, u.photo_url, u.total_miles, u.phone_hash
          FROM users u
