@@ -2974,7 +2974,7 @@ export default function CrewScreen() {
                     </View>
                   </>
                 )}
-                <TouchableOpacity style={[s.createCrewBtn, { marginHorizontal: 0, marginBottom: 12, alignSelf: "stretch" }]} onPress={() => setShowCreate(true)} testID="create-first-crew" activeOpacity={0.88}>
+                <TouchableOpacity style={[s.createCrewBtn, { marginBottom: 12 }]} onPress={() => setShowCreate(true)} testID="create-first-crew" activeOpacity={0.88}>
                   <Ionicons name="people" size={20} color={C.bg} />
                   <Text style={s.createCrewBtnTxt}>Create a Crew</Text>
                 </TouchableOpacity>
