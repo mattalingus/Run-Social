@@ -273,7 +273,7 @@ export default function HostProfileSheet({ hostId, onClose }: Props) {
                 <View style={s.achieveGrid}>
                   {earnedAchievements.map((a) => (
                     <View key={a.slug} style={s.achieveChip}>
-                      <Ionicons name={a.icon as any} size={14} color={a.iconColor} />
+                      <Ionicons name={a.icon as React.ComponentProps<typeof Ionicons>["name"]} size={14} color={a.iconColor} />
                       <Text style={s.achieveName}>{a.name}</Text>
                     </View>
                   ))}
