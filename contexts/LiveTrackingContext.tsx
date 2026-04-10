@@ -72,6 +72,7 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
   const locationSubRef = useRef<Location.LocationSubscription | null>(null);
   const webWatchIdRef = useRef<number | null>(null);
   const lastCoordRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  const lastCoordTimestampRef = useRef<number | null>(null);
   const totalDistRef = useRef(0);
   const elapsedRef = useRef(0);
   const routePathRef = useRef<Array<{ latitude: number; longitude: number }>>([]);
@@ -121,6 +122,24 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
   function handleCoord(latitude: number, longitude: number) {
     routePathRef.current = [...routePathRef.current, { latitude, longitude }];
     setUserLocation({ latitude, longitude });
+
+    // GPS gap reconciliation: if the app was backgrounded with foreground-only
+    // permission, the timer pauses but the user kept moving. Credit missing
+    // wall-clock seconds so distance and time stay proportional.
+    const GPS_GAP_THRESHOLD_SEC = 30;
+    const now = Date.now();
+    if (!isPausedRef.current && lastCoordTimestampRef.current !== null) {
+      const gapSec = (now - lastCoordTimestampRef.current) / 1000;
+      if (gapSec > GPS_GAP_THRESHOLD_SEC) {
+        setElapsed((prev) => {
+          const adjusted = prev + Math.round(gapSec);
+          elapsedRef.current = adjusted;
+          return adjusted;
+        });
+      }
+    }
+    lastCoordTimestampRef.current = now;
+
     if (!isPausedRef.current && lastCoordRef.current) {
       const d = haversineMi(
         lastCoordRef.current.latitude,
@@ -220,6 +239,7 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
 
   async function startTracking(rid: string, type: "run" | "ride" | "walk", userId?: string) {
     lastCoordRef.current = null;
+    lastCoordTimestampRef.current = null;
     totalDistRef.current = 0;
     elapsedRef.current = 0;
     routePathRef.current = [];
@@ -281,6 +301,8 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
 
   function resumeTracking() {
     isPausedRef.current = false;
+    lastCoordRef.current = null;
+    lastCoordTimestampRef.current = null;
     setPhase("active");
   }
 
@@ -310,6 +332,7 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
     totalDistRef.current = 0;
     routePathRef.current = [];
     lastCoordRef.current = null;
+    lastCoordTimestampRef.current = null;
     markedPresentRef.current = false;
     setHasBeenPresent(false);
     setPresentConfirmed(false);

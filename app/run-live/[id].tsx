@@ -378,7 +378,7 @@ export default function RunLiveScreen() {
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
               resetTracking();
               qc.invalidateQueries({ queryKey: ["/api/runs"] });
-              router.replace(`/run-results/${id}?autoShare=1`);
+              setTimeout(() => { router.replace(`/run-results/${id}?autoShare=1`); }, 0);
             } else {
               Alert.alert("Error", lastErr?.message || "Could not save run. Please try again.");
               recoverToActive();

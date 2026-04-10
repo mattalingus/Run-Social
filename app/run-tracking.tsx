@@ -539,6 +539,7 @@ export default function RunTrackingScreen() {
   const foregroundOnlyRef = useRef(false);
   const webWatchIdRef = useRef<number | null>(null);
   const lastCoordRef = useRef<Coord | null>(null);
+  const lastCoordTimestampRef = useRef<number | null>(null);
   const liveActivityStartedRef = useRef(false);
   const totalDistRef = useRef(0);
   const routePathRef = useRef<Coord[]>([]);
@@ -552,6 +553,9 @@ export default function RunTrackingScreen() {
   const lastSmoothedAltRef = useRef<number | null>(null);
   const moveTimeRef = useRef(0);
   const lastMoveTimestampRef = useRef<number | null>(null);
+
+  // ─── Location permission nudge banner ────────────────────────────────────
+  const [showPermNudge, setShowPermNudge] = useState(false);
   const stepCountRef = useRef(0);
   const pedometerSubRef = useRef<{ remove: () => void } | null>(null);
   const prevMileElapsedRef = useRef(0);
@@ -672,6 +676,23 @@ export default function RunTrackingScreen() {
       if (deltaSec < 30) moveTimeRef.current += deltaSec; // cap to avoid jumps after pauses
     }
     lastMoveTimestampRef.current = now;
+
+    // GPS gap reconciliation: if the app was backgrounded with foreground-only permission,
+    // the location (and our timer) pauses, but the user kept moving. When we get a new fix
+    // after a large time gap, credit the missing wall-clock seconds to the elapsed timer so
+    // distance and time stay proportional and pace stays accurate.
+    const GPS_GAP_THRESHOLD_SEC = 30;
+    if (lastCoordTimestampRef.current !== null) {
+      const gapSec = (now - lastCoordTimestampRef.current) / 1000;
+      if (gapSec > GPS_GAP_THRESHOLD_SEC) {
+        setElapsed((prev) => {
+          const adjusted = prev + Math.round(gapSec);
+          elapsedRef.current = adjusted;
+          return adjusted;
+        });
+      }
+    }
+    lastCoordTimestampRef.current = now;
 
     const coord: Coord = { latitude, longitude };
     routePathRef.current.push(coord);
@@ -893,6 +914,7 @@ export default function RunTrackingScreen() {
       }
     }
     lastCoordRef.current = null;
+    lastCoordTimestampRef.current = null;
     totalDistRef.current = 0;
     routePathRef.current = [];
     setRouteState([]);
@@ -912,6 +934,21 @@ export default function RunTrackingScreen() {
     moveTimeRef.current = 0;
     lastMoveTimestampRef.current = null;
     stepCountRef.current = 0;
+
+    // Check permission level and show nudge if only foreground was granted
+    if (Platform.OS !== "web") {
+      (async () => {
+        try {
+          const dismissed = await AsyncStorage.getItem("@paceup_perm_nudge_dismissed");
+          if (dismissed === "true") return;
+          const { status: fgStatus } = await Location.getForegroundPermissionsAsync();
+          const { status: bgStatus } = await Location.getBackgroundPermissionsAsync();
+          if (fgStatus === "granted" && bgStatus !== "granted") {
+            setShowPermNudge(true);
+          }
+        } catch {}
+      })();
+    }
     // Start pedometer for runs only (native only)
     if (activityFilter === "run" && Platform.OS !== "web") {
       try {
@@ -976,6 +1013,7 @@ export default function RunTrackingScreen() {
   function handleResume() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     lastCoordRef.current = null;
+    lastCoordTimestampRef.current = null;
     setPhase("active");
   }
 
@@ -1161,7 +1199,15 @@ export default function RunTrackingScreen() {
   }
 
   function finishAndNavigate() {
-    router.replace("/(tabs)/solo" as any);
+    // Stop any lingering location watchers before navigating away to prevent
+    // callbacks firing into an unmounted component state.
+    stopWatching();
+    stopPedometer();
+    // Navigate to solo tab; use a brief tick to let React flush pending state
+    // before the route transition tears down this component.
+    setTimeout(() => {
+      router.replace("/(tabs)/solo" as any);
+    }, 0);
   }
 
   async function pickAndUploadSoloPhoto() {
@@ -1731,6 +1777,25 @@ export default function RunTrackingScreen() {
           </View>
         )}
 
+        {/* Location permission nudge */}
+        {showPermNudge && (phase === "active" || phase === "paused") && (
+          <View style={t.permNudge}>
+            <Feather name="map-pin" size={14} color="#FFC542" />
+            <Text style={t.permNudgeTxt}>
+              Enable "Always Allow" location for accurate tracking when switching apps or locking the screen.
+            </Text>
+            <Pressable
+              style={t.permNudgeDismiss}
+              onPress={() => {
+                setShowPermNudge(false);
+                AsyncStorage.setItem("@paceup_perm_nudge_dismissed", "true").catch(() => {});
+              }}
+            >
+              <Feather name="x" size={14} color="#FFC542" />
+            </Pressable>
+          </View>
+        )}
+
         {/* Live stats */}
         <View style={t.liveRow}>
           <View style={t.liveStat}>
@@ -2018,6 +2083,27 @@ function makeRunStyles(C: ColorScheme) { return StyleSheet.create({
     fontSize: 13,
     color: "#fff",
     flex: 1,
+  },
+  permNudge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#78500A",
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    alignSelf: "stretch",
+    marginBottom: 8,
+  },
+  permNudgeTxt: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 12,
+    color: "#FFC542",
+    flex: 1,
+    lineHeight: 16,
+  },
+  permNudgeDismiss: {
+    padding: 2,
   },
   liveRow: {
     flexDirection: "row",
