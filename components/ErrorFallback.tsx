@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { reloadAppAsync } from "expo";
+import * as SplashScreen from "expo-splash-screen";
 import {
   StyleSheet,
   View,
@@ -22,6 +23,13 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const insets = useSafeAreaInsets();
+
+  // If a crash happened before SplashScreen.hideAsync() was called, the native
+  // splash screen covers this error screen. Force-hide it so the user can see
+  // the error and tap "Try Again" instead of being stuck on the splash.
+  useEffect(() => {
+    SplashScreen.hideAsync().catch(() => {});
+  }, []);
 
   const theme = {
     background: isDark ? "#000000" : "#FFFFFF",
