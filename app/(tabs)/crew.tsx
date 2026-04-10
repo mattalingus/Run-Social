@@ -2980,11 +2980,11 @@ export default function CrewScreen() {
                     </View>
                   </View>
                 )}
-                <TouchableOpacity style={[s.createCrewBtn, { marginBottom: 12, marginHorizontal: 0 }]} onPress={() => setShowCreate(true)} testID="create-first-crew" activeOpacity={0.88}>
+                <TouchableOpacity style={[s.createCrewBtn, { marginBottom: 12 }]} onPress={() => setShowCreate(true)} testID="create-first-crew" activeOpacity={0.88}>
                   <Ionicons name="people" size={20} color={C.bg} />
                   <Text style={s.createCrewBtnTxt}>Create a Crew</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[s.joinCrewBtn, { marginHorizontal: 0 }]} onPress={() => { setSearchActive(true); setTimeout(() => searchInputRef.current?.focus(), 100); }} activeOpacity={0.88}>
+                <TouchableOpacity style={s.joinCrewBtn} onPress={() => { setSearchActive(true); setTimeout(() => searchInputRef.current?.focus(), 100); }} activeOpacity={0.88}>
                   <Ionicons name="search" size={20} color={C.primary} />
                   <Text style={s.joinCrewBtnTxt}>Join a Crew</Text>
                 </TouchableOpacity>
@@ -3196,7 +3196,6 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     backgroundColor: C.primary,
     borderRadius: 16,
     paddingVertical: 16,
-    marginHorizontal: 20,
     marginBottom: 14,
   },
   createCrewBtnTxt: {
