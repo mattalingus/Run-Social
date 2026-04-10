@@ -817,9 +817,9 @@ async function go(e){
 
   app.post("/api/tts", requireAuth, async (req, res) => {
     try {
-      const { text } = req.body;
+      const { text, voice } = req.body;
       if (!text) return res.status(400).json({ message: "Text required" });
-      const buffer = await ai.generateTTS(text);
+      const buffer = await ai.generateTTS(text, voice);
       if (!buffer) return res.status(500).json({ message: "TTS failed" });
       res.set("Content-Type", "audio/mpeg");
       res.send(buffer);

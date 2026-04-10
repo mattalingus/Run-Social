@@ -345,13 +345,16 @@ export default function RunTrackingScreen() {
   // Audio Coach state
   const [coachEnabled, setCoachEnabled] = useState(true);
   const [coachInterval, setCoachInterval] = useState<"0.5" | "1" | "2">("1");
+  const [coachVoice, setCoachVoice] = useState<"nova" | "onyx" | "shimmer">("nova");
   const coachEnabledRef = useRef(true);
   const coachIntervalRef = useRef<"0.5" | "1" | "2">("1");
+  const coachVoiceRef = useRef<"nova" | "onyx" | "shimmer">("nova");
   const lastAnnouncedMileRef = useRef(0);
   const lastAnnouncedPaceRef = useRef<number | null>(null);
 
   useEffect(() => { coachEnabledRef.current = coachEnabled; }, [coachEnabled]);
   useEffect(() => { coachIntervalRef.current = coachInterval; }, [coachInterval]);
+  useEffect(() => { coachVoiceRef.current = coachVoice; }, [coachVoice]);
 
   // Route Publishing state
   const [publishedPath, setPublishedPath] = useState<{ id: string; name: string } | null>(null);
@@ -450,8 +453,12 @@ export default function RunTrackingScreen() {
       try {
         const enabled = await AsyncStorage.getItem("@paceup_coach_enabled");
         const interval = await AsyncStorage.getItem("@paceup_coach_interval");
+        const voice = await AsyncStorage.getItem("@paceup_coach_voice");
         if (enabled !== null) setCoachEnabled(enabled === "true");
         if (interval !== null) setCoachInterval(interval as any);
+        if (voice !== null && ["nova", "onyx", "shimmer"].includes(voice)) {
+          setCoachVoice(voice as "nova" | "onyx" | "shimmer");
+        }
       } catch (e) {}
     }
     loadPrefs();
@@ -468,6 +475,13 @@ export default function RunTrackingScreen() {
     setCoachInterval(val);
     try {
       await AsyncStorage.setItem("@paceup_coach_interval", val);
+    } catch (e) {}
+  };
+
+  const updateCoachVoice = async (val: "nova" | "onyx" | "shimmer") => {
+    setCoachVoice(val);
+    try {
+      await AsyncStorage.setItem("@paceup_coach_voice", val);
     } catch (e) {}
   };
 
@@ -497,7 +511,7 @@ export default function RunTrackingScreen() {
     lastAnnouncedPaceRef.current = paceMinTotal;
 
     try {
-      const res = await apiRequest("POST", "/api/tts", { text });
+      const res = await apiRequest("POST", "/api/tts", { text, voice: coachVoiceRef.current });
       if (res.ok) {
         const blob = await res.blob();
         const reader = new FileReader();
@@ -1883,27 +1897,52 @@ export default function RunTrackingScreen() {
                 />
               </View>
               {coachEnabled && (
-                <View style={t.intervalRow}>
-                  {(["0.5", "1", "2"] as const).map((interval) => (
-                    <Pressable
-                      key={interval}
-                      style={[
-                        t.intervalPill,
-                        coachInterval === interval && t.intervalPillActive,
-                      ]}
-                      onPress={() => updateCoachInterval(interval)}
-                    >
-                      <Text
+                <>
+                  <View style={t.intervalRow}>
+                    {(["0.5", "1", "2"] as const).map((interval) => (
+                      <Pressable
+                        key={interval}
                         style={[
-                          t.intervalPillTxt,
-                          coachInterval === interval && t.intervalPillTxtActive,
+                          t.intervalPill,
+                          coachInterval === interval && t.intervalPillActive,
                         ]}
+                        onPress={() => updateCoachInterval(interval)}
                       >
-                        {interval} mi
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
+                        <Text
+                          style={[
+                            t.intervalPillTxt,
+                            coachInterval === interval && t.intervalPillTxtActive,
+                          ]}
+                        >
+                          {interval} mi
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <View style={t.coachPersonaRow}>
+                    {(([
+                      { voice: "nova" as const, name: "Max", blurb: "Energetic & motivating" },
+                      { voice: "onyx" as const, name: "Jordan", blurb: "Calm & authoritative" },
+                      { voice: "shimmer" as const, name: "Sam", blurb: "Clear & encouraging" },
+                    ]) ).map((persona) => (
+                      <Pressable
+                        key={persona.voice}
+                        style={[
+                          t.coachPersonaCard,
+                          coachVoice === persona.voice && t.coachPersonaCardActive,
+                        ]}
+                        onPress={() => updateCoachVoice(persona.voice)}
+                      >
+                        <Text style={[t.coachPersonaName, coachVoice === persona.voice && t.coachPersonaNameActive]}>
+                          {persona.name}
+                        </Text>
+                        <Text style={t.coachPersonaBlurb} numberOfLines={2}>
+                          {persona.blurb}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </>
               )}
             </View>
 
@@ -2509,6 +2548,41 @@ function makeRunStyles(C: ColorScheme) { return StyleSheet.create({
   },
   intervalPillTxtActive: {
     color: C.bg,
+  },
+  coachPersonaRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 10,
+  },
+  coachPersonaCard: {
+    flex: 1,
+    backgroundColor: C.surface,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: C.border,
+    gap: 2,
+  },
+  coachPersonaCardActive: {
+    backgroundColor: C.primaryMuted,
+    borderColor: C.primary,
+  },
+  coachPersonaName: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 14,
+    color: C.textSecondary,
+  },
+  coachPersonaNameActive: {
+    color: C.primary,
+  },
+  coachPersonaBlurb: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 10,
+    color: C.textMuted,
+    textAlign: "center",
+    lineHeight: 13,
   },
 
   // ─── Route Publishing ─────────────────────────────────────────────────

@@ -104,12 +104,18 @@ export async function generateWeeklyInsight(userName: string, stats: any) {
   }
 }
 
-export async function generateTTS(text: string) {
+const ALLOWED_VOICES = ["alloy", "echo", "fable", "nova", "onyx", "shimmer"] as const;
+type TTSVoice = (typeof ALLOWED_VOICES)[number];
+
+export async function generateTTS(text: string, voice: string = "nova") {
   if (!process.env.OPENAI_API_KEY) return null;
+  const safeVoice: TTSVoice = (ALLOWED_VOICES as readonly string[]).includes(voice)
+    ? (voice as TTSVoice)
+    : "nova";
   try {
     const mp3 = await openai.audio.speech.create({
       model: "tts-1",
-      voice: "alloy",
+      voice: safeVoice,
       input: text,
     });
     const buffer = Buffer.from(await mp3.arrayBuffer());
