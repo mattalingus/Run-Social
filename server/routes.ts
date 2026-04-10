@@ -1139,7 +1139,7 @@ async function go(e){
             sendPushNotification(
               tokens,
               `New crew ${actLabel} scheduled 🏃`,
-              `${run.host_name} posted "${run.title}" for your crew`,
+              `${host?.name ?? host?.username ?? "A member"} posted "${run.title}" for your crew`,
               { runId: run.id }
             );
           }
@@ -1168,7 +1168,7 @@ async function go(e){
               const date = runDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
               timeStr = ` at ${time} on ${date}`;
             }
-            const displayName = host?.username ? `@${host.username}` : (run.host_name ?? "A friend");
+            const displayName = host?.username ? `@${host.username}` : (host?.name ?? "A friend");
             sendPushNotification(
               tokens,
               `${actEmoji} ${displayName} posted a${distStr} ${actLabel}`,
