@@ -89,9 +89,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   // Returns:
-  //   User         — server accepted the token, session re-established
-  //   null         — server EXPLICITLY rejected the token (401/400/500) — safe to log out
-  //   "network_error" — request timed out / fetch threw / network unavailable — keep cached user
+  //   User            — server accepted the token, session re-established
+  //   null            — server EXPLICITLY rejected credentials (401 or 400 only) — safe to log out
+  //   "network_error" — fetch threw / AbortError / timeout / 5xx — keep cached user, not definitive
   async function tryRestoreSession(): Promise<User | null | "network_error"> {
     let token: string | null = null;
     try {
@@ -113,10 +113,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signal: controller.signal,
       });
       clearTimeout(timer);
-      if (!res.ok) {
-        // Server explicitly rejected the token — it's invalid, clear it
+      if (res.status === 401 || res.status === 400) {
+        // Server definitively rejected the token — credentials are invalid
         await clearToken();
         return null;
+      }
+      if (!res.ok) {
+        // Non-auth failure (5xx, 503, etc.) — transient server error, not a definitive rejection
+        return "network_error";
       }
       const data = await res.json();
       if (data.rememberToken) await storeToken(data.rememberToken);
