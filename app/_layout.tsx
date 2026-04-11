@@ -200,6 +200,14 @@ function RootLayoutNav() {
           }
           return;
         }
+        if (data?.screen === "notifications") {
+          setTimeout(() => {
+            try {
+              router.push("/notifications" as any);
+            } catch (_) {}
+          }, 100);
+          return;
+        }
         const runId = data?.runId;
         if (!runId) return;
         if (data?.type === "run_started_present") {

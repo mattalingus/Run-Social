@@ -10,5 +10,9 @@ export function redirectSystemPath({
   if (path.includes("/run-tracking") || path.includes("/run-live/")) {
     return path;
   }
+  // Friend-request / accepted notification tap: open notifications screen
+  if (path.includes("/notifications")) {
+    return path;
+  }
   return '/';
 }
