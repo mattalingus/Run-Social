@@ -2307,6 +2307,37 @@ export async function forceCompleteRun(runId: string) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    // Finalize stats for any is_present participants who haven't finished yet.
+    // We derive their final_distance and final_pace from their latest tracking point.
+    const unfinished = await client.query(
+      `SELECT rp.user_id
+       FROM run_participants rp
+       WHERE rp.run_id = $1 AND rp.is_present = true
+         AND rp.final_pace IS NULL AND rp.status != 'cancelled'`,
+      [runId]
+    );
+    for (const row of unfinished.rows) {
+      const tpRes = await client.query(
+        `SELECT cumulative_distance, pace FROM run_tracking_points
+         WHERE run_id = $1 AND user_id = $2
+         ORDER BY recorded_at DESC LIMIT 1`,
+        [runId, row.user_id]
+      );
+      if (tpRes.rows.length > 0) {
+        const { cumulative_distance, pace } = tpRes.rows[0];
+        const safeDist = parseFloat(cumulative_distance) || 0;
+        const safePace = parseFloat(pace) || 0;
+        if (safeDist > 0 && safePace > 0) {
+          await client.query(
+            `UPDATE run_participants SET final_distance = $3, final_pace = $4
+             WHERE run_id = $1 AND user_id = $2`,
+            [runId, row.user_id, safeDist, safePace]
+          );
+        }
+      }
+    }
+
     await client.query(
       `UPDATE runs SET is_completed = true, is_active = false WHERE id = $1`,
       [runId]
