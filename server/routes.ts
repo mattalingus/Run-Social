@@ -580,9 +580,20 @@ async function go(e){
             0
           ) AS count,
           COALESCE(
-            (SELECT AVG(NULLIF(sr.pace_min_per_mile, 0)) FROM solo_runs sr
-             WHERE sr.user_id = $1 AND sr.completed = true AND sr.is_deleted IS NOT TRUE
-             AND ($2 = 'mixed' OR sr.activity_type = $2)),
+            (SELECT AVG(p) FROM (
+              SELECT NULLIF(sr.pace_min_per_mile, 0) AS p
+              FROM solo_runs sr
+              WHERE sr.user_id = $1 AND sr.completed = true AND sr.is_deleted IS NOT TRUE
+              AND ($2 = 'mixed' OR sr.activity_type = $2)
+              AND sr.pace_min_per_mile IS NOT NULL AND sr.pace_min_per_mile > 0
+              UNION ALL
+              SELECT NULLIF(rp.final_pace, 0) AS p
+              FROM run_participants rp
+              JOIN runs r ON r.id = rp.run_id
+              WHERE rp.user_id = $1 AND rp.final_pace IS NOT NULL AND rp.final_pace > 0
+              AND r.is_completed = true AND r.is_deleted IS NOT TRUE
+              AND ($2 = 'mixed' OR r.activity_type = $2)
+            ) paces),
             0
           ) AS avg_pace
       `, [targetId, activityType]);
