@@ -1658,7 +1658,7 @@ async function go(e){
       const { date } = req.body;
       if (!date) return res.status(400).json({ message: "date is required" });
       const updated = await storage.updateRunDateTime(req.params.id as string, req.session.userId!, date);
-      const tokens = await storage.getRunParticipantTokensFiltered(req.params.id as string, 'notif_run_reminders');
+      const tokens = await storage.getRunBroadcastTokens(req.params.id as string);
       if (tokens.length) {
         const newDate = new Date(updated.date);
         const label = `${newDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} at ${newDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
@@ -1678,10 +1678,10 @@ async function go(e){
   app.delete("/api/runs/:id", requireAuth, async (req, res) => {
     try {
       const result = await storage.cancelRun(req.params.id as string, req.session.userId!);
-      storage.getRunParticipantTokensFiltered(req.params.id as string, 'notif_run_reminders').then((filteredTokens) => {
-        if (filteredTokens.length) {
+      storage.getRunBroadcastTokens(req.params.id as string).then((broadcastTokens) => {
+        if (broadcastTokens.length) {
           sendPushNotification(
-            filteredTokens,
+            broadcastTokens,
             "Run cancelled ❌",
             `"${result.title}" has been cancelled by the host`,
             {}
