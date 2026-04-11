@@ -25,6 +25,7 @@ import { router } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
+import AICoachCard from "@/components/AICoachCard";
 import { resolvePhotoUrl } from "@/lib/photoUrl";
 import { darkColors as C, type ColorScheme } from "@/constants/colors";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -1036,6 +1037,9 @@ export default function SoloScreen() {
               </Pressable>
             )}
           </View>
+        )}
+        {isExpanded && run.completed && (
+          <AICoachCard runId={run.id} compact style={{ marginHorizontal: 12, marginBottom: 12 }} />
         )}
       </View>
     );

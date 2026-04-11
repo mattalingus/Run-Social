@@ -70,6 +70,38 @@ function requireAuth(req: Request, res: Response, next: Function) {
   next();
 }
 
+function formatPaceStr(avgPaceDecimal: number): string {
+  const totalSec = Math.round(avgPaceDecimal * 60);
+  const minutes = Math.floor(totalSec / 60);
+  const seconds = totalSec % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+async function postCrewRunRecap(runId: string): Promise<void> {
+  const run = await storage.getRunById(runId);
+  if (!run?.crew_id) return;
+  const crew = await storage.getCrewById(run.crew_id);
+  if (!crew) return;
+  const statsRes = await pool.query(
+    `SELECT COUNT(*) AS cnt, AVG(final_pace) AS avg_pace, AVG(final_distance) AS avg_dist
+     FROM run_participants
+     WHERE run_id = $1 AND final_pace IS NOT NULL AND final_pace > 0`,
+    [runId]
+  );
+  const finisherCount = parseInt(statsRes.rows[0].cnt ?? "0");
+  if (finisherCount < 2) return;
+  const avgPace = parseFloat(statsRes.rows[0].avg_pace ?? "0");
+  const avgDist = parseFloat(statsRes.rows[0].avg_dist ?? "0");
+  const paceStr = avgPace > 0 ? formatPaceStr(avgPace) : "unknown";
+  const recap = await ai.generateCrewRecap(crew.name, run.title, finisherCount, paceStr);
+  const distPart = avgDist > 0 ? ` · ${avgDist.toFixed(1)} mi avg` : "";
+  await storage.createCrewMessage(
+    run.crew_id, "system", "PaceUp Bot", null,
+    recap || `${crew.name} wrapped "${run.title}" — ${finisherCount} runners, ${paceStr} avg pace${distPart}.`,
+    "milestone"
+  );
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   if (!process.env.SESSION_SECRET) {
     throw new Error("SESSION_SECRET environment variable is required but not set");
@@ -2086,12 +2118,19 @@ async function go(e){
         safeDist, safePace
       );
       res.json({ success: result.success });
-      // Fire-and-forget crew achievement check
-      storage.getRunById(req.params.id as string).then((run: any) => {
+      // Fire-and-forget crew achievement check + crew recap if all finished
+      const runIdForBg = req.params.id as string;
+      storage.getRunById(runIdForBg).then((run: any) => {
         if (run?.crew_id) {
           storage.checkAndAwardCrewAchievements(run.crew_id).catch((err: any) => console.error("[bg]", err?.message ?? err));
         }
       }).catch((err: any) => console.error("[bg]", err?.message ?? err));
+
+      if (result.shouldComplete) {
+        postCrewRunRecap(runIdForBg).catch((bgErr: any) =>
+          console.error("[bg] crew recap (runner-finish):", bgErr?.message ?? bgErr)
+        );
+      }
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
@@ -2108,6 +2147,10 @@ async function go(e){
         console.error('[tag-along] finalizeTagAlongsForRun error', e?.message)
       );
       res.json({ success: true });
+      // Fire-and-forget: post AI crew recap to crew chat
+      postCrewRunRecap(req.params.id as string).catch((bgErr: any) =>
+        console.error("[bg] crew recap (host-end):", bgErr?.message ?? bgErr)
+      );
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }

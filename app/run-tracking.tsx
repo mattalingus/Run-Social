@@ -22,6 +22,7 @@ import * as Speech from "expo-speech";
 import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from "expo-av";
 import * as FileSystem from "expo-file-system/legacy";
 import ShareActivityModal from "@/components/ShareActivityModal";
+import AICoachCard from "@/components/AICoachCard";
 import MileSplitsChart, { MileSplit } from "@/components/MileSplitsChart";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -386,6 +387,7 @@ export default function RunTrackingScreen() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [prTiers, setPrTiers] = useState<{ distanceTier: number | null; paceTier: number | null } | null>(null);
+
 
   const { data: savedPaths = [] } = useQuery<any[]>({
     queryKey: ["/api/saved-paths"],
@@ -1550,6 +1552,9 @@ export default function RunTrackingScreen() {
 
           {savedRunId ? (
             <>
+              {/* ─── AI Coach Card ──────────────────────────────────────── */}
+              <AICoachCard runId={savedRunId} style={{ marginHorizontal: 4, marginBottom: 10 }} />
+
               {/* ─── Share ──────────────────────────────────────────────── */}
               <Pressable
                 style={t.shareBtn}
