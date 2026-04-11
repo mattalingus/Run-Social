@@ -1898,11 +1898,15 @@ export async function pingRunLocation(
     const isHost = userId === run.host_id;
 
     if (within500ft || isHost) {
-      const updateRes = await pool.query(
-        `UPDATE run_participants SET is_present = true WHERE run_id = $1 AND user_id = $2 AND status != 'cancelled'`,
+      const upsertRes = await pool.query(
+        `INSERT INTO run_participants (run_id, user_id, status, is_present)
+         VALUES ($1, $2, 'joined', true)
+         ON CONFLICT (run_id, user_id) DO UPDATE SET is_present = true
+         WHERE run_participants.status != 'cancelled'
+         RETURNING run_id`,
         [runId, userId]
       );
-      isPresent = (updateRes.rowCount ?? 0) > 0;
+      isPresent = (upsertRes.rowCount ?? 0) > 0;
     } else {
       const presRes = await pool.query(
         `SELECT is_present FROM run_participants WHERE run_id = $1 AND user_id = $2 AND status != 'cancelled'`,
