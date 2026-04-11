@@ -3197,6 +3197,7 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     borderRadius: 16,
     paddingVertical: 16,
     marginBottom: 14,
+    marginHorizontal: 16,
   },
   createCrewBtnTxt: {
     fontFamily: "Outfit_700Bold",
