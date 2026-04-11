@@ -3659,7 +3659,6 @@ export async function respondToCrewJoinRequest(crewId: string, requesterId: stri
 }
 
 export async function getCrewById(crewId: string, activityType: string = 'run') {
-  const safeActivity = ['run', 'ride', 'walk', 'mixed'].includes(activityType) ? activityType : 'run';
   const crew = await pool.query(
     `SELECT c.*, u.name AS created_by_name,
        (SELECT COUNT(*) FROM crew_members WHERE crew_id = c.id AND status = 'member') AS member_count
