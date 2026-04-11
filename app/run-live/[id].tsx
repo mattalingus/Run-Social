@@ -133,6 +133,7 @@ export default function RunLiveScreen() {
   const [secsAgo, setSecsAgo] = useState(0);
   const lastFetchedRef = useRef<number>(Date.now());
   const [isFollowing, setIsFollowing] = useState(true);
+  const [hostFinished, setHostFinished] = useState(false);
 
   // ── Server data ───────────────────────────────────────────────────────────
 
@@ -266,6 +267,26 @@ export default function RunLiveScreen() {
     wasHostRef.current = nowHost;
   }, [liveState?.hostId, liveState?.isActive]);
 
+  // Auto-redirect participants when run is force-completed by host
+  useEffect(() => {
+    if (!liveState?.isCompleted) return;
+    // Host navigates themselves via handleEndForEveryone or when run auto-completes
+    if (isHost && !hostFinished) return;
+    if (phase === "active" || phase === "paused") {
+      const finalPace = calcPaceNum(totalDistRef.current, elapsedRef.current);
+      apiRequest("POST", `/api/runs/${id}/runner-finish`, {
+        finalDistance: totalDistRef.current,
+        finalPace,
+      }).catch(() => {}).finally(() => {
+        resetTracking();
+        setTimeout(() => { router.replace(`/run-results/${id}?autoShare=1`); }, 0);
+      });
+    } else {
+      resetTracking();
+      setTimeout(() => { router.replace(`/run-results/${id}?autoShare=1`); }, 0);
+    }
+  }, [liveState?.isCompleted]);
+
   // ── Start Solo (leave group → go solo) ───────────────────────────────────
 
   function handleStartSolo() {
@@ -378,11 +399,40 @@ export default function RunLiveScreen() {
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
               resetTracking();
               qc.invalidateQueries({ queryKey: ["/api/runs"] });
-              setTimeout(() => { router.replace(`/run-results/${id}?autoShare=1`); }, 0);
+              if (isHost) {
+                setHostFinished(true);
+              } else {
+                setTimeout(() => { router.replace(`/run-results/${id}?autoShare=1`); }, 0);
+              }
             } else {
               Alert.alert("Error", lastErr?.message || "Could not save run. Please try again.");
               recoverToActive();
               setSaving(false);
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  // ── End for Everyone (host only, after they've finished) ─────────────────
+
+  async function handleEndForEveryone() {
+    Alert.alert(
+      "End Run for Everyone?",
+      "This will end the run for all participants still running.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "End for Everyone",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await apiRequest("POST", `/api/runs/${id}/host-end`, {});
+              qc.invalidateQueries({ queryKey: ["/api/runs"] });
+              setTimeout(() => { router.replace(`/run-results/${id}?autoShare=1`); }, 0);
+            } catch (e: any) {
+              Alert.alert("Error", e.message || "Could not end run for everyone");
             }
           },
         },
@@ -857,7 +907,17 @@ export default function RunLiveScreen() {
 
           {/* Bottom action */}
           <View style={[s.bottomBar, { paddingBottom: botPad + 16 }]}>
-            {phase === "idle" && isHost && (
+            {isHost && hostFinished && (
+              <View style={s.hostDoneBar}>
+                <Text style={s.hostDoneText}>
+                  You finished — {activeCount} still running
+                </Text>
+                <Pressable onPress={handleEndForEveryone} style={s.endAllBtn}>
+                  <Text style={s.endAllBtnText}>End for Everyone</Text>
+                </Pressable>
+              </View>
+            )}
+            {phase === "idle" && isHost && !hostFinished && (
               <Pressable style={({ pressed }) => [s.startBtn, { opacity: pressed ? 0.85 : 1 }]} onPress={handleStartTracking}>
                 <Feather name="play" size={20} color={C.bg} />
                 <Text style={s.startBtnText}>{run?.activity_type === "ride" ? "Start Ride" : run?.activity_type === "walk" ? "Start Walk" : "Start Run"}</Text>
@@ -1104,6 +1164,16 @@ const s = StyleSheet.create({
   pausedBadgeTxt: { fontFamily: "Outfit_700Bold", fontSize: 10, color: C.text, letterSpacing: 0.5 },
   savingRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, height: 52 },
   savingText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.textSecondary },
+  hostDoneBar: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 14, paddingVertical: 12, backgroundColor: C.primary + "18",
+    borderRadius: 14, borderWidth: 1, borderColor: C.primary + "30",
+  },
+  hostDoneText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.primary, flex: 1 },
+  endAllBtn: {
+    backgroundColor: "#C0392B", paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10,
+  },
+  endAllBtnText: { fontFamily: "Outfit_700Bold", fontSize: 13, color: "#fff" },
   waitingColumn: { alignItems: "center", gap: 10 },
   waitingRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, height: 52 },
   waitingText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.textSecondary },

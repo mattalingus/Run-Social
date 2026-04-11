@@ -2060,6 +2060,22 @@ async function go(e){
     }
   });
 
+  app.post("/api/runs/:id/host-end", requireAuth, async (req, res) => {
+    try {
+      const run = await storage.getRunById(req.params.id as string);
+      if (!run) return res.status(404).json({ message: "Run not found" });
+      if (run.host_id !== req.session.userId) return res.status(403).json({ message: "Only the host can end the run for everyone" });
+      if (!run.is_active) return res.status(400).json({ message: "Run is not active" });
+      await storage.forceCompleteRun(req.params.id as string);
+      storage.finalizeTagAlongsForRun(req.params.id as string).catch((e: any) =>
+        console.error('[tag-along] finalizeTagAlongsForRun error', e?.message)
+      );
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   // ─── Tag-Along Endpoints ───────────────────────────────────────────────────
 
   app.post("/api/runs/:id/tag-along/request", requireAuth, async (req, res) => {

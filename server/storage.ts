@@ -2206,23 +2206,14 @@ export async function finishRunnerRun(runId: string, userId: string, finalDistan
     const runRes = await client.query(`SELECT host_id FROM runs WHERE id = $1`, [runId]);
     let shouldComplete = false;
     if (runRes.rows.length) {
-      const hostId = runRes.rows[0].host_id;
-      const isHost = hostId === userId;
-      shouldComplete = isHost;
-      if (!shouldComplete) {
-        const hostDone = await client.query(
-          `SELECT 1 FROM run_participants WHERE run_id = $1 AND user_id = $2 AND final_pace IS NOT NULL`,
-          [runId, hostId]
-        );
-        if (hostDone.rows.length > 0) {
-          const remaining = await client.query(
-            `SELECT COUNT(*) FROM run_participants
-             WHERE run_id = $1 AND is_present = true AND final_pace IS NULL AND status != 'cancelled'`,
-            [runId]
-          );
-          shouldComplete = parseInt(remaining.rows[0].count) === 0;
-        }
-      }
+      // Run auto-completes when ALL is_present participants have finished (host no longer
+      // immediately ends the run — they stay on the live screen and can "End for Everyone")
+      const remaining = await client.query(
+        `SELECT COUNT(*) FROM run_participants
+         WHERE run_id = $1 AND is_present = true AND final_pace IS NULL AND status != 'cancelled'`,
+        [runId]
+      );
+      shouldComplete = parseInt(remaining.rows[0].count) === 0;
       if (shouldComplete) {
         await client.query(
           `UPDATE runs SET is_completed = true, is_active = false WHERE id = $1`,
@@ -2310,6 +2301,24 @@ async function computeLeaderboardRanksWithClient(runId: string, db: any) {
 
 export async function computeLeaderboardRanks(runId: string) {
   await computeLeaderboardRanksWithClient(runId, pool);
+}
+
+export async function forceCompleteRun(runId: string) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `UPDATE runs SET is_completed = true, is_active = false WHERE id = $1`,
+      [runId]
+    );
+    await computeLeaderboardRanksWithClient(runId, client);
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
 }
 
 export async function getRunResults(runId: string) {
