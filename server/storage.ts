@@ -1893,11 +1893,11 @@ export async function pingRunLocation(
 
   let isPresent = false;
   if (run.is_active) {
-    await pool.query(
+    const updateRes = await pool.query(
       `UPDATE run_participants SET is_present = true WHERE run_id = $1 AND user_id = $2 AND status != 'cancelled'`,
       [runId, userId]
     );
-    isPresent = true;
+    isPresent = (updateRes.rowCount ?? 0) > 0;
   }
   return { isPresent, isActive: run.is_active };
 }
