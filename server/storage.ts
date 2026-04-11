@@ -2318,17 +2318,24 @@ export async function forceCompleteRun(runId: string) {
       [runId]
     );
     for (const row of unfinished.rows) {
+      // Get latest tracking point for distance, and latest non-zero pace as fallback
       const tpRes = await client.query(
-        `SELECT cumulative_distance, pace FROM run_tracking_points
+        `SELECT cumulative_distance,
+                COALESCE(
+                  (SELECT pace FROM run_tracking_points
+                   WHERE run_id = $1 AND user_id = $2 AND pace > 0
+                   ORDER BY recorded_at DESC LIMIT 1),
+                  pace
+                ) AS pace
+         FROM run_tracking_points
          WHERE run_id = $1 AND user_id = $2
          ORDER BY recorded_at DESC LIMIT 1`,
         [runId, row.user_id]
       );
       if (tpRes.rows.length > 0) {
-        const { cumulative_distance, pace } = tpRes.rows[0];
-        const safeDist = parseFloat(cumulative_distance) || 0;
-        const safePace = parseFloat(pace) || 0;
-        if (safeDist > 0 && safePace > 0) {
+        const safeDist = parseFloat(tpRes.rows[0].cumulative_distance) || 0;
+        const safePace = parseFloat(tpRes.rows[0].pace) || 0;
+        if (safeDist > 0) {
           await client.query(
             `UPDATE run_participants SET final_distance = $3, final_pace = $4
              WHERE run_id = $1 AND user_id = $2`,
