@@ -1638,6 +1638,43 @@ function CrewDetailSheet({
                           const isPrompt = msg.message_type === "prompt";
                           const isMilestone = msg.message_type === "milestone";
                           const isGif = msg.message_type === "gif";
+                          const isSoloActivity = msg.message_type === "solo_activity";
+
+                          if (isSoloActivity) {
+                            const meta = msg.metadata || {};
+                            const actType = meta.activityType || "run";
+                            const actIcon =
+                              actType === "ride"
+                                ? ("bicycle-outline" as const)
+                                : actType === "walk"
+                                ? ("walk-outline" as const)
+                                : ("fitness-outline" as const);
+                            const formatPace = (p: number) =>
+                              `${Math.floor(p)}:${String(Math.round((p % 1) * 60)).padStart(2, "0")} /mi`;
+                            const formatDur = (s: number) => {
+                              const m = Math.floor(s / 60);
+                              const sec = s % 60;
+                              return sec > 0 ? `${m}m ${sec}s` : `${m} min`;
+                            };
+                            const statParts: string[] = [];
+                            if (meta.distance != null) statParts.push(`${Number(meta.distance).toFixed(1)} mi`);
+                            if (meta.pace != null) statParts.push(formatPace(Number(meta.pace)));
+                            if (meta.duration != null) statParts.push(formatDur(Number(meta.duration)));
+                            return (
+                              <View key={msg.id} style={s.soloActivityRow}>
+                                <View style={s.soloActivityCard}>
+                                  <View style={s.soloActivityHeader}>
+                                    <Ionicons name={actIcon} size={13} color={C.primary} />
+                                    <Text style={s.soloActivityName}>{msg.sender_name}</Text>
+                                  </View>
+                                  {statParts.length > 0 && (
+                                    <Text style={s.soloActivityStats}>{statParts.join("  ·  ")}</Text>
+                                  )}
+                                  <Text style={s.soloActivityMsg}>{msg.message}</Text>
+                                </View>
+                              </View>
+                            );
+                          }
 
                           if (isMilestone) {
                             return (
@@ -4212,6 +4249,44 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     fontSize: 12,
     color: C.gold,
     textAlign: "center",
+  },
+  soloActivityRow: {
+    alignItems: "center",
+    marginBottom: 8,
+    paddingHorizontal: 16,
+  },
+  soloActivityCard: {
+    backgroundColor: C.primary + "12",
+    borderWidth: 1,
+    borderColor: C.primary + "30",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    width: "100%",
+  },
+  soloActivityHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginBottom: 5,
+  },
+  soloActivityName: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 13,
+    color: C.primary,
+  },
+  soloActivityStats: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 12,
+    color: C.text,
+    marginBottom: 5,
+    letterSpacing: 0.2,
+  },
+  soloActivityMsg: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 13,
+    color: C.textMuted,
+    lineHeight: 18,
   },
   inlineQuickReplyRow: {
     flexDirection: "row",

@@ -104,6 +104,47 @@ export async function generateWeeklyInsight(userName: string, stats: any) {
   }
 }
 
+export async function generateSoloActivityPost(
+  name: string,
+  distanceMiles: number,
+  paceMinPerMile: number | null,
+  durationSeconds: number | null,
+  activityType: string
+): Promise<string> {
+  const activity = activityType === "ride" ? "bike ride" : activityType === "walk" ? "walk" : "run";
+  const distStr = `${distanceMiles.toFixed(1)} mi`;
+  const paceStr = paceMinPerMile
+    ? `${Math.floor(paceMinPerMile)}:${String(Math.round((paceMinPerMile % 1) * 60)).padStart(2, "0")} /mi`
+    : null;
+  const timeStr = durationSeconds ? `${Math.floor(durationSeconds / 60)} min` : null;
+  const details = [distStr, paceStr ? `${paceStr} pace` : null, timeStr].filter(Boolean).join(", ");
+
+  if (!process.env.OPENAI_API_KEY) {
+    return `${name} just logged a ${activity}: ${details}.`;
+  }
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a hype man for a running crew app. A member just logged a solo workout. Write one short, casual, celebratory message for the crew chat. Use the person's first name naturally. Mention the activity and key stats conversationally — don't just list them. Sound like a real person texting the group. Under 160 characters. No emojis. No hashtags.",
+        },
+        {
+          role: "user",
+          content: `Name: ${name}. Activity: ${activity}. Stats: ${details}.`,
+        },
+      ],
+      max_tokens: 60,
+    });
+    return response.choices[0].message.content?.trim() || `${name} just logged a ${activity}: ${details}.`;
+  } catch (err) {
+    console.error("[AI] generateSoloActivityPost error:", err);
+    return `${name} just logged a ${activity}: ${details}.`;
+  }
+}
+
 const ALLOWED_VOICES = ["alloy", "echo", "fable", "nova", "onyx", "shimmer"] as const;
 type TTSVoice = (typeof ALLOWED_VOICES)[number];
 

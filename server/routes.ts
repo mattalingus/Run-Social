@@ -1872,6 +1872,43 @@ async function go(e){
         storage.recomputeUserAvgPace(req.session.userId!).catch((err: any) => console.error("[bg]", err?.message ?? err));
       }
       res.status(201).json({ ...run, prTiers });
+      // Post solo activity to all crew chats in background (fire-and-forget)
+      if (completed) {
+        const resolvedUserId = req.session.userId!;
+        const resolvedActivity = activityType === "ride" ? "ride" : activityType === "walk" ? "walk" : "run";
+        const resolvedDist = parsedDist;
+        const resolvedPace = parsedPace;
+        const resolvedDuration = durationSeconds ? parseInt(durationSeconds) : null;
+        const resolvedRunId = run.id;
+        (async () => {
+          try {
+            const [user, crewRows] = await Promise.all([
+              storage.getUserById(resolvedUserId),
+              storage.getUserCrewIds(resolvedUserId),
+            ]);
+            if (!user || !crewRows.length) return;
+            const firstName = user.name?.split(" ")[0] || user.name || "Someone";
+            const aiMessage = await ai.generateSoloActivityPost(
+              firstName, resolvedDist, resolvedPace, resolvedDuration, resolvedActivity
+            );
+            const metadata = {
+              distance: resolvedDist,
+              pace: resolvedPace,
+              duration: resolvedDuration,
+              activityType: resolvedActivity,
+              runId: resolvedRunId,
+            };
+            for (const { crew_id } of crewRows) {
+              await storage.createCrewMessage(
+                crew_id, resolvedUserId, user.name, user.profilePhoto || null,
+                aiMessage, "solo_activity", metadata
+              );
+            }
+          } catch (err: any) {
+            console.error("[crew-activity]", err?.message ?? err);
+          }
+        })();
+      }
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
