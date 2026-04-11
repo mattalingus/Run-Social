@@ -1634,6 +1634,7 @@ export default function DiscoverScreen() {
     useCallback(() => {
       if (user) {
         qc.invalidateQueries({ queryKey: ["/api/runs/planned"] });
+        qc.invalidateQueries({ queryKey: ["/api/runs"] });
       }
     }, [user, qc])
   );
