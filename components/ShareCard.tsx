@@ -6,7 +6,7 @@ import { LinearGradient } from "expo-linear-gradient";
 
 const CARD_W = 360;
 const CARD_H = 640;
-const PRIMARY = "#00D97E";
+const PRIMARY = "#00A85E";
 const GOLD = "#FFB800";
 const BG = "#050C09";
 const CARD_BG = "#0A1410";

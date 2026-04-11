@@ -1198,6 +1198,7 @@ export default function DiscoverScreen() {
     enabled: !!user,
   });
   const notifications = notifDataRaw?.items ?? [];
+  const lastReadAt = notifDataRaw?.lastReadAt ? new Date(notifDataRaw.lastReadAt).getTime() : 0;
 
   const { data: unreadDmData } = useQuery<{ count: number }>({
     queryKey: ["/api/dm/unread-count"],
@@ -1206,7 +1207,14 @@ export default function DiscoverScreen() {
   });
   const unreadDmCount = unreadDmData?.count ?? 0;
 
-  const notifCount = notifications.length;
+  const notifCount = notifications.filter(
+    (n: any) => new Date(n.created_at).getTime() > lastReadAt
+  ).length;
+
+  const markNotifsReadMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/notifications/mark-read", {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/notifications"] }),
+  });
 
   const notifData = useMemo(() => {
     return {
@@ -1814,7 +1822,7 @@ export default function DiscoverScreen() {
             {/* Bell */}
             <Pressable
               style={[s.hBtn, { width: screenWidth < 390 ? 34 : 38 }]}
-              onPress={() => { setShowNotifs(true); Haptics.selectionAsync(); }}
+              onPress={() => { setShowNotifs(true); markNotifsReadMutation.mutate(); Haptics.selectionAsync(); }}
               testID="notifications-bell"
             >
               <View>

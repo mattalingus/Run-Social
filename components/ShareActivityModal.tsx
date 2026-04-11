@@ -61,7 +61,7 @@ type ActiveAction = "share" | "save" | "copy" | null;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const PRIMARY = "#00D97E";
+const PRIMARY = "#00A85E";
 const BG = "#050C09";
 const SURFACE = "#0D1510";
 const CARD_BG = "#0A1410";

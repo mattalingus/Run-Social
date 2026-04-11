@@ -3,9 +3,9 @@ export const darkColors = {
   surface: "#0F0F0F",
   card: "#1A1A1A",
   cardHighlight: "#222222",
-  primary: "#00D97E",
-  primaryDark: "#00A85E",
-  primaryMuted: "#00D97E22",
+  primary: "#00A85E",
+  primaryDark: "#007A44",
+  primaryMuted: "#00A85E22",
   text: "#F0FFF4",
   textSecondary: "#8FAF97",
   textMuted: "#4A6957",
@@ -18,9 +18,9 @@ export const darkColors = {
   overlay: "rgba(0, 0, 0, 0.88)",
   white: "#FFFFFF",
   tabBar: "#000000",
-  tint: "#00D97E",
+  tint: "#00A85E",
   tabIconDefault: "#4A6957",
-  tabIconSelected: "#00D97E",
+  tabIconSelected: "#00A85E",
 };
 
 export const lightColors = {

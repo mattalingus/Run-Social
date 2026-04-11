@@ -24,17 +24,17 @@ function getNotificationIcon(type: string): { name: keyof typeof Feather.glyphMa
     case "crew_invite":
       return { name: "users", color: "#FF6B35", bg: "#FF6B3522" };
     case "join_request":
-      return { name: "user-check", color: "#00D97E", bg: "#00D97E22" };
+      return { name: "user-check", color: "#00A85E", bg: "#00A85E22" };
     case "host_arrived":
-      return { name: "map-pin", color: "#00D97E", bg: "#00D97E22" };
+      return { name: "map-pin", color: "#00A85E", bg: "#00A85E22" };
     case "event_reminder":
       return { name: "clock", color: "#FFB800", bg: "#FFB80022" };
     case "friend_run_posted":
-      return { name: "activity", color: "#00D97E", bg: "#00D97E22" };
+      return { name: "activity", color: "#00A85E", bg: "#00A85E22" };
     case "pr_notification":
       return { name: "award", color: "#FFB800", bg: "#FFB80022" };
     default:
-      return { name: "bell", color: "#00D97E", bg: "#00D97E22" };
+      return { name: "bell", color: "#00A85E", bg: "#00A85E22" };
   }
 }
 
@@ -410,7 +410,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   acceptBtn: {
-    backgroundColor: "#00D97E",
+    backgroundColor: "#00A85E",
   },
   acceptText: {
     color: "#FFF",

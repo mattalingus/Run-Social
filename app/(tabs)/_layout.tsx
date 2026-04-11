@@ -5,8 +5,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState, useEffect, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { getApiUrl } from "@/lib/query-client";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { getApiUrl, apiRequest } from "@/lib/query-client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const CREW_SINCE_KEY = "@paceup_crew_last_visited";
@@ -31,11 +31,24 @@ export default function TabLayout() {
   const { C }    = useTheme();
   const { user } = useAuth();
   const pathname = usePathname();
+  const qc       = useQueryClient();
 
   const [hasCrewUnread, setHasCrewUnread] = useState(false);
   const [crewSince, setCrewSince] = useState<string | null>(null);
-  const onCrewTab = pathname === "/crew" || pathname.startsWith("/crew/");
+  const onCrewTab     = pathname === "/crew" || pathname.startsWith("/crew/");
   const onDiscoverTab = pathname === "/" || pathname === "/index";
+  const onProfileTab  = pathname === "/profile" || pathname.startsWith("/profile");
+
+  const markNotifsRead = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/notifications/mark-read", {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/notifications"] }),
+  });
+
+  useEffect(() => {
+    if (onProfileTab && user) {
+      markNotifsRead.mutate();
+    }
+  }, [onProfileTab, user]);
 
   const { data: notifData } = useQuery<{ items: any[]; lastReadAt: string | null }>({
     queryKey: ["/api/notifications"],
@@ -187,7 +200,7 @@ const styles = StyleSheet.create({
     width:           8,
     height:          8,
     borderRadius:    4,
-    backgroundColor: "#00D97E",
+    backgroundColor: "#00A85E",
   },
   redDot: {
     position:        "absolute",

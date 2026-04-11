@@ -84,13 +84,13 @@ function sectionKey(dateStr: string): string {
 
 const ICON_MAP: Record<string, { name: FeatherIconName; color: string; bg: string }> = {
   friend_request: { name: "user-plus", color: "#4DA6FF", bg: "#4DA6FF22" },
-  friend_accepted: { name: "user-check", color: "#00D97E", bg: "#00D97E22" },
+  friend_accepted: { name: "user-check", color: "#00A85E", bg: "#00A85E22" },
   crew_invite: { name: "users", color: "#A78BFA", bg: "#A78BFA22" },
   crew_join_request: { name: "users", color: "#F59E0B", bg: "#F59E0B22" },
   join_request: { name: "user-plus", color: "#F59E0B", bg: "#F59E0B22" },
   event_reminder: { name: "clock", color: "#3B82F6", bg: "#3B82F622" },
-  host_arrived: { name: "map-pin", color: "#00D97E", bg: "#00D97E22" },
-  friend_run_posted: { name: "activity", color: "#00D97E", bg: "#00D97E22" },
+  host_arrived: { name: "map-pin", color: "#00A85E", bg: "#00A85E22" },
+  friend_run_posted: { name: "activity", color: "#00A85E", bg: "#00A85E22" },
   pr_notification: { name: "award", color: "#F59E0B", bg: "#F59E0B22" },
   milestone_achievement: { name: "star", color: "#F59E0B", bg: "#F59E0B22" },
 };
@@ -349,7 +349,7 @@ const st = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#00D97E",
+    backgroundColor: "#00A85E",
     marginTop: 6,
   },
   actionRow: { flexDirection: "row", gap: 8, marginTop: 10 },
