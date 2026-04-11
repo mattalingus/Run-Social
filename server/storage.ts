@@ -3209,9 +3209,9 @@ export async function sharePathWithFriend(fromUserId: string, pathId: string, to
   if (!path) throw new Error("Path not found");
   // Enforce friendship — only allow sharing with accepted friends
   const friendRes = await pool.query(
-    `SELECT 1 FROM friendships
+    `SELECT 1 FROM friends
      WHERE status = 'accepted'
-       AND ((user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1))`,
+       AND ((requester_id = $1 AND addressee_id = $2) OR (requester_id = $2 AND addressee_id = $1))`,
     [fromUserId, toUserId]
   );
   if (!friendRes.rows.length) throw new Error("You can only share routes with friends");
