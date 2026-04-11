@@ -122,6 +122,43 @@ function sortTagsByCategory(tags: string[]): string[] {
   });
 }
 const PROX_STEPS  = [1, 5, 10, 25, 50, 100, 250]; // miles (null = Nationwide)
+// Cascade tiers for auto-proximity expansion (miles; -1 = same-state; null = nationwide)
+const CASCADE_TIERS: (number | null)[] = [10, 25, 50, 100, 250, -1, null];
+
+const US_STATE_ABBR: Record<string, string> = {
+  "Alabama":"AL","Alaska":"AK","Arizona":"AZ","Arkansas":"AR","California":"CA",
+  "Colorado":"CO","Connecticut":"CT","Delaware":"DE","Florida":"FL","Georgia":"GA",
+  "Hawaii":"HI","Idaho":"ID","Illinois":"IL","Indiana":"IN","Iowa":"IA","Kansas":"KS",
+  "Kentucky":"KY","Louisiana":"LA","Maine":"ME","Maryland":"MD","Massachusetts":"MA",
+  "Michigan":"MI","Minnesota":"MN","Mississippi":"MS","Missouri":"MO","Montana":"MT",
+  "Nebraska":"NE","Nevada":"NV","New Hampshire":"NH","New Jersey":"NJ","New Mexico":"NM",
+  "New York":"NY","North Carolina":"NC","North Dakota":"ND","Ohio":"OH","Oklahoma":"OK",
+  "Oregon":"OR","Pennsylvania":"PA","Rhode Island":"RI","South Carolina":"SC","South Dakota":"SD",
+  "Tennessee":"TN","Texas":"TX","Utah":"UT","Vermont":"VT","Virginia":"VA","Washington":"WA",
+  "West Virginia":"WV","Wisconsin":"WI","Wyoming":"WY","District of Columbia":"DC",
+  "Puerto Rico":"PR",
+};
+const US_ABBR_STATE: Record<string, string> = Object.fromEntries(
+  Object.entries(US_STATE_ABBR).map(([name, abbr]) => [abbr, name])
+);
+
+function normalizeStateToAbbr(s: string): string | null {
+  const t = s.trim();
+  const upper = t.toUpperCase();
+  if (US_ABBR_STATE[upper]) return upper;
+  const full = Object.keys(US_STATE_ABBR).find((name) => name.toLowerCase() === t.toLowerCase());
+  if (full) return US_STATE_ABBR[full];
+  return null;
+}
+
+function extractRunState(locationName: string): string | null {
+  const parts = locationName.split(",").map((p) => p.trim());
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const norm = normalizeStateToAbbr(parts[i]);
+    if (norm) return norm;
+  }
+  return null;
+}
 
 interface FilterState {
   paceMin: number;
@@ -140,7 +177,7 @@ const DEFAULT_FILTERS: FilterState = {
   paceMax: 15.0,
   distMin: 1,
   distMax: 999,
-  maxDistFromMe: null,
+  maxDistFromMe: 10,
   styles: [],
   visibility: "all",
   days: [],
@@ -283,9 +320,10 @@ interface FilterModalProps {
   userLocation: { latitude: number; longitude: number } | null;
   sortOption: SortOption;
   setSortOption: (s: SortOption) => void;
+  onDistanceTouched: () => void;
 }
 
-function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, userLocation, sortOption, setSortOption }: FilterModalProps) {
+function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, userLocation, sortOption, setSortOption, onDistanceTouched }: FilterModalProps) {
   const { C } = useTheme();
   const fm = useMemo(() => makeFmStyles(C), [C]);
   const insets = useSafeAreaInsets();
@@ -481,6 +519,7 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
                   onPress={() => {
                     if (!userLocation) return;
                     Haptics.selectionAsync();
+                    onDistanceTouched();
                     setDraft((p) => ({ ...p, maxDistFromMe: mi }));
                   }}
                   disabled={!userLocation}
@@ -501,6 +540,7 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
                 onPress={() => {
                   if (!userLocation) return;
                   Haptics.selectionAsync();
+                  onDistanceTouched();
                   setDraft((p) => ({ ...p, maxDistFromMe: null }));
                 }}
                 disabled={!userLocation}
@@ -1171,7 +1211,8 @@ export default function DiscoverScreen() {
       } catch (e) {}
     }
   }
-  const [sortOption, setSortOption] = useState<SortOption>("soonest");
+  const [sortOption, setSortOption] = useState<SortOption>("nearest");
+  const [userHasSetDistance, setUserHasSetDistance] = useState(false);
   const [visibleCount, setVisibleCount] = useState(5);
   const { activityFilter, setActivityFilter } = useActivity();
   const [showFilter, setShowFilter] = useState(false);
@@ -1447,10 +1488,10 @@ export default function DiscoverScreen() {
   // ─── Location ─────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (Platform.OS === "web") { setSortOption("soonest"); return; }
+    if (Platform.OS === "web") { setSortOption("soonest"); setApplied(p => ({ ...p, maxDistFromMe: null })); setDraft(p => ({ ...p, maxDistFromMe: null })); return; }
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") { setSortOption("soonest"); return; }
+      if (status !== "granted") { setSortOption("soonest"); setApplied(p => ({ ...p, maxDistFromMe: null })); setDraft(p => ({ ...p, maxDistFromMe: null })); return; }
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       setUserLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
     })();
@@ -1738,16 +1779,105 @@ export default function DiscoverScreen() {
     return list;
   }, [runs, search, applied, sortOption, distanceMap, userLocation, friendIdSet, activityFilter]);
 
-  const fallbackRuns = useMemo(() =>
-    runs
-      .filter((r) => (r.activity_type ?? "run") === activityFilter)
-      .filter((r) => !r.date || (Date.now() - new Date(r.date).getTime()) < 2 * 60 * 60 * 1000)
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
-    [runs, activityFilter]
-  );
+  const [userState, setUserState] = useState<string | null>(null);
+  useEffect(() => {
+    if (!userLocation || Platform.OS === "web") return;
+    (async () => {
+      try {
+        const geo = await Location.reverseGeocodeAsync({ latitude: userLocation.latitude, longitude: userLocation.longitude });
+        const st = geo?.[0]?.region ?? null;
+        setUserState(st);
+      } catch (_) {}
+    })();
+  }, [userLocation]);
 
-  const isFallback = sorted.length === 0 && fallbackRuns.length > 0 && !isLoading && !search;
-  const displayList = isFallback ? fallbackRuns : sorted;
+  const displayList = useMemo(() => {
+    if (sorted.length > 0) return sorted;
+    if (isLoading || search) return sorted;
+
+    if (!userHasSetDistance && userLocation) {
+      const DAY_MAP: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+      function runTimeSlot(h: number): string {
+        if (h >= 5 && h < 12) return "Morning";
+        if (h >= 12 && h < 17) return "Afternoon";
+        if (h >= 17 && h < 21) return "Evening";
+        return "Night";
+      }
+      const passesNonProxFilters = (r: Run): boolean => {
+        const q = search.toLowerCase();
+        const matchSearch = !search ||
+          r.title.toLowerCase().includes(q) ||
+          r.location_name.toLowerCase().includes(q) ||
+          r.host_name.toLowerCase().includes(q);
+        const matchPace = r.min_pace <= applied.paceMax && r.max_pace >= applied.paceMin;
+        const matchDist = r.min_distance <= applied.distMax && r.max_distance >= applied.distMin;
+        const matchStyle = applied.styles.length === 0 || r.tags?.some((t) => applied.styles.includes(t));
+        const matchVisibility =
+          applied.visibility === "all" ||
+          (applied.visibility === "public" && r.privacy === "public" && !r.crew_id) ||
+          (applied.visibility === "crew" && !!r.crew_id) ||
+          (applied.visibility === "friends" && friendIdSet.has(r.host_id) && !r.crew_id);
+        const runDay = new Date(r.date).getDay();
+        const appliedDays = applied.days ?? [];
+        const matchDay = appliedDays.length === 0 || appliedDays.some((d) => DAY_MAP[d] === runDay);
+        const runHour = new Date(r.date).getHours();
+        const appliedTimes = applied.times ?? [];
+        const matchTime = appliedTimes.length === 0 || appliedTimes.includes(runTimeSlot(runHour));
+        const matchActivity = (r.activity_type ?? "run") === activityFilter;
+        const matchFuture = !r.date || (Date.now() - new Date(r.date).getTime()) < 2 * 60 * 60 * 1000;
+        return matchSearch && matchPace && matchDist && matchStyle && matchVisibility && matchDay && matchTime && matchActivity && matchFuture;
+      };
+
+      const filteredBase = runs.filter(passesNonProxFilters);
+
+      const sortCascade = (list: Run[]) => {
+        const copy = [...list];
+        switch (sortOption) {
+          case "nearest":
+            copy.sort((a, b) =>
+              userLocation
+                ? (distanceMap[a.id] ?? Infinity) - (distanceMap[b.id] ?? Infinity)
+                : new Date(a.date).getTime() - new Date(b.date).getTime()
+            );
+            break;
+          case "soonest":
+          default:
+            copy.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        }
+        copy.sort((a, b) => {
+          const af = friendIdSet.has(a.host_id) ? 0 : 1;
+          const bf = friendIdSet.has(b.host_id) ? 0 : 1;
+          return af - bf;
+        });
+        return copy;
+      };
+
+      const userStateAbbr = userState ? normalizeStateToAbbr(userState) : null;
+
+      for (const tier of CASCADE_TIERS) {
+        let tierRuns: Run[];
+        if (tier === -1) {
+          if (!userStateAbbr) continue;
+          tierRuns = filteredBase.filter((r) => {
+            const runState = extractRunState(r.location_name ?? "");
+            return runState !== null && runState === userStateAbbr;
+          });
+        } else if (tier === null) {
+          tierRuns = filteredBase;
+        } else {
+          tierRuns = filteredBase.filter((r) => (distanceMap[r.id] ?? Infinity) <= tier);
+        }
+        if (tierRuns.length > 0) {
+          return sortCascade(tierRuns);
+        }
+      }
+      return [];
+    }
+
+    return sorted;
+  }, [sorted, isLoading, search, userHasSetDistance, userLocation, runs, activityFilter, sortOption, distanceMap, friendIdSet, userState, applied]);
+
+  const isFallback = false;
 
   // Reset to 5 whenever the user changes search/filters/activity
   useEffect(() => { setVisibleCount(5); }, [search, applied, activityFilter]);
@@ -1759,13 +1889,13 @@ export default function DiscoverScreen() {
     applied.paceMax !== DEFAULT_FILTERS.paceMax ||
     applied.distMin !== DEFAULT_FILTERS.distMin ||
     applied.distMax !== DEFAULT_FILTERS.distMax ||
-    applied.maxDistFromMe !== DEFAULT_FILTERS.maxDistFromMe ||
+    userHasSetDistance ||
     applied.styles.length > 0 ||
     applied.visibility !== "all" ||
     (applied.days ?? []).length > 0 ||
     (applied.times ?? []).length > 0;
 
-  const isNonDefaultSort = sortOption !== "soonest";
+  const isNonDefaultSort = sortOption !== "nearest";
 
   function openFilter() {
     setDraft({ ...applied });
@@ -1779,6 +1909,7 @@ export default function DiscoverScreen() {
 
   function resetFilters() {
     setDraft({ ...DEFAULT_FILTERS });
+    setUserHasSetDistance(false);
   }
 
   // ─── Navigate to map ───────────────────────────────────────────────────────
@@ -2220,6 +2351,7 @@ export default function DiscoverScreen() {
         userLocation={userLocation}
         sortOption={sortOption}
         setSortOption={setSortOption}
+        onDistanceTouched={() => setUserHasSetDistance(true)}
       />
 
       {/* ── Welcome Onboarding Modal ───────────────────────────────────────────── */}
