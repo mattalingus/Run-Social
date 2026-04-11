@@ -24,40 +24,59 @@ function computePathDistanceKm(coords: Array<{ latitude: number; longitude: numb
 function deduplicateRoutePath(coords: Array<{ latitude: number; longitude: number }>): {
   path: Array<{ latitude: number; longitude: number }>;
   distanceMiles: number;
+  loopDetected: boolean;
 } {
   const totalDistKm = computePathDistanceKm(coords);
   const distanceMiles = totalDistKm / 1.60934;
 
-  if (coords.length < 4 || totalDistKm < 0.3) {
-    return { path: coords, distanceMiles };
+  if (coords.length < 6 || totalDistKm < 0.3) {
+    return { path: coords, distanceMiles, loopDetected: false };
   }
 
-  const startPt = coords[0];
-  const THRESHOLD_KM = 0.04; // 40 m
-  const MIN_COVERED_KM = 0.3;
-  const MAX_CLOSURE_FRACTION = 0.85; // if closure before 85% of total, it's a multi-lap
-
-  let coveredKm = 0;
-  let closureIdx = -1;
-
-  for (let i = 1; i < coords.length; i++) {
-    coveredKm += haversineKm(
-      coords[i - 1].latitude, coords[i - 1].longitude,
-      coords[i].latitude, coords[i].longitude
+  // Build cumulative distance array so we can compute gap between any two points efficiently
+  const cumDist: number[] = [0];
+  for (let k = 1; k < coords.length; k++) {
+    cumDist.push(
+      cumDist[k - 1] + haversineKm(
+        coords[k - 1].latitude, coords[k - 1].longitude,
+        coords[k].latitude, coords[k].longitude
+      )
     );
-    if (coveredKm < MIN_COVERED_KM) continue;
-    const dToStart = haversineKm(coords[i].latitude, coords[i].longitude, startPt.latitude, startPt.longitude);
-    if (dToStart < THRESHOLD_KM && coveredKm / totalDistKm < MAX_CLOSURE_FRACTION) {
-      closureIdx = i;
-      break;
+  }
+
+  const THRESHOLD_KM = 0.04; // 40 m proximity to call it a "return"
+  const MIN_GAP_KM = 0.3;    // must have traveled ≥300m since the anchor point
+
+  // For each point i, scan earlier anchor points j where gap(j→i) ≥ MIN_GAP_KM
+  // Find the earliest i where point i returns within THRESHOLD_KM of some j < i
+  let closureAt = -1; // index i where closure first occurs
+  let closureAnchor = -1; // index j of the anchor point
+
+  outer:
+  for (let i = 3; i < coords.length; i++) {
+    for (let j = 0; j < i; j++) {
+      const gap = cumDist[i] - cumDist[j];
+      if (gap < MIN_GAP_KM) continue;
+      const d = haversineKm(
+        coords[i].latitude, coords[i].longitude,
+        coords[j].latitude, coords[j].longitude
+      );
+      if (d < THRESHOLD_KM) {
+        closureAt = i;
+        closureAnchor = j;
+        break outer;
+      }
     }
   }
 
-  if (closureIdx < 0) return { path: coords, distanceMiles };
+  if (closureAt < 0) {
+    return { path: coords, distanceMiles, loopDetected: false };
+  }
 
-  const trimmed = coords.slice(0, closureIdx + 1);
+  // Trim to the first non-repeating portion: from start up to and including the closure point
+  const trimmed = coords.slice(0, closureAt + 1);
   const trimmedMiles = computePathDistanceKm(trimmed) / 1.60934;
-  return { path: trimmed, distanceMiles: trimmedMiles };
+  return { path: trimmed, distanceMiles: trimmedMiles, loopDetected: true };
 }
 
 export async function initDb() {
@@ -3143,28 +3162,10 @@ export async function createSavedPath(
   userId: string,
   data: { name: string; routePath: Array<{ latitude: number; longitude: number }>; distanceMiles?: number; activityType?: string; soloRunId?: string | null }
 ) {
-  const rawDistKm = computePathDistanceKm(data.routePath);
-  const totalDistKm = rawDistKm;
-  const hasLoop = (() => {
-    const coords = data.routePath;
-    if (coords.length < 4 || totalDistKm < 0.3) return false;
-    const startPt = coords[0];
-    const THRESHOLD_KM = 0.04;
-    const MIN_COVERED_KM = 0.3;
-    const MAX_CLOSURE_FRACTION = 0.85;
-    let coveredKm = 0;
-    for (let i = 1; i < coords.length; i++) {
-      coveredKm += haversineKm(coords[i - 1].latitude, coords[i - 1].longitude, coords[i].latitude, coords[i].longitude);
-      if (coveredKm < MIN_COVERED_KM) continue;
-      const dToStart = haversineKm(coords[i].latitude, coords[i].longitude, startPt.latitude, startPt.longitude);
-      if (dToStart < THRESHOLD_KM && coveredKm / totalDistKm < MAX_CLOSURE_FRACTION) return true;
-    }
-    return false;
-  })();
-  const { path: dedupedPath, distanceMiles: computedDist } = deduplicateRoutePath(data.routePath);
+  const { path: dedupedPath, distanceMiles: computedDist, loopDetected } = deduplicateRoutePath(data.routePath);
   // When a loop closure was detected, use the trimmed GPS distance.
   // When no loop, keep the full path but prefer the run's recorded distance over recomputed GPS.
-  const finalDist = hasLoop
+  const finalDist = loopDetected
     ? computedDist
     : (data.distanceMiles != null && data.distanceMiles > 0 ? data.distanceMiles : (computedDist > 0 ? computedDist : null));
 
