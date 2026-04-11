@@ -1893,20 +1893,11 @@ export async function pingRunLocation(
 
   let isPresent = false;
   if (run.is_active) {
-    const dist = haversineKm(latitude, longitude, run.location_lat, run.location_lng);
-    if (dist <= 0.1524 || userId === run.host_id) {
-      await pool.query(
-        `UPDATE run_participants SET is_present = true WHERE run_id = $1 AND user_id = $2 AND status != 'cancelled'`,
-        [runId, userId]
-      );
-      isPresent = true;
-    } else {
-      const pRes = await pool.query(
-        `SELECT is_present FROM run_participants WHERE run_id = $1 AND user_id = $2 AND status != 'cancelled'`,
-        [runId, userId]
-      );
-      isPresent = pRes.rows[0]?.is_present || false;
-    }
+    await pool.query(
+      `UPDATE run_participants SET is_present = true WHERE run_id = $1 AND user_id = $2 AND status != 'cancelled'`,
+      [runId, userId]
+    );
+    isPresent = true;
   }
   return { isPresent, isActive: run.is_active };
 }
