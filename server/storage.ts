@@ -828,7 +828,10 @@ export async function getNotifications(userId: string) {
       body: `${r.from_name} shared "${r.path_name}" with you`,
       from_name: r.from_name,
       from_photo: r.from_photo,
-      data: { share_id: r.id, path_name: r.path_name, path_distance_miles: r.path_distance_miles, activity_type: r.activity_type, cloned: r.cloned },
+      share_id: r.id,
+      path_name: r.path_name,
+      path_distance_miles: r.path_distance_miles,
+      cloned: r.cloned,
       created_at: r.created_at,
     })),
   ];
@@ -1438,8 +1441,8 @@ export async function deleteSoloRun(id: string, userId: string) {
 }
 
 export async function recomputeUserAvgPace(userId: string): Promise<void> {
-  const res = await pool.query(
-    `SELECT AVG(pace_min_per_mile) AS avg_pace, AVG(distance_miles) AS avg_dist
+  const paceRes = await pool.query(
+    `SELECT AVG(pace_min_per_mile) AS avg_pace
      FROM solo_runs
      WHERE user_id = $1
        AND completed = true
@@ -1448,8 +1451,16 @@ export async function recomputeUserAvgPace(userId: string): Promise<void> {
        AND pace_min_per_mile >= 2.0`,
     [userId]
   );
-  const computedPace = res.rows[0]?.avg_pace != null ? parseFloat(res.rows[0].avg_pace) : null;
-  const computedDist = res.rows[0]?.avg_dist != null ? parseFloat(res.rows[0].avg_dist) : null;
+  const distRes = await pool.query(
+    `SELECT AVG(distance_miles) AS avg_dist
+     FROM solo_runs
+     WHERE user_id = $1
+       AND completed = true
+       AND distance_miles > 0.1`,
+    [userId]
+  );
+  const computedPace = paceRes.rows[0]?.avg_pace != null ? parseFloat(paceRes.rows[0].avg_pace) : null;
+  const computedDist = distRes.rows[0]?.avg_dist != null ? parseFloat(distRes.rows[0].avg_dist) : null;
   await pool.query(`UPDATE users SET avg_pace = $2, avg_distance = $3 WHERE id = $1`, [userId, computedPace, computedDist]);
 }
 
@@ -3132,8 +3143,30 @@ export async function createSavedPath(
   userId: string,
   data: { name: string; routePath: Array<{ latitude: number; longitude: number }>; distanceMiles?: number; activityType?: string; soloRunId?: string | null }
 ) {
+  const rawDistKm = computePathDistanceKm(data.routePath);
+  const totalDistKm = rawDistKm;
+  const hasLoop = (() => {
+    const coords = data.routePath;
+    if (coords.length < 4 || totalDistKm < 0.3) return false;
+    const startPt = coords[0];
+    const THRESHOLD_KM = 0.04;
+    const MIN_COVERED_KM = 0.3;
+    const MAX_CLOSURE_FRACTION = 0.85;
+    let coveredKm = 0;
+    for (let i = 1; i < coords.length; i++) {
+      coveredKm += haversineKm(coords[i - 1].latitude, coords[i - 1].longitude, coords[i].latitude, coords[i].longitude);
+      if (coveredKm < MIN_COVERED_KM) continue;
+      const dToStart = haversineKm(coords[i].latitude, coords[i].longitude, startPt.latitude, startPt.longitude);
+      if (dToStart < THRESHOLD_KM && coveredKm / totalDistKm < MAX_CLOSURE_FRACTION) return true;
+    }
+    return false;
+  })();
   const { path: dedupedPath, distanceMiles: computedDist } = deduplicateRoutePath(data.routePath);
-  const finalDist = computedDist > 0 ? computedDist : (data.distanceMiles ?? null);
+  // When a loop closure was detected, use the trimmed GPS distance.
+  // When no loop, keep the full path but prefer the run's recorded distance over recomputed GPS.
+  const finalDist = hasLoop
+    ? computedDist
+    : (data.distanceMiles != null && data.distanceMiles > 0 ? data.distanceMiles : (computedDist > 0 ? computedDist : null));
 
   const res = await pool.query(
     `INSERT INTO saved_paths (user_id, name, route_path, distance_miles, activity_type)
@@ -3173,6 +3206,14 @@ export async function sharePathWithFriend(fromUserId: string, pathId: string, to
   const pathRes = await pool.query(`SELECT * FROM saved_paths WHERE id = $1 AND user_id = $2`, [pathId, fromUserId]);
   const path = pathRes.rows[0];
   if (!path) throw new Error("Path not found");
+  // Enforce friendship — only allow sharing with accepted friends
+  const friendRes = await pool.query(
+    `SELECT 1 FROM friendships
+     WHERE status = 'accepted'
+       AND ((user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1))`,
+    [fromUserId, toUserId]
+  );
+  if (!friendRes.rows.length) throw new Error("You can only share routes with friends");
   const res = await pool.query(
     `INSERT INTO path_shares (from_user_id, to_user_id, saved_path_id, path_name, path_distance_miles, activity_type)
      VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,

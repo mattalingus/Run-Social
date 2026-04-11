@@ -2528,6 +2528,26 @@ export default function DiscoverScreen() {
                         <View style={{ flex: 1 }}>
                           <Text style={s.notifInfoTitle}>{n.title ?? "Route shared with you"}</Text>
                           <Text style={s.notifInfoBody}>{n.body ?? n.message}</Text>
+                          {n.share_id && !n.cloned && (
+                            <Pressable
+                              style={{ marginTop: 8, alignSelf: "flex-start", backgroundColor: C.primary, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 6 }}
+                              onPress={async () => {
+                                try {
+                                  await apiRequest("POST", `/api/saved-paths/${n.share_id}/clone`);
+                                  qc.invalidateQueries({ queryKey: ["/api/saved-paths"] });
+                                  qc.invalidateQueries({ queryKey: ["/api/notifications"] });
+                                  Alert.alert("Saved!", "Route added to your Saved Paths.");
+                                } catch (e: any) {
+                                  Alert.alert("Error", e?.message ?? "Could not save route.");
+                                }
+                              }}
+                            >
+                              <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.bg }}>Save to My Paths</Text>
+                            </Pressable>
+                          )}
+                          {n.cloned && (
+                            <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, marginTop: 4 }}>Saved to your paths</Text>
+                          )}
                         </View>
                       </View>
                     ))}
