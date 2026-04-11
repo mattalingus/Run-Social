@@ -427,7 +427,7 @@ export default function DmThread() {
 
   return (
     <>
-      <Stack.Screen options={{ headerTitle }} />
+      <Stack.Screen options={{ headerTitle, headerBackVisible: true }} />
       <View style={s.root}>
         <KeyboardAvoidingView
           style={s.kav}
@@ -499,7 +499,6 @@ export default function DmThread() {
                         {formatMsgTime(item.created_at)}
                       </Text>
                     </View>
-                    {isMe && <View style={s.avatarSpacer} />}
                   </View>
                 );
               }}
