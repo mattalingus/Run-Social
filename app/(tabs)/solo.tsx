@@ -70,6 +70,14 @@ interface SavedPath {
   distance_miles: number | null;
   created_at: string;
   activity_type?: string | null;
+  community_path_id?: string | null;
+}
+
+interface FriendItem {
+  id: string;
+  name: string;
+  username?: string | null;
+  photo_url?: string | null;
 }
 
 type RoutePoint = { latitude: number; longitude: number };
@@ -556,6 +564,12 @@ export default function SoloScreen() {
   const [saveRunPathName, setSaveRunPathName] = useState("");
   const [savingRunPath, setSavingRunPath] = useState(false);
   const [savedRunPathIds, setSavedRunPathIds] = useState<Set<string>>(new Set());
+  const [pathShareModalVisible, setPathShareModalVisible] = useState(false);
+  const [pathShareSearch, setPathShareSearch] = useState("");
+  const [pathShareTarget, setPathShareTarget] = useState<SavedPath | null>(null);
+  const [pathPublishingId, setPathPublishingId] = useState<string | null>(null);
+  const [publishedPathIds, setPublishedPathIds] = useState<Set<string>>(new Set());
+  const [pathRunMode, setPathRunMode] = useState<"run" | "ride" | "walk">("run");
 
   // Goals display period (UI toggle only — not saved separately)
   const [period, setPeriod] = useState<"monthly" | "yearly">("monthly");
@@ -591,6 +605,18 @@ export default function SoloScreen() {
     () => savedPaths.filter((p) => (p.activity_type ?? "run") === activityFilter),
     [savedPaths, activityFilter]
   );
+
+  const { data: friends = [] } = useQuery<FriendItem[]>({
+    queryKey: ["/api/friends"],
+    enabled: pathShareModalVisible,
+    staleTime: 60_000,
+  });
+
+  const filteredFriends = useMemo(() => {
+    const q = pathShareSearch.toLowerCase().trim();
+    if (!q) return friends;
+    return friends.filter(f => f.name.toLowerCase().includes(q) || (f.username ?? "").toLowerCase().includes(q));
+  }, [friends, pathShareSearch]);
 
   const { data: pathRuns = [], isLoading: pathRunsLoading } = useQuery<SoloRun[]>({
     queryKey: ["/api/saved-paths", selectedSavedPath?.id, "runs"],
@@ -1247,7 +1273,7 @@ export default function SoloScreen() {
               <Pressable
                 key={path.id}
                 style={({ pressed }) => [s.savedPathCard, { opacity: pressed ? 0.85 : 1 }]}
-                onPress={() => { Haptics.selectionAsync(); setSelectedSavedPath(path); }}
+                onPress={() => { Haptics.selectionAsync(); setSelectedSavedPath(path); setPathRunMode((path.activity_type ?? "run") as "run" | "ride" | "walk"); }}
                 onLongPress={() => {
                   Alert.alert(
                     "Delete Path",
@@ -1490,6 +1516,7 @@ export default function SoloScreen() {
                         routePath: cleanPath,
                         distanceMiles: saveRunPathTarget.distance_miles,
                         activityType: saveRunPathTarget.activity_type,
+                        soloRunId: saveRunPathTarget.id,
                       });
                       qc.invalidateQueries({ queryKey: ["/api/saved-paths"] });
                       const savedId = saveRunPathTarget.id;
@@ -1826,9 +1853,67 @@ export default function SoloScreen() {
               <View style={s.savedPathIconWrap}>
                 <Feather name="map" size={18} color={C.primary} />
               </View>
-              <Pressable onPress={() => { setSelectedSavedPath(null); setEditingPathName(false); }} hitSlop={12}>
-                <Feather name="x" size={22} color={C.textSecondary} />
-              </Pressable>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+                {/* Share with friend */}
+                <Pressable
+                  hitSlop={10}
+                  onPress={() => {
+                    setPathShareTarget(selectedSavedPath);
+                    setPathShareSearch("");
+                    setPathShareModalVisible(true);
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }}
+                >
+                  <Feather name="share-2" size={20} color={C.textSecondary} />
+                </Pressable>
+                {/* Add to Public Map */}
+                <Pressable
+                  hitSlop={10}
+                  disabled={pathPublishingId === selectedSavedPath?.id}
+                  onPress={async () => {
+                    if (!selectedSavedPath) return;
+                    const isAlreadyPublished = publishedPathIds.has(selectedSavedPath.id) || !!selectedSavedPath.community_path_id;
+                    if (isAlreadyPublished) {
+                      Alert.alert("Already on Map", "This route is already visible on the community map.");
+                      return;
+                    }
+                    if (!selectedSavedPath.route_path || selectedSavedPath.route_path.length < 2) {
+                      Alert.alert("No Route", "This path has no GPS route data to publish.");
+                      return;
+                    }
+                    setPathPublishingId(selectedSavedPath.id);
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    try {
+                      const res = await apiRequest("POST", `/api/saved-paths/${selectedSavedPath.id}/publish`);
+                      const data = await res.json();
+                      if (data.alreadyPublished) {
+                        Alert.alert("Already on Map", "This route is already visible on the community map.");
+                      } else {
+                        setPublishedPathIds(prev => new Set([...prev, selectedSavedPath.id]));
+                        qc.invalidateQueries({ queryKey: ["/api/saved-paths"] });
+                        qc.invalidateQueries({ queryKey: ["/api/community-paths"] });
+                        Alert.alert("Added to Map!", "Your route is now visible to the community on the Discover map.");
+                      }
+                    } catch (e: any) {
+                      Alert.alert("Error", e?.message ?? "Could not publish route.");
+                    } finally {
+                      setPathPublishingId(null);
+                    }
+                  }}
+                >
+                  {pathPublishingId === selectedSavedPath?.id
+                    ? <ActivityIndicator size="small" color={C.primary} />
+                    : <Ionicons
+                        name="globe-outline"
+                        size={20}
+                        color={(publishedPathIds.has(selectedSavedPath?.id ?? "") || !!selectedSavedPath?.community_path_id) ? C.primary : C.textSecondary}
+                      />
+                  }
+                </Pressable>
+                <Pressable onPress={() => { setSelectedSavedPath(null); setEditingPathName(false); }} hitSlop={12}>
+                  <Feather name="x" size={22} color={C.textSecondary} />
+                </Pressable>
+              </View>
             </View>
 
             {editingPathName ? (
@@ -1940,26 +2025,151 @@ export default function SoloScreen() {
               </ScrollView>
             </View>
 
-            {/* ── CTA button ───────────────────────────────────── */}
-            <Pressable
-              style={s.runPathBtn}
-              onPress={() => {
-                const pathId = selectedSavedPath.id;
-                const actType = pathStats.actType;
-                setSelectedSavedPath(null);
-                setTimeout(() => {
-                  setActivityFilter(actType);
-                  router.push(`/run-tracking?pathId=${pathId}` as any);
-                }, 350);
-              }}
-            >
-              <Feather name={pathStats.actType === "ride" ? "trending-up" : "play"} size={16} color={C.bg} />
-              <Text style={s.runPathBtnTxt}>{pathStats.actType === "ride" ? "Ride This Path" : pathStats.actType === "walk" ? "Walk This Path" : "Run This Path"}</Text>
-            </Pressable>
+            {/* ── Activity + destination picker ────────────────── */}
+            <View style={{ paddingTop: 10, gap: 10 }}>
+              {/* Activity type toggle */}
+              <View style={{ flexDirection: "row", backgroundColor: C.surface, borderRadius: 8, padding: 3, gap: 3, borderWidth: 1, borderColor: C.border }}>
+                {(["run", "ride", "walk"] as const).map((tab) => (
+                  <Pressable
+                    key={tab}
+                    style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingVertical: 7, borderRadius: 6, backgroundColor: pathRunMode === tab ? C.primary : "transparent" }}
+                    onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setPathRunMode(tab); }}
+                  >
+                    <Ionicons name={tab === "ride" ? "bicycle" : tab === "walk" ? "footsteps" : "walk"} size={12} color={pathRunMode === tab ? C.bg : C.textMuted} />
+                    <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 11, color: pathRunMode === tab ? C.bg : C.textMuted }}>
+                      {tab === "run" ? "Run" : tab === "ride" ? "Ride" : "Walk"}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              {/* Where to run */}
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <Pressable
+                  style={s.runDestBtn}
+                  onPress={() => {
+                    const pathId = selectedSavedPath.id;
+                    setSelectedSavedPath(null);
+                    setTimeout(() => {
+                      setActivityFilter(pathRunMode);
+                      router.push(`/run-tracking?pathId=${pathId}` as any);
+                    }, 350);
+                  }}
+                >
+                  <Feather name="play" size={16} color={C.bg} />
+                  <Text style={s.runDestBtnTxt}>Solo</Text>
+                </Pressable>
+                <Pressable
+                  style={[s.runDestBtn, { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border }]}
+                  onPress={() => {
+                    setSelectedSavedPath(null);
+                    setTimeout(() => router.push("/"), 200);
+                  }}
+                >
+                  <Ionicons name="compass" size={16} color={C.primary} />
+                  <Text style={[s.runDestBtnTxt, { color: C.primary }]}>Discover</Text>
+                </Pressable>
+                <Pressable
+                  style={[s.runDestBtn, { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border }]}
+                  onPress={() => {
+                    setSelectedSavedPath(null);
+                    setTimeout(() => router.push("/(tabs)/crew"), 200);
+                  }}
+                >
+                  <Ionicons name="people" size={16} color={C.primary} />
+                  <Text style={[s.runDestBtnTxt, { color: C.primary }]}>Crew</Text>
+                </Pressable>
+              </View>
+            </View>
           </View>
         )}
         </View>
       </Modal>
+
+      {/* ─── Share Path Modal ─────────────────────────────────────── */}
+      <Modal
+        visible={pathShareModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPathShareModalVisible(false)}
+      >
+        <View style={{ flex: 1, justifyContent: "flex-end" }}>
+          <Pressable
+            style={[StyleSheet.absoluteFillObject, { backgroundColor: "rgba(0,0,0,0.55)" }]}
+            onPress={() => setPathShareModalVisible(false)}
+          />
+          <View style={[s.sheet, { paddingBottom: insets.bottom + 20, maxHeight: "70%", flex: 0 }]}>
+            <View style={s.sheetHandle} />
+            <View style={[s.sheetHeader, { marginBottom: 12 }]}>
+              <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 17, color: C.text }}>Share Route</Text>
+              <Pressable onPress={() => setPathShareModalVisible(false)} hitSlop={12}>
+                <Feather name="x" size={22} color={C.textSecondary} />
+              </Pressable>
+            </View>
+            {pathShareTarget && (
+              <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary, marginBottom: 12 }}>
+                Share "{pathShareTarget.name}" with a friend
+              </Text>
+            )}
+            <TextInput
+              style={{
+                backgroundColor: C.card, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10,
+                fontFamily: "Outfit_400Regular", fontSize: 14, color: C.text,
+                borderWidth: 1, borderColor: C.border, marginBottom: 10,
+              }}
+              placeholder="Search friends…"
+              placeholderTextColor={C.textMuted}
+              value={pathShareSearch}
+              onChangeText={setPathShareSearch}
+            />
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              {filteredFriends.length === 0 ? (
+                <View style={{ alignItems: "center", paddingVertical: 24 }}>
+                  <Feather name="users" size={28} color={C.textMuted} />
+                  <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textMuted, marginTop: 8 }}>
+                    {friends.length === 0 ? "No friends yet" : "No friends match your search"}
+                  </Text>
+                </View>
+              ) : (
+                filteredFriends.map((friend) => (
+                  <Pressable
+                    key={friend.id}
+                    style={({ pressed }) => ({
+                      flexDirection: "row", alignItems: "center", gap: 12,
+                      paddingVertical: 10, paddingHorizontal: 4,
+                      opacity: pressed ? 0.7 : 1,
+                      borderBottomWidth: 1, borderBottomColor: C.border,
+                    })}
+                    onPress={async () => {
+                      if (!pathShareTarget) return;
+                      setPathShareModalVisible(false);
+                      try {
+                        await apiRequest("POST", `/api/saved-paths/${pathShareTarget.id}/share`, { toUserId: friend.id });
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                        Alert.alert("Shared!", `Route sent to ${friend.name}.`);
+                      } catch (e: any) {
+                        Alert.alert("Error", e?.message ?? "Could not share route.");
+                      }
+                    }}
+                  >
+                    {friend.photo_url
+                      ? <Image source={{ uri: friend.photo_url }} style={{ width: 40, height: 40, borderRadius: 20 }} />
+                      : <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: C.primaryMuted, alignItems: "center", justifyContent: "center" }}>
+                          <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 15, color: C.primary }}>{friend.name.charAt(0).toUpperCase()}</Text>
+                        </View>
+                    }
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text }}>{friend.name}</Text>
+                      {friend.username ? <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted }}>@{friend.username}</Text> : null}
+                    </View>
+                    <Feather name="chevron-right" size={16} color={C.textMuted} />
+                  </Pressable>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
@@ -2450,4 +2660,15 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     marginTop: 16,
   },
   runPathBtnTxt: { fontFamily: "Outfit_700Bold", fontSize: 17, color: C.bg },
+  runDestBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: C.primary,
+    borderRadius: 12,
+    paddingVertical: 11,
+  },
+  runDestBtnTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.bg },
 }); }

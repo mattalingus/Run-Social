@@ -1046,26 +1046,6 @@ function ProfileScreenInner() {
             </View>
           </View>
         </View>
-        <View style={[styles.statsRow, { marginTop: 8 }]}>
-          <View style={styles.statsItem}>
-            <Text style={{ fontSize: 16 }}>
-              {achData?.stats?.attendance_rate_pct != null
-                ? achData.stats.attendance_rate_pct >= 90 ? "⭐"
-                  : achData.stats.attendance_rate_pct >= 80 ? "🟢"
-                  : achData.stats.attendance_rate_pct >= 65 ? "🔵"
-                  : "🟡"
-                : "📋"}
-            </Text>
-            <View>
-              <Text style={styles.statsVal}>
-                {achData?.stats?.attendance_rate_pct != null
-                  ? `${achData.stats.attendance_rate_pct}%`
-                  : "—"}
-              </Text>
-              <Text style={styles.statsLabel}>Show-Up Rate</Text>
-            </View>
-          </View>
-        </View>
       </View>
 
       </WalkthroughPulse>
@@ -2410,6 +2390,7 @@ function ProfileScreenInner() {
                         routePath: cleanPath,
                         distanceMiles: savePathRun.my_final_distance ?? savePathRun.distance_miles,
                         activityType: savePathRun.activity_type,
+                        ...(savePathRun.type === "solo" ? { soloRunId: savePathRun.id } : {}),
                       });
                       qc.invalidateQueries({ queryKey: ["/api/saved-paths"] });
                       const savedKey = `${savePathRun.id}_${savePathRun.type}`;

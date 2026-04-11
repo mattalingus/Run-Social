@@ -1224,6 +1224,7 @@ export default function DiscoverScreen() {
       joinRequests: notifications.filter((n: any) => n.type === "join_request"),
       eventReminders: notifications.filter((n: any) => n.type === "event_reminder"),
       prNotifs: notifications.filter((n: any) => n.type === "pr_notification"),
+      pathShared: notifications.filter((n: any) => n.type === "path_shared"),
     };
   }, [notifications]);
 
@@ -2510,6 +2511,23 @@ export default function DiscoverScreen() {
                         <View style={{ flex: 1 }}>
                           <Text style={s.notifInfoTitle}>{n.title}</Text>
                           <Text style={s.notifInfoBody}>{n.body}</Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {notifData.pathShared.length > 0 && (
+                  <View style={s.notifSection}>
+                    <Text style={s.notifSectionTitle}>Shared Routes</Text>
+                    {notifData.pathShared.map((n: any) => (
+                      <View key={n.id} style={s.notifInfoCard}>
+                        <View style={[s.notifIconWrap, { backgroundColor: C.primary + "22" }]}>
+                          <Feather name="map" size={18} color={C.primary} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={s.notifInfoTitle}>{n.title ?? "Route shared with you"}</Text>
+                          <Text style={s.notifInfoBody}>{n.body ?? n.message}</Text>
                         </View>
                       </View>
                     ))}

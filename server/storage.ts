@@ -13,6 +13,53 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): nu
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+function computePathDistanceKm(coords: Array<{ latitude: number; longitude: number }>): number {
+  let dist = 0;
+  for (let i = 1; i < coords.length; i++) {
+    dist += haversineKm(coords[i - 1].latitude, coords[i - 1].longitude, coords[i].latitude, coords[i].longitude);
+  }
+  return dist;
+}
+
+function deduplicateRoutePath(coords: Array<{ latitude: number; longitude: number }>): {
+  path: Array<{ latitude: number; longitude: number }>;
+  distanceMiles: number;
+} {
+  const totalDistKm = computePathDistanceKm(coords);
+  const distanceMiles = totalDistKm / 1.60934;
+
+  if (coords.length < 4 || totalDistKm < 0.3) {
+    return { path: coords, distanceMiles };
+  }
+
+  const startPt = coords[0];
+  const THRESHOLD_KM = 0.04; // 40 m
+  const MIN_COVERED_KM = 0.3;
+  const MAX_CLOSURE_FRACTION = 0.85; // if closure before 85% of total, it's a multi-lap
+
+  let coveredKm = 0;
+  let closureIdx = -1;
+
+  for (let i = 1; i < coords.length; i++) {
+    coveredKm += haversineKm(
+      coords[i - 1].latitude, coords[i - 1].longitude,
+      coords[i].latitude, coords[i].longitude
+    );
+    if (coveredKm < MIN_COVERED_KM) continue;
+    const dToStart = haversineKm(coords[i].latitude, coords[i].longitude, startPt.latitude, startPt.longitude);
+    if (dToStart < THRESHOLD_KM && coveredKm / totalDistKm < MAX_CLOSURE_FRACTION) {
+      closureIdx = i;
+      break;
+    }
+  }
+
+  if (closureIdx < 0) return { path: coords, distanceMiles };
+
+  const trimmed = coords.slice(0, closureIdx + 1);
+  const trimmedMiles = computePathDistanceKm(trimmed) / 1.60934;
+  return { path: trimmed, distanceMiles: trimmedMiles };
+}
+
 export async function initDb() {
   await pool.query(`
     DO $$ BEGIN
@@ -416,6 +463,20 @@ export async function initDb() {
     );
     CREATE INDEX IF NOT EXISTS idx_user_blocks_blocker ON user_blocks(blocker_id);
     CREATE INDEX IF NOT EXISTS idx_user_blocks_blocked ON user_blocks(blocked_id);
+
+    CREATE TABLE IF NOT EXISTS path_shares (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      from_user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      to_user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      saved_path_id VARCHAR NOT NULL REFERENCES saved_paths(id) ON DELETE CASCADE,
+      path_name TEXT NOT NULL,
+      path_distance_miles REAL,
+      activity_type TEXT DEFAULT 'run',
+      created_at TIMESTAMP DEFAULT NOW(),
+      cloned BOOLEAN DEFAULT false
+    );
+    CREATE INDEX IF NOT EXISTS idx_path_shares_to ON path_shares(to_user_id);
+    ALTER TABLE saved_paths ADD COLUMN IF NOT EXISTS community_path_id VARCHAR REFERENCES community_paths(id) ON DELETE SET NULL;
   `);
 
   const dummyCheck = await pool.query(`SELECT COUNT(*) FROM users WHERE email LIKE 'dummy-%@paceup.dev'`);
@@ -625,6 +686,18 @@ export async function getNotifications(userId: string) {
     [userId]
   );
 
+  const pathSharesNotifs = await pool.query(
+    `SELECT ps.id, ps.path_name, ps.path_distance_miles, ps.activity_type, ps.cloned, ps.created_at,
+            u.name as from_name, u.photo_url as from_photo
+     FROM path_shares ps
+     JOIN users u ON u.id = ps.from_user_id
+     WHERE ps.to_user_id = $1
+       AND ps.created_at >= NOW() - INTERVAL '14 days'
+     ORDER BY ps.created_at DESC
+     LIMIT 10`,
+    [userId]
+  );
+
   // Deduplicate PR notifications by run id (a run could be both a dist and pace PR)
   const prRunIds = new Set<string>();
   const prRows: any[] = [];
@@ -748,6 +821,16 @@ export async function getNotifications(userId: string) {
         created_at: r.date,
       };
     }),
+    ...pathSharesNotifs.rows.map(r => ({
+      id: `ps_${r.id}`,
+      type: 'path_shared',
+      title: 'Route Shared With You',
+      body: `${r.from_name} shared "${r.path_name}" with you`,
+      from_name: r.from_name,
+      from_photo: r.from_photo,
+      data: { share_id: r.id, path_name: r.path_name, path_distance_miles: r.path_distance_miles, activity_type: r.activity_type, cloned: r.cloned },
+      created_at: r.created_at,
+    })),
   ];
 
   return notifications.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -1356,7 +1439,7 @@ export async function deleteSoloRun(id: string, userId: string) {
 
 export async function recomputeUserAvgPace(userId: string): Promise<void> {
   const res = await pool.query(
-    `SELECT AVG(pace_min_per_mile) AS avg_pace
+    `SELECT AVG(pace_min_per_mile) AS avg_pace, AVG(distance_miles) AS avg_dist
      FROM solo_runs
      WHERE user_id = $1
        AND completed = true
@@ -1365,10 +1448,9 @@ export async function recomputeUserAvgPace(userId: string): Promise<void> {
        AND pace_min_per_mile >= 2.0`,
     [userId]
   );
-  const computed = res.rows[0]?.avg_pace != null
-    ? parseFloat(res.rows[0].avg_pace)
-    : null;
-  await pool.query(`UPDATE users SET avg_pace = $2 WHERE id = $1`, [userId, computed]);
+  const computedPace = res.rows[0]?.avg_pace != null ? parseFloat(res.rows[0].avg_pace) : null;
+  const computedDist = res.rows[0]?.avg_dist != null ? parseFloat(res.rows[0].avg_dist) : null;
+  await pool.query(`UPDATE users SET avg_pace = $2, avg_distance = $3 WHERE id = $1`, [userId, computedPace, computedDist]);
 }
 
 export async function updateSoloGoals(
@@ -3048,14 +3130,26 @@ export async function getSavedPaths(userId: string) {
 
 export async function createSavedPath(
   userId: string,
-  data: { name: string; routePath: Array<{ latitude: number; longitude: number }>; distanceMiles?: number; activityType?: string }
+  data: { name: string; routePath: Array<{ latitude: number; longitude: number }>; distanceMiles?: number; activityType?: string; soloRunId?: string | null }
 ) {
+  const { path: dedupedPath, distanceMiles: computedDist } = deduplicateRoutePath(data.routePath);
+  const finalDist = computedDist > 0 ? computedDist : (data.distanceMiles ?? null);
+
   const res = await pool.query(
     `INSERT INTO saved_paths (user_id, name, route_path, distance_miles, activity_type)
      VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [userId, data.name, JSON.stringify(data.routePath), data.distanceMiles ?? null, data.activityType ?? "run"]
+    [userId, data.name, JSON.stringify(dedupedPath), finalDist, data.activityType ?? "run"]
   );
-  return res.rows[0];
+  const newPath = res.rows[0];
+
+  if (data.soloRunId) {
+    await pool.query(
+      `UPDATE solo_runs SET saved_path_id = $1 WHERE id = $2 AND user_id = $3`,
+      [newPath.id, data.soloRunId, userId]
+    );
+  }
+
+  return newPath;
 }
 
 export async function updateSavedPath(id: string, userId: string, name: string) {
@@ -3073,6 +3167,84 @@ export async function deleteSavedPath(id: string, userId: string) {
   );
   if (!res.rows.length) throw new Error("Not found or not authorized");
   return { success: true };
+}
+
+export async function sharePathWithFriend(fromUserId: string, pathId: string, toUserId: string) {
+  const pathRes = await pool.query(`SELECT * FROM saved_paths WHERE id = $1 AND user_id = $2`, [pathId, fromUserId]);
+  const path = pathRes.rows[0];
+  if (!path) throw new Error("Path not found");
+  const res = await pool.query(
+    `INSERT INTO path_shares (from_user_id, to_user_id, saved_path_id, path_name, path_distance_miles, activity_type)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+    [fromUserId, toUserId, pathId, path.name, path.distance_miles, path.activity_type ?? "run"]
+  );
+  return res.rows[0];
+}
+
+export async function cloneSharedPath(shareId: string, toUserId: string) {
+  const shareRes = await pool.query(`SELECT * FROM path_shares WHERE id = $1 AND to_user_id = $2`, [shareId, toUserId]);
+  const share = shareRes.rows[0];
+  if (!share) throw new Error("Share not found");
+  const pathRes = await pool.query(`SELECT * FROM saved_paths WHERE id = $1`, [share.saved_path_id]);
+  const path = pathRes.rows[0];
+  if (!path) throw new Error("Path no longer exists");
+  const newRes = await pool.query(
+    `INSERT INTO saved_paths (user_id, name, route_path, distance_miles, activity_type)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [toUserId, path.name, path.route_path, path.distance_miles, path.activity_type ?? "run"]
+  );
+  await pool.query(`UPDATE path_shares SET cloned = true WHERE id = $1`, [shareId]);
+  return newRes.rows[0];
+}
+
+export async function getPathShares(userId: string) {
+  const res = await pool.query(
+    `SELECT ps.*, u.name as from_name, u.photo_url as from_photo
+     FROM path_shares ps
+     JOIN users u ON u.id = ps.from_user_id
+     WHERE ps.to_user_id = $1
+     ORDER BY ps.created_at DESC
+     LIMIT 30`,
+    [userId]
+  );
+  return res.rows;
+}
+
+export async function publishSavedPath(pathId: string, userId: string) {
+  const pathRes = await pool.query(`SELECT * FROM saved_paths WHERE id = $1 AND user_id = $2`, [pathId, userId]);
+  const path = pathRes.rows[0];
+  if (!path) throw new Error("Path not found");
+
+  if (path.community_path_id) {
+    const existing = await pool.query(`SELECT * FROM community_paths WHERE id = $1`, [path.community_path_id]);
+    if (existing.rows[0]) return { alreadyPublished: true, communityPath: existing.rows[0] };
+  }
+
+  const user = await getUserById(userId);
+  if (!user) throw new Error("User not found");
+
+  const routePath = typeof path.route_path === "string" ? JSON.parse(path.route_path) : path.route_path;
+  if (!routePath || routePath.length < 2) throw new Error("Route must have at least 2 points");
+
+  const startLat = routePath[0].latitude;
+  const startLng = routePath[0].longitude;
+  const endLat = routePath[routePath.length - 1].latitude;
+  const endLng = routePath[routePath.length - 1].longitude;
+
+  const cpRes = await pool.query(
+    `INSERT INTO community_paths (name, route_path, distance_miles, is_public, created_by_user_id, created_by_name, start_lat, start_lng, end_lat, end_lng, activity_type, run_count)
+     VALUES ($1, $2, $3, true, $4, $5, $6, $7, $8, $9, $10, 0) RETURNING *`,
+    [path.name, path.route_path, path.distance_miles, userId, user.name, startLat, startLng, endLat, endLng, path.activity_type ?? "run"]
+  );
+  const communityPath = cpRes.rows[0];
+
+  await pool.query(`UPDATE saved_paths SET community_path_id = $1 WHERE id = $2`, [communityPath.id, pathId]);
+  await pool.query(
+    `INSERT INTO path_contributions (community_path_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+    [communityPath.id, userId]
+  );
+
+  return { alreadyPublished: false, communityPath };
 }
 
 // ─── Community Paths ───────────────────────────────────────────────────────────

@@ -2215,13 +2215,42 @@ async function go(e){
 
   app.post("/api/saved-paths", requireAuth, async (req, res) => {
     try {
-      const { name, routePath, distanceMiles, activityType } = req.body;
+      const { name, routePath, distanceMiles, activityType, soloRunId } = req.body;
       if (!name || !routePath || !Array.isArray(routePath)) {
         return res.status(400).json({ message: "name and routePath are required" });
       }
-      const path = await storage.createSavedPath(req.session.userId!, { name, routePath, distanceMiles, activityType });
+      const path = await storage.createSavedPath(req.session.userId!, { name, routePath, distanceMiles, activityType, soloRunId: soloRunId || null });
       storage.matchCommunityPath(req.session.userId!, path.id, routePath, distanceMiles ?? null).catch(console.error);
       res.json(path);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/saved-paths/:id/share", requireAuth, async (req, res) => {
+    try {
+      const { toUserId } = req.body;
+      if (!toUserId) return res.status(400).json({ message: "toUserId required" });
+      const share = await storage.sharePathWithFriend(req.session.userId!, req.params.id as string, toUserId);
+      res.json(share);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/saved-paths/:id/clone", requireAuth, async (req, res) => {
+    try {
+      const cloned = await storage.cloneSharedPath(req.params.id as string, req.session.userId!);
+      res.json(cloned);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/saved-paths/:id/publish", requireAuth, async (req, res) => {
+    try {
+      const result = await storage.publishSavedPath(req.params.id as string, req.session.userId!);
+      res.json(result);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
