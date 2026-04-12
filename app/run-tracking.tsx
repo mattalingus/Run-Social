@@ -517,32 +517,22 @@ export default function RunTrackingScreen() {
         shouldDuckAndroid: true,
       });
       const res = await apiRequest("POST", "/api/tts", { text: PREVIEW_PHRASES[voice], voice });
-      if (!res.ok || previewTokenRef.current !== token) { setPreviewingVoice(null); return; }
-      const blob = await res.blob();
-      const reader = new FileReader();
-      reader.onload = async () => {
-        if (previewTokenRef.current !== token) { setPreviewingVoice(null); return; }
-        try {
-          const base64 = (reader.result as string).split(",")[1];
-          const filename = `${FileSystem.cacheDirectory}coach_preview_${voice}.mp3`;
-          await FileSystem.writeAsStringAsync(filename, base64, { encoding: FileSystem.EncodingType.Base64 });
-          if (previewTokenRef.current !== token) { setPreviewingVoice(null); return; }
-          const { sound } = await Audio.Sound.createAsync({ uri: filename });
-          previewSoundRef.current = sound;
-          sound.setOnPlaybackStatusUpdate((status: any) => {
-            if (status.didJustFinish) {
-              setPreviewingVoice(null);
-              sound.unloadAsync().catch(() => {});
-              if (previewSoundRef.current === sound) previewSoundRef.current = null;
-            }
-          });
-          await sound.playAsync();
-        } catch (_) {
+      if (previewTokenRef.current !== token) { setPreviewingVoice(null); return; }
+      const arrayBuffer = await res.arrayBuffer();
+      const base64 = Buffer.from(arrayBuffer).toString("base64");
+      const filename = `${FileSystem.cacheDirectory}coach_preview_${voice}.mp3`;
+      await FileSystem.writeAsStringAsync(filename, base64, { encoding: FileSystem.EncodingType.Base64 });
+      if (previewTokenRef.current !== token) { setPreviewingVoice(null); return; }
+      const { sound } = await Audio.Sound.createAsync({ uri: filename });
+      previewSoundRef.current = sound;
+      sound.setOnPlaybackStatusUpdate((status: any) => {
+        if (status.didJustFinish) {
           setPreviewingVoice(null);
+          sound.unloadAsync().catch(() => {});
+          if (previewSoundRef.current === sound) previewSoundRef.current = null;
         }
-      };
-      reader.onerror = () => setPreviewingVoice(null);
-      reader.readAsDataURL(blob);
+      });
+      await sound.playAsync();
       return;
     } catch (_) {}
     setPreviewingVoice(null);
@@ -584,31 +574,26 @@ export default function RunTrackingScreen() {
 
     try {
       const res = await apiRequest("POST", "/api/tts", { text, voice: coachVoiceRef.current });
-      if (res.ok) {
-        const blob = await res.blob();
-        const reader = new FileReader();
-        reader.onload = async () => {
-          try {
-            const base64 = (reader.result as string).split(",")[1];
-            const filename = `${FileSystem.cacheDirectory}pace_${Math.round(distance * 100)}.mp3`;
-            await FileSystem.writeAsStringAsync(filename, base64, { encoding: FileSystem.EncodingType.Base64 });
-            const { sound } = await Audio.Sound.createAsync({ uri: filename });
-            sound.setOnPlaybackStatusUpdate((status: any) => {
-              if (status.didJustFinish) {
-                ensureAudioMode(false);
-                sound.unloadAsync().catch(() => {});
-              }
-            });
-            await sound.playAsync();
-          } catch (e) {
-            Speech.speak(text, {
-              rate: 0.95,
-              onDone: () => { void ensureAudioMode(false); },
-              onError: () => { void ensureAudioMode(false); },
-            });
+      try {
+        const arrayBuffer = await res.arrayBuffer();
+        const base64 = Buffer.from(arrayBuffer).toString("base64");
+        const filename = `${FileSystem.cacheDirectory}pace_${Math.round(distance * 100)}.mp3`;
+        await FileSystem.writeAsStringAsync(filename, base64, { encoding: FileSystem.EncodingType.Base64 });
+        const { sound } = await Audio.Sound.createAsync({ uri: filename });
+        sound.setOnPlaybackStatusUpdate((status: any) => {
+          if (status.didJustFinish) {
+            ensureAudioMode(false);
+            sound.unloadAsync().catch(() => {});
           }
-        };
-        reader.readAsDataURL(blob);
+        });
+        await sound.playAsync();
+        return;
+      } catch (e) {
+        Speech.speak(text, {
+          rate: 0.95,
+          onDone: () => { void ensureAudioMode(false); },
+          onError: () => { void ensureAudioMode(false); },
+        });
         return;
       }
     } catch (e) {}
