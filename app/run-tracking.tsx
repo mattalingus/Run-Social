@@ -347,13 +347,13 @@ export default function RunTrackingScreen() {
   // Audio Coach state
   const [coachEnabled, setCoachEnabled] = useState(true);
   const [coachInterval, setCoachInterval] = useState<"0.5" | "1" | "2">("1");
-  const [coachVoice, setCoachVoice] = useState<"nova" | "onyx" | "shimmer">("nova");
-  const [previewingVoice, setPreviewingVoice] = useState<"nova" | "onyx" | "shimmer" | null>(null);
+  const [coachVoice, setCoachVoice] = useState<"nova" | "onyx" | "shimmer" | "echo">("nova");
+  const [previewingVoice, setPreviewingVoice] = useState<"nova" | "onyx" | "shimmer" | "echo" | null>(null);
   const previewSoundRef = useRef<Audio.Sound | null>(null);
   const previewTokenRef = useRef(0);
   const coachEnabledRef = useRef(true);
   const coachIntervalRef = useRef<"0.5" | "1" | "2">("1");
-  const coachVoiceRef = useRef<"nova" | "onyx" | "shimmer">("nova");
+  const coachVoiceRef = useRef<"nova" | "onyx" | "shimmer" | "echo">("nova");
   const lastAnnouncedMileRef = useRef(0);
   const lastAnnouncedPaceRef = useRef<number | null>(null);
 
@@ -462,8 +462,8 @@ export default function RunTrackingScreen() {
         const voice = await AsyncStorage.getItem("@paceup_coach_voice");
         if (enabled !== null) setCoachEnabled(enabled === "true");
         if (interval !== null) setCoachInterval(interval as any);
-        if (voice !== null && ["nova", "onyx", "shimmer"].includes(voice)) {
-          setCoachVoice(voice as "nova" | "onyx" | "shimmer");
+        if (voice !== null && ["nova", "onyx", "shimmer", "echo"].includes(voice)) {
+          setCoachVoice(voice as "nova" | "onyx" | "shimmer" | "echo");
         }
       } catch (e) {}
     }
@@ -484,20 +484,21 @@ export default function RunTrackingScreen() {
     } catch (e) {}
   };
 
-  const updateCoachVoice = async (val: "nova" | "onyx" | "shimmer") => {
+  const updateCoachVoice = async (val: "nova" | "onyx" | "shimmer" | "echo") => {
     setCoachVoice(val);
     try {
       await AsyncStorage.setItem("@paceup_coach_voice", val);
     } catch (e) {}
   };
 
-  const PREVIEW_PHRASES: Record<"nova" | "onyx" | "shimmer", string> = {
+  const PREVIEW_PHRASES: Record<"nova" | "onyx" | "shimmer" | "echo", string> = {
     nova: "Ready to crush it? Let's go!",
     onyx: "Stay focused. You've got this.",
     shimmer: "You're doing great, keep it up!",
+    echo: "Let's lock in and get after it.",
   };
 
-  const playCoachPreview = async (voice: "nova" | "onyx" | "shimmer") => {
+  const playCoachPreview = async (voice: "nova" | "onyx" | "shimmer" | "echo") => {
     if (Platform.OS === "web") return;
     const token = ++previewTokenRef.current;
     try {
@@ -1983,9 +1984,10 @@ export default function RunTrackingScreen() {
                   </View>
                   <View style={t.coachPersonaRow}>
                     {[
-                      { voice: "nova" as const, name: "Max", blurb: "Energetic & motivating" },
+                      { voice: "nova" as const, name: "Nova", blurb: "Energetic & motivating" },
                       { voice: "onyx" as const, name: "Jordan", blurb: "Calm & authoritative" },
                       { voice: "shimmer" as const, name: "Sam", blurb: "Clear & encouraging" },
+                      { voice: "echo" as const, name: "Zach", blurb: "Warm & steady" },
                     ].map((persona) => (
                       <Pressable
                         key={persona.voice}
