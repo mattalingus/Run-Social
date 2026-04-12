@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { Buffer } from "buffer";
 import {
   View,
   Text,
@@ -517,7 +518,7 @@ export default function RunTrackingScreen() {
         shouldDuckAndroid: true,
       });
       const res = await apiRequest("POST", "/api/tts", { text: PREVIEW_PHRASES[voice], voice });
-      if (previewTokenRef.current !== token) { setPreviewingVoice(null); return; }
+      if (!res.ok || previewTokenRef.current !== token) { setPreviewingVoice(null); return; }
       const arrayBuffer = await res.arrayBuffer();
       const base64 = Buffer.from(arrayBuffer).toString("base64");
       const filename = `${FileSystem.cacheDirectory}coach_preview_${voice}.mp3`;
@@ -574,6 +575,7 @@ export default function RunTrackingScreen() {
 
     try {
       const res = await apiRequest("POST", "/api/tts", { text, voice: coachVoiceRef.current });
+      if (!res.ok) throw new Error("TTS failed");
       try {
         const arrayBuffer = await res.arrayBuffer();
         const base64 = Buffer.from(arrayBuffer).toString("base64");
