@@ -1,0 +1,32 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "JTOUZRaOBKpEI6M5apbAl"
+uri = "file://attached_assets/generated_videos/gps_tracking_audio_coach.mp4"
+type = "video"
+title = "Clip 1 — Live GPS Tracking + Audio Coach"
+
+[[outputs]]
+id = "IjiH7dWnPu8bAbdVeVcDb"
+uri = "file://attached_assets/generated_videos/notification_lace_up.mp4"
+type = "video"
+title = "Clip 2 — Notification → Lacing Up"
+
+[[outputs]]
+id = "46e26NgQhuB3gRfHRA0Yd"
+uri = "file://attached_assets/generated_videos/radius_discovery_arrival.mp4"
+type = "video"
+title = "Clip 3 — Radius Discovery & Arrival"
+
+[[outputs]]
+id = "WY9btlyMZ0N4FiDCgyRE-"
+uri = "file://attached_assets/generated_videos/crew_gathering_queue.mp4"
+type = "video"
+title = "Clip 4 — Crew Gathering & Queue"
+
+[[outputs]]
+id = "2YiAZDtbvuTQ3s8UlyZHQ"
+uri = "file://attached_assets/generated_videos/group_run_finish.mp4"
+type = "video"
+title = "Clip 5 — Group Run & Finish"
