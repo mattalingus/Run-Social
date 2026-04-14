@@ -1760,6 +1760,48 @@ async function go(e){
       const result = await storage.confirmRunCompletion(req.params.id as string, req.session.userId!, miles);
       res.json({ success: result.success });
 
+      // Fire-and-forget: post participant completion to finisher + host crew chats
+      const completerId = req.session.userId!;
+      const completionMiles = miles;
+      const completionRunId = req.params.id as string;
+      (async () => {
+        try {
+          const run = await storage.getRunById(completionRunId);
+          const hostId = run?.host_id;
+          const [user, finisherCrews, hostCrews] = await Promise.all([
+            storage.getUserById(completerId),
+            storage.getUserCrewIds(completerId),
+            hostId && hostId !== completerId ? storage.getUserCrewIds(hostId) : Promise.resolve([]),
+          ]);
+          if (!user) return;
+          const allCrewIdSet = new Set<string>([
+            ...finisherCrews.map((r: any) => r.crew_id),
+            ...(hostCrews as any[]).map((r: any) => r.crew_id),
+          ]);
+          if (!allCrewIdSet.size) return;
+          const firstName = user.name?.split(" ")[0] || user.name || "Someone";
+          const activityType = run?.activity_type ?? "run";
+          const aiMessage = await ai.generateSoloActivityPost(
+            firstName, completionMiles, null, null, activityType
+          );
+          const metadata = {
+            distance: completionMiles,
+            pace: null,
+            activityType,
+            runId: completionRunId,
+            isGroupRun: true,
+          };
+          for (const crewId of allCrewIdSet) {
+            await storage.createCrewMessage(
+              crewId, completerId, user.name, user.profilePhoto || null,
+              aiMessage, "solo_activity", metadata
+            );
+          }
+        } catch (bgErr: any) {
+          console.error("[crew-complete-fanout]", bgErr?.message ?? bgErr);
+        }
+      })();
+
       if (result.crewStreakUpdated) {
         const runId = req.params.id as string;
         const { crewId, newStreak } = result.crewStreakUpdated;
