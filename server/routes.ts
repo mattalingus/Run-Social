@@ -2128,6 +2128,9 @@ async function go(e){
       res.json({ success: result.success });
       // Fire-and-forget crew achievement check + crew recap if all finished
       const runIdForBg = req.params.id as string;
+      const finisherUserId = req.session.userId!;
+      const finisherDist = safeDist;
+      const finisherPace = safePace;
       storage.getRunById(runIdForBg).then((run: any) => {
         if (run?.crew_id) {
           storage.checkAndAwardCrewAchievements(run.crew_id).catch((err: any) => console.error("[bg]", err?.message ?? err));
@@ -2138,6 +2141,40 @@ async function go(e){
         postCrewRunRecap(runIdForBg).catch((bgErr: any) =>
           console.error("[bg] crew recap (runner-finish):", bgErr?.message ?? bgErr)
         );
+      }
+
+      // Fire-and-forget: post individual participant finish to their crew chats
+      if (finisherDist > 0) {
+        (async () => {
+          try {
+            const [user, run, crewRows] = await Promise.all([
+              storage.getUserById(finisherUserId),
+              storage.getRunById(runIdForBg),
+              storage.getUserCrewIds(finisherUserId),
+            ]);
+            if (!user || !crewRows.length) return;
+            const firstName = user.name?.split(" ")[0] || user.name || "Someone";
+            const activityType = run?.activity_type ?? "run";
+            const aiMessage = await ai.generateSoloActivityPost(
+              firstName, finisherDist, finisherPace > 0 ? finisherPace : null, null, activityType
+            );
+            const metadata = {
+              distance: finisherDist,
+              pace: finisherPace > 0 ? finisherPace : null,
+              activityType,
+              runId: runIdForBg,
+              isGroupRun: true,
+            };
+            for (const { crew_id } of crewRows) {
+              await storage.createCrewMessage(
+                crew_id, finisherUserId, user.name, user.profilePhoto || null,
+                aiMessage, "solo_activity", metadata
+              );
+            }
+          } catch (err: any) {
+            console.error("[crew-group-finish]", err?.message ?? err);
+          }
+        })();
       }
     } catch (e: any) {
       res.status(500).json({ message: e.message });
