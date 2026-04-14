@@ -62,6 +62,7 @@ interface SoloRun {
   source?: string | null;
   garmin_activity_id?: string | null;
   apple_health_id?: string | null;
+  distance_tier?: number | null;
 }
 
 interface SavedPath {
@@ -217,6 +218,40 @@ function PathRoutePreview({ path, primary }: { path: RoutePoint[]; primary: stri
           <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 9, color: primary, letterSpacing: 0.3 }}>GPS Route</Text>
         </View>
       )}
+    </View>
+  );
+}
+
+// ─── Medal Badge ──────────────────────────────────────────────────────────────
+
+function MedalBadge({ tier }: { tier: 1 | 2 | 3 }) {
+  const { C } = useTheme();
+  const size = tier === 1 ? 20 : tier === 2 ? 18 : 16;
+  const opacity = tier === 1 ? 1 : tier === 2 ? 0.68 : 0.42;
+  const ribbonW = Math.floor(size * 0.28);
+  const ribbonH = Math.floor(size * 0.42);
+  const label = tier === 1 ? "PR" : String(tier);
+  const fontSize = tier === 1 ? 7 : 8;
+  return (
+    <View style={{ alignItems: "center", opacity }}>
+      <View style={{
+        width: size, height: size, borderRadius: size / 2,
+        backgroundColor: C.primary,
+        alignItems: "center", justifyContent: "center",
+      }}>
+        <Text style={{
+          fontFamily: "Outfit_700Bold",
+          fontSize,
+          color: "#fff",
+          lineHeight: size * 0.58,
+          includeFontPadding: false,
+        }}>{label}</Text>
+      </View>
+      <View style={{ flexDirection: "row", marginTop: 1 }}>
+        <View style={{ width: ribbonW, height: ribbonH, backgroundColor: C.primary, borderBottomLeftRadius: 3 }} />
+        <View style={{ width: 2 }} />
+        <View style={{ width: ribbonW, height: ribbonH, backgroundColor: C.primary, borderBottomRightRadius: 3 }} />
+      </View>
     </View>
   );
 }
@@ -951,6 +986,9 @@ export default function SoloScreen() {
                 color={run.is_starred ? C.gold : C.textMuted}
               />
             </Pressable>
+            {run.completed && run.distance_tier != null && run.distance_tier >= 1 && run.distance_tier <= 3 && (
+              <MedalBadge tier={run.distance_tier as 1 | 2 | 3} />
+            )}
             <Text style={s.historyDist}>{toDisplayDist(run.distance_miles, distUnit)}</Text>
             {run.completed && (
               <Pressable

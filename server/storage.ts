@@ -1320,7 +1320,16 @@ export async function updateMarkerIcon(userId: string, icon: string | null) {
 
 export async function getSoloRuns(userId: string) {
   const result = await pool.query(
-    `SELECT * FROM solo_runs WHERE user_id = $1 AND is_deleted IS NOT TRUE ORDER BY date DESC`,
+    `SELECT sr.*,
+       CASE WHEN sr.completed THEN
+         (SELECT CASE WHEN COUNT(*) < 3 THEN COUNT(*) + 1 ELSE NULL END
+          FROM solo_runs sr2
+          WHERE sr2.user_id = $1 AND sr2.completed = true AND sr2.is_deleted IS NOT TRUE
+            AND sr2.id != sr.id AND sr2.distance_miles > sr.distance_miles)
+       ELSE NULL END AS distance_tier
+     FROM solo_runs sr
+     WHERE sr.user_id = $1 AND sr.is_deleted IS NOT TRUE
+     ORDER BY sr.date DESC`,
     [userId]
   );
   return result.rows;

@@ -8,16 +8,11 @@ export type MileSplit = {
   isPartial: boolean;
 };
 
-const BAR_AREA_HEIGHT = 110;
-const PACE_LABEL_H = 18;
-const MILE_LABEL_H = 18;
-
 function fmtPace(pace: number): string {
   const m = Math.floor(pace);
   const s = Math.round((pace - m) * 60);
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
-
 
 type Props = {
   splits: MileSplit[];
@@ -39,58 +34,56 @@ export default function MileSplitsChart({ splits, activityType }: Props) {
   const maxPace = Math.max(...paces);
   const paceRange = maxPace - minPace;
 
-  const MIN_BAR = 28;
-  const MAX_BAR = BAR_AREA_HEIGHT;
+  const MIN_PCT = 18;
+  const MAX_PCT = 100;
 
-  const getBarHeight = (pace: number) => {
-    if (paceRange < 0.05) return MIN_BAR + (MAX_BAR - MIN_BAR) * 0.6;
-    return MIN_BAR + ((pace - minPace) / paceRange) * (MAX_BAR - MIN_BAR);
+  const getBarPct = (pace: number): number => {
+    if (paceRange < 0.05) return 72;
+    return MAX_PCT - ((pace - minPace) / paceRange) * (MAX_PCT - MIN_PCT);
   };
-
-  const barWidth = valid.length <= 5 ? 28 : valid.length <= 8 ? 22 : valid.length <= 12 ? 16 : 12;
 
   const label = activityType === "ride" ? "INTERVAL SPLITS" : "MILE SPLITS";
 
   return (
     <View style={styles.container}>
       <Text style={[styles.title, { color: C.textMuted }]}>{label}</Text>
-      <View style={styles.chartRow}>
-        {valid.map((split, i) => {
-          const barHeight = getBarHeight(split.paceMinPerMile);
-          return (
-            <View key={i} style={styles.column}>
-              <View style={[styles.paceLabelWrap, { height: PACE_LABEL_H }]}>
-                <Text style={[styles.paceLabel, { color: C.textMuted }]} numberOfLines={1}>
-                  {fmtPace(split.paceMinPerMile)}
-                </Text>
-              </View>
-              <View style={[styles.barArea, { height: BAR_AREA_HEIGHT }]}>
-                <View
-                  style={{
-                    width: barWidth,
-                    height: barHeight,
-                    borderRadius: 4,
-                    backgroundColor: C.primary,
-                    opacity: split.isPartial ? 0.55 : 1,
-                  }}
-                />
-              </View>
-              <View style={[styles.mileLabelWrap, { height: MILE_LABEL_H }]}>
-                <Text style={[styles.mileLabel, { color: split.isPartial ? C.textMuted : C.text }]} numberOfLines={1}>
-                  {split.label}
-                </Text>
-              </View>
-            </View>
-          );
-        })}
+      <View style={styles.headerRow}>
+        <Text style={[styles.colMi, { color: C.textMuted }]}>Mi</Text>
+        <View style={styles.colBar} />
+        <Text style={[styles.colPace, { color: C.textMuted }]}>Pace</Text>
       </View>
+      {valid.map((split, i) => {
+        const pct = getBarPct(split.paceMinPerMile);
+        return (
+          <View key={i} style={styles.row}>
+            <Text style={[styles.colMi, { color: split.isPartial ? C.textMuted : C.text }]}>
+              {split.label}
+            </Text>
+            <View style={styles.colBar}>
+              <View
+                style={[
+                  styles.bar,
+                  {
+                    width: `${pct}%` as any,
+                    backgroundColor: C.primary,
+                    opacity: split.isPartial ? 0.5 : 1,
+                  },
+                ]}
+              />
+            </View>
+            <Text style={[styles.colPace, { color: split.isPartial ? C.textMuted : C.text }]}>
+              {fmtPace(split.paceMinPerMile)}
+            </Text>
+          </View>
+        );
+      })}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    marginTop: 20,
+    marginTop: 16,
     width: "100%",
   },
   title: {
@@ -98,35 +91,36 @@ const styles = StyleSheet.create({
     fontSize: 11,
     letterSpacing: 0.8,
     textTransform: "uppercase",
-    marginBottom: 8,
+    marginBottom: 10,
   },
-  chartRow: {
+  headerRow: {
     flexDirection: "row",
-    alignItems: "flex-end",
+    alignItems: "center",
+    marginBottom: 5,
   },
-  column: {
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 7,
+  },
+  colMi: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 12,
+    width: 28,
+  },
+  colBar: {
     flex: 1,
-    alignItems: "center",
+    marginHorizontal: 8,
+    justifyContent: "center",
   },
-  paceLabelWrap: {
-    justifyContent: "flex-end",
-    alignItems: "center",
+  bar: {
+    height: 8,
+    borderRadius: 4,
   },
-  paceLabel: {
+  colPace: {
     fontFamily: "Outfit_400Regular",
-    fontSize: 8,
-  },
-  barArea: {
-    justifyContent: "flex-end",
-    alignItems: "center",
-  },
-  mileLabelWrap: {
-    justifyContent: "flex-start",
-    alignItems: "center",
-    marginTop: 4,
-  },
-  mileLabel: {
-    fontFamily: "Outfit_400Regular",
-    fontSize: 8,
+    fontSize: 12,
+    width: 44,
+    textAlign: "right",
   },
 });
