@@ -62,7 +62,6 @@ interface SoloRun {
   source?: string | null;
   garmin_activity_id?: string | null;
   apple_health_id?: string | null;
-  distance_tier?: number | null;
 }
 
 interface SavedPath {
@@ -224,34 +223,42 @@ function PathRoutePreview({ path, primary }: { path: RoutePoint[]; primary: stri
 
 // ─── Medal Badge ──────────────────────────────────────────────────────────────
 
-function MedalBadge({ tier }: { tier: 1 | 2 | 3 }) {
+interface RunAchievement { label: string; rank: 1 | 2 | 3 }
+
+function MedalBadge({ label, rank }: RunAchievement) {
   const { C } = useTheme();
-  const size = tier === 1 ? 20 : tier === 2 ? 18 : 16;
-  const opacity = tier === 1 ? 1 : tier === 2 ? 0.68 : 0.42;
-  const ribbonW = Math.floor(size * 0.28);
-  const ribbonH = Math.floor(size * 0.42);
-  const label = tier === 1 ? "PR" : String(tier);
-  const fontSize = tier === 1 ? 7 : 8;
+  const CIRCLE = 14;
+  const ribbonW = 4;
+  const ribbonH = 6;
+  const opacity = rank === 1 ? 1 : rank === 2 ? 0.72 : 0.46;
+  const rankLabel = rank === 1 ? "PR" : String(rank);
   return (
-    <View style={{ alignItems: "center", opacity }}>
+    <View style={{ alignItems: "center", opacity, marginRight: 4 }}>
       <View style={{
-        width: size, height: size, borderRadius: size / 2,
+        width: CIRCLE, height: CIRCLE, borderRadius: CIRCLE / 2,
         backgroundColor: C.primary,
         alignItems: "center", justifyContent: "center",
       }}>
         <Text style={{
           fontFamily: "Outfit_700Bold",
-          fontSize,
+          fontSize: 6,
           color: "#fff",
-          lineHeight: size * 0.58,
           includeFontPadding: false,
-        }}>{label}</Text>
+          lineHeight: 9,
+        }}>{rankLabel}</Text>
       </View>
       <View style={{ flexDirection: "row", marginTop: 1 }}>
-        <View style={{ width: ribbonW, height: ribbonH, backgroundColor: C.primary, borderBottomLeftRadius: 3 }} />
-        <View style={{ width: 2 }} />
-        <View style={{ width: ribbonW, height: ribbonH, backgroundColor: C.primary, borderBottomRightRadius: 3 }} />
+        <View style={{ width: ribbonW, height: ribbonH, backgroundColor: C.primary, borderBottomLeftRadius: 2 }} />
+        <View style={{ width: 1 }} />
+        <View style={{ width: ribbonW, height: ribbonH, backgroundColor: C.primary, borderBottomRightRadius: 2 }} />
       </View>
+      <Text style={{
+        fontFamily: "Outfit_600SemiBold",
+        fontSize: 7,
+        color: C.textMuted,
+        marginTop: 1,
+        includeFontPadding: false,
+      }}>{label}</Text>
     </View>
   );
 }
@@ -571,6 +578,7 @@ export default function SoloScreen() {
                   }
                   await AsyncStorage.removeItem(key);
                   qc.invalidateQueries({ queryKey: ["/api/solo-runs"] });
+                  qc.invalidateQueries({ queryKey: ["/api/solo-runs/achievements"] });
                   qc.invalidateQueries({ queryKey: ["/api/runs/mine"] });
                   Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 } catch (e: any) {
@@ -629,6 +637,12 @@ export default function SoloScreen() {
     queryKey: ["/api/solo-runs"],
     enabled: !!user,
     staleTime: 30_000,
+  });
+
+  const { data: achievementsMap = {} } = useQuery<Record<string, RunAchievement[]>>({
+    queryKey: ["/api/solo-runs/achievements"],
+    enabled: !!user,
+    staleTime: 60_000,
   });
 
   const { data: savedPaths = [] } = useQuery<SavedPath[]>({
@@ -708,14 +722,20 @@ export default function SoloScreen() {
       const res = await apiRequest("POST", "/api/solo-runs", data);
       return res.json();
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/solo-runs"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/solo-runs"] });
+      qc.invalidateQueries({ queryKey: ["/api/solo-runs/achievements"] });
+    },
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       await apiRequest("DELETE", `/api/solo-runs/${id}`);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/solo-runs"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/solo-runs"] });
+      qc.invalidateQueries({ queryKey: ["/api/solo-runs/achievements"] });
+    },
   });
 
   const starMutation = useMutation({
@@ -986,8 +1006,12 @@ export default function SoloScreen() {
                 color={run.is_starred ? C.gold : C.textMuted}
               />
             </Pressable>
-            {run.completed && run.distance_tier != null && run.distance_tier >= 1 && run.distance_tier <= 3 && (
-              <MedalBadge tier={run.distance_tier as 1 | 2 | 3} />
+            {run.completed && achievementsMap[run.id]?.length > 0 && (
+              <View style={{ flexDirection: "row", alignItems: "flex-end", marginRight: 2 }}>
+                {achievementsMap[run.id].map((a, i) => (
+                  <MedalBadge key={`${a.label}-${a.rank}-${i}`} label={a.label} rank={a.rank} />
+                ))}
+              </View>
             )}
             <Text style={s.historyDist}>{toDisplayDist(run.distance_miles, distUnit)}</Text>
             {run.completed && (
@@ -1081,7 +1105,7 @@ export default function SoloScreen() {
         )}
       </View>
     );
-  }, [expandedRunId, runBadges, distUnit, C, s, setShareRunData, starMutation, setSaveRunPathTarget, setSaveRunPathName, savedRunPathIds]);
+  }, [expandedRunId, runBadges, achievementsMap, distUnit, C, s, setShareRunData, starMutation, setSaveRunPathTarget, setSaveRunPathName, savedRunPathIds]);
 
   const renderSectionHeader = useCallback(({ section }: { section: { title: string } }) => (
     <View style={[s.monthHeader, { backgroundColor: C.bg }]}>

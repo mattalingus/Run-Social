@@ -1905,6 +1905,15 @@ async function go(e){
     }
   });
 
+  app.get("/api/solo-runs/achievements", requireAuth, async (req, res) => {
+    try {
+      const achievements = await storage.getSoloRunAchievements(req.session.userId!);
+      res.json(achievements);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.patch("/api/solo-runs/:id/star", requireAuth, async (req, res) => {
     try {
       const run = await storage.toggleStarSoloRun(req.params.id as string, req.session.userId!);

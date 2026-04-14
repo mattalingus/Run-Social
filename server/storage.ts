@@ -1320,19 +1320,86 @@ export async function updateMarkerIcon(userId: string, icon: string | null) {
 
 export async function getSoloRuns(userId: string) {
   const result = await pool.query(
-    `SELECT sr.*,
-       CASE WHEN sr.completed THEN
-         (SELECT CASE WHEN COUNT(*) < 3 THEN COUNT(*) + 1 ELSE NULL END
-          FROM solo_runs sr2
-          WHERE sr2.user_id = $1 AND sr2.completed = true AND sr2.is_deleted IS NOT TRUE
-            AND sr2.id != sr.id AND sr2.distance_miles > sr.distance_miles)
-       ELSE NULL END AS distance_tier
-     FROM solo_runs sr
-     WHERE sr.user_id = $1 AND sr.is_deleted IS NOT TRUE
-     ORDER BY sr.date DESC`,
+    `SELECT * FROM solo_runs WHERE user_id = $1 AND is_deleted IS NOT TRUE ORDER BY date DESC`,
     [userId]
   );
   return result.rows;
+}
+
+export async function getSoloRunAchievements(userId: string): Promise<Record<string, Array<{ label: string; rank: 1 | 2 | 3 }>>> {
+  const result = await pool.query(
+    `WITH
+      half_mi AS (
+        SELECT id, RANK() OVER (ORDER BY pace_min_per_mile ASC) AS rnk
+        FROM solo_runs WHERE user_id = $1 AND completed = true AND is_deleted IS NOT TRUE
+          AND pace_min_per_mile IS NOT NULL AND pace_min_per_mile > 0 AND distance_miles >= 0.5
+      ),
+      one_mi AS (
+        SELECT id, RANK() OVER (ORDER BY pace_min_per_mile ASC) AS rnk
+        FROM solo_runs WHERE user_id = $1 AND completed = true AND is_deleted IS NOT TRUE
+          AND pace_min_per_mile IS NOT NULL AND pace_min_per_mile > 0 AND distance_miles >= 0.9
+      ),
+      two_mi AS (
+        SELECT id, RANK() OVER (ORDER BY pace_min_per_mile ASC) AS rnk
+        FROM solo_runs WHERE user_id = $1 AND completed = true AND is_deleted IS NOT TRUE
+          AND pace_min_per_mile IS NOT NULL AND pace_min_per_mile > 0 AND distance_miles >= 1.9
+      ),
+      five_k AS (
+        SELECT id, RANK() OVER (ORDER BY pace_min_per_mile ASC) AS rnk
+        FROM solo_runs WHERE user_id = $1 AND completed = true AND is_deleted IS NOT TRUE
+          AND pace_min_per_mile IS NOT NULL AND pace_min_per_mile > 0 AND distance_miles >= 3.0
+      ),
+      five_mi AS (
+        SELECT id, RANK() OVER (ORDER BY pace_min_per_mile ASC) AS rnk
+        FROM solo_runs WHERE user_id = $1 AND completed = true AND is_deleted IS NOT TRUE
+          AND pace_min_per_mile IS NOT NULL AND pace_min_per_mile > 0 AND distance_miles >= 4.8
+      ),
+      ten_k AS (
+        SELECT id, RANK() OVER (ORDER BY pace_min_per_mile ASC) AS rnk
+        FROM solo_runs WHERE user_id = $1 AND completed = true AND is_deleted IS NOT TRUE
+          AND pace_min_per_mile IS NOT NULL AND pace_min_per_mile > 0 AND distance_miles >= 6.0
+      ),
+      half_mara AS (
+        SELECT id, RANK() OVER (ORDER BY pace_min_per_mile ASC) AS rnk
+        FROM solo_runs WHERE user_id = $1 AND completed = true AND is_deleted IS NOT TRUE
+          AND pace_min_per_mile IS NOT NULL AND pace_min_per_mile > 0 AND distance_miles >= 13.0
+      ),
+      full_mara AS (
+        SELECT id, RANK() OVER (ORDER BY pace_min_per_mile ASC) AS rnk
+        FROM solo_runs WHERE user_id = $1 AND completed = true AND is_deleted IS NOT TRUE
+          AND pace_min_per_mile IS NOT NULL AND pace_min_per_mile > 0 AND distance_miles >= 26.0
+      ),
+      longest AS (
+        SELECT id, RANK() OVER (ORDER BY distance_miles DESC) AS rnk
+        FROM solo_runs WHERE user_id = $1 AND completed = true AND is_deleted IS NOT TRUE
+      ),
+      fastest AS (
+        SELECT id, RANK() OVER (ORDER BY pace_min_per_mile ASC) AS rnk
+        FROM solo_runs WHERE user_id = $1 AND completed = true AND is_deleted IS NOT TRUE
+          AND pace_min_per_mile IS NOT NULL AND pace_min_per_mile > 0
+      ),
+      all_achievements AS (
+        SELECT id, '½ mi' AS label, rnk FROM half_mi WHERE rnk <= 3
+        UNION ALL SELECT id, '1 mi', rnk FROM one_mi WHERE rnk <= 3
+        UNION ALL SELECT id, '2 mi', rnk FROM two_mi WHERE rnk <= 3
+        UNION ALL SELECT id, '5K', rnk FROM five_k WHERE rnk <= 3
+        UNION ALL SELECT id, '5 mi', rnk FROM five_mi WHERE rnk <= 3
+        UNION ALL SELECT id, '10K', rnk FROM ten_k WHERE rnk <= 3
+        UNION ALL SELECT id, 'Half', rnk FROM half_mara WHERE rnk <= 3
+        UNION ALL SELECT id, 'Marathon', rnk FROM full_mara WHERE rnk <= 3
+        UNION ALL SELECT id, 'Longest', rnk FROM longest WHERE rnk <= 3
+        UNION ALL SELECT id, 'Fastest', rnk FROM fastest WHERE rnk <= 3
+      )
+    SELECT id, label, rnk FROM all_achievements ORDER BY id, rnk`,
+    [userId]
+  );
+
+  const map: Record<string, Array<{ label: string; rank: 1 | 2 | 3 }>> = {};
+  for (const row of result.rows) {
+    if (!map[row.id]) map[row.id] = [];
+    map[row.id].push({ label: row.label, rank: Math.min(row.rnk, 3) as 1 | 2 | 3 });
+  }
+  return map;
 }
 
 export async function getSoloRunById(id: string) {
