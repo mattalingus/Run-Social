@@ -3480,6 +3480,7 @@ export async function getPlannedRuns(userId: string) {
      JOIN runs r ON r.id = pr.run_id
      JOIN users u ON u.id = r.host_id
      WHERE pr.user_id = $1
+       AND r.date >= NOW() - INTERVAL '3 hours'
      ORDER BY r.date ASC`,
     [userId]
   );
