@@ -1,5 +1,28 @@
 uploads = []
-generated = []
+
+[[generated]]
+id = "fn63ad5mkA6jHchI9UNQb"
+uri = "file://assets/images/icon.png"
+type = "image"
+title = "paceup icon"
+
+[[generated]]
+id = "wh2ciED5oVRZU-zcfUuOl"
+uri = "file://assets/images/android-icon-foreground.png"
+type = "image"
+title = "paceup foreground icon"
+
+[[generated]]
+id = "KyNHRc2FlWhrEdEPCRg10"
+uri = "file://assets/images/android-icon-background.png"
+type = "image"
+title = "paceup dark background"
+
+[[generated]]
+id = "wIOkGn30qjsgb9HPFR7g1"
+uri = "file://assets/images/android-icon-monochrome.png"
+type = "image"
+title = "paceup monochrome icon"
 
 [[outputs]]
 id = "JTOUZRaOBKpEI6M5apbAl"
