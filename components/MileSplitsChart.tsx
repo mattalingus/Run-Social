@@ -60,16 +60,15 @@ export default function MileSplitsChart({ splits, activityType }: Props) {
               {split.label}
             </Text>
             <View style={styles.colBar}>
-              <View
-                style={[
-                  styles.bar,
-                  {
-                    width: `${pct}%` as any,
-                    backgroundColor: C.primary,
-                    opacity: split.isPartial ? 0.5 : 1,
-                  },
-                ]}
-              />
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <View
+                  style={[
+                    styles.bar,
+                    { flex: pct, backgroundColor: C.primary, opacity: split.isPartial ? 0.5 : 1 },
+                  ]}
+                />
+                <View style={{ flex: MAX_PCT - pct }} />
+              </View>
             </View>
             <Text style={[styles.colPace, { color: split.isPartial ? C.textMuted : C.text }]}>
               {fmtPace(split.paceMinPerMile)}
