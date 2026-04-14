@@ -233,7 +233,7 @@ function MedalBadge({ label, rank }: RunAchievement) {
   const opacity = rank === 1 ? 1 : rank === 2 ? 0.72 : 0.46;
   const rankLabel = rank === 1 ? "PR" : String(rank);
   return (
-    <View style={{ alignItems: "center", opacity, marginRight: 4 }}>
+    <View style={{ alignItems: "center", opacity }}>
       <View style={{
         width: CIRCLE, height: CIRCLE, borderRadius: CIRCLE / 2,
         backgroundColor: C.primary,
@@ -1007,7 +1007,7 @@ export default function SoloScreen() {
               />
             </Pressable>
             {run.completed && achievementsMap[run.id]?.length > 0 && (
-              <View style={{ flexDirection: "row", alignItems: "flex-end", marginRight: 2 }}>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "flex-end", gap: 4, marginRight: 2 }}>
                 {achievementsMap[run.id].map((a, i) => (
                   <MedalBadge key={`${a.label}-${a.rank}-${i}`} label={a.label} rank={a.rank} />
                 ))}
