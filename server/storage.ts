@@ -1431,6 +1431,31 @@ export async function getStarredSoloRuns(userId: string) {
   return result.rows;
 }
 
+export async function getUserPrContext(userId: string, excludeRunId: string): Promise<{
+  maxDistance: number | null;
+  bestPace: number | null;
+  totalRuns: number;
+}> {
+  const res = await pool.query(
+    `SELECT
+       MAX(distance_miles) AS max_distance,
+       MIN(CASE WHEN pace_min_per_mile > 0 THEN pace_min_per_mile END) AS best_pace,
+       COUNT(*) AS total_runs
+     FROM solo_runs
+     WHERE user_id = $1
+       AND completed = true
+       AND is_deleted IS NOT TRUE
+       AND id != $2`,
+    [userId, excludeRunId]
+  );
+  const row = res.rows[0];
+  return {
+    maxDistance: row.max_distance != null ? parseFloat(row.max_distance) : null,
+    bestPace: row.best_pace != null ? parseFloat(row.best_pace) : null,
+    totalRuns: parseInt(row.total_runs ?? "0"),
+  };
+}
+
 export async function toggleStarSoloRun(id: string, userId: string) {
   const result = await pool.query(
     `UPDATE solo_runs SET is_starred = NOT is_starred WHERE id = $1 AND user_id = $2 RETURNING *`,

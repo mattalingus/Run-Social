@@ -109,7 +109,8 @@ export async function generateSoloActivityPost(
   distanceMiles: number,
   paceMinPerMile: number | null,
   durationSeconds: number | null,
-  activityType: string
+  activityType: string,
+  prContext?: { isLongest: boolean; isBestPace: boolean; totalRuns: number }
 ): Promise<string> {
   const activity = activityType === "ride" ? "bike ride" : activityType === "walk" ? "walk" : "run";
   const distStr = `${distanceMiles.toFixed(1)} mi`;
@@ -119,8 +120,18 @@ export async function generateSoloActivityPost(
   const timeStr = durationSeconds ? `${Math.floor(durationSeconds / 60)} min` : null;
   const details = [distStr, paceStr ? `${paceStr} pace` : null, timeStr].filter(Boolean).join(", ");
 
+  const prNotes: string[] = [];
+  if (prContext?.isLongest) prNotes.push(`longest ${activity} ever`);
+  if (prContext?.isBestPace) prNotes.push("fastest pace ever");
+  const milestones = [5, 10, 25, 50, 100, 200, 500];
+  if (prContext && milestones.includes(prContext.totalRuns)) {
+    prNotes.push(`workout #${prContext.totalRuns} milestone`);
+  }
+  const prLine = prNotes.length > 0 ? ` Notable: ${prNotes.join(", ")}.` : "";
+
   if (!process.env.OPENAI_API_KEY) {
-    return `${name} just logged a ${activity}: ${details}.`;
+    const prSuffix = prNotes.length > 0 ? ` That's their ${prNotes[0]}!` : "";
+    return `${name} just logged a ${activity}: ${details}.${prSuffix}`;
   }
   try {
     const response = await openai.chat.completions.create({
@@ -129,11 +140,11 @@ export async function generateSoloActivityPost(
         {
           role: "system",
           content:
-            "You are a hype man for a running crew app. A member just logged a solo workout. Write one short, casual, celebratory message for the crew chat. Use the person's first name naturally. Mention the activity and key stats conversationally — don't just list them. Sound like a real person texting the group. Under 160 characters. No emojis. No hashtags.",
+            "You are a hype man for a running crew app. A member just logged a solo workout. Write one short, casual, celebratory message for the crew chat. Use the person's first name naturally. Mention the activity and key stats conversationally — don't just list them. If there are notable personal records or milestones, weave them in naturally (e.g., 'that's their longest run yet' or 'new pace PR'). Sound like a real person texting the group. Under 160 characters. No emojis. No hashtags.",
         },
         {
           role: "user",
-          content: `Name: ${name}. Activity: ${activity}. Stats: ${details}.`,
+          content: `Name: ${name}. Activity: ${activity}. Stats: ${details}.${prLine}`,
         },
       ],
       max_tokens: 60,

@@ -1914,14 +1914,22 @@ async function go(e){
         const resolvedRunId = run.id;
         (async () => {
           try {
-            const [user, crewRows] = await Promise.all([
+            const [user, crewRows, prCtx] = await Promise.all([
               storage.getUserById(resolvedUserId),
               storage.getUserCrewIds(resolvedUserId),
+              storage.getUserPrContext(resolvedUserId, resolvedRunId),
             ]);
             if (!user || !crewRows.length) return;
             const firstName = user.name?.split(" ")[0] || user.name || "Someone";
+            const isLongest = prCtx.maxDistance != null
+              ? resolvedDist > prCtx.maxDistance
+              : prCtx.totalRuns === 0;
+            const isBestPace = resolvedPace != null && prCtx.bestPace != null
+              ? resolvedPace < prCtx.bestPace
+              : false;
             const aiMessage = await ai.generateSoloActivityPost(
-              firstName, resolvedDist, resolvedPace, resolvedDuration, resolvedActivity
+              firstName, resolvedDist, resolvedPace, resolvedDuration, resolvedActivity,
+              { isLongest, isBestPace, totalRuns: prCtx.totalRuns + 1 }
             );
             const metadata = {
               distance: resolvedDist,
