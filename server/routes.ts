@@ -2143,16 +2143,24 @@ async function go(e){
         );
       }
 
-      // Fire-and-forget: post individual participant finish to their crew chats
+      // Fire-and-forget: post participant finish to both their crews AND the host's crews
       if (finisherDist > 0) {
         (async () => {
           try {
-            const [user, run, crewRows] = await Promise.all([
+            const run = await storage.getRunById(runIdForBg);
+            const hostId = run?.host_id;
+            const [user, finisherCrews, hostCrews] = await Promise.all([
               storage.getUserById(finisherUserId),
-              storage.getRunById(runIdForBg),
               storage.getUserCrewIds(finisherUserId),
+              hostId && hostId !== finisherUserId ? storage.getUserCrewIds(hostId) : Promise.resolve([]),
             ]);
-            if (!user || !crewRows.length) return;
+            if (!user) return;
+            // Deduplicate crew IDs from both finisher and host
+            const allCrewIdSet = new Set<string>([
+              ...finisherCrews.map((r: any) => r.crew_id),
+              ...(hostCrews as any[]).map((r: any) => r.crew_id),
+            ]);
+            if (!allCrewIdSet.size) return;
             const firstName = user.name?.split(" ")[0] || user.name || "Someone";
             const activityType = run?.activity_type ?? "run";
             const aiMessage = await ai.generateSoloActivityPost(
@@ -2165,9 +2173,9 @@ async function go(e){
               runId: runIdForBg,
               isGroupRun: true,
             };
-            for (const { crew_id } of crewRows) {
+            for (const crewId of allCrewIdSet) {
               await storage.createCrewMessage(
-                crew_id, finisherUserId, user.name, user.profilePhoto || null,
+                crewId, finisherUserId, user.name, user.profilePhoto || null,
                 aiMessage, "solo_activity", metadata
               );
             }
