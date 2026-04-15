@@ -521,6 +521,8 @@ export async function cleanupStalePlannedRuns() {
     )
     RETURNING run_id
   `);
+  // Note: uses 24h threshold (vs getPlannedRuns' 3h display cutoff) to give
+  // a generous buffer for long or delayed runs before hard-deleting the intent row.
   if (result.rowCount && result.rowCount > 0) {
     console.log(`[startup-cleanup] Removed ${result.rowCount} stale planned_runs row(s)`);
   }
