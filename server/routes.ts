@@ -108,6 +108,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   await storage.initDb();
+  await storage.cleanupStalePlannedRuns();
 
   if (process.env.NODE_ENV !== "production") {
     const runCount = await getRunCount();

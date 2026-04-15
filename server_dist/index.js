@@ -595,6 +595,21 @@ async function initDb() {
     console.log("[cleanup] Removed dummy seed accounts and their runs");
   }
 }
+async function cleanupStalePlannedRuns() {
+  const result = await pool.query(`
+    DELETE FROM planned_runs
+    WHERE run_id IN (
+      SELECT id FROM runs
+      WHERE is_completed = true
+         OR is_deleted = true
+         OR date < NOW() - INTERVAL '24 hours'
+    )
+    RETURNING run_id
+  `);
+  if (result.rowCount && result.rowCount > 0) {
+    console.log(`[startup-cleanup] Removed ${result.rowCount} stale planned_runs row(s)`);
+  }
+}
 async function getBuddyEligibility(userId) {
   const groupRes = await pool.query(
     `SELECT COUNT(DISTINCT rc.run_id) as count
@@ -4696,6 +4711,7 @@ async function registerRoutes(app2) {
     throw new Error("SESSION_SECRET environment variable is required but not set");
   }
   await initDb();
+  await cleanupStalePlannedRuns();
   if (process.env.NODE_ENV !== "production") {
     const runCount = await getRunCount();
     if (runCount === 0) {

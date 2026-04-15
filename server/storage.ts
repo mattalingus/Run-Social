@@ -510,6 +510,22 @@ export async function initDb() {
   }
 }
 
+export async function cleanupStalePlannedRuns() {
+  const result = await pool.query(`
+    DELETE FROM planned_runs
+    WHERE run_id IN (
+      SELECT id FROM runs
+      WHERE is_completed = true
+         OR is_deleted = true
+         OR date < NOW() - INTERVAL '24 hours'
+    )
+    RETURNING run_id
+  `);
+  if (result.rowCount && result.rowCount > 0) {
+    console.log(`[startup-cleanup] Removed ${result.rowCount} stale planned_runs row(s)`);
+  }
+}
+
 export async function getBuddyEligibility(userId: string) {
   // Count group runs user completed where total completions >= 2
   const groupRes = await pool.query(
