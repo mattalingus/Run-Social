@@ -552,16 +552,48 @@ export default function RunTrackingScreen() {
   const audioModeConfiguredRef = useRef(false);
 
   const ensureAudioMode = useCallback(async (duck: boolean) => {
+    if (Platform.OS === "web") return;
     try {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        interruptionModeIOS: duck ? InterruptionModeIOS.DuckOthers : InterruptionModeIOS.MixWithOthers,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: true,
-        interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
-        shouldDuckAndroid: duck,
-        playThroughEarpieceAndroid: false,
-      });
+      if (duck) {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          interruptionModeIOS: InterruptionModeIOS.DuckOthers,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: true,
+          interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+        });
+      } else {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: true,
+          interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
+          shouldDuckAndroid: false,
+          playThroughEarpieceAndroid: false,
+        });
+        await new Promise<void>(resolve => setTimeout(resolve, 300));
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
+          shouldDuckAndroid: false,
+          playThroughEarpieceAndroid: false,
+        });
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: true,
+          interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
+          shouldDuckAndroid: false,
+          playThroughEarpieceAndroid: false,
+        });
+      }
     } catch (e) {}
   }, []);
 
