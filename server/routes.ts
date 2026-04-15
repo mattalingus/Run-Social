@@ -2166,15 +2166,16 @@ async function go(e){
 
   app.post("/api/runs/:id/runner-finish", requireAuth, async (req, res) => {
     try {
-      const { finalDistance, finalPace } = req.body;
+      const { finalDistance, finalPace, mileSplits } = req.body;
       if (finalDistance == null || finalPace == null) return res.status(400).json({ message: "finalDistance and finalPace required" });
       const parsedDist = parseFloat(finalDistance);
       const parsedPace = parseFloat(finalPace);
       const safeDist = Number.isFinite(parsedDist) && parsedDist > 0 ? parsedDist : 0;
       const safePace = Number.isFinite(parsedPace) && parsedPace > 0 ? parsedPace : 0;
+      const safeSplits = Array.isArray(mileSplits) && mileSplits.length > 0 ? mileSplits : null;
       const result = await storage.finishRunnerRun(
         req.params.id as string, req.session.userId!,
-        safeDist, safePace
+        safeDist, safePace, safeSplits
       );
       res.json({ success: result.success });
       // Fire-and-forget crew achievement check + crew recap if all finished

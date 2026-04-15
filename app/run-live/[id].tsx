@@ -53,6 +53,27 @@ function formatPaceStr(paceNum: number): string {
 // Runner dot colors (cycling palette, excluding primary green for self)
 const DOT_COLORS = ["#FF6B6B", "#4ECDC4", "#FFE66D", "#A855F7", "#F97316", "#38BDF8", "#FB7185"];
 
+type MileSplit = { label: string; paceMinPerMile: number; isPartial: boolean };
+
+function buildFinalSplits(splits: MileSplit[], totalDist: number, totalElapsed: number): MileSplit[] {
+  const result = [...splits];
+  const lastSplitMile = result.filter((s) => !s.isPartial).length;
+  const prevMileElapsed = lastSplitMile > 0
+    ? result.filter((s) => !s.isPartial).reduce((acc, s) => acc + s.paceMinPerMile * 60, 0)
+    : 0;
+  const remainingDist = totalDist - lastSplitMile;
+  if (remainingDist > 0.05 && totalElapsed > prevMileElapsed) {
+    const remainingSeconds = totalElapsed - prevMileElapsed;
+    const partialPace = Math.min(Math.max((remainingSeconds / 60) / remainingDist, 1), 30);
+    result.push({
+      label: (Math.floor(remainingDist * 10) / 10).toFixed(1),
+      paceMinPerMile: partialPace,
+      isPartial: true,
+    });
+  }
+  return result;
+}
+
 // ─── Screen ──────────────────────────────────────────────────────────────────
 
 export default function RunLiveScreen() {
@@ -74,6 +95,7 @@ export default function RunLiveScreen() {
     routePathRef,
     totalDistRef,
     elapsedRef,
+    mileSplitsRef,
     hasBeenPresent,
     presentConfirmed,
     startTracking,
@@ -274,9 +296,11 @@ export default function RunLiveScreen() {
     if (isHost && !hostFinished) return;
     if (phase === "active" || phase === "paused") {
       const finalPace = calcPaceNum(totalDistRef.current, elapsedRef.current);
+      const autoSplits = buildFinalSplits(mileSplitsRef.current, totalDistRef.current, elapsedRef.current);
       apiRequest("POST", `/api/runs/${id}/runner-finish`, {
         finalDistance: totalDistRef.current,
         finalPace,
+        mileSplits: autoSplits.length > 0 ? autoSplits : null,
       }).catch(() => {}).finally(() => {
         resetTracking();
         setTimeout(() => { router.replace(`/run-results/${id}?autoShare=1`); }, 0);
@@ -385,9 +409,11 @@ export default function RunLiveScreen() {
             for (let attempt = 0; attempt < 3; attempt++) {
               try {
                 if (attempt > 0) await new Promise((r) => setTimeout(r, 2000 * attempt));
+                const manualSplits = buildFinalSplits(mileSplitsRef.current, totalDistRef.current, elapsedRef.current);
                 await apiRequest("POST", `/api/runs/${id}/runner-finish`, {
                   finalDistance: totalDistRef.current,
                   finalPace,
+                  mileSplits: manualSplits.length > 0 ? manualSplits : null,
                 });
                 saved = true;
                 break;

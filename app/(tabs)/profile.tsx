@@ -92,6 +92,7 @@ interface RunHistoryItem {
   my_final_distance?: number | null;
   my_final_pace?: number | null;
   my_route_path?: any[] | null;
+  my_mile_splits?: Array<{ label: string; paceMinPerMile: number; isPartial: boolean }> | null;
 }
 
 type HistoryEventType = "solo" | "crew" | "public" | "friends";
@@ -560,6 +561,7 @@ function ProfileScreenInner() {
           duration_seconds: null,
           elevation_gain_ft: null,
           route_path: routePath,
+          mile_splits: r.my_mile_splits ?? null,
           activity_type: r.activity_type ?? "run",
           is_starred: false,
           host_name: r.host_name,
@@ -2028,6 +2030,11 @@ function ProfileScreenInner() {
                               {run.duration_seconds ? `  ·  Duration: ${formatDurationSolo(run.duration_seconds)}` : ""}
                             </Text>
                           )}
+                          {run.mile_splits && run.mile_splits.length > 0 ? (
+                            <MileSplitsChart splits={run.mile_splits} activityType={run.activity_type} />
+                          ) : (run.my_final_distance != null && run.my_final_distance > 0) ? (
+                            <Text style={[styles.soloHistMeta, { marginTop: 8, textAlign: "center", fontStyle: "italic" }]}>No splits recorded for this run</Text>
+                          ) : null}
                           <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
                             <Pressable
                               style={({ pressed }) => [styles.shareActivityBtn, { flex: 1, opacity: pressed ? 0.75 : 1 }]}

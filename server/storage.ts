@@ -496,6 +496,7 @@ export async function initDb() {
     );
     CREATE INDEX IF NOT EXISTS idx_path_shares_to ON path_shares(to_user_id);
     ALTER TABLE saved_paths ADD COLUMN IF NOT EXISTS community_path_id VARCHAR REFERENCES community_paths(id) ON DELETE SET NULL;
+    ALTER TABLE run_participants ADD COLUMN IF NOT EXISTS mile_splits JSONB DEFAULT NULL;
   `);
 
   const dummyCheck = await pool.query(`SELECT COUNT(*) FROM users WHERE email LIKE 'dummy-%@paceup.dev'`);
@@ -1664,6 +1665,7 @@ export async function getUserRuns(userId: string) {
       COALESCE((SELECT rp3.is_present FROM run_participants rp3 WHERE rp3.run_id = r.id AND rp3.user_id = $1 LIMIT 1), false) as my_is_present,
       (SELECT rp5.final_distance FROM run_participants rp5 WHERE rp5.run_id = r.id AND rp5.user_id = $1 LIMIT 1) as my_final_distance,
       (SELECT rp6.final_pace FROM run_participants rp6 WHERE rp6.run_id = r.id AND rp6.user_id = $1 LIMIT 1) as my_final_pace,
+      (SELECT rp7.mile_splits FROM run_participants rp7 WHERE rp7.run_id = r.id AND rp7.user_id = $1 LIMIT 1) as my_mile_splits,
       (SELECT json_agg(pt ORDER BY pt.recorded_at)
          FROM (
            SELECT latitude, longitude, recorded_at
@@ -2415,7 +2417,7 @@ export async function createSoloRunForTagAlong(runId: string, tagAlongUserId: st
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function finishRunnerRun(runId: string, userId: string, finalDistance: number, finalPace: number) {
+export async function finishRunnerRun(runId: string, userId: string, finalDistance: number, finalPace: number, mileSplits?: any[] | null) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -2428,8 +2430,8 @@ export async function finishRunnerRun(runId: string, userId: string, finalDistan
     );
 
     await client.query(
-      `UPDATE run_participants SET final_distance = $3, final_pace = $4 WHERE run_id = $1 AND user_id = $2`,
-      [runId, userId, finalDistance, finalPace]
+      `UPDATE run_participants SET final_distance = $3, final_pace = $4, mile_splits = $5 WHERE run_id = $1 AND user_id = $2`,
+      [runId, userId, finalDistance, finalPace, mileSplits && mileSplits.length > 0 ? JSON.stringify(mileSplits) : null]
     );
 
     const runRes = await client.query(`SELECT host_id FROM runs WHERE id = $1`, [runId]);

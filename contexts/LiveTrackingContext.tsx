@@ -13,6 +13,12 @@ import { apiRequest } from "@/lib/query-client";
 
 type Phase = "idle" | "active" | "paused" | "finishing";
 
+export type MileSplit = {
+  label: string;
+  paceMinPerMile: number;
+  isPartial: boolean;
+};
+
 export interface LiveTrackingContextValue {
   runId: string | null;
   activityType: "run" | "ride" | "walk";
@@ -26,6 +32,7 @@ export interface LiveTrackingContextValue {
   routePathRef: React.MutableRefObject<Array<{ latitude: number; longitude: number }>>;
   totalDistRef: React.MutableRefObject<number>;
   elapsedRef: React.MutableRefObject<number>;
+  mileSplitsRef: React.MutableRefObject<MileSplit[]>;
   startTracking: (runId: string, activityType: "run" | "ride" | "walk", userId?: string) => Promise<void>;
   pauseTracking: () => void;
   resumeTracking: () => void;
@@ -76,6 +83,9 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
   const totalDistRef = useRef(0);
   const elapsedRef = useRef(0);
   const routePathRef = useRef<Array<{ latitude: number; longitude: number }>>([]);
+  const mileSplitsRef = useRef<MileSplit[]>([]);
+  const lastSplitMileRef = useRef(0);
+  const prevMileElapsedRef = useRef(0);
   const markedPresentRef = useRef(false);
   const activeRunIdRef = useRef<string | null>(null);
   const activeUserIdRef = useRef<string | null>(null);
@@ -150,6 +160,21 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
       if (d >= 0 && d < 0.3) {
         totalDistRef.current += d;
         setDisplayDist(totalDistRef.current);
+
+        // Track mile splits
+        const crossedMile = Math.floor(totalDistRef.current);
+        if (crossedMile > lastSplitMileRef.current && crossedMile >= 1) {
+          const splitSeconds = elapsedRef.current - prevMileElapsedRef.current;
+          if (splitSeconds > 0) {
+            const pace = Math.min(Math.max(splitSeconds / 60, 1), 30);
+            mileSplitsRef.current = [
+              ...mileSplitsRef.current,
+              { label: `M${mileSplitsRef.current.length + 1}`, paceMinPerMile: pace, isPartial: false },
+            ];
+          }
+          lastSplitMileRef.current = crossedMile;
+          prevMileElapsedRef.current = elapsedRef.current;
+        }
       }
     }
     // Always keep lastCoord current so resume has no distance jump
@@ -243,6 +268,9 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
     totalDistRef.current = 0;
     elapsedRef.current = 0;
     routePathRef.current = [];
+    mileSplitsRef.current = [];
+    lastSplitMileRef.current = 0;
+    prevMileElapsedRef.current = 0;
     markedPresentRef.current = false;
     setDisplayDist(0);
     setElapsed(0);
@@ -331,6 +359,9 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
     elapsedRef.current = 0;
     totalDistRef.current = 0;
     routePathRef.current = [];
+    mileSplitsRef.current = [];
+    lastSplitMileRef.current = 0;
+    prevMileElapsedRef.current = 0;
     lastCoordRef.current = null;
     lastCoordTimestampRef.current = null;
     markedPresentRef.current = false;
@@ -366,6 +397,7 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
         routePathRef,
         totalDistRef,
         elapsedRef,
+        mileSplitsRef,
         startTracking,
         pauseTracking,
         resumeTracking,
