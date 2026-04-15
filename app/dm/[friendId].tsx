@@ -352,8 +352,10 @@ export default function DmThread() {
   useEffect(() => {
     if (!friendId) return;
     apiRequest("POST", `/api/dm/${friendId}/read`).catch(() => {});
+    apiRequest("POST", "/api/notifications/mark-read", {}).catch(() => {});
     qc.invalidateQueries({ queryKey: ["/api/dm/conversations"] });
     qc.invalidateQueries({ queryKey: ["/api/dm/unread-count"] });
+    qc.invalidateQueries({ queryKey: ["/api/notifications"] });
   }, [friendId]);
 
   async function fetchGifs(query: string) {

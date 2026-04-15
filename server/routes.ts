@@ -2961,7 +2961,7 @@ async function go(e){
         storage.getUserById(req.session.userId!),
         storage.getUserById(req.params.friendId as string),
       ]).then(([sender, recipient]) => {
-        if (sender && recipient?.push_token && recipient.notifications_enabled !== false) {
+        if (sender && userWantsNotif(recipient, "direct_messages")) {
           const body = isGif ? "Sent you a GIF 🏃" : (message ?? "").trim();
           sendPushNotification(
             recipient.push_token,

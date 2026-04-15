@@ -41,13 +41,14 @@ export async function sendPushNotification(
   }
 }
 
-export type NotifType = "run_reminders" | "crew_activity" | "weekly_summary" | "friend_requests";
+export type NotifType = "run_reminders" | "crew_activity" | "weekly_summary" | "friend_requests" | "direct_messages";
 
 const notifFieldMap: Record<NotifType, string> = {
   run_reminders: "notif_run_reminders",
   crew_activity: "notif_crew_activity",
   weekly_summary: "notif_weekly_summary",
   friend_requests: "notif_friend_requests",
+  direct_messages: "notif_direct_messages",
 };
 
 export function userWantsNotif(user: any, type: NotifType): boolean {
