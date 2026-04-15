@@ -12,7 +12,7 @@ import {
   Keyboard,
 } from "react-native";
 import { Image as ExpoImage } from "expo-image";
-import { Stack, useLocalSearchParams } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -333,6 +333,7 @@ export default function DmThread() {
     friendUsername: string;
     friendPhoto: string;
   }>();
+  const router = useRouter();
   const { user } = useAuth();
   const qc = useQueryClient();
   const [draft, setDraft] = useState("");
@@ -429,7 +430,17 @@ export default function DmThread() {
 
   return (
     <>
-      <Stack.Screen options={{ headerTitle, headerBackVisible: true }} />
+      <Stack.Screen
+        options={{
+          headerTitle,
+          headerBackVisible: false,
+          headerLeft: () => (
+            <TouchableOpacity onPress={router.back} style={{ paddingRight: 8 }}>
+              <Ionicons name="chevron-back" size={26} color={C.text} />
+            </TouchableOpacity>
+          ),
+        }}
+      />
       <View style={s.root}>
         <KeyboardAvoidingView
           style={s.kav}
