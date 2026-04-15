@@ -1125,6 +1125,53 @@ export default function RunTrackingScreen() {
         isPartial: true,
       });
     }
+
+    // Clip GPS path and distance to the saved route's length if the user ran past it
+    if (selectedPath?.distance_miles && totalDistRef.current > selectedPath.distance_miles * 1.02) {
+      const routeDist = selectedPath.distance_miles;
+      const fullPath = routePathRef.current;
+      if (fullPath.length > 1) {
+        let cumDist = 0;
+        const clippedPts: { latitude: number; longitude: number }[] = [fullPath[0]];
+        let didClip = false;
+        for (let i = 1; i < fullPath.length; i++) {
+          const prev = fullPath[i - 1];
+          const curr = fullPath[i];
+          const seg = haversine(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
+          if (cumDist + seg >= routeDist) {
+            const frac = seg > 0 ? (routeDist - cumDist) / seg : 0;
+            clippedPts.push({
+              latitude: prev.latitude + frac * (curr.latitude - prev.latitude),
+              longitude: prev.longitude + frac * (curr.longitude - prev.longitude),
+            });
+            didClip = true;
+            break;
+          }
+          clippedPts.push(curr);
+          cumDist += seg;
+        }
+        if (didClip) {
+          routePathRef.current = clippedPts;
+          totalDistRef.current = routeDist;
+          setDisplayDist(routeDist);
+          // Rebuild splits: keep full-mile splits within the route, add partial for leftover
+          const fullMilesInRoute = Math.floor(routeDist);
+          const keptSplits = finalSplits.filter((s) => !s.isPartial).slice(0, fullMilesInRoute);
+          const fracDist = routeDist - fullMilesInRoute;
+          if (fracDist > 0.05) {
+            const avgPace = elapsedRef.current / 60 / routeDist;
+            keptSplits.push({
+              label: fracDist.toFixed(2),
+              paceMinPerMile: Math.min(Math.max(avgPace, 1), 30),
+              isPartial: true,
+            });
+          }
+          finalSplits.length = 0;
+          finalSplits.push(...keptSplits);
+        }
+      }
+    }
+
     setMileSplits(finalSplits);
     // T002: persist draft so data survives app crash on done screen
     if (user) {
@@ -1927,7 +1974,7 @@ export default function RunTrackingScreen() {
             horizontal
             showsHorizontalScrollIndicator={false}
             style={{ width: "100%" }}
-            contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }}
+            contentContainerStyle={{ flexDirection: "row", gap: 8, paddingHorizontal: 16 }}
           >
             {mileSplits.map((split) => {
               const m = Math.floor(split.paceMinPerMile);

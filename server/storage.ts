@@ -3490,7 +3490,7 @@ export async function matchCommunityPath(
        AND ABS(cp.start_lng - $3) < 0.005
        AND ABS(cp.end_lat - $4) < 0.005
        AND ABS(cp.end_lng - $5) < 0.005
-       AND ($6 = 0 OR cp.distance_miles IS NULL OR ABS(cp.distance_miles - $6) / GREATEST($6, 0.1) < 0.35)
+       AND ($6::float = 0 OR cp.distance_miles IS NULL OR ABS(cp.distance_miles - $6::float) / GREATEST($6::float, 0.1) < 0.35)
      ORDER BY cp.contributor_count DESC LIMIT 1`,
     [userId, start.latitude, start.longitude, end.latitude, end.longitude, dist]
   );

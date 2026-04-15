@@ -43,7 +43,12 @@ export default function AICoachCard({ runId, style, compact = false }: Props) {
     setSummary(null);
     apiRequest("POST", `/api/solo-runs/${runId}/ai-summary`)
       .then(res => res.json())
-      .then(data => { if (!cancelled) setSummary(data.summary ?? null); })
+      .then(data => {
+        if (!cancelled) {
+          const s = data?.summary;
+          setSummary(typeof s === "string" && s.length > 0 ? s : null);
+        }
+      })
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
