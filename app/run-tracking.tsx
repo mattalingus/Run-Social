@@ -190,9 +190,9 @@ function pickCoachPhrase(
     const ww = wholeMiles <= 20 ? NUM[wholeMiles] : String(wholeMiles);
     distLine = pick([
       `${ww.charAt(0).toUpperCase() + ww.slice(1)} ${fracWord} miles.`,
-      `${distance.toFixed(1)} miles.`,
-      `${distance.toFixed(1)} miles in.`,
-      `${distance.toFixed(1)}.`,
+      `${(Math.floor(distance * 10) / 10).toFixed(1)} miles.`,
+      `${(Math.floor(distance * 10) / 10).toFixed(1)} miles in.`,
+      `${(Math.floor(distance * 10) / 10).toFixed(1)}.`,
     ]);
   } else {
     distLine = `${distance} miles.`;
@@ -689,7 +689,7 @@ export default function RunTrackingScreen() {
             ? `${Math.floor(pace)}:${Math.round((pace - Math.floor(pace)) * 60).toString().padStart(2, "0")}/mi`
             : "";
           Share.share({
-            message: `Just finished a ${dist.toFixed(2)} mile ${activityFilter}${paceStr ? ` at ${paceStr} pace` : ""}! ${activityFilter === "ride" ? "🚴" : activityFilter === "walk" ? "🚶" : "🏃"} Tracked on PaceUp.`,
+            message: `Just finished a ${(Math.floor(dist * 100) / 100).toFixed(2)} mile ${activityFilter}${paceStr ? ` at ${paceStr} pace` : ""}! ${activityFilter === "ride" ? "🚴" : activityFilter === "walk" ? "🚶" : "🏃"} Tracked on PaceUp.`,
           }).catch(() => {});
         });
       } catch (_) {}
@@ -1120,7 +1120,7 @@ export default function RunTrackingScreen() {
       const remainingSeconds = elapsedRef.current - prevMileElapsedRef.current;
       const partialPace = Math.min(Math.max((remainingSeconds / 60) / remainingDist, 1), 30);
       finalSplits.push({
-        label: remainingDist.toFixed(1),
+        label: (Math.floor(remainingDist * 10) / 10).toFixed(1),
         paceMinPerMile: partialPace,
         isPartial: true,
       });
