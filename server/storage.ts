@@ -2449,6 +2449,10 @@ export async function finishRunnerRun(runId: string, userId: string, finalDistan
           [runId]
         );
         await computeLeaderboardRanksWithClient(runId, client);
+        await client.query(
+          `DELETE FROM planned_runs WHERE run_id = $1`,
+          [runId]
+        );
       }
     }
 
@@ -2566,11 +2570,25 @@ export async function forceCompleteRun(runId: string) {
         const safePace = parseFloat(tpRes.rows[0].pace) || 0;
         if (safeDist > 0) {
           await client.query(
-            `UPDATE run_participants SET final_distance = $3, final_pace = $4
+            `UPDATE run_participants SET final_distance = $3, final_pace = $4, status = 'confirmed'
              WHERE run_id = $1 AND user_id = $2`,
             [runId, row.user_id, safeDist, safePace]
           );
+        } else {
+          // Present but no tracking data — mark confirmed so they show "Done"
+          await client.query(
+            `UPDATE run_participants SET status = 'confirmed'
+             WHERE run_id = $1 AND user_id = $2`,
+            [runId, row.user_id]
+          );
         }
+      } else {
+        // No tracking points at all — still present, mark confirmed
+        await client.query(
+          `UPDATE run_participants SET status = 'confirmed'
+           WHERE run_id = $1 AND user_id = $2`,
+          [runId, row.user_id]
+        );
       }
     }
 
@@ -2579,6 +2597,10 @@ export async function forceCompleteRun(runId: string) {
       [runId]
     );
     await computeLeaderboardRanksWithClient(runId, client);
+    await client.query(
+      `DELETE FROM planned_runs WHERE run_id = $1`,
+      [runId]
+    );
     await client.query('COMMIT');
   } catch (e) {
     await client.query('ROLLBACK');
@@ -3584,6 +3606,10 @@ export async function getPlannedRuns(userId: string) {
        AND r.date >= NOW() - INTERVAL '3 hours'
        AND r.is_completed = false
        AND r.is_deleted IS NOT TRUE
+       AND NOT EXISTS (
+         SELECT 1 FROM run_participants rp2
+         WHERE rp2.run_id = r.id AND rp2.user_id = $1 AND rp2.status = 'confirmed'
+       )
      ORDER BY r.date ASC`,
     [userId]
   );
