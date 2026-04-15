@@ -574,25 +574,27 @@ export default function RunTrackingScreen() {
           shouldDuckAndroid: false,
           playThroughEarpieceAndroid: false,
         });
-        await new Promise<void>(resolve => setTimeout(resolve, 300));
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-          interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: false,
-          interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
-          shouldDuckAndroid: false,
-          playThroughEarpieceAndroid: false,
-        });
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-          interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: true,
-          interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
-          shouldDuckAndroid: false,
-          playThroughEarpieceAndroid: false,
-        });
+        if (Platform.OS === "ios") {
+          await new Promise<void>(resolve => setTimeout(resolve, 300));
+          await Audio.setAudioModeAsync({
+            allowsRecordingIOS: false,
+            interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
+            playsInSilentModeIOS: true,
+            staysActiveInBackground: false,
+            interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
+            shouldDuckAndroid: false,
+            playThroughEarpieceAndroid: false,
+          });
+          await Audio.setAudioModeAsync({
+            allowsRecordingIOS: false,
+            interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
+            playsInSilentModeIOS: true,
+            staysActiveInBackground: true,
+            interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
+            shouldDuckAndroid: false,
+            playThroughEarpieceAndroid: false,
+          });
+        }
       }
     } catch (e) {}
   }, []);
