@@ -143,8 +143,22 @@ export default function RunResultsScreen() {
   const hasPaceGroups = run?.pace_groups && (run.pace_groups as any[]).length > 0;
   const hasAnyGroupLabel = finished.some((r: any) => r.pace_group_label);
 
-  const aiSummary: { summary: string } | undefined = undefined;
-  const summaryLoading = false;
+  const { data: aiSummary, isLoading: summaryLoading } = useQuery<{ summary: string } | undefined>({
+    queryKey: ["/api/solo-runs", id, "ai-summary"],
+    enabled: !!id,
+    retry: false,
+    staleTime: Infinity,
+    queryFn: async () => {
+      try {
+        const res = await apiRequest("POST", `/api/solo-runs/${id}/ai-summary`);
+        const data = await res.json();
+        if (typeof data?.summary !== "string" || data.summary.length === 0) return undefined;
+        return { summary: data.summary as string };
+      } catch {
+        return undefined;
+      }
+    },
+  });
 
   return (
     <View style={s.container}>

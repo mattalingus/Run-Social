@@ -1127,7 +1127,7 @@ export default function RunTrackingScreen() {
     }
 
     // Clip GPS path and distance to the saved route's length if the user ran past it
-    if (selectedPath?.distance_miles && totalDistRef.current > selectedPath.distance_miles * 1.02) {
+    if (selectedPath?.distance_miles && totalDistRef.current > selectedPath.distance_miles) {
       const routeDist = selectedPath.distance_miles;
       const fullPath = routePathRef.current;
       if (fullPath.length > 1) {
