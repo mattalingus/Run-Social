@@ -2151,35 +2151,27 @@ export async function pingRunLocation(
 
   let isPresent = false;
   if (run.is_active) {
-    // Once the run is active, any participant who pings is marked present
-    // regardless of their distance from the start point.
-    // Pre-run proximity auto-check-in is handled in startGroupRun when the
-    // host launches the run (500ft gate still applies there).
-    const upsertRes = await pool.query(
-      `INSERT INTO run_participants (run_id, user_id, status, is_present)
-       VALUES ($1, $2, 'joined', true)
-       ON CONFLICT (run_id, user_id) DO UPDATE SET is_present = true
-       WHERE run_participants.status != 'cancelled'
-       RETURNING run_id`,
-      [runId, userId]
-    );
-    isPresent = (upsertRes.rowCount ?? 0) > 0;
+    const distKm = haversineKm(latitude, longitude, run.location_lat, run.location_lng);
+    const within500ft = distKm <= 0.1524;
+    const isHost = userId === run.host_id;
 
-    // Backfill: mark all non-cancelled participants who already have at least
-    // one tracking ping as present. This makes previously-pinging participants
-    // immediately visible to the host without waiting for their next ping cycle.
-    await pool.query(
-      `UPDATE run_participants rp
-       SET is_present = true
-       WHERE rp.run_id = $1
-         AND rp.status != 'cancelled'
-         AND rp.is_present = false
-         AND EXISTS (
-           SELECT 1 FROM run_tracking_points tp
-           WHERE tp.run_id = $1 AND tp.user_id = rp.user_id
-         )`,
-      [runId]
-    );
+    if (within500ft || isHost) {
+      const upsertRes = await pool.query(
+        `INSERT INTO run_participants (run_id, user_id, status, is_present)
+         VALUES ($1, $2, 'joined', true)
+         ON CONFLICT (run_id, user_id) DO UPDATE SET is_present = true
+         WHERE run_participants.status != 'cancelled'
+         RETURNING run_id`,
+        [runId, userId]
+      );
+      isPresent = (upsertRes.rowCount ?? 0) > 0;
+    } else {
+      const presRes = await pool.query(
+        `SELECT is_present FROM run_participants WHERE run_id = $1 AND user_id = $2 AND status != 'cancelled'`,
+        [runId, userId]
+      );
+      isPresent = presRes.rows[0]?.is_present ?? false;
+    }
   }
   return { isPresent, isActive: run.is_active };
 }

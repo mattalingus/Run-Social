@@ -197,8 +197,14 @@ export default function RunLiveScreen() {
     restore();
   }, []);
 
-  // Auto-start tracking when host activates run and current user is a confirmed participant
-  // (fires when liveState transitions from falsy → true while screen is already open)
+  // Auto-start tracking when host activates run.
+  // Any non-host participant on the live screen begins tracking the moment
+  // the run becomes active. Their first ping will mark them is_present=true
+  // via the 500ft proximity check in pingRunLocation, making them visible to
+  // the host within ~10 seconds. We do NOT gate this on is_present, because
+  // startGroupRun only marks participants present if they had pre-existing
+  // tracking points (which idle participants never do) — gating here would
+  // leave them stuck on a spinner forever.
   useEffect(() => {
     if (!liveState?.isActive) return;
     if (!run || !user) return;
@@ -206,15 +212,13 @@ export default function RunLiveScreen() {
     if (phase !== "idle") return;
     if (Platform.OS === "web") return;
     if (autostart) return; // handled by the autostart effect below
-    const isParticipant = liveState?.participants?.some(
-      (p: any) => p.user_id === user.id && p.is_present
-    );
-    if (!isParticipant) return;
+    if (autostartAttemptedRef.current) return;
+    autostartAttemptedRef.current = true;
     handleStartTracking();
   }, [liveState?.isActive]);
 
   // Auto-start via notification deep-link (?autostart=1):
-  // When a present participant taps the "run is starting" notification, they land here
+  // When a participant taps the "run is starting" notification, they land here
   // with liveState already active. Fire immediately once both liveState and run are ready.
   // One-shot guard prevents repeated retries if handleStartTracking() fails (e.g. location denied).
   useEffect(() => {
@@ -225,10 +229,6 @@ export default function RunLiveScreen() {
     if (run.host_id === user.id) return;
     if (phase !== "idle") return;
     if (Platform.OS === "web") return;
-    const isPresent = liveState?.participants?.some(
-      (p: any) => p.user_id === user.id && p.is_present
-    );
-    if (!isPresent) return;
     autostartAttemptedRef.current = true;
     handleStartTracking();
   }, [liveState, run, autostart]);
@@ -963,6 +963,17 @@ export default function RunLiveScreen() {
                     {liveState?.isActive ? "Starting your tracking…" : "Waiting for host to start…"}
                   </Text>
                 </View>
+                {liveState?.isActive && (
+                  <Pressable
+                    style={({ pressed }) => [s.startBtn, { opacity: pressed ? 0.85 : 1 }]}
+                    onPress={() => { autostartAttemptedRef.current = true; handleStartTracking(); }}
+                  >
+                    <Feather name="play" size={20} color={C.bg} />
+                    <Text style={s.startBtnText}>
+                      {run?.activity_type === "ride" ? "Join Live Ride" : run?.activity_type === "walk" ? "Join Live Walk" : "Join Live Run"}
+                    </Text>
+                  </Pressable>
+                )}
                 {!liveState?.isActive && (
                   <Pressable
                     style={({ pressed }) => [s.startSoloBtn, { opacity: pressed ? 0.75 : 1 }]}
