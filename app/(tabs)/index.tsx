@@ -175,7 +175,7 @@ interface FilterState {
 const DEFAULT_FILTERS: FilterState = {
   paceMin: 4.0,
   paceMax: 15.0,
-  distMin: 1,
+  distMin: 0,
   distMax: 999,
   maxDistFromMe: 10,
   styles: [],
@@ -465,12 +465,12 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
                 <TextInput
                   style={fm.distInput}
                   keyboardType="decimal-pad"
-                  placeholder="1"
+                  placeholder="0"
                   placeholderTextColor={C.textMuted}
                   value={draft.distMin === DEFAULT_FILTERS.distMin ? "" : String(draft.distMin)}
                   onChangeText={(t) => {
                     const n = parseFloat(t);
-                    setDraft((p) => ({ ...p, distMin: t === "" ? 1 : (Number.isFinite(n) && n > 0 ? n : p.distMin) }));
+                    setDraft((p) => ({ ...p, distMin: t === "" ? 0 : (Number.isFinite(n) && n >= 0 ? n : p.distMin) }));
                   }}
                   returnKeyType="done"
                 />
