@@ -884,6 +884,33 @@ function ProfileScreenInner() {
         )}
       </View>
 
+      {/* ── Saved Routes shortcut ─────────────────────────────────────────── */}
+      {(() => {
+        const savedCount = profileSavedPaths.filter((p) => (p.activity_type ?? "run") === profileActivity).length;
+        return (
+          <Pressable
+            style={({ pressed }) => [styles.viewPastBtn, { opacity: pressed ? 0.8 : 1, borderColor: "#FF6B3544" }]}
+            onPress={() => {
+              setShowProfileSavedPaths(true);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+          >
+            <Feather name="bookmark" size={16} color="#FF6B35" />
+            <Text style={[styles.viewPastBtnTxt, { color: "#FF6B35" }]}>
+              {profileActivity === "ride" ? "Saved Ride Routes" : profileActivity === "walk" ? "Saved Walk Routes" : "Saved Run Routes"}
+            </Text>
+            {savedCount > 0 && (
+              <View style={[styles.histEventBadge, { backgroundColor: "#FF6B3522", marginRight: 4 }]}>
+                <Text style={[styles.histEventBadgeTxt, { color: "#FF6B35" }]}>
+                  {savedCount}
+                </Text>
+              </View>
+            )}
+            <Feather name="chevron-right" size={16} color="#FF6B35" />
+          </Pressable>
+        );
+      })()}
+
       {/* ── Activity Toggle ────────────────────────────────────────────────── */}
       <View style={styles.actToggleRow}>
         <Pressable
@@ -993,33 +1020,6 @@ function ProfileScreenInner() {
         </Text>
         <Feather name="chevron-right" size={16} color={C.primary} />
       </Pressable>
-
-      {/* ── Saved Routes shortcut ─────────────────────────────────────────── */}
-      {(() => {
-        const savedCount = profileSavedPaths.filter((p) => (p.activity_type ?? "run") === profileActivity).length;
-        return (
-          <Pressable
-            style={({ pressed }) => [styles.viewPastBtn, { opacity: pressed ? 0.8 : 1, borderColor: "#FF6B3544" }]}
-            onPress={() => {
-              setShowProfileSavedPaths(true);
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            }}
-          >
-            <Feather name="bookmark" size={16} color="#FF6B35" />
-            <Text style={[styles.viewPastBtnTxt, { color: "#FF6B35" }]}>
-              {profileActivity === "ride" ? "Saved Ride Routes" : profileActivity === "walk" ? "Saved Walk Routes" : "Saved Run Routes"}
-            </Text>
-            {savedCount > 0 && (
-              <View style={[styles.histEventBadge, { backgroundColor: "#FF6B3522", marginRight: 4 }]}>
-                <Text style={[styles.histEventBadgeTxt, { color: "#FF6B35" }]}>
-                  {savedCount}
-                </Text>
-              </View>
-            )}
-            <Feather name="chevron-right" size={16} color="#FF6B35" />
-          </Pressable>
-        );
-      })()}
 
       {/* ── My Stats ──────────────────────────────────────────────────────── */}
       <View style={styles.section}>
