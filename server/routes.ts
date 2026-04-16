@@ -2416,7 +2416,7 @@ async function go(e){
 
   app.get("/api/saved-paths/:id/public-preview", requireAuth, async (req, res) => {
     try {
-      const preview = await storage.getSavedPathPublicPreview(req.params.id as string);
+      const preview = await storage.getSavedPathPublicPreview(req.params.id as string, req.session.userId!);
       res.json(preview);
     } catch (e: any) {
       res.status(404).json({ message: e.message });

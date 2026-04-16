@@ -2555,7 +2555,7 @@ function ProfileScreenInner() {
                               setSharePathTarget({
                                 id: path.id,
                                 name: path.name,
-                                community_path_id: (path as any).community_path_id ?? null,
+                                community_path_id: path.community_path_id ?? null,
                                 route_path: path.route_path ?? null,
                               });
                             }}

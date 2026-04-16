@@ -3449,7 +3449,33 @@ export async function getSavedPathStats(pathId: string, userId: string) {
   };
 }
 
-export async function getSavedPathPublicPreview(pathId: string) {
+async function userCanAccessSavedPath(pathId: string, userId: string): Promise<boolean> {
+  const ownRes = await pool.query(
+    `SELECT 1 FROM saved_paths WHERE id = $1 AND user_id = $2`,
+    [pathId, userId]
+  );
+  if (ownRes.rows.length) return true;
+
+  const publicRes = await pool.query(
+    `SELECT 1 FROM saved_paths sp
+       JOIN community_paths cp ON cp.id = sp.community_path_id
+      WHERE sp.id = $1 AND cp.is_public = true`,
+    [pathId]
+  );
+  if (publicRes.rows.length) return true;
+
+  const shareRes = await pool.query(
+    `SELECT 1 FROM path_shares WHERE saved_path_id = $1 AND to_user_id = $2`,
+    [pathId, userId]
+  );
+  if (shareRes.rows.length) return true;
+
+  return false;
+}
+
+export async function getSavedPathPublicPreview(pathId: string, viewerId: string) {
+  const allowed = await userCanAccessSavedPath(pathId, viewerId);
+  if (!allowed) throw new Error("Route not found");
   const res = await pool.query(
     `SELECT sp.id AS path_id, sp.name, sp.distance_miles, sp.activity_type, sp.route_path,
             sp.community_path_id, u.name AS owner_name, u.photo_url AS owner_photo
@@ -3467,6 +3493,8 @@ export async function getSavedPathPublicPreview(pathId: string) {
 }
 
 export async function clonePathDirect(pathId: string, toUserId: string) {
+  const allowed = await userCanAccessSavedPath(pathId, toUserId);
+  if (!allowed) throw new Error("Route not found");
   const pathRes = await pool.query(`SELECT * FROM saved_paths WHERE id = $1`, [pathId]);
   const path = pathRes.rows[0];
   if (!path) throw new Error("Route not found");
