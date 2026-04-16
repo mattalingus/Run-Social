@@ -3420,6 +3420,91 @@ export async function getPathShares(userId: string) {
   return res.rows;
 }
 
+export async function getSavedPathStats(pathId: string, userId: string) {
+  const owner = await pool.query(`SELECT id FROM saved_paths WHERE id = $1 AND user_id = $2`, [pathId, userId]);
+  if (!owner.rows.length) throw new Error("Path not found");
+  // Solo runs that used this path
+  const soloRes = await pool.query(
+    `SELECT distance_miles, pace_min_per_mile FROM solo_runs
+     WHERE saved_path_id = $1 AND user_id = $2 AND completed = true AND is_deleted IS NOT TRUE`,
+    [pathId, userId]
+  );
+  // Group runs (crew/discover) tagged with this saved_path_id where this user participated
+  const partRes = await pool.query(
+    `SELECT rp.final_distance AS distance_miles, rp.final_pace AS pace_min_per_mile
+       FROM run_participants rp
+       JOIN runs r ON r.id = rp.run_id
+      WHERE r.saved_path_id = $1 AND rp.user_id = $2
+        AND rp.final_distance IS NOT NULL`,
+    [pathId, userId]
+  );
+  const rows = [...soloRes.rows, ...partRes.rows];
+  const dists = rows.map(r => Number(r.distance_miles)).filter(n => Number.isFinite(n) && n > 0);
+  const paces = rows.map(r => Number(r.pace_min_per_mile)).filter(n => Number.isFinite(n) && n > 0);
+  const avg = (a: number[]) => a.length ? a.reduce((s, x) => s + x, 0) / a.length : null;
+  return {
+    timesUsed: rows.length,
+    avgDistanceMiles: avg(dists),
+    avgPaceMinPerMile: avg(paces),
+  };
+}
+
+export async function getSavedPathPublicPreview(pathId: string) {
+  const res = await pool.query(
+    `SELECT sp.id AS path_id, sp.name, sp.distance_miles, sp.activity_type, sp.route_path,
+            sp.community_path_id, u.name AS owner_name, u.photo_url AS owner_photo
+       FROM saved_paths sp
+       JOIN users u ON u.id = sp.user_id
+      WHERE sp.id = $1`,
+    [pathId]
+  );
+  const row = res.rows[0];
+  if (!row) throw new Error("Route not found");
+  if (typeof row.route_path === "string") {
+    try { row.route_path = JSON.parse(row.route_path); } catch { row.route_path = []; }
+  }
+  return row;
+}
+
+export async function clonePathDirect(pathId: string, toUserId: string) {
+  const pathRes = await pool.query(`SELECT * FROM saved_paths WHERE id = $1`, [pathId]);
+  const path = pathRes.rows[0];
+  if (!path) throw new Error("Route not found");
+  if (path.user_id === toUserId) {
+    return path;
+  }
+  const dupe = await pool.query(
+    `SELECT id FROM saved_paths WHERE user_id = $1 AND name = $2`,
+    [toUserId, path.name]
+  );
+  if (dupe.rows.length) return dupe.rows[0];
+  const newRes = await pool.query(
+    `INSERT INTO saved_paths (user_id, name, route_path, distance_miles, activity_type)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [toUserId, path.name, path.route_path, path.distance_miles, path.activity_type ?? "run"]
+  );
+  return newRes.rows[0];
+}
+
+export async function getPathSharePreview(shareId: string, userId: string) {
+  const res = await pool.query(
+    `SELECT ps.id AS share_id, ps.cloned, ps.from_user_id, ps.to_user_id,
+            sp.id AS path_id, sp.name, sp.distance_miles, sp.activity_type, sp.route_path,
+            u.name AS from_name, u.photo_url AS from_photo
+       FROM path_shares ps
+       JOIN saved_paths sp ON sp.id = ps.saved_path_id
+       JOIN users u ON u.id = ps.from_user_id
+      WHERE ps.id = $1 AND ps.to_user_id = $2`,
+    [shareId, userId]
+  );
+  const row = res.rows[0];
+  if (!row) throw new Error("Share not found");
+  if (typeof row.route_path === "string") {
+    try { row.route_path = JSON.parse(row.route_path); } catch { row.route_path = []; }
+  }
+  return row;
+}
+
 export async function publishSavedPath(pathId: string, userId: string) {
   const pathRes = await pool.query(`SELECT * FROM saved_paths WHERE id = $1 AND user_id = $2`, [pathId, userId]);
   const path = pathRes.rows[0];

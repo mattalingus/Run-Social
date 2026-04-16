@@ -14,5 +14,9 @@ export function redirectSystemPath({
   if (path.includes("/notifications")) {
     return path;
   }
+  // Shared route deep link
+  if (path.includes("/path/")) {
+    return path;
+  }
   return '/';
 }

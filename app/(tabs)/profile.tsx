@@ -42,6 +42,7 @@ import { Linking } from "react-native";
 import { requestContactsPermission, scanContacts, type ContactMatch, type NonMemberContact, type ContactScanResult } from "@/lib/contactsDiscovery";
 import WalkthroughPulse from "@/components/WalkthroughPulse";
 import { getAppShareUrl, buildAppInviteSmsUrl, buildAppInviteMessage } from "@/lib/shareLinks";
+import SharePathSheet from "@/components/SharePathSheet";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -69,6 +70,36 @@ function ProgressBar({ value, total, color }: { value: number; total: number; co
   return (
     <View style={{ height: 6, backgroundColor: TC.border, borderRadius: 3, overflow: "hidden" }}>
       <View style={{ height: "100%", borderRadius: 3, width: `${pct * 100}%` as any, backgroundColor: fillColor }} />
+    </View>
+  );
+}
+
+function ProfilePathStatsStrip({ pathId, distUnit }: { pathId: string; distUnit: DistanceUnit }) {
+  const { data, isLoading } = useQuery<{ timesUsed: number; avgDistanceMiles: number | null; avgPaceMinPerMile: number | null }>({
+    queryKey: ["/api/saved-paths", pathId, "stats"],
+    staleTime: 60_000,
+  });
+  const cell = (label: string, value: string) => (
+    <View style={{ flex: 1, alignItems: "center" }}>
+      <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 10, color: C.textMuted, letterSpacing: 0.4, textTransform: "uppercase" }}>{label}</Text>
+      <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 15, color: C.text, marginTop: 3 }}>{value}</Text>
+    </View>
+  );
+  return (
+    <View style={{ flexDirection: "row", backgroundColor: C.surface, borderRadius: 10, paddingVertical: 12, marginTop: 12, borderWidth: 1, borderColor: C.border }}>
+      {isLoading || !data ? (
+        <View style={{ flex: 1, alignItems: "center", paddingVertical: 6 }}>
+          <ActivityIndicator size="small" color={C.primary} />
+        </View>
+      ) : (
+        <>
+          {cell("Times Used", String(data.timesUsed))}
+          <View style={{ width: 1, backgroundColor: C.border }} />
+          {cell("Avg Pace", data.avgPaceMinPerMile ? toDisplayPace(data.avgPaceMinPerMile, distUnit) : "—")}
+          <View style={{ width: 1, backgroundColor: C.border }} />
+          {cell("Avg Dist", data.avgDistanceMiles ? toDisplayDist(data.avgDistanceMiles, distUnit) : "—")}
+        </>
+      )}
     </View>
   );
 }
@@ -274,6 +305,7 @@ function ProfileScreenInner() {
   const [savedPathRunKeys, setSavedPathRunKeys] = useState<Set<string>>(new Set());
   const [expandedPathId, setExpandedPathId] = useState<string | null>(null);
   const [expandedPathActivity, setExpandedPathActivity] = useState<"run" | "ride" | "walk">("run");
+  const [sharePathTarget, setSharePathTarget] = useState<{ id: string; name: string; community_path_id?: string | null; route_path?: Array<{ latitude: number; longitude: number }> | null } | null>(null);
   const [favActivityFilter, setFavActivityFilter] = useState<"run" | "ride" | "walk">("run");
   const [friendSearch, setFriendSearch] = useState("");
   const [showAddFriend, setShowAddFriend] = useState(false);
@@ -427,6 +459,7 @@ function ProfileScreenInner() {
     id: string; name: string; distance_miles: number | null;
     activity_type?: string | null; created_at: string;
     route_path?: Array<{ latitude: number; longitude: number }> | null;
+    community_path_id?: string | null;
   }>>({
     queryKey: ["/api/saved-paths"],
     enabled: !!user,
@@ -2423,6 +2456,13 @@ function ProfileScreenInner() {
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* ── Share Path Sheet ──────────────────────────────────────────────── */}
+      <SharePathSheet
+        visible={!!sharePathTarget}
+        path={sharePathTarget}
+        onClose={() => setSharePathTarget(null)}
+      />
+
       {/* ── Saved Routes Viewer Modal ──────────────────────────────────────── */}
       <Modal visible={showProfileSavedPaths} transparent animationType="slide" onRequestClose={() => setShowProfileSavedPaths(false)}>
         <View style={{ flex: 1, backgroundColor: "#00000088", justifyContent: "flex-end" }}>
@@ -2507,11 +2547,28 @@ function ProfileScreenInner() {
                               {path.distance_miles ? toDisplayDist(path.distance_miles, distUnit) : "Distance unknown"}
                             </Text>
                           </View>
+                          <Pressable
+                            hitSlop={10}
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                              setSharePathTarget({
+                                id: path.id,
+                                name: path.name,
+                                community_path_id: (path as any).community_path_id ?? null,
+                                route_path: path.route_path ?? null,
+                              });
+                            }}
+                            style={{ padding: 4 }}
+                          >
+                            <Feather name="share-2" size={16} color={C.textSecondary} />
+                          </Pressable>
                           <Ionicons name={isExpanded ? "chevron-up" : "chevron-down"} size={16} color={C.textMuted} />
                         </View>
                         {/* Plan-a-run expandable section */}
                         {isExpanded && (
                           <View style={{ paddingHorizontal: 12, paddingBottom: 14, borderTopWidth: 1, borderTopColor: C.border }}>
+                            <ProfilePathStatsStrip pathId={path.id} distUnit={distUnit} />
                             <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.textMuted, marginTop: 12, marginBottom: 10, letterSpacing: 0.4, textTransform: "uppercase" }}>Plan a {expandedPathActivity}</Text>
                             {/* Activity toggle */}
                             <View style={{ flexDirection: "row", backgroundColor: C.surface, borderRadius: 8, padding: 3, gap: 3, marginBottom: 12, borderWidth: 1, borderColor: C.border }}>

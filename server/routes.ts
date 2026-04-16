@@ -2405,6 +2405,42 @@ async function go(e){
     }
   });
 
+  app.get("/api/saved-paths/:id/stats", requireAuth, async (req, res) => {
+    try {
+      const stats = await storage.getSavedPathStats(req.params.id as string, req.session.userId!);
+      res.json(stats);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/saved-paths/:id/public-preview", requireAuth, async (req, res) => {
+    try {
+      const preview = await storage.getSavedPathPublicPreview(req.params.id as string);
+      res.json(preview);
+    } catch (e: any) {
+      res.status(404).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/saved-paths/:id/clone-direct", requireAuth, async (req, res) => {
+    try {
+      const cloned = await storage.clonePathDirect(req.params.id as string, req.session.userId!);
+      res.json(cloned);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/path-shares/:id/preview", requireAuth, async (req, res) => {
+    try {
+      const preview = await storage.getPathSharePreview(req.params.id as string, req.session.userId!);
+      res.json(preview);
+    } catch (e: any) {
+      res.status(404).json({ message: e.message });
+    }
+  });
+
   app.get("/api/saved-paths/:id/runs", requireAuth, async (req, res) => {
     try {
       const runs = await storage.getSoloRunsByPathId(req.session.userId!, req.params.id as string);

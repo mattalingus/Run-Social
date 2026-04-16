@@ -40,6 +40,7 @@ import WebFAB from "@/components/WebFAB";
 import WalkthroughPulse from "@/components/WalkthroughPulse";
 import { useWalkthrough } from "@/contexts/WalkthroughContext";
 import MiniCalendarPicker from "@/components/MiniCalendarPicker";
+import SharedPathPreviewModal from "@/components/SharedPathPreviewModal";
 
 function formatDaysAgo(dateStr: string): string {
   const d = new Date(dateStr);
@@ -1257,6 +1258,7 @@ export default function DiscoverScreen() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/notifications"] }),
   });
 
+  const [previewShareId, setPreviewShareId] = useState<string | null>(null);
   const notifData = useMemo(() => {
     return {
       hostArrivals: notifications.filter((n: any) => n.type === "host_arrived"),
@@ -2653,7 +2655,15 @@ export default function DiscoverScreen() {
                   <View style={s.notifSection}>
                     <Text style={s.notifSectionTitle}>Shared Routes</Text>
                     {notifData.pathShared.map((n: any) => (
-                      <View key={n.id} style={s.notifInfoCard}>
+                      <Pressable
+                        key={n.id}
+                        style={({ pressed }) => [s.notifInfoCard, { opacity: pressed ? 0.85 : 1 }]}
+                        onPress={() => {
+                          if (!n.share_id) return;
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setPreviewShareId(n.share_id);
+                        }}
+                      >
                         <View style={[s.notifIconWrap, { backgroundColor: C.primary + "22" }]}>
                           <Feather name="map" size={18} color={C.primary} />
                         </View>
@@ -2663,7 +2673,8 @@ export default function DiscoverScreen() {
                           {n.share_id && !n.cloned && (
                             <Pressable
                               style={{ marginTop: 8, alignSelf: "flex-start", backgroundColor: C.primary, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 6 }}
-                              onPress={async () => {
+                              onPress={async (e) => {
+                                e.stopPropagation();
                                 try {
                                   await apiRequest("POST", `/api/saved-paths/${n.share_id}/clone`);
                                   qc.invalidateQueries({ queryKey: ["/api/saved-paths"] });
@@ -2681,7 +2692,8 @@ export default function DiscoverScreen() {
                             <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, marginTop: 4 }}>Saved to your paths</Text>
                           )}
                         </View>
-                      </View>
+                        <Feather name="chevron-right" size={16} color={C.textMuted} style={{ alignSelf: "center" }} />
+                      </Pressable>
                     ))}
                   </View>
                 )}
@@ -3264,6 +3276,13 @@ export default function DiscoverScreen() {
           <Ionicons name="stopwatch-outline" size={28} color={C.bg} />
         </Pressable>
       )}
+
+      <SharedPathPreviewModal
+        visible={!!previewShareId}
+        shareId={previewShareId}
+        onClose={() => setPreviewShareId(null)}
+        distUnit={distUnit}
+      />
     </View>
   );
 }

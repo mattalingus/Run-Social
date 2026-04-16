@@ -38,6 +38,7 @@ const MAP_TYPE = Platform.OS === "ios" ? ("mutedStandard" as const) : ("standard
 import Svg, { Polyline as SvgPolyline, Circle as SvgCircle } from "react-native-svg";
 import MileSplitsChart from "@/components/MileSplitsChart";
 import ShareActivityModal, { ShareRunData } from "@/components/ShareActivityModal";
+import SharePathSheet from "@/components/SharePathSheet";
 import WalkthroughPulse from "@/components/WalkthroughPulse";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -609,10 +610,7 @@ export default function SoloScreen() {
   const [savingRunPath, setSavingRunPath] = useState(false);
   const [savedRunPathIds, setSavedRunPathIds] = useState<Set<string>>(new Set());
   const [pathShareModalVisible, setPathShareModalVisible] = useState(false);
-  const [pathShareSearch, setPathShareSearch] = useState("");
   const [pathShareTarget, setPathShareTarget] = useState<SavedPath | null>(null);
-  const [pathPublishingId, setPathPublishingId] = useState<string | null>(null);
-  const [publishedPathIds, setPublishedPathIds] = useState<Set<string>>(new Set());
   const [pathRunMode, setPathRunMode] = useState<"run" | "ride" | "walk">("run");
 
   // Goals display period (UI toggle only — not saved separately)
@@ -655,18 +653,6 @@ export default function SoloScreen() {
     () => savedPaths.filter((p) => (p.activity_type ?? "run") === activityFilter),
     [savedPaths, activityFilter]
   );
-
-  const { data: friends = [] } = useQuery<FriendItem[]>({
-    queryKey: ["/api/friends"],
-    enabled: pathShareModalVisible,
-    staleTime: 60_000,
-  });
-
-  const filteredFriends = useMemo(() => {
-    const q = pathShareSearch.toLowerCase().trim();
-    if (!q) return friends;
-    return friends.filter(f => f.name.toLowerCase().includes(q) || (f.username ?? "").toLowerCase().includes(q));
-  }, [friends, pathShareSearch]);
 
   const { data: pathRuns = [], isLoading: pathRunsLoading } = useQuery<SoloRun[]>({
     queryKey: ["/api/saved-paths", selectedSavedPath?.id, "runs"],
@@ -1920,61 +1906,16 @@ export default function SoloScreen() {
                 <Feather name="map" size={18} color={C.primary} />
               </View>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
-                {/* Share with friend */}
+                {/* Unified share */}
                 <Pressable
                   hitSlop={10}
                   onPress={() => {
                     setPathShareTarget(selectedSavedPath);
-                    setPathShareSearch("");
                     setPathShareModalVisible(true);
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   }}
                 >
                   <Feather name="share-2" size={20} color={C.textSecondary} />
-                </Pressable>
-                {/* Add to Public Map */}
-                <Pressable
-                  hitSlop={10}
-                  disabled={pathPublishingId === selectedSavedPath?.id}
-                  onPress={async () => {
-                    if (!selectedSavedPath) return;
-                    const isAlreadyPublished = publishedPathIds.has(selectedSavedPath.id) || !!selectedSavedPath.community_path_id;
-                    if (isAlreadyPublished) {
-                      Alert.alert("Already on Map", "This route is already visible on the community map.");
-                      return;
-                    }
-                    if (!selectedSavedPath.route_path || selectedSavedPath.route_path.length < 2) {
-                      Alert.alert("No Route", "This path has no GPS route data to publish.");
-                      return;
-                    }
-                    setPathPublishingId(selectedSavedPath.id);
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                    try {
-                      const res = await apiRequest("POST", `/api/saved-paths/${selectedSavedPath.id}/publish`);
-                      const data = await res.json();
-                      if (data.alreadyPublished) {
-                        Alert.alert("Already on Map", "This route is already visible on the community map.");
-                      } else {
-                        setPublishedPathIds(prev => new Set([...prev, selectedSavedPath.id]));
-                        qc.invalidateQueries({ queryKey: ["/api/saved-paths"] });
-                        qc.invalidateQueries({ queryKey: ["/api/community-paths"] });
-                        Alert.alert("Added to Map!", "Your route is now visible to the community on the Discover map.");
-                      }
-                    } catch (e: any) {
-                      Alert.alert("Error", e?.message ?? "Could not publish route.");
-                    } finally {
-                      setPathPublishingId(null);
-                    }
-                  }}
-                >
-                  {pathPublishingId === selectedSavedPath?.id
-                    ? <ActivityIndicator size="small" color={C.primary} />
-                    : <Ionicons
-                        name="globe-outline"
-                        size={20}
-                        color={(publishedPathIds.has(selectedSavedPath?.id ?? "") || !!selectedSavedPath?.community_path_id) ? C.primary : C.textSecondary}
-                      />
-                  }
                 </Pressable>
                 <Pressable onPress={() => { setSelectedSavedPath(null); setEditingPathName(false); }} hitSlop={12}>
                   <Feather name="x" size={22} color={C.textSecondary} />
@@ -2151,90 +2092,12 @@ export default function SoloScreen() {
         </View>
       </Modal>
 
-      {/* ─── Share Path Modal ─────────────────────────────────────── */}
-      <Modal
+      {/* ─── Unified Share Path Sheet ─────────────────────────────── */}
+      <SharePathSheet
         visible={pathShareModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setPathShareModalVisible(false)}
-      >
-        <View style={{ flex: 1, justifyContent: "flex-end" }}>
-          <Pressable
-            style={[StyleSheet.absoluteFillObject, { backgroundColor: "rgba(0,0,0,0.55)" }]}
-            onPress={() => setPathShareModalVisible(false)}
-          />
-          <View style={[s.sheet, { paddingBottom: insets.bottom + 20, maxHeight: "70%", flex: 0 }]}>
-            <View style={s.sheetHandle} />
-            <View style={[s.sheetHeader, { marginBottom: 12 }]}>
-              <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 17, color: C.text }}>Share Route</Text>
-              <Pressable onPress={() => setPathShareModalVisible(false)} hitSlop={12}>
-                <Feather name="x" size={22} color={C.textSecondary} />
-              </Pressable>
-            </View>
-            {pathShareTarget && (
-              <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary, marginBottom: 12 }}>
-                Share "{pathShareTarget.name}" with a friend
-              </Text>
-            )}
-            <TextInput
-              style={{
-                backgroundColor: C.card, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10,
-                fontFamily: "Outfit_400Regular", fontSize: 14, color: C.text,
-                borderWidth: 1, borderColor: C.border, marginBottom: 10,
-              }}
-              placeholder="Search friends…"
-              placeholderTextColor={C.textMuted}
-              value={pathShareSearch}
-              onChangeText={setPathShareSearch}
-            />
-            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-              {filteredFriends.length === 0 ? (
-                <View style={{ alignItems: "center", paddingVertical: 24 }}>
-                  <Feather name="users" size={28} color={C.textMuted} />
-                  <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textMuted, marginTop: 8 }}>
-                    {friends.length === 0 ? "No friends yet" : "No friends match your search"}
-                  </Text>
-                </View>
-              ) : (
-                filteredFriends.map((friend) => (
-                  <Pressable
-                    key={friend.id}
-                    style={({ pressed }) => ({
-                      flexDirection: "row", alignItems: "center", gap: 12,
-                      paddingVertical: 10, paddingHorizontal: 4,
-                      opacity: pressed ? 0.7 : 1,
-                      borderBottomWidth: 1, borderBottomColor: C.border,
-                    })}
-                    onPress={async () => {
-                      if (!pathShareTarget) return;
-                      setPathShareModalVisible(false);
-                      try {
-                        await apiRequest("POST", `/api/saved-paths/${pathShareTarget.id}/share`, { toUserId: friend.id });
-                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                        Alert.alert("Shared!", `Route sent to ${friend.name}.`);
-                      } catch (e: any) {
-                        Alert.alert("Error", e?.message ?? "Could not share route.");
-                      }
-                    }}
-                  >
-                    {friend.photo_url
-                      ? <Image source={{ uri: friend.photo_url }} style={{ width: 40, height: 40, borderRadius: 20 }} />
-                      : <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: C.primaryMuted, alignItems: "center", justifyContent: "center" }}>
-                          <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 15, color: C.primary }}>{friend.name.charAt(0).toUpperCase()}</Text>
-                        </View>
-                    }
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text }}>{friend.name}</Text>
-                      {friend.username ? <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted }}>@{friend.username}</Text> : null}
-                    </View>
-                    <Feather name="chevron-right" size={16} color={C.textMuted} />
-                  </Pressable>
-                ))
-              )}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+        path={pathShareTarget}
+        onClose={() => setPathShareModalVisible(false)}
+      />
 
     </View>
   );
