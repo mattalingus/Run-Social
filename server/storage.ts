@@ -2164,6 +2164,22 @@ export async function pingRunLocation(
       [runId, userId]
     );
     isPresent = (upsertRes.rowCount ?? 0) > 0;
+
+    // Backfill: mark all non-cancelled participants who already have at least
+    // one tracking ping as present. This makes previously-pinging participants
+    // immediately visible to the host without waiting for their next ping cycle.
+    await pool.query(
+      `UPDATE run_participants rp
+       SET is_present = true
+       WHERE rp.run_id = $1
+         AND rp.status != 'cancelled'
+         AND rp.is_present = false
+         AND EXISTS (
+           SELECT 1 FROM run_tracking_points tp
+           WHERE tp.run_id = $1 AND tp.user_id = rp.user_id
+         )`,
+      [runId]
+    );
   }
   return { isPresent, isActive: run.is_active };
 }
