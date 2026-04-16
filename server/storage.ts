@@ -4791,7 +4791,7 @@ export async function getRecentCommunityActivity() {
     LEFT JOIN run_participants rp
       ON rp.run_id = r.id AND rp.status IN ('confirmed', 'joined')
     WHERE r.is_completed = true
-      AND COALESCE(r.started_at, r.date) >= NOW() - INTERVAL '14 days'
+      AND COALESCE(r.started_at, r.date) >= NOW() - INTERVAL '7 days'
     GROUP BY r.id, u.name
     ORDER BY (COUNT(DISTINCT rp.user_id) * 2 + COALESCE(r.max_distance, 0)) DESC,
              COALESCE(r.started_at, r.date) DESC

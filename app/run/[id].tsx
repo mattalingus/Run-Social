@@ -817,7 +817,7 @@ export default function RunDetailScreen() {
           </View>
           {isHost && (
             <View style={styles.yourRunBadge}>
-              <Text style={styles.yourRunText}>Your Run</Text>
+              <Text style={styles.yourRunText}>Your {run?.activity_type === "ride" ? "Ride" : run?.activity_type === "walk" ? "Walk" : "Run"}</Text>
             </View>
           )}
           {!isHost && (
@@ -1193,7 +1193,7 @@ export default function RunDetailScreen() {
           <View style={styles.photosSection}>
             <View style={styles.photosSectionHeader}>
               <Text style={styles.sectionTitle}>
-                Run Photos {runPhotos.length > 0 ? `(${runPhotos.length})` : ""}
+                {run?.activity_type === "ride" ? "Ride" : run?.activity_type === "walk" ? "Walk" : "Run"} Photos {runPhotos.length > 0 ? `(${runPhotos.length})` : ""}
               </Text>
               {(isHost || isParticipant) && (
                 <Pressable

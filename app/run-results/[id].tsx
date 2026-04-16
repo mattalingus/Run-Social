@@ -137,6 +137,10 @@ export default function RunResultsScreen() {
   const botPad = insets.bottom + (Platform.OS === "web" ? 34 : 0);
 
   const isRide = run?.activity_type === "ride";
+  const isWalk = run?.activity_type === "walk";
+  const actLabel = isRide ? "Ride" : isWalk ? "Walk" : "Run";
+  const actorLabel = isRide ? "Riders" : isWalk ? "Walkers" : "Runners";
+  const actIngLabel = isRide ? "riding" : isWalk ? "walking" : "running";
   const stillRunning = results.filter((r) => r.is_present && r.final_rank == null);
   const finished = results.filter((r) => r.final_rank != null).sort((a, b) => a.final_rank - b.final_rank);
   const isParticipant = results.some((r: any) => r.user_id === user?.id);
@@ -168,7 +172,7 @@ export default function RunResultsScreen() {
           <Feather name="arrow-left" size={20} color={C.text} />
         </Pressable>
         <View style={s.headerCenter}>
-          <Text style={s.headerTitle}>{isRide ? "Ride Results" : "Run Results"}</Text>
+          <Text style={s.headerTitle}>{actLabel} Results</Text>
           {run?.title && <Text style={s.headerSub}>{run.title}</Text>}
         </View>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -206,7 +210,7 @@ export default function RunResultsScreen() {
             <View style={s.summaryItem}>
               <Feather name="users" size={18} color={C.primary} />
               <Text style={s.summaryValue}>{results.length}</Text>
-              <Text style={s.summaryLabel}>{isRide ? "Riders" : "Runners"}</Text>
+              <Text style={s.summaryLabel}>{actorLabel}</Text>
             </View>
             <View style={s.summaryDivider} />
             <View style={s.summaryItem}>
@@ -220,7 +224,7 @@ export default function RunResultsScreen() {
               <Text style={[s.summaryValue, { color: stillRunning.length > 0 ? C.primary : C.textSecondary }]}>
                 {stillRunning.length}
               </Text>
-              <Text style={s.summaryLabel}>{isRide ? "Still riding" : "Still running"}</Text>
+              <Text style={s.summaryLabel}>Still {actIngLabel}</Text>
             </View>
           </View>
 
@@ -341,7 +345,7 @@ export default function RunResultsScreen() {
             <View style={s.section}>
               <View style={s.sectionTitleRow}>
                 <View style={s.liveDot} />
-                <Text style={s.sectionTitle}>{isRide ? "Still Riding" : "Still Running"}</Text>
+                <Text style={s.sectionTitle}>Still {actIngLabel.charAt(0).toUpperCase() + actIngLabel.slice(1)}</Text>
               </View>
               {stillRunning.map((runner) => {
                 const isMe = runner.user_id === user?.id;
@@ -372,9 +376,7 @@ export default function RunResultsScreen() {
               <Feather name="flag" size={40} color={C.border} />
               <Text style={s.emptyTitle}>No results yet</Text>
               <Text style={s.emptyText}>
-                {isRide
-                  ? "Riders haven't finished yet. Results will appear here as they cross the finish line."
-                  : "Runners haven't finished yet. Results will appear here as they cross the finish line."}
+                {`${actorLabel} haven't finished yet. Results will appear here as they cross the finish line.`}
               </Text>
             </View>
           )}
