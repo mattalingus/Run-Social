@@ -2038,7 +2038,7 @@ export default function DiscoverScreen() {
           }
           ListHeaderComponent={
             <View>
-            {user && ((!ghostBookmarkDone || sortedBookmarkedRuns.length > 0) || (!ghostPlannedDone || plannedRuns.filter((r) => (r.activity_type ?? "run") === activityFilter).length > 0)) && (() => {
+            {user && ((!ghostBookmarkDone || sortedBookmarkedRuns.length > 0) || (!ghostPlannedDone || plannedRuns.filter((r) => (r.activity_type ?? "run") === activityFilter && !r.is_completed).length > 0)) && (() => {
               const filteredPlanned = plannedRuns.filter((r) => (r.activity_type ?? "run") === activityFilter && !r.is_completed);
               const SCROLL_CARD_W = 140;
               return (
