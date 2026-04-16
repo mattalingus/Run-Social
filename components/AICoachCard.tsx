@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
 import { View, Text, Animated } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import { useTheme } from "@/contexts/ThemeContext";
 import { apiRequest } from "@/lib/query-client";
 
@@ -66,20 +65,7 @@ export default function AICoachCard({ runId, style, compact = false }: Props) {
       borderRadius: compact ? 12 : 14,
       paddingHorizontal: compact ? 12 : 14,
       paddingVertical: compact ? 10 : 12,
-      gap: 6,
     }, style]}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-        <Feather name="cpu" size={compact ? 12 : 13} color={C.primary} />
-        <Text style={{
-          fontFamily: "Outfit_700Bold",
-          fontSize: compact ? 11 : 12,
-          color: C.primary,
-          textTransform: "uppercase",
-          letterSpacing: 0.6,
-        }}>
-          AI Coach
-        </Text>
-      </View>
       {loading ? (
         <ShimmerLines color={shimmerColor} />
       ) : summary ? (

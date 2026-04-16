@@ -231,12 +231,6 @@ export default function RunResultsScreen() {
           {/* AI Coach Summary Card */}
           {aiSummary?.summary && (
             <View style={s.aiCoachCard}>
-              <View style={s.aiCoachHeader}>
-                <View style={s.aiIconBox}>
-                  <Ionicons name="sparkles" size={14} color={C.primary} />
-                </View>
-                <Text style={s.aiCoachTitle}>AI COACH SUMMARY</Text>
-              </View>
               <Text style={s.aiCoachText}>{aiSummary.summary}</Text>
             </View>
           )}

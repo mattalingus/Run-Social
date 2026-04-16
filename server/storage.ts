@@ -73,8 +73,10 @@ function deduplicateRoutePath(coords: Array<{ latitude: number; longitude: numbe
     return { path: coords, distanceMiles, loopDetected: false };
   }
 
-  // Trim to the first non-repeating portion: from start up to and including the closure point
+  // Trim to the first non-repeating portion: from start up to and including the closure point.
+  // Then append the anchor coordinate so the route closes cleanly without a visible gap.
   const trimmed = coords.slice(0, closureAt + 1);
+  trimmed.push({ latitude: coords[closureAnchor].latitude, longitude: coords[closureAnchor].longitude });
   const trimmedMiles = computePathDistanceKm(trimmed) / 1.60934;
   return { path: trimmed, distanceMiles: trimmedMiles, loopDetected: true };
 }

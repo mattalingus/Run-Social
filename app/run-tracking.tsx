@@ -565,6 +565,9 @@ export default function RunTrackingScreen() {
           playThroughEarpieceAndroid: false,
         });
       } else {
+        // Keep staysActiveInBackground: true so the audio session stays alive
+        // for subsequent background announcements (screen locked).
+        // Switching to MixWithOthers is sufficient for iOS to restore ducked music.
         await Audio.setAudioModeAsync({
           allowsRecordingIOS: false,
           interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
@@ -574,27 +577,6 @@ export default function RunTrackingScreen() {
           shouldDuckAndroid: false,
           playThroughEarpieceAndroid: false,
         });
-        if (Platform.OS === "ios") {
-          await new Promise<void>(resolve => setTimeout(resolve, 300));
-          await Audio.setAudioModeAsync({
-            allowsRecordingIOS: false,
-            interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
-            playsInSilentModeIOS: true,
-            staysActiveInBackground: false,
-            interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
-            shouldDuckAndroid: false,
-            playThroughEarpieceAndroid: false,
-          });
-          await Audio.setAudioModeAsync({
-            allowsRecordingIOS: false,
-            interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
-            playsInSilentModeIOS: true,
-            staysActiveInBackground: true,
-            interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
-            shouldDuckAndroid: false,
-            playThroughEarpieceAndroid: false,
-          });
-        }
       }
     } catch (e) {}
   }, []);
