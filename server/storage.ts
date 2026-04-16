@@ -526,6 +526,21 @@ export async function cleanupStalePlannedRuns() {
   if (result.rowCount && result.rowCount > 0) {
     console.log(`[startup-cleanup] Removed ${result.rowCount} stale planned_runs row(s)`);
   }
+
+  // Remove planned_runs entries for users who have already joined — prevents double-counting
+  const dedupe = await pool.query(`
+    DELETE FROM planned_runs pr
+    WHERE EXISTS (
+      SELECT 1 FROM run_participants rp
+      WHERE rp.run_id = pr.run_id
+        AND rp.user_id = pr.user_id
+        AND rp.status IS DISTINCT FROM 'cancelled'
+    )
+    RETURNING pr.run_id
+  `);
+  if (dedupe.rowCount && dedupe.rowCount > 0) {
+    console.log(`[startup-cleanup] Removed ${dedupe.rowCount} duplicate planned_runs row(s) for already-joined users`);
+  }
 }
 
 export async function getBuddyEligibility(userId: string) {
@@ -1750,6 +1765,11 @@ export async function joinRun(runId: string, userId: string, paceGroupLabel?: st
         `SELECT * FROM run_participants WHERE run_id = $1 AND user_id = $2`,
         [runId, userId]
       );
+      // Remove any "planned to go" entry — user has now officially joined
+      await client.query(
+        `DELETE FROM planned_runs WHERE user_id = $1 AND run_id = $2`,
+        [userId, runId]
+      );
       await client.query('COMMIT');
       return updated.rows[0];
     }
@@ -1773,6 +1793,11 @@ export async function joinRun(runId: string, userId: string, paceGroupLabel?: st
     const result = await client.query(
       `INSERT INTO run_participants (run_id, user_id, pace_group_label) VALUES ($1, $2, $3) RETURNING *`,
       [runId, userId, paceGroupLabel || null]
+    );
+    // Remove any "planned to go" entry — user has now officially joined
+    await client.query(
+      `DELETE FROM planned_runs WHERE user_id = $1 AND run_id = $2`,
+      [userId, runId]
     );
     await client.query('COMMIT');
     return result.rows[0];
