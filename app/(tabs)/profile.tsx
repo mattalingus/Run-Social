@@ -75,7 +75,7 @@ function ProgressBar({ value, total, color }: { value: number; total: number; co
 }
 
 function ProfilePathStatsStrip({ pathId, distUnit }: { pathId: string; distUnit: DistanceUnit }) {
-  const { data, isLoading } = useQuery<{ timesUsed: number; avgDistanceMiles: number | null; avgPaceMinPerMile: number | null }>({
+  const { data, isLoading, isError } = useQuery<{ timesUsed: number; avgDistanceMiles: number | null; avgPaceMinPerMile: number | null }>({
     queryKey: ["/api/saved-paths", pathId, "stats"],
     staleTime: 60_000,
   });
@@ -87,9 +87,15 @@ function ProfilePathStatsStrip({ pathId, distUnit }: { pathId: string; distUnit:
   );
   return (
     <View style={{ flexDirection: "row", backgroundColor: C.surface, borderRadius: 10, paddingVertical: 12, marginTop: 12, borderWidth: 1, borderColor: C.border }}>
-      {isLoading || !data ? (
+      {isLoading ? (
         <View style={{ flex: 1, alignItems: "center", paddingVertical: 6 }}>
           <ActivityIndicator size="small" color={C.primary} />
+        </View>
+      ) : isError || !data ? (
+        <View style={{ flex: 1, alignItems: "center", paddingVertical: 6 }}>
+          <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted }}>
+            Stats unavailable
+          </Text>
         </View>
       ) : (
         <>
