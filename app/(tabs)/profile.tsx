@@ -2462,13 +2462,6 @@ function ProfileScreenInner() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* ── Share Path Sheet ──────────────────────────────────────────────── */}
-      <SharePathSheet
-        visible={!!sharePathTarget}
-        path={sharePathTarget}
-        onClose={() => setSharePathTarget(null)}
-      />
-
       {/* ── Saved Routes Viewer Modal ──────────────────────────────────────── */}
       <Modal visible={showProfileSavedPaths} transparent animationType="slide" onRequestClose={() => setShowProfileSavedPaths(false)}>
         <View style={{ flex: 1, backgroundColor: "#00000088", justifyContent: "flex-end" }}>
@@ -2640,6 +2633,12 @@ function ProfileScreenInner() {
             </ScrollView>
           </View>
         </View>
+        {/* Share sheet inside this modal so it presents on top of it on iOS */}
+        <SharePathSheet
+          visible={!!sharePathTarget}
+          path={sharePathTarget}
+          onClose={() => setSharePathTarget(null)}
+        />
       </Modal>
 
     </ScrollView>

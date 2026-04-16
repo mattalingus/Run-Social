@@ -2090,14 +2090,13 @@ export default function SoloScreen() {
           </View>
         )}
         </View>
+        {/* Share sheet inside this modal so it presents on top of it on iOS */}
+        <SharePathSheet
+          visible={pathShareModalVisible}
+          path={pathShareTarget}
+          onClose={() => setPathShareModalVisible(false)}
+        />
       </Modal>
-
-      {/* ─── Unified Share Path Sheet ─────────────────────────────── */}
-      <SharePathSheet
-        visible={pathShareModalVisible}
-        path={pathShareTarget}
-        onClose={() => setPathShareModalVisible(false)}
-      />
 
     </View>
   );
