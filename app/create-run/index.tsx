@@ -247,18 +247,20 @@ export default function CreateRunScreen() {
       if (isNaN(dateTime.getTime())) throw new Error("Invalid date or time");
       if (dateTime.getTime() < Date.now() - 60_000) throw new Error("Event date cannot be in the past");
 
-      const dist = isCrew ? parseFloat(plannedDistance) || 3 : parseFloat(minDistance);
-      const distMax = isCrew ? dist : parseFloat(maxDistance);
-      // For crew runs with pace groups, use the range across all groups
+      // Crew runs have no lower bound — send 0 as min so the server's strict
+      // minDist < maxDist and minPace < maxPace checks are satisfied naturally.
+      const dist = isCrew ? 0 : parseFloat(minDistance);
+      const distMax = isCrew ? parseFloat(plannedDistance) || 3 : parseFloat(maxDistance);
+      // For crew runs with pace groups, spread across all groups; default min to 0.
       let pace: number, paceMax: number;
       if (isCrew && paceGroups.length > 0) {
         const allMin = paceGroups.map((g) => parseFloat(g.minPace)).filter((n) => !isNaN(n));
         const allMax = paceGroups.map((g) => parseFloat(g.maxPace)).filter((n) => !isNaN(n));
-        pace = allMin.length > 0 ? Math.min(...allMin) : parseFloat(plannedPace) || 9;
-        paceMax = allMax.length > 0 ? Math.max(...allMax) : pace;
+        pace = allMin.length > 0 ? Math.min(...allMin) : 0;
+        paceMax = allMax.length > 0 ? Math.max(...allMax) : parseFloat(plannedPace) || 9;
       } else {
-        pace = isCrew ? parseFloat(plannedPace) || 9 : parseFloat(minPace);
-        paceMax = isCrew ? pace : parseFloat(maxPace);
+        pace = isCrew ? 0 : parseFloat(minPace);
+        paceMax = isCrew ? parseFloat(plannedPace) || 9 : parseFloat(maxPace);
       }
 
       if (privacy === "crew" && !selectedCrewId && !params.crewId) throw new Error("Please select a crew for this run");
