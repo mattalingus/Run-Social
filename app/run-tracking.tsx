@@ -740,12 +740,16 @@ export default function RunTrackingScreen() {
       const t = setTimeout(() => setCountdown((c) => (c !== null ? c - 1 : null)), 1000);
       return () => clearTimeout(t);
     }
-    // countdown === 0 — "GO!" — strong haptic then activate
+    // countdown === 0 — "GO!" — strong haptic, hold for 1 s, then start
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const t = setTimeout(() => {
+      // Clear the last coord so the first active fix doesn't measure
+      // distance from a position captured during the countdown phase
+      lastCoordRef.current = null;
+      lastCoordTimestampRef.current = null;
       setCountdown(null);
       setPhase("active");
-    }, 700);
+    }, 1000);
     return () => clearTimeout(t);
   }, [countdown]);
 

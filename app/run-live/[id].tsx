@@ -177,7 +177,7 @@ export default function RunLiveScreen() {
       const timer = setTimeout(() => setCountdown((c) => (c !== null ? c - 1 : null)), 1000);
       return () => clearTimeout(timer);
     }
-    // countdown === 0 — "GO!" — strong haptic then start tracking
+    // countdown === 0 — "GO!" — strong haptic, hold for 1 s, then start tracking
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const timer = setTimeout(() => {
       // Stop warmup subscription before handing off to handleStartTracking
@@ -185,7 +185,7 @@ export default function RunLiveScreen() {
       gpsWarmupSubRef.current = null;
       setCountdown(null);
       handleStartTracking();
-    }, 700);
+    }, 1000);
     return () => clearTimeout(timer);
   }, [countdown]);
 
