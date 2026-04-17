@@ -85,6 +85,7 @@ export default function RunLiveScreen() {
   const liveActivityStartedRef = useRef(false);
   const autostartAttemptedRef = useRef(false);
   const gpsWarmupSubRef = useRef<Location.LocationSubscription | null>(null);
+  const warmupCancelledRef = useRef(false);
 
   // ── Tracking context (survives minimize/navigation) ──────────────────────
   const tracking = useLiveTracking();
@@ -167,17 +168,21 @@ export default function RunLiveScreen() {
       // Start GPS warmup on the first tick so GPS warms up during countdown.
       // Request permission if not yet granted so first-time users also get the full window.
       if (countdown === 3 && Platform.OS !== "web" && !gpsWarmupSubRef.current) {
+        warmupCancelledRef.current = false;
         (async () => {
           try {
             let { granted } = await Location.getForegroundPermissionsAsync();
             if (!granted) {
               ({ granted } = await Location.requestForegroundPermissionsAsync());
             }
-            if (!granted || gpsWarmupSubRef.current) return;
+            // Guard: countdown may have reached GO and been cancelled while awaiting permission
+            if (!granted || warmupCancelledRef.current) return;
             const sub = await Location.watchPositionAsync(
               { accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 5 },
               () => {} // warm up GPS chip; real tracking starts in handleStartTracking
             );
+            // Second guard: GO may have fired while watchPositionAsync was setting up
+            if (warmupCancelledRef.current) { sub.remove(); return; }
             gpsWarmupSubRef.current = sub;
           } catch { }
         })();
@@ -188,7 +193,8 @@ export default function RunLiveScreen() {
     // countdown === 0 — "GO!" — strong haptic, hold for 1 s, then start tracking
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const timer = setTimeout(() => {
-      // Stop warmup subscription before handing off to handleStartTracking
+      // Cancel any in-flight warmup async and tear down the subscription
+      warmupCancelledRef.current = true;
       gpsWarmupSubRef.current?.remove();
       gpsWarmupSubRef.current = null;
       setCountdown(null);
