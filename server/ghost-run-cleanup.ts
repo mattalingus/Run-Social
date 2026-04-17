@@ -5,26 +5,38 @@ const CHECK_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 
 async function closeGhostRuns(): Promise<void> {
   try {
-    // Step 1 — identify candidates: active runs with no tracking pings in the last 2 hours
-    const candidates = await pool.query<{ id: string; title: string; host_id: string }>(
-      `SELECT r.id, r.title, r.host_id
-       FROM runs r
-       WHERE r.is_active = true
-         AND (r.is_completed IS NULL OR r.is_completed = false)
+    // Atomically close active runs that:
+    //   - started at least 10 minutes ago (avoids sweeping brand-new runs with no pings yet)
+    //   - have had no tracking pings from any participant in the last 2 hours
+    // Re-checking both conditions inside the UPDATE prevents false closures if pings
+    // arrive between a prior SELECT and this UPDATE.
+    const closed = await pool.query<{ id: string; title: string; host_id: string }>(
+      `UPDATE runs
+       SET is_active = false, is_completed = true
+       WHERE is_active = true
+         AND (is_completed IS NULL OR is_completed = false)
+         AND started_at IS NOT NULL
+         AND started_at < NOW() - INTERVAL '10 minutes'
          AND NOT EXISTS (
            SELECT 1 FROM run_tracking_points tp
-           WHERE tp.run_id = r.id
+           WHERE tp.run_id = runs.id
              AND tp.recorded_at > NOW() - INTERVAL '2 hours'
-         )`
+         )
+       RETURNING id, title, host_id`
     );
 
-    if (candidates.rows.length === 0) return;
+    if (closed.rows.length === 0) return;
 
-    // Step 2 — notify each host BEFORE closing so they are informed first
-    for (const candidate of candidates.rows) {
+    console.log(
+      `[ghost-run-cleanup] Auto-closed ${closed.rows.length} ghost run(s):`,
+      closed.rows.map((r) => `"${r.title}" (${r.id})`).join(", ")
+    );
+
+    // Notify only hosts whose run was actually closed (RETURNING rows)
+    for (const run of closed.rows) {
       const hostRes = await pool.query<{ push_token: string | null; notifications_enabled: boolean }>(
         `SELECT push_token, notifications_enabled FROM users WHERE id = $1`,
-        [candidate.host_id]
+        [run.host_id]
       );
       const host = hostRes.rows[0];
       if (
@@ -32,38 +44,13 @@ async function closeGhostRuns(): Promise<void> {
         host.notifications_enabled !== false &&
         host.push_token.startsWith("ExponentPushToken[")
       ) {
-        await sendPushNotification(
+        sendPushNotification(
           host.push_token,
           "Run auto-closed",
-          `"${candidate.title}" was closed automatically due to 2 hours of inactivity.`,
-          { runId: candidate.id }
+          `"${run.title}" was closed automatically due to 2 hours of inactivity.`,
+          { runId: run.id }
         );
       }
-    }
-
-    // Step 3 — atomically close, re-checking the no-pings predicate at UPDATE time
-    // so runs that received fresh pings between step 1 and here are not falsely closed
-    const ids = candidates.rows.map((r) => r.id);
-    const closed = await pool.query<{ id: string; title: string }>(
-      `UPDATE runs
-       SET is_active = false, is_completed = true
-       WHERE id = ANY($1)
-         AND is_active = true
-         AND (is_completed IS NULL OR is_completed = false)
-         AND NOT EXISTS (
-           SELECT 1 FROM run_tracking_points tp
-           WHERE tp.run_id = runs.id
-             AND tp.recorded_at > NOW() - INTERVAL '2 hours'
-         )
-       RETURNING id, title`,
-      [ids]
-    );
-
-    if (closed.rows.length > 0) {
-      console.log(
-        `[ghost-run-cleanup] Auto-closed ${closed.rows.length} ghost run(s):`,
-        closed.rows.map((r) => `"${r.title}" (${r.id})`).join(", ")
-      );
     }
   } catch (err: any) {
     console.error("[ghost-run-cleanup] Error:", err?.message ?? err);
