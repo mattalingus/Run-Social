@@ -1161,19 +1161,27 @@ async function go(e){
       if (reqDateStr) {
         const reqDate = new Date(reqDateStr);
         if (isNaN(reqDate.getTime())) return res.status(400).json({ message: "Invalid date" });
-        if (reqDate.getTime() < Date.now() - 5 * 60 * 1000) return res.status(400).json({ message: "Event date cannot be in the past" });
+        if (reqDate.getTime() < Date.now() - 60 * 1000) return res.status(400).json({ message: "Event date cannot be in the past" });
       }
+      const locationLat = parseFloat(req.body.locationLat ?? req.body.location_lat);
+      const locationLng = parseFloat(req.body.locationLng ?? req.body.location_lng);
+      if (!Number.isFinite(locationLat) || !Number.isFinite(locationLng)) return res.status(400).json({ message: "Valid location coordinates are required" });
+      if (locationLat === 0 && locationLng === 0) return res.status(400).json({ message: "Invalid location — coordinates cannot be (0, 0)" });
+      if (locationLat < -90 || locationLat > 90) return res.status(400).json({ message: "Latitude must be between -90 and 90" });
+      if (locationLng < -180 || locationLng > 180) return res.status(400).json({ message: "Longitude must be between -180 and 180" });
       const minDist = parseFloat(req.body.minDistance ?? req.body.min_distance ?? 0);
       const maxDist = parseFloat(req.body.maxDistance ?? req.body.max_distance ?? 0);
+      if (!Number.isFinite(minDist) || !Number.isFinite(maxDist)) return res.status(400).json({ message: "Distance values must be numbers" });
       if (minDist < 0 || maxDist < 0) return res.status(400).json({ message: "Distance values must be positive" });
       if (minDist > 200 || maxDist > 200) return res.status(400).json({ message: "Distance cannot exceed 200 miles" });
-      if (maxDist > 0 && minDist > maxDist) return res.status(400).json({ message: "Minimum distance cannot exceed maximum distance" });
+      if (maxDist > 0 && minDist > 0 && minDist >= maxDist) return res.status(400).json({ message: "Minimum distance must be less than maximum distance" });
       const minPaceVal = parseFloat(req.body.minPace ?? req.body.min_pace ?? 0);
       const maxPaceVal = parseFloat(req.body.maxPace ?? req.body.max_pace ?? 0);
       if ((minPaceVal > 0 && minPaceVal < 2) || minPaceVal > 60) return res.status(400).json({ message: "Pace must be between 2 and 60 min/mile" });
       if ((maxPaceVal > 0 && maxPaceVal < 2) || maxPaceVal > 60) return res.status(400).json({ message: "Pace must be between 2 and 60 min/mile" });
-      const maxParticipantsVal = parseInt(req.body.maxParticipants ?? req.body.max_participants ?? 20);
-      if (maxParticipantsVal < 1 || maxParticipantsVal > 500) return res.status(400).json({ message: "Max participants must be between 1 and 500" });
+      if (minPaceVal > 0 && maxPaceVal > 0 && minPaceVal >= maxPaceVal) return res.status(400).json({ message: "Minimum pace must be less than maximum pace" });
+      const maxParticipantsRaw = parseInt(req.body.maxParticipants ?? req.body.max_participants ?? 20, 10);
+      if (!Number.isInteger(maxParticipantsRaw) || isNaN(maxParticipantsRaw) || maxParticipantsRaw < 1 || maxParticipantsRaw > 500) return res.status(400).json({ message: "Max participants must be between 1 and 500" });
       const run = await storage.createRun({ ...req.body, hostId: req.session.userId!, savedPathId: req.body.savedPathId || null });
       res.status(201).json(run);
       // Notify — crew runs notify crew members; regular runs notify friends (fire-and-forget)
@@ -1621,8 +1629,8 @@ async function go(e){
         participant = await storage.joinRun(req.params.id as string, req.session.userId!, paceGroupLabel);
       } catch (joinErr: any) {
         if (joinErr.message === "EVENT_FULL") return res.status(409).json({ message: "This event is full" });
-        if (joinErr.message === "RUN_CANCELLED") return res.status(400).json({ message: "This event has been cancelled" });
-        if (joinErr.message === "RUN_COMPLETED") return res.status(400).json({ message: "This event has already completed" });
+        if (joinErr.message === "RUN_CANCELLED") return res.status(409).json({ message: "This event has been cancelled" });
+        if (joinErr.message === "RUN_COMPLETED") return res.status(409).json({ message: "This event has already completed" });
         if (joinErr.message === "RUN_NOT_FOUND") return res.status(404).json({ message: "Event not found" });
         throw joinErr;
       }
@@ -2190,8 +2198,17 @@ async function go(e){
       if (finalDistance == null || finalPace == null) return res.status(400).json({ message: "finalDistance and finalPace required" });
       const parsedDist = parseFloat(finalDistance);
       const parsedPace = parseFloat(finalPace);
-      const safeDist = Number.isFinite(parsedDist) && parsedDist > 0 ? parsedDist : 0;
-      const safePace = Number.isFinite(parsedPace) && parsedPace > 0 ? parsedPace : 0;
+      let safeDist = Number.isFinite(parsedDist) && parsedDist > 0 ? parsedDist : 0;
+      let safePace = Number.isFinite(parsedPace) && parsedPace > 0 ? parsedPace : 0;
+      // DNF guard: if distance is negligible (<0.1 mi), treat as a DNF finish.
+      // Store safeDist=0 and safePace=0 as the DNF sentinel:
+      //   - final_pace IS NOT NULL (0 ≠ NULL) → runner is counted as "finished" (not stuck in-progress)
+      //   - final_pace = 0 → excluded from leaderboard rankings (leaderboard filters final_pace > 0)
+      //   - final_rank remains NULL (computeLeaderboardRanks only assigns ranks for final_pace > 0)
+      if (safeDist < 0.1) {
+        safeDist = 0;
+        safePace = 0;
+      }
       const safeSplits = Array.isArray(mileSplits) && mileSplits.length > 0 ? mileSplits : null;
       const result = await storage.finishRunnerRun(
         req.params.id as string, req.session.userId!,

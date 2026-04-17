@@ -1730,22 +1730,25 @@ export async function joinRun(runId: string, userId: string, paceGroupLabel?: st
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // Lock the run row first to serialize concurrent join attempts
     const runStateRes = await client.query(
-      `SELECT id, is_deleted, is_completed FROM runs WHERE id = $1 FOR UPDATE`,
+      `SELECT id, is_deleted, is_completed, max_participants FROM runs WHERE id = $1 FOR UPDATE`,
       [runId]
     );
     if (!runStateRes.rows.length) {
       await client.query('ROLLBACK');
       throw new Error("RUN_NOT_FOUND");
     }
-    if (runStateRes.rows[0].is_deleted) {
+    const runState = runStateRes.rows[0];
+    if (runState.is_deleted) {
       await client.query('ROLLBACK');
       throw new Error("RUN_CANCELLED");
     }
-    if (runStateRes.rows[0].is_completed) {
+    if (runState.is_completed) {
       await client.query('ROLLBACK');
       throw new Error("RUN_COMPLETED");
     }
+    const maxP: number | null = runState.max_participants ?? null;
 
     const existing = await client.query(
       `SELECT * FROM run_participants WHERE run_id = $1 AND user_id = $2`,
@@ -1753,12 +1756,8 @@ export async function joinRun(runId: string, userId: string, paceGroupLabel?: st
     );
     if (existing.rows.length > 0) {
       if (existing.rows[0].status === "cancelled") {
-        const runRow = await client.query(
-          `SELECT max_participants FROM runs WHERE id = $1`,
-          [runId]
-        );
-        const maxP = runRow.rows[0]?.max_participants;
-        if (maxP) {
+        // Capacity check before re-activating a cancelled participant
+        if (maxP !== null) {
           const countRes = await client.query(
             `SELECT COUNT(*) FROM run_participants WHERE run_id = $1 AND status IN ('joined', 'confirmed')`,
             [runId]
@@ -1782,42 +1781,30 @@ export async function joinRun(runId: string, userId: string, paceGroupLabel?: st
         `SELECT * FROM run_participants WHERE run_id = $1 AND user_id = $2`,
         [runId, userId]
       );
-      // Remove any "planned to go" entry — user has now officially joined
-      await client.query(
-        `DELETE FROM planned_runs WHERE user_id = $1 AND run_id = $2`,
-        [userId, runId]
-      );
+      await client.query(`DELETE FROM planned_runs WHERE user_id = $1 AND run_id = $2`, [userId, runId]);
       await client.query('COMMIT');
       return updated.rows[0];
     }
 
-    const runRow = await client.query(
-      `SELECT max_participants FROM runs WHERE id = $1`,
-      [runId]
+    // New participant — atomic conditional INSERT: only inserts when capacity allows
+    const insertRes = await client.query(
+      `INSERT INTO run_participants (run_id, user_id, pace_group_label)
+       SELECT $1, $2, $3
+       WHERE $4::int IS NULL
+          OR (
+            SELECT COUNT(*) FROM run_participants
+            WHERE run_id = $1 AND status IN ('joined', 'confirmed')
+          ) < $4::int
+       RETURNING *`,
+      [runId, userId, paceGroupLabel || null, maxP]
     );
-    const maxP = runRow.rows[0]?.max_participants;
-    if (maxP) {
-      const countRes = await client.query(
-        `SELECT COUNT(*) FROM run_participants WHERE run_id = $1 AND status IN ('joined', 'confirmed')`,
-        [runId]
-      );
-      if (parseInt(countRes.rows[0].count, 10) >= maxP) {
-        await client.query('ROLLBACK');
-        throw new Error("EVENT_FULL");
-      }
+    if (!insertRes.rows.length) {
+      await client.query('ROLLBACK');
+      throw new Error("EVENT_FULL");
     }
-
-    const result = await client.query(
-      `INSERT INTO run_participants (run_id, user_id, pace_group_label) VALUES ($1, $2, $3) RETURNING *`,
-      [runId, userId, paceGroupLabel || null]
-    );
-    // Remove any "planned to go" entry — user has now officially joined
-    await client.query(
-      `DELETE FROM planned_runs WHERE user_id = $1 AND run_id = $2`,
-      [userId, runId]
-    );
+    await client.query(`DELETE FROM planned_runs WHERE user_id = $1 AND run_id = $2`, [userId, runId]);
     await client.query('COMMIT');
-    return result.rows[0];
+    return insertRes.rows[0];
   } catch (e) {
     await client.query('ROLLBACK');
     throw e;
