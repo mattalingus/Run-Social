@@ -740,16 +740,14 @@ export default function RunTrackingScreen() {
       const t = setTimeout(() => setCountdown((c) => (c !== null ? c - 1 : null)), 1000);
       return () => clearTimeout(t);
     }
-    // countdown === 0 — "GO!" — strong haptic, hold for 1 s, then start
+    // countdown === 0 — "GO!" — start tracking immediately, dismiss overlay after 1 s
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    const t = setTimeout(() => {
-      // Clear the last coord so the first active fix doesn't measure
-      // distance from a position captured during the countdown phase
-      lastCoordRef.current = null;
-      lastCoordTimestampRef.current = null;
-      setCountdown(null);
-      setPhase("active");
-    }, 1000);
+    // Clear pre-GO coords so the first active fix starts clean
+    lastCoordRef.current = null;
+    lastCoordTimestampRef.current = null;
+    setPhase("active");
+    // Keep "GO!" overlay visible for 1 s, then dismiss
+    const t = setTimeout(() => setCountdown(null), 1000);
     return () => clearTimeout(t);
   }, [countdown]);
 
@@ -2203,8 +2201,8 @@ export default function RunTrackingScreen() {
         </Modal>
       )}
 
-      {/* 3-2-1-GO countdown overlay */}
-      {phase === "countdown" && (
+      {/* 3-2-1-GO countdown overlay — visible from 3 until 1s after GO! */}
+      {countdown !== null && (
         <View style={[StyleSheet.absoluteFillObject, t.countdownOverlay]}>
           <Text style={t.countdownDigit}>
             {countdown === 0 ? "GO!" : countdown !== null ? String(countdown) : ""}

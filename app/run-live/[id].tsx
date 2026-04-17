@@ -190,16 +190,15 @@ export default function RunLiveScreen() {
       const timer = setTimeout(() => setCountdown((c) => (c !== null ? c - 1 : null)), 1000);
       return () => clearTimeout(timer);
     }
-    // countdown === 0 — "GO!" — strong haptic, hold for 1 s, then start tracking
+    // countdown === 0 — "GO!" — start tracking immediately, dismiss overlay after 1 s
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    const timer = setTimeout(() => {
-      // Cancel any in-flight warmup async and tear down the subscription
-      warmupCancelledRef.current = true;
-      gpsWarmupSubRef.current?.remove();
-      gpsWarmupSubRef.current = null;
-      setCountdown(null);
-      handleStartTracking();
-    }, 1000);
+    // Cancel any in-flight warmup async and tear down the subscription
+    warmupCancelledRef.current = true;
+    gpsWarmupSubRef.current?.remove();
+    gpsWarmupSubRef.current = null;
+    handleStartTracking();
+    // Keep "GO!" overlay visible for 1 s, then dismiss
+    const timer = setTimeout(() => setCountdown(null), 1000);
     return () => clearTimeout(timer);
   }, [countdown]);
 
