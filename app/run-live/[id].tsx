@@ -156,6 +156,24 @@ export default function RunLiveScreen() {
   const lastFetchedRef = useRef<number>(Date.now());
   const [isFollowing, setIsFollowing] = useState(true);
   const [hostFinished, setHostFinished] = useState(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
+
+  // Countdown tick: 3→2→1→0(GO!)→call handleStartTracking
+  useEffect(() => {
+    if (countdown === null) return;
+    if (countdown > 0) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const timer = setTimeout(() => setCountdown((c) => (c !== null ? c - 1 : null)), 1000);
+      return () => clearTimeout(timer);
+    }
+    // countdown === 0 — "GO!" — strong haptic then start tracking
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    const timer = setTimeout(() => {
+      setCountdown(null);
+      handleStartTracking();
+    }, 700);
+    return () => clearTimeout(timer);
+  }, [countdown]);
 
   // ── Server data ───────────────────────────────────────────────────────────
 
@@ -944,7 +962,7 @@ export default function RunLiveScreen() {
               </View>
             )}
             {phase === "idle" && isHost && !hostFinished && (
-              <Pressable style={({ pressed }) => [s.startBtn, { opacity: pressed ? 0.85 : 1 }]} onPress={handleStartTracking}>
+              <Pressable style={({ pressed }) => [s.startBtn, { opacity: pressed ? 0.85 : 1 }]} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setCountdown(3); }}>
                 <Feather name="play" size={20} color={C.bg} />
                 <Text style={s.startBtnText}>{run?.activity_type === "ride" ? "Start Ride" : run?.activity_type === "walk" ? "Start Walk" : "Start Run"}</Text>
               </Pressable>
@@ -966,7 +984,7 @@ export default function RunLiveScreen() {
                 {liveState?.isActive && (
                   <Pressable
                     style={({ pressed }) => [s.startBtn, { opacity: pressed ? 0.85 : 1 }]}
-                    onPress={() => { autostartAttemptedRef.current = true; handleStartTracking(); }}
+                    onPress={() => { autostartAttemptedRef.current = true; Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setCountdown(3); }}
                   >
                     <Feather name="play" size={20} color={C.bg} />
                     <Text style={s.startBtnText}>
@@ -1080,6 +1098,18 @@ export default function RunLiveScreen() {
             )}
           </View>
         </KAV>
+      )}
+
+      {/* 3-2-1-GO countdown overlay */}
+      {countdown !== null && (
+        <View style={[StyleSheet.absoluteFillObject, s.countdownOverlay]}>
+          <Text style={s.countdownDigit}>
+            {countdown === 0 ? "GO!" : String(countdown)}
+          </Text>
+          <Text style={s.countdownSub}>
+            {countdown === 0 ? "Tracking started" : "Warming up GPS…"}
+          </Text>
+        </View>
       )}
     </View>
   );
@@ -1350,4 +1380,22 @@ const s = StyleSheet.create({
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
   },
   tagAlongCancelTxt: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted },
+  countdownOverlay: {
+    backgroundColor: C.primary + "F0",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 999,
+  },
+  countdownDigit: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 112,
+    color: "#FFFFFF",
+    lineHeight: 120,
+  },
+  countdownSub: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 17,
+    color: "#FFFFFFCC",
+    marginTop: 8,
+  },
 });

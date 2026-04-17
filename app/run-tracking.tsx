@@ -67,7 +67,7 @@ if (IS_NATIVE) {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Phase = "idle" | "active" | "paused" | "done";
+type Phase = "idle" | "countdown" | "active" | "paused" | "done";
 type Coord = { latitude: number; longitude: number };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -313,6 +313,9 @@ export default function RunTrackingScreen() {
   const { pathId, recover } = useLocalSearchParams<{ pathId?: string; recover?: string }>();
 
   const [phase, setPhase] = useState<Phase>("idle");
+  const phaseRef = useRef<Phase>("idle");
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
+  const [countdown, setCountdown] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [displayDist, setDisplayDist] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -646,10 +649,6 @@ export default function RunTrackingScreen() {
   const moveTimeRef = useRef(0);
   const lastMoveTimestampRef = useRef<number | null>(null);
 
-  // GPS warm-up refs: discard first N updates or first ~8s to avoid start-jump
-  const gpsWarmupCountRef = useRef(0);
-  const gpsStartTimeRef = useRef<number | null>(null);
-
   // ─── Location permission nudge banner ────────────────────────────────────
   const [showPermNudge, setShowPermNudge] = useState(false);
   const stepCountRef = useRef(0);
@@ -721,14 +720,34 @@ export default function RunTrackingScreen() {
 
   // ─── GPS ───────────────────────────────────────────────────────────────────
 
+  // GPS lifecycle: start during countdown (warm up GPS) and keep running while active
   useEffect(() => {
-    if (phase === "active") {
+    if (phase === "active" || phase === "countdown") {
       watchLocation();
     } else {
       stopWatching();
     }
-    return () => { stopWatching(); };
   }, [phase]);
+
+  // Stop GPS on unmount
+  useEffect(() => () => { stopWatching(); }, []);
+
+  // Countdown tick: 3→2→1→0(GO!)→null then activate
+  useEffect(() => {
+    if (countdown === null) return;
+    if (countdown > 0) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const t = setTimeout(() => setCountdown((c) => (c !== null ? c - 1 : null)), 1000);
+      return () => clearTimeout(t);
+    }
+    // countdown === 0 — "GO!" — strong haptic then activate
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    const t = setTimeout(() => {
+      setCountdown(null);
+      setPhase("active");
+    }, 700);
+    return () => clearTimeout(t);
+  }, [countdown]);
 
   const handleCoord = useCallback((latitude: number, longitude: number, accuracy?: number, speed?: number | null, altitude?: number | null) => {
     // Skip poor-accuracy fixes that occur during GPS warm-up (first few seconds)
@@ -807,23 +826,23 @@ export default function RunTrackingScreen() {
 
     const coord: Coord = { latitude, longitude };
 
-    // GPS warm-up: skip route recording and distance counting for first 5 updates
-    // or first 8 seconds to avoid start-jump from initial GPS lock correction.
-    // The map is still panned (below) so the user sees their location immediately.
-    if (gpsStartTimeRef.current === null) {
-      gpsStartTimeRef.current = now;
-    }
-    gpsWarmupCountRef.current += 1;
-    const inWarmup =
-      gpsWarmupCountRef.current <= 5 ||
-      now - gpsStartTimeRef.current < 8000;
-
-    if (!inWarmup) {
-      routePathRef.current.push(coord);
-      setRouteState((prev) => [...prev, coord]);
+    // During countdown phase: GPS is warming up. Update position for map panning
+    // but don't record route coords or count distance yet.
+    if (phaseRef.current === "countdown") {
+      lastCoordRef.current = coord;
+      if (mapRef.current) {
+        mapRef.current.animateToRegion(
+          { latitude, longitude, latitudeDelta: 0.004, longitudeDelta: 0.004 },
+          300
+        );
+      }
+      return;
     }
 
-    if (!inWarmup && lastCoordRef.current) {
+    routePathRef.current.push(coord);
+    setRouteState((prev) => [...prev, coord]);
+
+    if (lastCoordRef.current) {
       const d = haversine(
         lastCoordRef.current.latitude,
         lastCoordRef.current.longitude,
@@ -1061,10 +1080,6 @@ export default function RunTrackingScreen() {
     moveTimeRef.current = 0;
     lastMoveTimestampRef.current = null;
     stepCountRef.current = 0;
-    // Reset GPS warm-up state
-    gpsWarmupCountRef.current = 0;
-    gpsStartTimeRef.current = null;
-
     // Check permission level and show nudge if only foreground was granted
     if (Platform.OS !== "web") {
       (async () => {
@@ -1091,8 +1106,9 @@ export default function RunTrackingScreen() {
       } catch (_) {}
     }
     liveActivityStartedRef.current = false;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setPhase("active");
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setPhase("countdown");
+    setCountdown(3);
   }
 
   function stopPedometer() {
@@ -1263,6 +1279,13 @@ export default function RunTrackingScreen() {
     if (phase === "idle") {
       if (Platform.OS !== "web") Speech.stop();
       router.back();
+      return;
+    }
+    if (phase === "countdown") {
+      // Cancel countdown — stop GPS and return to idle
+      setCountdown(null);
+      setPhase("idle");
+      stopWatching();
       return;
     }
     Alert.alert(`Discard ${activityFilter === "ride" ? "Ride" : activityFilter === "walk" ? "Walk" : "Run"}`, `Discard this ${activityFilter === "ride" ? "ride" : activityFilter === "walk" ? "walk" : "run"} and go back?`, [
@@ -1939,7 +1962,7 @@ export default function RunTrackingScreen() {
               },
             ]} />
             <Text style={t.statusTxt}>
-              {phase === "idle" ? "Ready" : phase === "active" ? (activityFilter === "ride" ? "Riding" : activityFilter === "walk" ? "Walking" : "Running") : "Paused"}
+              {phase === "idle" || phase === "countdown" ? "Ready" : phase === "active" ? (activityFilter === "ride" ? "Riding" : activityFilter === "walk" ? "Walking" : "Running") : "Paused"}
             </Text>
           </View>
         )}
@@ -2172,6 +2195,18 @@ export default function RunTrackingScreen() {
             )}
           </View>
         </Modal>
+      )}
+
+      {/* 3-2-1-GO countdown overlay */}
+      {phase === "countdown" && (
+        <View style={[StyleSheet.absoluteFillObject, t.countdownOverlay]}>
+          <Text style={t.countdownDigit}>
+            {countdown === 0 ? "GO!" : countdown !== null ? String(countdown) : ""}
+          </Text>
+          <Text style={t.countdownSub}>
+            {countdown === 0 ? "Tracking started" : "Warming up GPS…"}
+          </Text>
+        </View>
       )}
     </View>
   );
@@ -2932,5 +2967,23 @@ function makeRunStyles(C: ColorScheme) { return StyleSheet.create({
     fontSize: 12,
     color: C.textSecondary,
     marginTop: 2,
+  },
+  countdownOverlay: {
+    backgroundColor: C.primary + "F0",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 999,
+  },
+  countdownDigit: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 112,
+    color: "#FFFFFF",
+    lineHeight: 120,
+  },
+  countdownSub: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 17,
+    color: "#FFFFFFCC",
+    marginTop: 8,
   },
 }); }
