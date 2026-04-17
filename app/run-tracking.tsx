@@ -602,29 +602,51 @@ export default function RunTrackingScreen() {
         const filename = `${FileSystem.cacheDirectory}pace_${Math.round(distance * 100)}.mp3`;
         await FileSystem.writeAsStringAsync(filename, base64, { encoding: FileSystem.EncodingType.Base64 });
         const { sound } = await Audio.Sound.createAsync({ uri: filename });
-        sound.setOnPlaybackStatusUpdate((status: any) => {
-          if (status.didJustFinish) {
-            ensureAudioMode(false);
-            sound.unloadAsync().catch(() => {});
+        try {
+          await sound.playAsync();
+          // Poll getStatusAsync until playback ends — more reliable than
+          // waiting for the didJustFinish callback which can be missed.
+          const deadline = Date.now() + 30_000;
+          let started = false;
+          while (Date.now() < deadline) {
+            await new Promise<void>((r) => setTimeout(r, 250));
+            try {
+              const st = await sound.getStatusAsync();
+              if (!st.isLoaded) break;
+              if (st.isLoaded && st.positionMillis > 0) started = true;
+              if (started && !st.isPlaying) break;
+            } catch {
+              break;
+            }
           }
-        });
-        await sound.playAsync();
+        } finally {
+          sound.unloadAsync().catch(() => {});
+          await ensureAudioMode(false);
+        }
         return;
       } catch (e) {
-        Speech.speak(text, {
-          rate: 0.95,
-          onDone: () => { void ensureAudioMode(false); },
-          onError: () => { void ensureAudioMode(false); },
+        // TTS audio playback failed — fall back to on-device speech while audio session is still active
+        await new Promise<void>((resolve) => {
+          Speech.speak(text, {
+            rate: 0.95,
+            onDone: resolve,
+            onError: resolve,
+          });
         });
+        await ensureAudioMode(false);
         return;
       }
     } catch (e) {}
 
-    Speech.speak(text, {
-      rate: 0.95,
-      onDone: () => { void ensureAudioMode(false); },
-      onError: () => { void ensureAudioMode(false); },
+    // TTS network request failed — use on-device speech while audio session is still active
+    await new Promise<void>((resolve) => {
+      Speech.speak(text, {
+        rate: 0.95,
+        onDone: resolve,
+        onError: resolve,
+      });
     });
+    await ensureAudioMode(false);
   }, [activityFilter]);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -1241,6 +1263,7 @@ export default function RunTrackingScreen() {
         }
         if (didClip) {
           routePathRef.current = clippedPts;
+          setRouteState(clippedPts);
           totalDistRef.current = routeDist;
           setDisplayDist(routeDist);
           // Rebuild splits: keep full-mile splits within the route, add partial for leftover
