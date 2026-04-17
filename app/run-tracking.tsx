@@ -500,7 +500,14 @@ export default function RunTrackingScreen() {
         mileSplitsRef.current = data.splits ?? [];
         elevationGainRef.current = data.elevationGainFt ?? 0;
         lastSplitMileRef.current = Math.floor(data.distanceMi ?? 0);
-        prevMileElapsedRef.current = data.durationSeconds ?? 0;
+        // Rehydrate prevMileElapsedRef from completed splits so the next split
+        // computes correct segment seconds.  Using total durationSeconds would
+        // make every post-recovery split look impossibly fast.
+        const completedSplits = (data.splits ?? []).filter((s: any) => !s.isPartial);
+        prevMileElapsedRef.current = completedSplits.reduce(
+          (acc: number, s: any) => acc + (s.paceMinPerMile ?? 0) * 60,
+          0
+        );
         setElapsed(data.durationSeconds ?? 0);
         setDisplayDist(data.distanceMi ?? 0);
         setRouteState(data.routePath ?? []);
@@ -1013,8 +1020,9 @@ export default function RunTrackingScreen() {
             }
           } else {
             const interval = parseFloat(coachIntervalRef.current);
-            if (totalDistRef.current >= lastAnnouncedMileRef.current + interval) {
-              lastAnnouncedMileRef.current += interval;
+            const safeInterval = Number.isFinite(interval) && interval > 0 ? interval : 1.0;
+            if (totalDistRef.current >= lastAnnouncedMileRef.current + safeInterval) {
+              lastAnnouncedMileRef.current += safeInterval;
               announcePace(lastAnnouncedMileRef.current, elapsedRef.current);
             }
           }
@@ -1357,7 +1365,7 @@ export default function RunTrackingScreen() {
     // Compute final partial-mile split before transitioning to done screen
     const finalSplits = [...mileSplitsRef.current];
     const remainingDist = totalDistRef.current - lastSplitMileRef.current;
-    if (remainingDist > 0.05 && elapsedRef.current > prevMileElapsedRef.current) {
+    if (remainingDist >= 0.1 && elapsedRef.current > prevMileElapsedRef.current) {
       const remainingSeconds = elapsedRef.current - prevMileElapsedRef.current;
       const partialPace = Math.min(Math.max((remainingSeconds / 60) / remainingDist, 1), 30);
       finalSplits.push({
@@ -1675,7 +1683,7 @@ export default function RunTrackingScreen() {
 
   if (phase === "done") {
     const distance = totalDistRef.current;
-    const pace = distance > 0.01 ? (elapsed / 60) / distance : null;
+    const pace = distance > 0.01 ? (elapsedRef.current / 60) / distance : null;
     const displayPace = pace && distUnit === "km" ? pace / 1.60934 : pace;
     let paceM = displayPace ? Math.floor(displayPace) : 0;
     let paceS = displayPace ? Math.round((displayPace - paceM) * 60) : 0;
