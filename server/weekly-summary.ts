@@ -19,8 +19,8 @@ export async function sendWeeklySummaries(): Promise<void> {
 
       const insight = await ai.generateWeeklyInsight(user.name, stats);
       const body = insight 
-        ? `${stats.runs} run${stats.runs !== 1 ? "s" : ""} · ${mi} mi · ${timeLabel} — ${insight}`
-        : `${stats.runs} run${stats.runs !== 1 ? "s" : ""} · ${mi} mi · ${timeLabel} this week — keep it up!`;
+        ? `${stats.runs} activit${stats.runs !== 1 ? "ies" : "y"} · ${mi} mi · ${timeLabel} — ${insight}`
+        : `${stats.runs} activit${stats.runs !== 1 ? "ies" : "y"} · ${mi} mi · ${timeLabel} this week — keep it up!`;
 
       await sendPushNotification(
         user.push_token,
@@ -88,7 +88,7 @@ export async function checkCrewStreakAtRisk(): Promise<void> {
           "system",
           "PaceUp Bot",
           null,
-          `⚠️ Heads up! Your ${weeksLabel} streak is at risk — no run logged this week yet. Schedule one to keep it alive! 🔥`,
+          `⚠️ Heads up! Your ${weeksLabel} streak is at risk — no activity logged this week yet. Schedule one to keep it alive! 🔥`,
           "milestone"
         );
         await storage.updateCrew(crew.id, { streak_risk_notif_week: currentWeek });

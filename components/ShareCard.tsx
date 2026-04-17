@@ -23,6 +23,12 @@ function formatPace(pace: number | null | undefined): string {
   return `${m}:${sec.toString().padStart(2, "0")}`;
 }
 
+function formatSpeed(pace: number | null | undefined): string {
+  if (!pace || pace <= 0) return "--.-";
+  const mph = 60 / pace;
+  return mph.toFixed(1);
+}
+
 function formatDuration(seconds: number | null | undefined): string {
   if (!seconds || seconds <= 0) return "--:--";
   const h = Math.floor(seconds / 3600);
@@ -278,7 +284,9 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
   const isGroup = participantCount != null && participantCount > 1;
   const isRide = activityType === "ride";
   const isWalk = activityType === "walk";
-  const actIcon: any = isRide ? "bicycle" : isWalk ? "footsteps" : "walk";
+  const actIcon: any = isRide ? "bicycle" : isWalk ? "footsteps" : "body";
+  const displayPaceOrSpeed = isRide ? formatSpeed(paceMinPerMile) : formatPace(paceMinPerMile);
+  const paceUnit = isRide ? "mph" : "/mi";
   const actLabel = isRide ? "Ride" : isWalk ? "Walk" : "Run";
   const actParticipants = isRide ? "Riders" : isWalk ? "Walkers" : "Runners";
 
@@ -366,8 +374,8 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
           <View style={st.centerBlock}>
             <Text style={st.heroDistWhite}>{formatDist(distanceMi)}</Text>
             <View style={st.heroPaceTimeRow}>
-              <Text style={st.heroSmallValWhite}>{formatPace(paceMinPerMile)}</Text>
-              <Text style={st.heroSmallLabelWhite}>/mi</Text>
+              <Text style={st.heroSmallValWhite}>{displayPaceOrSpeed}</Text>
+              <Text style={st.heroSmallLabelWhite}>{paceUnit}</Text>
               <View style={st.heroSmallDivider} />
               <Text style={st.heroSmallValWhite}>{formatDuration(durationSeconds)}</Text>
             </View>
@@ -393,7 +401,7 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
                 <Text style={st.leftStatVal}>{formatDist(distanceMi)} <Text style={st.leftStatUnit}>mi</Text></Text>
               </View>
               <View style={st.leftStatRow}>
-                <Text style={st.leftStatVal}>{formatPace(paceMinPerMile)} <Text style={st.leftStatUnit}>/mi</Text></Text>
+                <Text style={st.leftStatVal}>{displayPaceOrSpeed} <Text style={st.leftStatUnit}>{paceUnit}</Text></Text>
               </View>
               <View style={st.leftStatRow}>
                 <Text style={st.leftStatVal}>{formatDuration(durationSeconds)}</Text>
@@ -419,8 +427,8 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
               </View>
               <View style={st.statDividerWhite} />
               <View style={st.statBlock}>
-                <Text style={st.statMidWhite}>{formatPace(paceMinPerMile)}</Text>
-                <Text style={st.statUnitWhite}>/mi</Text>
+                <Text style={st.statMidWhite}>{displayPaceOrSpeed}</Text>
+                <Text style={st.statUnitWhite}>{paceUnit}</Text>
               </View>
               <View style={st.statDividerWhite} />
               <View style={st.statBlock}>
@@ -442,7 +450,7 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
           <View style={st.frostedPillWrap}>
             <View style={st.frostedPill}>
               <Text style={st.frostedPillTxt}>
-                {formatDist(distanceMi)} mi  ·  {formatPace(paceMinPerMile)} /mi  ·  {formatDuration(durationSeconds)}
+                {formatDist(distanceMi)} mi  ·  {displayPaceOrSpeed} {paceUnit}  ·  {formatDuration(durationSeconds)}
               </Text>
             </View>
           </View>
@@ -497,8 +505,8 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
             <Text style={st.watermarkAboveDist}>PACEUP</Text>
             <Text style={st.heroDistWhite}>{formatDist(distanceMi)}</Text>
             <View style={[st.heroPaceTimeRow, { marginTop: 8 }]}>
-              <Text style={st.heroSmallValWhite}>{formatPace(paceMinPerMile)}</Text>
-              <Text style={st.heroSmallLabelWhite}>/mi</Text>
+              <Text style={st.heroSmallValWhite}>{displayPaceOrSpeed}</Text>
+              <Text style={st.heroSmallLabelWhite}>{paceUnit}</Text>
               <View style={st.heroSmallDivider} />
               <Text style={st.heroSmallValWhite}>{formatDuration(durationSeconds)}</Text>
             </View>
@@ -523,8 +531,8 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
               </View>
               <View style={[st.rightStatDivider, { backgroundColor: "rgba(255,255,255,0.15)" }]} />
               <View style={st.rightStatItem}>
-                <Text style={[st.rightStatVal, { color: "#FFFFFF" }]}>{formatPace(paceMinPerMile)}</Text>
-                <Text style={[st.rightStatUnit, { color: "rgba(255,255,255,0.5)" }]}>/mi</Text>
+                <Text style={[st.rightStatVal, { color: "#FFFFFF" }]}>{displayPaceOrSpeed}</Text>
+                <Text style={[st.rightStatUnit, { color: "rgba(255,255,255,0.5)" }]}>{paceUnit}</Text>
               </View>
               <View style={[st.rightStatDivider, { backgroundColor: "rgba(255,255,255,0.15)" }]} />
               <View style={st.rightStatItem}>
@@ -552,8 +560,8 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
               </View>
               <View style={st.statDividerWhite} />
               <View style={st.statBlock}>
-                <Text style={st.statMidWhite}>{formatPace(paceMinPerMile)}</Text>
-                <Text style={st.statUnitWhite}>/mi</Text>
+                <Text style={st.statMidWhite}>{displayPaceOrSpeed}</Text>
+                <Text style={st.statUnitWhite}>{paceUnit}</Text>
               </View>
               <View style={st.statDividerWhite} />
               <View style={st.statBlock}>
@@ -579,8 +587,8 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
             </View>
             <View style={[st.stackedDivider, { backgroundColor: "rgba(255,255,255,0.15)" }]} />
             <View style={st.stackedStatRow}>
-              <Text style={[st.stackedStatVal, { color: "#FFFFFF" }]}>{formatPace(paceMinPerMile)}</Text>
-              <Text style={[st.stackedStatUnit, { color: "rgba(255,255,255,0.5)" }]}>/mi</Text>
+              <Text style={[st.stackedStatVal, { color: "#FFFFFF" }]}>{displayPaceOrSpeed}</Text>
+              <Text style={[st.stackedStatUnit, { color: "rgba(255,255,255,0.5)" }]}>{paceUnit}</Text>
             </View>
             <View style={[st.stackedDivider, { backgroundColor: "rgba(255,255,255,0.15)" }]} />
             <View style={st.stackedStatRow}>
@@ -617,8 +625,8 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
           <Text style={st.watermarkAboveDist}>PACEUP</Text>
           <Text style={st.heroDist}>{formatDist(distanceMi)}</Text>
           <View style={[st.heroPaceTimeRow, { marginTop: 8 }]}>
-            <Text style={st.heroSmallVal}>{formatPace(paceMinPerMile)}</Text>
-            <Text style={st.heroSmallLabel}>/mi</Text>
+            <Text style={st.heroSmallVal}>{displayPaceOrSpeed}</Text>
+            <Text style={st.heroSmallLabel}>{paceUnit}</Text>
             <View style={[st.heroSmallDivider, { backgroundColor: TEXT_MUTED }]} />
             <Text style={st.heroSmallVal}>{formatDuration(durationSeconds)}</Text>
           </View>
@@ -661,8 +669,8 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
             </View>
             <View style={st.rightStatDivider} />
             <View style={st.rightStatItem}>
-              <Text style={st.rightStatVal}>{formatPace(paceMinPerMile)}</Text>
-              <Text style={st.rightStatUnit}>/mi</Text>
+              <Text style={st.rightStatVal}>{displayPaceOrSpeed}</Text>
+              <Text style={st.rightStatUnit}>{paceUnit}</Text>
             </View>
             <View style={st.rightStatDivider} />
             <View style={st.rightStatItem}>
@@ -706,8 +714,8 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
             </View>
             <View style={st.statDividerDark} />
             <View style={st.statBlock}>
-              <Text style={st.statMidLight}>{formatPace(paceMinPerMile)}</Text>
-              <Text style={st.statUnitDark}>/mi</Text>
+              <Text style={st.statMidLight}>{displayPaceOrSpeed}</Text>
+              <Text style={st.statUnitDark}>{paceUnit}</Text>
             </View>
             <View style={st.statDividerDark} />
             <View style={st.statBlock}>
@@ -741,8 +749,8 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
           </View>
           <View style={st.stackedDivider} />
           <View style={st.stackedStatRow}>
-            <Text style={st.stackedStatVal}>{formatPace(paceMinPerMile)}</Text>
-            <Text style={st.stackedStatUnit}>/mi</Text>
+            <Text style={st.stackedStatVal}>{displayPaceOrSpeed}</Text>
+            <Text style={st.stackedStatUnit}>{paceUnit}</Text>
           </View>
           <View style={st.stackedDivider} />
           <View style={st.stackedStatRow}>

@@ -27,7 +27,7 @@ interface Props {
 
 function getHostBadge(hosted: number): { label: string; color: string } | null {
   if (hosted < 1) return null;
-  if (hosted === 1) return { label: "1st Run", color: "#A0C4FF" };
+  if (hosted === 1) return { label: "Debut", color: "#A0C4FF" };
   if (hosted < 5) return { label: "Bronze", color: "#CD7F32" };
   if (hosted < 20) return { label: "Silver", color: "#9E9E9E" };
   if (hosted < 100) return { label: "Gold", color: "#FFD700" };
@@ -235,7 +235,7 @@ export default function HostProfileSheet({ hostId, onClose }: Props) {
                   activeOpacity={0.7}
                 >
                   <Ionicons
-                    name={tab === "ride" ? "bicycle" : tab === "walk" ? "footsteps" : "walk"}
+                    name={tab === "ride" ? "bicycle" : tab === "walk" ? "footsteps" : "body"}
                     size={13}
                     color={activityTab === tab ? C.bg : C.textMuted}
                   />
@@ -249,8 +249,12 @@ export default function HostProfileSheet({ hostId, onClose }: Props) {
             {/* Per-activity stats */}
             <View style={s.actStatsRow}>
               <View style={s.actStatBox}>
-                <Text style={s.actStatVal}>{formatPace(actStats?.avg_pace ?? 0)}</Text>
-                <Text style={s.actStatLabel}>Avg Pace</Text>
+                <Text style={s.actStatVal}>
+                  {activityTab === "ride"
+                    ? (actStats?.avg_pace ? `${(60 / actStats.avg_pace).toFixed(1)} mph` : "—")
+                    : formatPace(actStats?.avg_pace ?? 0)}
+                </Text>
+                <Text style={s.actStatLabel}>{activityTab === "ride" ? "Avg Speed" : "Avg Pace"}</Text>
               </View>
               <View style={s.statDivider} />
               <View style={s.actStatBox}>

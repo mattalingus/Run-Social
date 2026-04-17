@@ -200,46 +200,62 @@ function pickCoachPhrase(
     distLine = `${distance} miles.`;
   }
 
-  // ── Pace line ───────────────────────────────────────────────────────────────
+  // ── Pace / Speed line ────────────────────────────────────────────────────────
   const secPart = pSec > 0 ? ` ${pSec} second${pSec !== 1 ? "s" : ""}` : "";
-  const paceLines = [
-    `${isRide ? "Riding" : "Running"} at ${pS} per mile.`,
-    `Current pace, ${pS} a mile.`,
-    `${pM} minute${secPart} miles.`,
-    `Averaging ${pS} per mile.`,
-    `${pS} per mile right now.`,
-    `Your pace is ${pS} a mile.`,
-    `Pace is sitting at ${pS}.`,
-    `Clocking ${pS} per mile.`,
-    `That's ${pS} per mile.`,
-    `${pS} a mile.`,
-    `Pace: ${pS} per mile.`,
-    `Holding ${pS} per mile.`,
-    `You're at ${pS} per mile.`,
-    `Average pace, ${pS}.`,
-    `Moving at ${pS} a mile.`,
-    `Pace right now is ${pS}.`,
-    `That puts you at ${pS} per mile.`,
-    `You're ${isRide ? "riding" : "running"} ${pS} miles.`,
-    `Speed check: ${pS} per mile.`,
-    `${pS} on the pace.`,
-    `Tracking at ${pS} per mile.`,
-    `Mile pace: ${pS}.`,
-    `You're sitting on ${pS}.`,
-    `Pace check: ${pS} a mile.`,
-    `${pS} per mile this ${isRide ? "ride" : "run"}.`,
-    `Effort translates to ${pS} per mile.`,
-    `That's ${pS} minute miles.`,
-    `${pS} through the mile.`,
-    `On pace at ${pS}.`,
-    `Holding a ${pS} per mile clip.`,
-    `Current split: ${pS} a mile.`,
-    `You're averaging ${pS}.`,
-    `Right now you're doing ${pS} a mile.`,
-    `Per mile pace is ${pS}.`,
-    `${pS} miles per minute.`,
-  ];
-  const paceLine = pick(paceLines);
+  let paceLine: string;
+  if (isRide) {
+    const mph = 60 / paceMinTotal;
+    const mphStr = mph.toFixed(1);
+    const rideSpeedLines = [
+      `Riding at ${mphStr} miles per hour.`,
+      `Current speed, ${mphStr} miles per hour.`,
+      `Speed check: ${mphStr} mph.`,
+      `You're cruising at ${mphStr} mph.`,
+      `${mphStr} miles per hour right now.`,
+      `Averaging ${mphStr} mph.`,
+      `Speed is sitting at ${mphStr}.`,
+      `${mphStr} mph on this ride.`,
+      `Tracking at ${mphStr} mph.`,
+      `You're doing ${mphStr} per hour.`,
+    ];
+    paceLine = pick(rideSpeedLines);
+  } else {
+    const paceLines = [
+      `Running at ${pS} per mile.`,
+      `Current pace, ${pS} a mile.`,
+      `${pM} minute${secPart} miles.`,
+      `Averaging ${pS} per mile.`,
+      `${pS} per mile right now.`,
+      `Your pace is ${pS} a mile.`,
+      `Pace is sitting at ${pS}.`,
+      `Clocking ${pS} per mile.`,
+      `That's ${pS} per mile.`,
+      `${pS} a mile.`,
+      `Pace: ${pS} per mile.`,
+      `Holding ${pS} per mile.`,
+      `You're at ${pS} per mile.`,
+      `Average pace, ${pS}.`,
+      `Moving at ${pS} a mile.`,
+      `Pace right now is ${pS}.`,
+      `That puts you at ${pS} per mile.`,
+      `Speed check: ${pS} per mile.`,
+      `${pS} on the pace.`,
+      `Tracking at ${pS} per mile.`,
+      `Mile pace: ${pS}.`,
+      `You're sitting on ${pS}.`,
+      `Pace check: ${pS} a mile.`,
+      `${pS} per mile this run.`,
+      `Effort translates to ${pS} per mile.`,
+      `That's ${pS} minute miles.`,
+      `On pace at ${pS}.`,
+      `Holding a ${pS} per mile clip.`,
+      `Current split: ${pS} a mile.`,
+      `You're averaging ${pS}.`,
+      `Right now you're doing ${pS} a mile.`,
+      `Per mile pace is ${pS}.`,
+    ];
+    paceLine = pick(paceLines);
+  }
 
   // ── Pace context (trend or effort level) ────────────────────────────────────
   let paceContext = "";
@@ -815,7 +831,11 @@ export default function RunTrackingScreen() {
           let _pm = pace ? Math.floor(pace) : 0;
           let _ps = pace ? Math.round((pace - _pm) * 60) : 0;
           if (_ps === 60) { _ps = 0; _pm += 1; }
-          const paceStr = pace ? `${_pm}:${_ps.toString().padStart(2, "0")}/mi` : "";
+          const paceStr = pace
+            ? activityFilter === "ride"
+              ? `${(60 / pace).toFixed(1)} mph`
+              : `${_pm}:${_ps.toString().padStart(2, "0")}/mi`
+            : "";
           Share.share({
             message: `Just finished a ${(Math.floor(dist * 100) / 100).toFixed(2)} mile ${activityFilter}${paceStr ? ` at ${paceStr} pace` : ""}! ${activityFilter === "ride" ? "🚴" : activityFilter === "walk" ? "🚶" : "🏃"} Tracked on PaceUp.`,
           }).catch(() => {});
@@ -1191,7 +1211,7 @@ export default function RunTrackingScreen() {
         if (!fgGranted) {
           Alert.alert(
             "Location Required",
-            "Enable location access in Settings so PaceUp can track your run."
+            `Enable location access in Settings so PaceUp can track your ${activityFilter === "ride" ? "ride" : activityFilter === "walk" ? "walk" : "run"}.`
           );
           return;
         }
@@ -1770,9 +1790,11 @@ export default function RunTrackingScreen() {
             <View style={t.statDivider} />
             <View style={t.statBlock}>
               <Text style={t.statBig}>
-                {displayPace ? `${paceM}:${paceS.toString().padStart(2, "0")}` : "--"}
+                {activityFilter === "ride"
+                  ? (displayPace ? `${(60 / (distUnit === "km" ? displayPace * 1.60934 : displayPace)).toFixed(1)}` : "--")
+                  : (displayPace ? `${paceM}:${paceS.toString().padStart(2, "0")}` : "--")}
               </Text>
-              <Text style={t.statUnit}>{distUnit === "km" ? "min/km" : "min/mi"}</Text>
+              <Text style={t.statUnit}>{activityFilter === "ride" ? "mph" : distUnit === "km" ? "min/km" : "min/mi"}</Text>
             </View>
           </View>
 
@@ -2034,8 +2056,12 @@ export default function RunTrackingScreen() {
   const showMap = IS_NATIVE && MapView && (phase === "active" || phase === "paused") && routeState.length > 0;
   const currentPt = routeState[routeState.length - 1];
   const livePaceStr = (() => {
-    if (displayDist < 0.01 || elapsed < 1) return "--:--";
+    if (displayDist < 0.01 || elapsed < 1) return activityFilter === "ride" ? "--.-" : "--:--";
     const minPerMile = elapsed / 60 / displayDist;
+    if (activityFilter === "ride") {
+      const mph = 60 / minPerMile;
+      return mph.toFixed(1);
+    }
     const p = distUnit === "km" ? minPerMile / 1.60934 : minPerMile;
     let m = Math.floor(p);
     let s = Math.round((p - m) * 60);
@@ -2165,7 +2191,7 @@ export default function RunTrackingScreen() {
           <View style={t.liveDivider} />
           <View style={t.liveStat}>
             <Text style={t.liveVal}>{livePaceStr}</Text>
-            <Text style={t.liveUnit}>{distUnit === "km" ? "min/km" : "min/mi"}</Text>
+            <Text style={t.liveUnit}>{activityFilter === "ride" ? "mph" : distUnit === "km" ? "min/km" : "min/mi"}</Text>
           </View>
         </View>
 

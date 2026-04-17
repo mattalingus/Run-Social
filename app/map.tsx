@@ -484,7 +484,9 @@ export default function MapScreen() {
     }
 
     const totalRunners = visibleRuns.reduce((acc, r) => acc + Number(r.participant_count), 0);
-    if (totalRunners > 0) result.push({ icon: "walk", lib: "ion", text: `${totalRunners} participant${totalRunners !== 1 ? "s" : ""} signed up`, color: C.primary });
+    const participantNoun = activityFilter === "ride" ? "rider" : activityFilter === "walk" ? "walker" : "runner";
+    const participantIcon = activityFilter === "ride" ? "bicycle" : activityFilter === "walk" ? "footsteps" : "body";
+    if (totalRunners > 0) result.push({ icon: participantIcon, lib: "ion", text: `${totalRunners} ${participantNoun}${totalRunners !== 1 ? "s" : ""} signed up`, color: C.primary });
 
     const fiveK = upcoming.filter((r) => r.activity_type === "run" && r.min_distance <= 3.3 && r.max_distance >= 2.8);
     if (fiveK.length > 0) {
@@ -762,7 +764,7 @@ export default function MapScreen() {
                   <Text style={s.chipTxt}>{formatDate(selectedRun.date)} · {formatTime(selectedRun.date)}</Text>
                 </View>
                 <View style={s.chip}>
-                  <Ionicons name="walk" size={11} color={getPaceColor(selectedRun.min_pace, selectedRun.max_pace, C)} />
+                  <Ionicons name={selectedRun.activity_type === "ride" ? "bicycle" : selectedRun.activity_type === "walk" ? "footsteps" : "body"} size={11} color={getPaceColor(selectedRun.min_pace, selectedRun.max_pace, C)} />
                   <Text style={[s.chipTxt, { color: getPaceColor(selectedRun.min_pace, selectedRun.max_pace, C) }]}>
                     {selectedRun.min_pace === selectedRun.max_pace ? toDisplayPace(selectedRun.min_pace, distUnit) : `${toDisplayPace(selectedRun.min_pace, distUnit)}–${toDisplayPace(selectedRun.max_pace, distUnit)}`}
                   </Text>

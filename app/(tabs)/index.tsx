@@ -993,7 +993,7 @@ function RunCard({
                         : `${toDisplayPace(run.min_pace, distUnit).replace(/ \/(mi|km)$/, "")}–${toDisplayPace(run.max_pace, distUnit).replace(/ \/(mi|km)$/, "")}`}
                     </Text>
                   )}
-                  <Text numberOfLines={1} style={s.statPillLabel}>Pace {distUnit === "km" ? "min/km" : "min/mi"}</Text>
+                  <Text numberOfLines={1} style={s.statPillLabel}>{run.activity_type === "ride" ? "Speed mph" : `Pace ${distUnit === "km" ? "min/km" : "min/mi"}`}</Text>
                 </View>
                 <View style={s.statDiv} />
                 <View style={s.statPill}>
@@ -1995,7 +1995,7 @@ export default function DiscoverScreen() {
             style={[s.activityPill, activityFilter === "run" && s.activityPillActive]}
             onPress={() => { setActivityFilter("run"); Haptics.selectionAsync(); }}
           >
-            <Ionicons name="walk" size={13} color={activityFilter === "run" ? C.bg : C.textMuted} />
+            <Ionicons name="body" size={13} color={activityFilter === "run" ? C.bg : C.textMuted} />
             <Text style={[s.activityPillTxt, activityFilter === "run" && s.activityPillTxtActive]}>Runs</Text>
           </Pressable>
           <Pressable
@@ -2233,7 +2233,7 @@ export default function DiscoverScreen() {
                     </View>
                     <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 16, color: C.text, marginBottom: 4 }}>Find a Training Partner</Text>
                     <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary, textAlign: "center" }}>
-                      We've found active members in your area with similar goals and pace.
+                      We've found athletes in your area with similar goals and pace.
                     </Text>
                   </Pressable>
                 )}
@@ -2388,7 +2388,7 @@ export default function DiscoverScreen() {
               {/* Slide 0 — Welcome */}
               <ScrollView style={{ width: screenWidth - 48 }} contentContainerStyle={s.onboardContent} showsVerticalScrollIndicator={false} bounces={false}>
                 <View style={s.onboardIconWrap}>
-                  <Ionicons name="walk" size={56} color={C.primary} />
+                  <Ionicons name="body" size={56} color={C.primary} />
                 </View>
                 <Text style={s.onboardTitle}>Welcome to PaceUp</Text>
                 <Text style={s.onboardBody}>
@@ -2716,7 +2716,7 @@ export default function DiscoverScreen() {
                         )}
                         <View style={{ flex: 1 }}>
                           <Text style={s.notifText}>
-                            <Text style={{ fontFamily: "Outfit_600SemiBold" }}>{req.user_name}</Text> wants to join your run <Text style={{ fontFamily: "Outfit_600SemiBold" }}>"{req.run_title}"</Text>
+                            <Text style={{ fontFamily: "Outfit_600SemiBold" }}>{req.user_name}</Text> wants to join your {req.activity_type === "ride" ? "ride" : req.activity_type === "walk" ? "walk" : "run"} <Text style={{ fontFamily: "Outfit_600SemiBold" }}>"{req.run_title}"</Text>
                           </Text>
                           <View style={s.notifActions}>
                             <Pressable style={[s.notifBtn, s.notifBtnPrimary]} onPress={() => respondJoin(req.id, "approve")}>
@@ -2937,7 +2937,7 @@ export default function DiscoverScreen() {
                 style={[s.activityPill, hActivityType === "run" && s.activityPillActive, { flex: 1 }]}
                 onPress={() => { setHActivityType("run"); setHMinPace((p) => Math.max(4, p)); Haptics.selectionAsync(); }}
               >
-                <Ionicons name="walk" size={14} color={hActivityType === "run" ? C.bg : C.textMuted} />
+                <Ionicons name="body" size={14} color={hActivityType === "run" ? C.bg : C.textMuted} />
                 <Text style={[s.activityPillTxt, hActivityType === "run" && s.activityPillTxtActive]}>Run</Text>
               </Pressable>
               <Pressable

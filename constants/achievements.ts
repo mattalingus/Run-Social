@@ -19,7 +19,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     slug: "first_step",
     name: "First Step",
     desc: "Complete your first run.",
-    icon: "walk",
+    icon: "body",
     iconColor: "#00D97E",
     iconBg: "#021309",
     category: "Beginner",

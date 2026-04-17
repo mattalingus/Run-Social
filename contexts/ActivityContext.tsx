@@ -91,11 +91,11 @@ export function activityLabel(type: string | null | undefined, form: "noun" | "v
 export function activityIcon(type: string | null | undefined): string {
   if (type === "ride") return "bicycle";
   if (type === "walk") return "footsteps";
-  return "walk";
+  return "body";
 }
 
 export function activityIconOutline(type: string | null | undefined): string {
   if (type === "ride") return "bicycle-outline";
   if (type === "walk") return "footsteps-outline";
-  return "walk-outline";
+  return "body-outline";
 }

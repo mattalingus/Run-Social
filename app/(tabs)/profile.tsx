@@ -956,7 +956,7 @@ function ProfileScreenInner() {
           style={[styles.actToggleBtn, profileActivity === "run" && styles.actToggleBtnActive]}
           onPress={() => { setProfileActivity("run"); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
         >
-          <Ionicons name="walk" size={14} color={profileActivity === "run" ? C.primary : C.textMuted} />
+          <Ionicons name="body" size={14} color={profileActivity === "run" ? C.primary : C.textMuted} />
           <Text style={[styles.actToggleTxt, profileActivity === "run" && styles.actToggleTxtActive]}>Runs</Text>
         </Pressable>
         <Pressable
@@ -2609,7 +2609,7 @@ function ProfileScreenInner() {
                                   setTimeout(() => router.push("/(tabs)/solo"), 100);
                                 }}
                               >
-                                <Ionicons name="walk" size={18} color={C.primary} />
+                                <Ionicons name="body" size={18} color={C.primary} />
                                 <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.text }}>Solo</Text>
                               </Pressable>
                               <Pressable

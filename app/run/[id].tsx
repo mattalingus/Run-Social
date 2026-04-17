@@ -497,13 +497,14 @@ export default function RunDetailScreen() {
 
   function handleCancelRun() {
     const label = run?.activity_type === "ride" ? "ride" : run?.activity_type === "walk" ? "walk" : "run";
+    const labelCap = label.charAt(0).toUpperCase() + label.slice(1);
     Alert.alert(
-      "Cancel Run",
+      `Cancel ${labelCap}`,
       `Are you sure you want to cancel this ${label}? All participants will be notified and the event will be removed.`,
       [
         { text: "Keep It", style: "cancel" },
         {
-          text: "Cancel Run",
+          text: `Cancel ${labelCap}`,
           style: "destructive",
           onPress: async () => {
             setCancelling(true);
@@ -875,10 +876,10 @@ export default function RunDetailScreen() {
           </View>
           <View style={styles.requirementsGrid}>
             <View style={styles.reqItem}>
-              <Ionicons name="walk" size={20} color={C.orange} />
+              <Ionicons name={run.activity_type === "ride" ? "bicycle" : run.activity_type === "walk" ? "footsteps" : "body"} size={20} color={C.orange} />
               <Text style={styles.reqValue}>
                 {run.activity_type === "ride"
-                  ? (run.min_pace === run.max_pace ? `${run.min_pace} mph` : `${run.min_pace}–${run.max_pace} mph`)
+                  ? (run.min_pace === run.max_pace ? `${(60 / run.min_pace).toFixed(1)}` : `${(60 / run.max_pace).toFixed(1)}–${(60 / run.min_pace).toFixed(1)}`)
                   : (run.min_pace === run.max_pace ? toDisplayPace(run.min_pace, distUnit) : `${toDisplayPace(run.min_pace, distUnit)} – ${toDisplayPace(run.max_pace, distUnit)}`)}
               </Text>
               <Text style={styles.reqLabel}>{run.activity_type === "ride" ? "Speed (mph)" : `Pace (min/${unitLabel(distUnit)})`}</Text>
@@ -1127,7 +1128,7 @@ export default function RunDetailScreen() {
                                 </Text>
                               )}
                               <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted }}>
-                                · {groups[label].length} participant{groups[label].length !== 1 ? "s" : ""}
+                                · {groups[label].length} {run?.activity_type === "ride" ? "rider" : run?.activity_type === "walk" ? "walker" : "runner"}{groups[label].length !== 1 ? "s" : ""}
                               </Text>
                             </View>
                             <View style={styles.participantsList}>
@@ -1612,7 +1613,7 @@ export default function RunDetailScreen() {
                   doJoin();
                 }}
               >
-                <Ionicons name="walk" size={18} color={C.text} />
+                <Ionicons name={run?.activity_type === "ride" ? "bicycle" : run?.activity_type === "walk" ? "footsteps" : "body"} size={18} color={C.text} />
                 <Text style={styles.primaryBtnText}>Let's go!</Text>
               </Pressable>
             </View>

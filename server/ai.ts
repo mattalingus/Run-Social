@@ -10,13 +10,16 @@ const openai = new OpenAI({
 
 export async function generateRunSummary(stats: any) {
   if (!process.env.OPENAI_API_KEY) return null;
+  const activityType = stats.activityType ?? "run";
+  const activityLabel = activityType === "ride" ? "ride" : activityType === "walk" ? "walk" : "run";
+  const coachRole = activityType === "ride" ? "cycling coach" : activityType === "walk" ? "walking coach" : "running coach";
   try {
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
         {
           role: "system",
-          content: "You are an elite AI running and cycling coach. Provide a concise, motivating summary of the workout based on the provided stats. Keep it under 150 characters. Use a supportive, professional tone. Avoid emojis.",
+          content: `You are an elite AI ${coachRole}. Provide a concise, motivating summary of a ${activityLabel} based on the provided stats. Keep it under 150 characters. Use a supportive, professional tone. Avoid emojis.`,
         },
         {
           role: "user",
@@ -88,11 +91,11 @@ export async function generateWeeklyInsight(userName: string, stats: any) {
       messages: [
         {
           role: "system",
-          content: "You are a performance analyst for runners and cyclists. Provide one insightful sentence for a user's weekly training summary. Compare to typical progress or highlight a specific achievement in the data. No emojis.",
+          content: "You are a performance analyst. Provide one insightful sentence for an athlete's weekly activity summary. Compare to typical progress or highlight a specific achievement in the data. No emojis.",
         },
         {
           role: "user",
-          content: `Runner: ${userName}. This week: ${stats.runs} runs, ${stats.totalMi.toFixed(1)} miles, ${Math.floor(stats.totalSeconds / 60)} minutes.`,
+          content: `Athlete: ${userName}. This week: ${stats.runs} activities, ${stats.totalMi.toFixed(1)} miles, ${Math.floor(stats.totalSeconds / 60)} minutes.`,
         },
       ],
       max_tokens: 80,

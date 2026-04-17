@@ -392,7 +392,7 @@ export default function CreateRunScreen() {
               style={[styles.activityPill, activityType === "run" && styles.activityPillActive]}
               onPress={() => { setActivityType("run"); Haptics.selectionAsync(); }}
             >
-              <Ionicons name="walk" size={14} color={activityType === "run" ? C.bg : C.textMuted} />
+              <Ionicons name="body" size={14} color={activityType === "run" ? C.bg : C.textMuted} />
               <Text style={[styles.activityPillTxt, activityType === "run" && styles.activityPillTxtActive]}>Run</Text>
             </Pressable>
             <Pressable

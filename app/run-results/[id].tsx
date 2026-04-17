@@ -267,7 +267,7 @@ export default function RunResultsScreen() {
                     <View style={s.runnerStats}>
                       <Text style={s.runnerStatText}>{formatDist(runner.final_distance)} mi</Text>
                       <Text style={s.runnerStatDot}>·</Text>
-                      <Text style={s.runnerStatText}>{formatPace(runner.final_pace)} /mi</Text>
+                      <Text style={s.runnerStatText}>{isRide && runner.final_pace > 0 ? `${(60 / runner.final_pace).toFixed(1)} mph` : `${formatPace(runner.final_pace)} /mi`}</Text>
                     </View>
                   </View>
                   {runner.final_rank <= 3 && (
@@ -309,7 +309,7 @@ export default function RunResultsScreen() {
                           </View>
                           {groupDef && (
                             <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted }}>
-                              {groupDef.minPace}–{groupDef.maxPace} min/mi
+                              {groupDef.minPace}–{groupDef.maxPace} {isRide ? "mph" : "min/mi"}
                             </Text>
                           )}
                         </View>

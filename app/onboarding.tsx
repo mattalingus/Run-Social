@@ -27,7 +27,7 @@ type ActivityOption = {
 };
 
 const ACTIVITIES: ActivityOption[] = [
-  { type: "run", label: "Running", icon: "walk", emoji: "🏃" },
+  { type: "run", label: "Running", icon: "body", emoji: "🏃" },
   { type: "ride", label: "Cycling", icon: "bicycle", emoji: "🚴" },
   { type: "walk", label: "Walking", icon: "footsteps", emoji: "🚶" },
 ];

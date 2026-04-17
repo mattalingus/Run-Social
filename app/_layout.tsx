@@ -146,7 +146,7 @@ function RootLayoutNav() {
             const mins = Math.floor((data.durationSeconds ?? 0) / 60);
             const type = data.activityType === "ride" ? "ride" : data.activityType === "walk" ? "walk" : "run";
             Alert.alert(
-              "Recover your last run?",
+              `Recover your last ${type}?`,
               `It looks like PaceUp was closed while you were tracking a ${type} (${dist} mi, ${mins} min).`,
               [
                 { text: "Discard", style: "destructive", onPress: () => AsyncStorage.removeItem(soloKey).catch(() => {}) },
@@ -170,7 +170,7 @@ function RootLayoutNav() {
             const mins = Math.floor((data.durationSeconds ?? 0) / 60);
             const type = data.activityType === "ride" ? "ride" : data.activityType === "walk" ? "walk" : "run";
             Alert.alert(
-              "Rejoin your group run?",
+              `Rejoin your group ${type}?`,
               `It looks like PaceUp was closed while you were tracking a group ${type} (${dist} mi, ${mins} min).`,
               [
                 { text: "Dismiss", style: "destructive", onPress: () => AsyncStorage.removeItem("paceup_group_active_run").catch(() => {}) },

@@ -15,6 +15,12 @@ function fmtPace(pace: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+function fmtSpeed(pace: number): string {
+  if (!pace || pace <= 0) return "--";
+  const mph = 60 / pace;
+  return mph.toFixed(1);
+}
+
 type Props = {
   splits: MileSplit[];
   activityType?: string;
@@ -22,6 +28,7 @@ type Props = {
 
 export default function MileSplitsChart({ splits, activityType }: Props) {
   const { C } = useTheme();
+  const isRide = activityType === "ride";
 
   const valid = useMemo(
     () => splits.filter((s) => s.paceMinPerMile > 0 && s.paceMinPerMile < 60),
@@ -40,10 +47,14 @@ export default function MileSplitsChart({ splits, activityType }: Props) {
 
   const getBarPct = (pace: number): number => {
     if (paceRange < 0.05) return 72;
+    if (isRide) {
+      return MIN_PCT + ((maxPace - pace) / paceRange) * (MAX_PCT - MIN_PCT);
+    }
     return MAX_PCT - ((pace - minPace) / paceRange) * (MAX_PCT - MIN_PCT);
   };
 
-  const label = activityType === "ride" ? "INTERVAL SPLITS" : "MILE SPLITS";
+  const label = isRide ? "INTERVAL SPLITS" : "MILE SPLITS";
+  const colHeader = isRide ? "Speed" : "Pace";
 
   return (
     <View style={styles.container}>
@@ -51,7 +62,7 @@ export default function MileSplitsChart({ splits, activityType }: Props) {
       <View style={styles.headerRow}>
         <Text style={[styles.colMi, { color: C.textMuted }]}>Mi</Text>
         <View style={styles.colBar} />
-        <Text style={[styles.colPace, { color: C.textMuted }]}>Pace</Text>
+        <Text style={[styles.colPace, { color: C.textMuted }]}>{colHeader}</Text>
       </View>
       {valid.map((split, i) => {
         const pct = getBarPct(split.paceMinPerMile);
@@ -72,11 +83,14 @@ export default function MileSplitsChart({ splits, activityType }: Props) {
               </View>
             </View>
             <Text style={[styles.colPace, { color: split.isPartial ? C.textMuted : C.text }]}>
-              {fmtPace(split.paceMinPerMile)}
+              {isRide ? `${fmtSpeed(split.paceMinPerMile)}` : fmtPace(split.paceMinPerMile)}
             </Text>
           </View>
         );
       })}
+      {isRide && (
+        <Text style={[styles.speedUnit, { color: C.textMuted }]}>mph</Text>
+      )}
     </View>
   );
 }
@@ -122,5 +136,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     width: 44,
     textAlign: "right",
+  },
+  speedUnit: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 10,
+    textAlign: "right",
+    marginTop: 2,
   },
 });

@@ -75,6 +75,7 @@ interface Run {
   crew_id?: string | null;
   crew_name?: string | null;
   crew_emoji?: string | null;
+  activity_type?: "run" | "ride" | "walk" | null;
 }
 
 function formatPace(pace: number) {
@@ -339,13 +340,17 @@ export default function DiscoverScreen() {
                   </View>
                   <View style={st.cardStats}>
                     <View style={st.stat}>
-                      <Ionicons name="walk" size={12} color={C.orange} />
+                      <Ionicons name={run.activity_type === "ride" ? "bicycle" : run.activity_type === "walk" ? "footsteps" : "body"} size={12} color={C.orange} />
                       <Text style={st.statText}>
-                        {run.min_pace === run.max_pace
-                          ? formatPace(run.min_pace)
-                          : `${formatPace(run.min_pace)}–${formatPace(run.max_pace)}`}
+                        {run.activity_type === "ride"
+                          ? (run.min_pace === run.max_pace
+                            ? `${(60 / run.min_pace).toFixed(1)}`
+                            : `${(60 / run.max_pace).toFixed(1)}–${(60 / run.min_pace).toFixed(1)}`)
+                          : (run.min_pace === run.max_pace
+                            ? formatPace(run.min_pace)
+                            : `${formatPace(run.min_pace)}–${formatPace(run.max_pace)}`)}
                       </Text>
-                      <Text style={[st.statText, { color: C.textMuted, fontSize: 10 }]}>min/mi</Text>
+                      <Text style={[st.statText, { color: C.textMuted, fontSize: 10 }]}>{run.activity_type === "ride" ? "mph" : "min/mi"}</Text>
                     </View>
                     <View style={st.divDot} />
                     <View style={st.stat}>

@@ -1143,7 +1143,7 @@ export default function SoloScreen() {
           style={[s.activityPill, activityFilter === "run" && s.activityPillActive]}
           onPress={() => { setActivityFilter("run"); Haptics.selectionAsync(); }}
         >
-          <Ionicons name="walk" size={14} color={activityFilter === "run" ? C.bg : C.textMuted} />
+          <Ionicons name="body" size={14} color={activityFilter === "run" ? C.bg : C.textMuted} />
           <Text style={[s.activityPillTxt, activityFilter === "run" && s.activityPillTxtActive]}>Runs</Text>
         </Pressable>
         <Pressable
@@ -1262,7 +1262,7 @@ export default function SoloScreen() {
           <View style={[s.goalSection, { borderTopWidth: 1, borderTopColor: C.border, paddingTop: 14, marginTop: 4 }]}>
             <View style={s.goalRow}>
               <View style={s.goalLabelRow}>
-                <Ionicons name="walk" size={14} color={C.orange} />
+                <Ionicons name="body" size={14} color={C.orange} />
                 <Text style={s.goalLabel}>Avg Pace Goal</Text>
               </View>
               <Text style={s.goalValues}>

@@ -1437,7 +1437,7 @@ function CrewDetailSheet({
                     style={[s.detailToggleBtn, activityFilter === "run" && s.detailToggleBtnActive]}
                     onPress={() => setActivityFilter("run")}
                   >
-                    <Ionicons name="walk" size={14} color={activityFilter === "run" ? C.bg : C.textMuted} />
+                    <Ionicons name="body" size={14} color={activityFilter === "run" ? C.bg : C.textMuted} />
                     <Text style={[s.detailToggleTxt, activityFilter === "run" && s.detailToggleTxtActive]}>Runs</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
