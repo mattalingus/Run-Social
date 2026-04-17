@@ -5,50 +5,48 @@ const CHECK_INTERVAL_MS = 5 * 60 * 1000;
 
 async function checkLateStarts(): Promise<void> {
   try {
-    const result = await pool.query<{
-      id: string;
-      title: string;
-      activity_type: string;
-      host_push_token: string | null;
-      notifications_enabled: boolean;
-      notif_run_reminders: boolean;
-    }>(
-      `SELECT r.id, r.title, r.activity_type,
-              u.push_token AS host_push_token,
-              u.notifications_enabled,
-              u.notif_run_reminders
-       FROM runs r
-       JOIN users u ON u.id = r.host_id
-       WHERE r.is_active = false
-         AND r.is_completed = false
-         AND (r.is_deleted IS NULL OR r.is_deleted = false)
-         AND r.notif_late_start_sent = false
-         AND r.date < NOW() - INTERVAL '25 minutes'
-         AND r.date > NOW() - INTERVAL '35 minutes'`
+    // Atomically claim qualifying runs — prevents duplicate notifications on concurrent/restarted calls
+    const claimed = await pool.query<{ id: string; title: string; activity_type: string; host_id: string }>(
+      `UPDATE runs
+       SET notif_late_start_sent = true
+       WHERE is_active = false
+         AND is_completed = false
+         AND (is_deleted IS NULL OR is_deleted = false)
+         AND notif_late_start_sent = false
+         AND date < NOW() - INTERVAL '25 minutes'
+         AND date > NOW() - INTERVAL '35 minutes'
+       RETURNING id, title, activity_type, host_id`
     );
 
-    if (result.rows.length > 0) {
-      const ids = result.rows.map((r) => r.id);
-      await pool.query(
-        `UPDATE runs SET notif_late_start_sent = true WHERE id = ANY($1)`,
-        [ids]
+    if (!claimed.rows.length) return;
+
+    for (const run of claimed.rows) {
+      const type = run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run";
+
+      const hostRes = await pool.query<{
+        push_token: string | null;
+        notifications_enabled: boolean;
+        notif_run_reminders: boolean;
+      }>(
+        `SELECT push_token, notifications_enabled, notif_run_reminders FROM users WHERE id = $1`,
+        [run.host_id]
       );
-      for (const run of result.rows) {
-        const type = run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run";
-        if (
-          run.host_push_token &&
-          run.notifications_enabled !== false &&
-          run.notif_run_reminders !== false
-        ) {
-          await sendPushNotification(
-            run.host_push_token,
-            `⏰ Start your ${type} soon`,
-            `"${run.title}" was scheduled 30 minutes ago. Start it now or it will be automatically removed in 30 minutes.`,
-            { screen: "run", runId: run.id }
-          );
-        }
-        console.log(`[late-start] Notified host for run ${run.id} ("${run.title}")`);
+      const host = hostRes.rows[0];
+
+      if (
+        host?.push_token &&
+        host.notifications_enabled !== false &&
+        host.notif_run_reminders !== false &&
+        host.push_token.startsWith("ExponentPushToken[")
+      ) {
+        await sendPushNotification(
+          host.push_token,
+          `⏰ Start your ${type} soon`,
+          `"${run.title}" was scheduled 30 minutes ago. Start it now or it will be automatically removed in 30 minutes.`,
+          { screen: "run", runId: run.id }
+        );
       }
+      console.log(`[late-start] Notified host for run ${run.id} ("${run.title}")`);
     }
   } catch (err) {
     console.error("[late-start] Check failed:", err);
@@ -299,12 +297,12 @@ async function checkPreRunReminders(): Promise<void> {
   }
 }
 
-// Auto-promote a new host when the current host hasn't pinged in 5+ minutes during an active run
+// Auto-promote a new host when the current host hasn't pinged in 10+ minutes during an active run
 async function checkAndPromoteHost(): Promise<void> {
   try {
-    // Find active runs where the host hasn't pinged in 5+ minutes
-    const staleHosts = await pool.query(
-      `SELECT r.id, r.host_id
+    // Find active runs where the host hasn't pinged in 10+ minutes
+    const staleHosts = await pool.query<{ id: string; title: string; host_id: string }>(
+      `SELECT r.id, r.title, r.host_id
        FROM runs r
        WHERE r.is_active = true
          AND r.is_completed = false
@@ -313,7 +311,7 @@ async function checkAndPromoteHost(): Promise<void> {
            SELECT 1 FROM run_tracking_points tp
            WHERE tp.run_id = r.id
              AND tp.user_id = r.host_id
-             AND tp.recorded_at > NOW() - INTERVAL '5 minutes'
+             AND tp.recorded_at > NOW() - INTERVAL '10 minutes'
          )`
     );
 
@@ -327,7 +325,7 @@ async function checkAndPromoteHost(): Promise<void> {
            AND tp.user_id != $2
            AND rp.is_present = true
            AND rp.final_pace IS NULL
-           AND tp.recorded_at > NOW() - INTERVAL '5 minutes'
+           AND tp.recorded_at > NOW() - INTERVAL '10 minutes'
          ORDER BY tp.user_id, tp.recorded_at DESC`,
         [run.id, run.host_id]
       );
@@ -340,6 +338,36 @@ async function checkAndPromoteHost(): Promise<void> {
         const newHostId = sorted[0].user_id;
         await pool.query(`UPDATE runs SET host_id = $1 WHERE id = $2`, [newHostId, run.id]);
         console.log(`[late-start] Auto-promoted user ${newHostId} to host for run ${run.id} (original host went silent)`);
+
+        // Notify the old host that they've been replaced
+        const oldHostRes = await pool.query<{ push_token: string | null; notifications_enabled: boolean }>(
+          `SELECT push_token, notifications_enabled FROM users WHERE id = $1`,
+          [run.host_id]
+        );
+        const oldHost = oldHostRes.rows[0];
+        if (oldHost?.push_token && oldHost.notifications_enabled !== false && oldHost.push_token.startsWith("ExponentPushToken[")) {
+          sendPushNotification(
+            oldHost.push_token,
+            "Host role transferred",
+            `You were inactive for 10 minutes — someone else is now leading "${run.title}".`,
+            { runId: run.id }
+          );
+        }
+
+        // Notify the new host of their promotion
+        const newHostRes = await pool.query<{ push_token: string | null; name: string; notifications_enabled: boolean }>(
+          `SELECT push_token, name, notifications_enabled FROM users WHERE id = $1`,
+          [newHostId]
+        );
+        const newHost = newHostRes.rows[0];
+        if (newHost?.push_token && newHost.notifications_enabled !== false && newHost.push_token.startsWith("ExponentPushToken[")) {
+          sendPushNotification(
+            newHost.push_token,
+            "You're leading the run!",
+            `The original host went silent — you're now leading "${run.title}".`,
+            { runId: run.id }
+          );
+        }
       }
     }
   } catch (err) {

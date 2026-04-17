@@ -277,7 +277,7 @@ export default function CreateRunScreen() {
         minPace: pace,
         maxPace: paceMax,
         tags: isCrew ? [] : hostTags,
-        maxParticipants: isCrew ? 9999 : parseInt(maxParticipants),
+        maxParticipants: isCrew ? 9999 : Math.max(1, Math.min(9999, parseInt(maxParticipants) || 20)),
         activityType,
         crewId: effectiveCrewId || undefined,
         isStrict: false,
