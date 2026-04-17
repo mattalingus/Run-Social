@@ -933,7 +933,8 @@ export default function SoloScreen() {
 
   const renderHistoryItem = useCallback(({ item: run }: { item: SoloRun }) => {
     const badge = runBadges[run.id];
-    const label = run.title || `${toDisplayDist(run.distance_miles, distUnit)} ${run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run"}`;
+    const actTypeLabel = run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run";
+    const label = run.title || (run.distance_miles ? `${toDisplayDist(run.distance_miles, distUnit)} ${actTypeLabel}` : actTypeLabel);
     const isExpanded = expandedRunId === run.id;
     const parsedRoutePath = parseRoutePath(run.route_path);
     const hasRoutePath = parsedRoutePath.length > 1;
@@ -974,7 +975,7 @@ export default function SoloScreen() {
               </View>
               <Text style={s.historyMeta}>
                 {formatDisplayDate(run.date)}
-                {` · ${toDisplayPace(run.pace_min_per_mile, distUnit)}`}
+                {run.pace_min_per_mile ? ` · ${toDisplayPace(run.pace_min_per_mile, distUnit)}` : ""}
                 {run.duration_seconds ? ` · ${formatDuration(run.duration_seconds)}` : ""}
               </Text>
             </View>
@@ -1307,7 +1308,8 @@ export default function SoloScreen() {
           <View style={[s.section, { marginTop: 5 }]}>
             <Text style={s.sectionTitle}>{activityFilter === "ride" ? "Scheduled Rides" : activityFilter === "walk" ? "Scheduled Walks" : "Scheduled Runs"}</Text>
             {scheduledRuns.map((run) => {
-              const label = run.title || `${toDisplayDist(run.distance_miles, distUnit)} ${run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run"}`;
+              const scheduledActLabel = run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run";
+              const label = run.title || (run.distance_miles ? `${toDisplayDist(run.distance_miles, distUnit)} ${scheduledActLabel}` : scheduledActLabel);
               return (
                 <Pressable
                   key={run.id}

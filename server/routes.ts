@@ -888,6 +888,9 @@ async function go(e){
   });
 
   app.post("/api/runs/search-ai", requireAuth, async (req, res) => {
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(501).json({ error: "AI search disabled" });
+    }
     try {
       const { q } = req.body;
       if (!q) return res.status(400).json({ message: "Query required" });
@@ -1423,6 +1426,11 @@ async function go(e){
 
       if (!isParticipant && !isHost) {
         return res.status(403).json({ message: "Only participants can send messages" });
+      }
+
+      // Event has ended — silently accept but discard the message
+      if (run?.is_completed) {
+        return res.json({ id: "noop", message: "Event ended" });
       }
 
       const user = await storage.getUserById(userId);

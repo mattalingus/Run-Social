@@ -1734,7 +1734,7 @@ export async function joinRun(runId: string, userId: string, paceGroupLabel?: st
     await client.query('BEGIN');
     // Lock the run row first to serialize concurrent join attempts
     const runStateRes = await client.query(
-      `SELECT id, is_deleted, is_completed, max_participants FROM runs WHERE id = $1 FOR UPDATE`,
+      `SELECT id, is_deleted, is_completed, is_active, max_participants FROM runs WHERE id = $1 FOR UPDATE`,
       [runId]
     );
     if (!runStateRes.rows.length) {
@@ -1770,8 +1770,9 @@ export async function joinRun(runId: string, userId: string, paceGroupLabel?: st
           }
         }
         await client.query(
-          `UPDATE run_participants SET status = 'joined', pace_group_label = $3 WHERE run_id = $1 AND user_id = $2`,
-          [runId, userId, paceGroupLabel || null]
+          `UPDATE run_participants SET status = 'joined', pace_group_label = $3, is_present = $4
+           WHERE run_id = $1 AND user_id = $2`,
+          [runId, userId, paceGroupLabel || null, !!runState.is_active]
         );
       } else if (paceGroupLabel) {
         await client.query(
@@ -1790,15 +1791,15 @@ export async function joinRun(runId: string, userId: string, paceGroupLabel?: st
 
     // New participant — atomic conditional INSERT: only inserts when capacity allows
     const insertRes = await client.query(
-      `INSERT INTO run_participants (run_id, user_id, pace_group_label)
-       SELECT $1, $2, $3
+      `INSERT INTO run_participants (run_id, user_id, pace_group_label, is_present)
+       SELECT $1, $2, $3, $5
        WHERE $4::int IS NULL
           OR (
             SELECT COUNT(*) FROM run_participants
             WHERE run_id = $1 AND status IN ('joined', 'confirmed')
           ) < $4::int
        RETURNING *`,
-      [runId, userId, paceGroupLabel || null, maxP]
+      [runId, userId, paceGroupLabel || null, maxP, !!runState.is_active]
     );
     if (!insertRes.rows.length) {
       await client.query('ROLLBACK');
@@ -2262,9 +2263,11 @@ export async function getLiveRunState(runId: string) {
   const STALE_THRESHOLD_MS = 90 * 1000;
   const now = Date.now();
   const participants = participantsRes.rows.map((r: any) => {
+    const isFinished = r.final_pace != null;
     const lastPingAge = r.recorded_at ? now - new Date(r.recorded_at).getTime() : null;
-    const isStale = r.is_present && r.final_pace == null && lastPingAge != null && lastPingAge > STALE_THRESHOLD_MS;
-    return { ...r, isStale: !!isStale };
+    // Stale only applies to runners still actively tracking (not yet finished)
+    const isStale = r.is_present && !isFinished && lastPingAge != null && lastPingAge > STALE_THRESHOLD_MS;
+    return { ...r, isStale: !!isStale, isFinished };
   });
 
   const activeCount = participants.filter((r: any) => r.is_present && !r.isStale && r.final_pace == null).length;

@@ -1435,21 +1435,21 @@ function CrewDetailSheet({
                 <View style={s.detailToggleRow}>
                   <TouchableOpacity
                     style={[s.detailToggleBtn, activityFilter === "run" && s.detailToggleBtnActive]}
-                    onPress={() => setActivityFilter("run")}
+                    onPress={() => { setActivityFilter("run"); setEventsExpanded(false); }}
                   >
                     <Ionicons name="body" size={14} color={activityFilter === "run" ? C.bg : C.textMuted} />
                     <Text style={[s.detailToggleTxt, activityFilter === "run" && s.detailToggleTxtActive]}>Runs</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[s.detailToggleBtn, activityFilter === "ride" && s.detailToggleBtnActive]}
-                    onPress={() => setActivityFilter("ride")}
+                    onPress={() => { setActivityFilter("ride"); setEventsExpanded(false); }}
                   >
                     <Ionicons name="bicycle" size={14} color={activityFilter === "ride" ? C.bg : C.textMuted} />
                     <Text style={[s.detailToggleTxt, activityFilter === "ride" && s.detailToggleTxtActive]}>Rides</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[s.detailToggleBtn, activityFilter === "walk" && s.detailToggleBtnActive]}
-                    onPress={() => setActivityFilter("walk")}
+                    onPress={() => { setActivityFilter("walk"); setEventsExpanded(false); }}
                   >
                     <Ionicons name="footsteps" size={14} color={activityFilter === "walk" ? C.bg : C.textMuted} />
                     <Text style={[s.detailToggleTxt, activityFilter === "walk" && s.detailToggleTxtActive]}>Walks</Text>

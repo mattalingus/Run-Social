@@ -442,18 +442,27 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
                 {toDisplayPace(draft.paceMin, distUnit)} – {toDisplayPace(draft.paceMax, distUnit)}
               </Text>
             </View>
-            <RangeSlider
-              min={4} max={15} step={PACE_STEP}
-              low={draft.paceMin} high={draft.paceMax}
-              onLowChange={(v) => setDraft((p) => ({ ...p, paceMin: v }))}
-              onHighChange={(v) => setDraft((p) => ({ ...p, paceMax: v }))}
-              color={C.primary}
-              trackColor={C.border}
-            />
-            <View style={fm.edgeRow}>
-              <Text style={fm.edgeLabel}>4:00</Text>
-              <Text style={fm.edgeLabel}>{`15:00 /${unitLabel(distUnit)}`}</Text>
-            </View>
+            {(() => {
+              const MI_TO_KM = 1 / 1.60934;
+              const toSlider = (mi: number) => distUnit === "km" ? mi * MI_TO_KM : mi;
+              const fromSlider = (v: number) => distUnit === "km" ? v / MI_TO_KM : v;
+              return (
+                <>
+                  <RangeSlider
+                    min={toSlider(4)} max={toSlider(15)} step={PACE_STEP}
+                    low={toSlider(draft.paceMin)} high={toSlider(draft.paceMax)}
+                    onLowChange={(v) => setDraft((p) => ({ ...p, paceMin: fromSlider(v) }))}
+                    onHighChange={(v) => setDraft((p) => ({ ...p, paceMax: fromSlider(v) }))}
+                    color={C.primary}
+                    trackColor={C.border}
+                  />
+                  <View style={fm.edgeRow}>
+                    <Text style={fm.edgeLabel}>{toDisplayPace(4, distUnit)}</Text>
+                    <Text style={fm.edgeLabel}>{toDisplayPace(15, distUnit)}</Text>
+                  </View>
+                </>
+              );
+            })()}
           </View>
 
           <View style={fm.divider} />
@@ -1235,6 +1244,7 @@ export default function DiscoverScreen() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardSlide, setOnboardSlide] = useState(0);
   const onboardScrollRef = useRef<ScrollView>(null);
+  const flatListRef = useRef<FlatList<any>>(null);
   const [checklistDismissed, setChecklistDismissed] = useState(true);
   const [checklistAllDone, setChecklistAllDone] = useState(false);
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
@@ -1735,21 +1745,19 @@ export default function DiscoverScreen() {
       // Proximity
       const matchProx = !applied.maxDistFromMe || !userLocation ||
         (distanceMap[r.id] ?? Infinity) <= applied.maxDistFromMe;
-      // Host style
+      // Host style — ALL selected tags must be present on the run (AND semantics)
       const matchStyle = applied.styles.length === 0 ||
-        r.tags?.some((t) => applied.styles.includes(t));
+        applied.styles.every((tag) => r.tags?.includes(tag));
       // Visibility
       const matchVisibility =
         applied.visibility === "all" ||
         (applied.visibility === "public" && r.privacy === "public" && !r.crew_id) ||
         (applied.visibility === "crew" && !!r.crew_id) ||
         (applied.visibility === "friends" && friendIdSet.has(r.host_id) && !r.crew_id);
-      // Day of Week
-      const DAY_MAP: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-      const runDay = new Date(r.date).getDay();
+      // Day of Week — use local-timezone weekday string to avoid UTC off-by-one
+      const runDay = new Date(r.date).toLocaleDateString("en-US", { weekday: "short" });
       const appliedDays = applied.days ?? [];
-      const matchDay = appliedDays.length === 0 ||
-        appliedDays.some((d) => DAY_MAP[d] === runDay);
+      const matchDay = appliedDays.length === 0 || appliedDays.includes(runDay);
       // Time of Day
       const runHour = new Date(r.date).getHours();
       function runTimeSlot(h: number): string {
@@ -1806,7 +1814,6 @@ export default function DiscoverScreen() {
     if (isLoading || search) return sorted;
 
     if (!userHasSetDistance && userLocation) {
-      const DAY_MAP: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
       function runTimeSlot(h: number): string {
         if (h >= 5 && h < 12) return "Morning";
         if (h >= 12 && h < 17) return "Afternoon";
@@ -1822,15 +1829,15 @@ export default function DiscoverScreen() {
         // Pace overlap: event's pace range intersects the user's selected window
         const matchPace = r.min_pace <= applied.paceMax && r.max_pace >= applied.paceMin;
         const matchDist = r.min_distance <= applied.distMax && r.max_distance >= applied.distMin;
-        const matchStyle = applied.styles.length === 0 || r.tags?.some((t) => applied.styles.includes(t));
+        const matchStyle = applied.styles.length === 0 || applied.styles.every((tag) => r.tags?.includes(tag));
         const matchVisibility =
           applied.visibility === "all" ||
           (applied.visibility === "public" && r.privacy === "public" && !r.crew_id) ||
           (applied.visibility === "crew" && !!r.crew_id) ||
           (applied.visibility === "friends" && friendIdSet.has(r.host_id) && !r.crew_id);
-        const runDay = new Date(r.date).getDay();
+        const runDay = new Date(r.date).toLocaleDateString("en-US", { weekday: "short" });
         const appliedDays = applied.days ?? [];
-        const matchDay = appliedDays.length === 0 || appliedDays.some((d) => DAY_MAP[d] === runDay);
+        const matchDay = appliedDays.length === 0 || appliedDays.includes(runDay);
         const runHour = new Date(r.date).getHours();
         const appliedTimes = applied.times ?? [];
         const matchTime = appliedTimes.length === 0 || appliedTimes.includes(runTimeSlot(runHour));
@@ -1917,6 +1924,11 @@ export default function DiscoverScreen() {
     setApplied({ ...draft });
     setShowFilter(false);
   }
+
+  // Scroll discover list back to top whenever active filters change
+  useEffect(() => {
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+  }, [applied, activityFilter]);
 
   function resetFilters() {
     setDraft({ ...DEFAULT_FILTERS });
@@ -2036,6 +2048,7 @@ export default function DiscoverScreen() {
         </View>
       ) : (
         <FlatList
+          ref={flatListRef}
           data={displayList.slice(0, visibleCount)}
           keyExtractor={(r) => r.id}
           contentContainerStyle={[

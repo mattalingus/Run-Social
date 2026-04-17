@@ -659,9 +659,11 @@ export default function RunLiveScreen() {
       const isSelf = p.user_id === user?.id;
       const distMi = isSelf
         ? displayDist
-        : parseFloat(p.cumulative_distance ?? p.final_distance ?? 0);
+        : p.isFinished
+          ? parseFloat(p.final_distance ?? 0)
+          : parseFloat(p.cumulative_distance ?? 0);
       const pace = isSelf ? paceNum : parseFloat(p.current_pace ?? p.final_pace ?? 0);
-      return { user_id: p.user_id, name: p.name || "Runner", distMi, pace, isStale: !!p.isStale };
+      return { user_id: p.user_id, name: p.name || "Runner", distMi, pace, isStale: !!p.isStale, isFinished: !!p.isFinished };
     })
     .sort((a, b) => b.distMi - a.distMi);
 
@@ -761,7 +763,8 @@ export default function RunLiveScreen() {
                 )}
                 {otherRunners.map((runner: any, i: number) => {
                   if (!runner.latitude || !runner.longitude) return null;
-                  const color = runner.isStale ? "#888888" : DOT_COLORS[i % DOT_COLORS.length];
+                  const finished = !!runner.isFinished;
+                  const color = finished ? "#6B7280" : runner.isStale ? "#888888" : DOT_COLORS[i % DOT_COLORS.length];
                   return (
                     <Marker
                       key={runner.user_id}
@@ -769,8 +772,11 @@ export default function RunLiveScreen() {
                       anchor={{ x: 0.5, y: 0.5 }}
                       tracksViewChanges={false}
                     >
-                      <View style={[s.runnerDot, { backgroundColor: color, opacity: runner.isStale ? 0.5 : 1 }]}>
-                        <Text style={s.runnerDotText}>{runner.name?.[0] ?? "?"}</Text>
+                      <View style={[s.runnerDot, { backgroundColor: color, opacity: finished || runner.isStale ? 0.6 : 1 }]}>
+                        {finished
+                          ? <Feather name="check" size={10} color="#fff" />
+                          : <Text style={s.runnerDotText}>{runner.name?.[0] ?? "?"}</Text>
+                        }
                       </View>
                     </Marker>
                   );
@@ -931,7 +937,7 @@ export default function RunLiveScreen() {
                           {isSelf ? "You" : runner.name.split(" ")[0]}
                         </Text>
                         <Text style={s.leaderboardPaceTxt}>
-                          {runner.isStale ? "Signal lost" : `${formatPaceStr(runner.pace)} /mi`}
+                          {runner.isFinished ? "Finished" : runner.isStale ? "Signal lost" : `${formatPaceStr(runner.pace)} /mi`}
                         </Text>
                       </View>
                       <View style={s.leaderboardRight}>
@@ -1115,23 +1121,31 @@ export default function RunLiveScreen() {
                     </View>
                   }
                 />
-                <View style={[s.inputContainer, { paddingBottom: botPad + 10 }]}>
-                  <TextInput
-                    style={s.textInput}
-                    placeholder="Type a message..."
-                    placeholderTextColor={C.textMuted}
-                    value={messageInput}
-                    onChangeText={setMessageInput}
-                    multiline
-                  />
-                  <Pressable
-                    onPress={handleSendMessage}
-                    style={({ pressed }) => [s.sendBtn, { opacity: pressed || !messageInput.trim() ? 0.6 : 1 }]}
-                    disabled={!messageInput.trim()}
-                  >
-                    <Feather name="send" size={20} color={C.primary} />
-                  </Pressable>
-                </View>
+                {liveState?.isCompleted ? (
+                  <View style={[s.inputContainer, { paddingBottom: botPad + 10, justifyContent: "center" }]}>
+                    <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textMuted, textAlign: "center", flex: 1 }}>
+                      Event ended — chat is read-only
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={[s.inputContainer, { paddingBottom: botPad + 10 }]}>
+                    <TextInput
+                      style={s.textInput}
+                      placeholder="Type a message..."
+                      placeholderTextColor={C.textMuted}
+                      value={messageInput}
+                      onChangeText={setMessageInput}
+                      multiline
+                    />
+                    <Pressable
+                      onPress={handleSendMessage}
+                      style={({ pressed }) => [s.sendBtn, { opacity: pressed || !messageInput.trim() ? 0.6 : 1 }]}
+                      disabled={!messageInput.trim()}
+                    >
+                      <Feather name="send" size={20} color={C.primary} />
+                    </Pressable>
+                  </View>
+                )}
               </>
             )}
           </View>
