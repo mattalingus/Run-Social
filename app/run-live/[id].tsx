@@ -164,15 +164,23 @@ export default function RunLiveScreen() {
     if (countdown === null) return;
     if (countdown > 0) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      // Start GPS warmup on the first tick so GPS warms up during countdown
+      // Start GPS warmup on the first tick so GPS warms up during countdown.
+      // Request permission if not yet granted so first-time users also get the full window.
       if (countdown === 3 && Platform.OS !== "web" && !gpsWarmupSubRef.current) {
-        Location.getForegroundPermissionsAsync().then(({ granted }) => {
-          if (!granted || gpsWarmupSubRef.current) return;
-          Location.watchPositionAsync(
-            { accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 5 },
-            () => {} // warm up GPS chip; real tracking starts in handleStartTracking
-          ).then((sub) => { gpsWarmupSubRef.current = sub; }).catch(() => {});
-        });
+        (async () => {
+          try {
+            let { granted } = await Location.getForegroundPermissionsAsync();
+            if (!granted) {
+              ({ granted } = await Location.requestForegroundPermissionsAsync());
+            }
+            if (!granted || gpsWarmupSubRef.current) return;
+            const sub = await Location.watchPositionAsync(
+              { accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 5 },
+              () => {} // warm up GPS chip; real tracking starts in handleStartTracking
+            );
+            gpsWarmupSubRef.current = sub;
+          } catch { }
+        })();
       }
       const timer = setTimeout(() => setCountdown((c) => (c !== null ? c - 1 : null)), 1000);
       return () => clearTimeout(timer);
