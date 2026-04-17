@@ -1730,7 +1730,22 @@ export async function joinRun(runId: string, userId: string, paceGroupLabel?: st
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query(`SELECT id FROM runs WHERE id = $1 FOR UPDATE`, [runId]);
+    const runStateRes = await client.query(
+      `SELECT id, is_deleted, is_completed FROM runs WHERE id = $1 FOR UPDATE`,
+      [runId]
+    );
+    if (!runStateRes.rows.length) {
+      await client.query('ROLLBACK');
+      throw new Error("RUN_NOT_FOUND");
+    }
+    if (runStateRes.rows[0].is_deleted) {
+      await client.query('ROLLBACK');
+      throw new Error("RUN_CANCELLED");
+    }
+    if (runStateRes.rows[0].is_completed) {
+      await client.query('ROLLBACK');
+      throw new Error("RUN_COMPLETED");
+    }
 
     const existing = await client.query(
       `SELECT * FROM run_participants WHERE run_id = $1 AND user_id = $2`,

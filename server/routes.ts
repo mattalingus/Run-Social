@@ -1155,10 +1155,25 @@ async function go(e){
           message: "Your host rating is below the minimum required to host new runs. Attend runs as a participant — your rating may recover over time.",
         });
       }
+      const { title, date: reqDateStr } = req.body;
+      if (!title || typeof title !== "string" || !title.trim()) return res.status(400).json({ message: "Title is required" });
+      if (title.trim().length > 100) return res.status(400).json({ message: "Title must be 100 characters or less" });
+      if (reqDateStr) {
+        const reqDate = new Date(reqDateStr);
+        if (isNaN(reqDate.getTime())) return res.status(400).json({ message: "Invalid date" });
+        if (reqDate.getTime() < Date.now() - 5 * 60 * 1000) return res.status(400).json({ message: "Event date cannot be in the past" });
+      }
       const minDist = parseFloat(req.body.minDistance ?? req.body.min_distance ?? 0);
       const maxDist = parseFloat(req.body.maxDistance ?? req.body.max_distance ?? 0);
       if (minDist < 0 || maxDist < 0) return res.status(400).json({ message: "Distance values must be positive" });
+      if (minDist > 200 || maxDist > 200) return res.status(400).json({ message: "Distance cannot exceed 200 miles" });
       if (maxDist > 0 && minDist > maxDist) return res.status(400).json({ message: "Minimum distance cannot exceed maximum distance" });
+      const minPaceVal = parseFloat(req.body.minPace ?? req.body.min_pace ?? 0);
+      const maxPaceVal = parseFloat(req.body.maxPace ?? req.body.max_pace ?? 0);
+      if ((minPaceVal > 0 && minPaceVal < 2) || minPaceVal > 60) return res.status(400).json({ message: "Pace must be between 2 and 60 min/mile" });
+      if ((maxPaceVal > 0 && maxPaceVal < 2) || maxPaceVal > 60) return res.status(400).json({ message: "Pace must be between 2 and 60 min/mile" });
+      const maxParticipantsVal = parseInt(req.body.maxParticipants ?? req.body.max_participants ?? 20);
+      if (maxParticipantsVal < 1 || maxParticipantsVal > 500) return res.status(400).json({ message: "Max participants must be between 1 and 500" });
       const run = await storage.createRun({ ...req.body, hostId: req.session.userId!, savedPathId: req.body.savedPathId || null });
       res.status(201).json(run);
       // Notify — crew runs notify crew members; regular runs notify friends (fire-and-forget)
@@ -1605,9 +1620,10 @@ async function go(e){
       try {
         participant = await storage.joinRun(req.params.id as string, req.session.userId!, paceGroupLabel);
       } catch (joinErr: any) {
-        if (joinErr.message === "EVENT_FULL") {
-          return res.status(409).json({ message: "This event is full" });
-        }
+        if (joinErr.message === "EVENT_FULL") return res.status(409).json({ message: "This event is full" });
+        if (joinErr.message === "RUN_CANCELLED") return res.status(400).json({ message: "This event has been cancelled" });
+        if (joinErr.message === "RUN_COMPLETED") return res.status(400).json({ message: "This event has already completed" });
+        if (joinErr.message === "RUN_NOT_FOUND") return res.status(404).json({ message: "Event not found" });
         throw joinErr;
       }
       res.json(participant);
@@ -1690,6 +1706,9 @@ async function go(e){
     try {
       const { date } = req.body;
       if (!date) return res.status(400).json({ message: "date is required" });
+      const parsedPatchDate = new Date(date);
+      if (isNaN(parsedPatchDate.getTime())) return res.status(400).json({ message: "Invalid date" });
+      if (parsedPatchDate.getTime() < Date.now() - 5 * 60 * 1000) return res.status(400).json({ message: "Event date cannot be in the past" });
       const updated = await storage.updateRunDateTime(req.params.id as string, req.session.userId!, date);
       const tokens = await storage.getRunBroadcastTokens(req.params.id as string);
       if (tokens.length) {

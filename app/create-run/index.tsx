@@ -243,6 +243,7 @@ export default function CreateRunScreen() {
 
       const dateTime = new Date(date.getFullYear(), date.getMonth(), date.getDate(), parsedTime.hours, parsedTime.minutes);
       if (isNaN(dateTime.getTime())) throw new Error("Invalid date or time");
+      if (dateTime.getTime() < Date.now() - 5 * 60 * 1000) throw new Error("Event date cannot be in the past");
 
       const dist = isCrew ? parseFloat(plannedDistance) || 3 : parseFloat(minDistance);
       const distMax = isCrew ? dist : parseFloat(maxDistance);
@@ -322,6 +323,7 @@ export default function CreateRunScreen() {
   }
 
   function validateAndSubmit() {
+    if (createMutation.isPending) return;
     if (isCrew && paceGroups.length > 0) {
       const errors = paceGroups.map((g) => {
         const min = parseFloat(g.minPace);
