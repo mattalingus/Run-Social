@@ -342,7 +342,7 @@ export default function RunLiveScreen() {
   }, [liveState?.hostId, liveState?.isActive]);
 
   // Auto-redirect participants when run is force-completed by host.
-  // Shares navigatedAwayRef with the isActive effect below so only one fires.
+  // navigatedAwayRef prevents double runner-finish POST if this effect re-fires.
   useEffect(() => {
     if (!liveState?.isCompleted) return;
     // Host navigates themselves via handleEndForEveryone or when run auto-completes
@@ -635,9 +635,7 @@ export default function RunLiveScreen() {
   const paceNum = calcPaceNum(displayDist, elapsed);
   const otherRunners = presentParticipants.filter((p: any) => p.user_id !== user?.id);
 
-  // ── Tag-Along derived state ────────────────────────────────────────────────
-  // Participant record for the current user (carries tag_along_of_user_id from the server)
-
+  // ── Tag-Along request state ───────────────────────────────────────────────
   const tagAlongRequests: any[] = liveState?.tagAlongRequests ?? [];
   // Pending requests targeting the current user (they need to respond)
   const incomingTagAlongRequests = tagAlongRequests.filter(
