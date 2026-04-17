@@ -1720,8 +1720,8 @@ export default function DiscoverScreen() {
         r.title.toLowerCase().includes(q) ||
         r.location_name.toLowerCase().includes(q) ||
         r.host_name.toLowerCase().includes(q);
-      // Pace overlap
-      const matchPace = r.min_pace <= applied.paceMax && r.max_pace >= applied.paceMin;
+      // Pace fit: event's full range must fit inside the user's selected window
+      const matchPace = r.min_pace >= applied.paceMin && r.max_pace <= applied.paceMax;
       // Distance (run length) overlap
       const matchDist = r.min_distance <= applied.distMax && r.max_distance >= applied.distMin;
       // Proximity
@@ -1811,7 +1811,8 @@ export default function DiscoverScreen() {
           r.title.toLowerCase().includes(q) ||
           r.location_name.toLowerCase().includes(q) ||
           r.host_name.toLowerCase().includes(q);
-        const matchPace = r.min_pace <= applied.paceMax && r.max_pace >= applied.paceMin;
+        // Pace fit: event's full range must fit inside the user's selected window
+        const matchPace = r.min_pace >= applied.paceMin && r.max_pace <= applied.paceMax;
         const matchDist = r.min_distance <= applied.distMax && r.max_distance >= applied.distMin;
         const matchStyle = applied.styles.length === 0 || r.tags?.some((t) => applied.styles.includes(t));
         const matchVisibility =

@@ -430,10 +430,14 @@ export default function MapScreen() {
     });
   }, [communityPaths, bounds]);
 
-  // Only runs/rides matching the activity filter and visible in the map viewport
+  // Only runs/rides matching the activity filter and visible in the map viewport.
+  // Explicitly exclude (0,0) pins and non-finite coordinates to prevent the map
+  // from zooming out to span the globe.
   const visibleRuns = useMemo(() => {
     if (!bounds) return [];
     return runs.filter((r) => {
+      if (!Number.isFinite(r.location_lat) || !Number.isFinite(r.location_lng)) return false;
+      if (r.location_lat === 0 && r.location_lng === 0) return false;
       if ((r.activity_type ?? "run") !== activityFilter) return false;
       if (r.location_lat < bounds.swLat || r.location_lat > bounds.neLat) return false;
       if (r.location_lng < bounds.swLng || r.location_lng > bounds.neLng) return false;

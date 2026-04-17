@@ -711,6 +711,7 @@ export default function SoloScreen() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/solo-runs"] });
       qc.invalidateQueries({ queryKey: ["/api/solo-runs/achievements"] });
+      qc.invalidateQueries({ queryKey: ["/api/runs"] });
     },
   });
 
@@ -999,7 +1000,11 @@ export default function SoloScreen() {
                 ))}
               </View>
             )}
-            <Text style={s.historyDist}>{toDisplayDist(run.distance_miles, distUnit)}</Text>
+            <Text style={s.historyDist}>
+              {run.distance_miles != null && Number.isFinite(run.distance_miles)
+                ? toDisplayDist(run.distance_miles, distUnit)
+                : "—"}
+            </Text>
             {run.completed && (
               <Pressable
                 onPress={() => setExpandedRunId(isExpanded ? null : run.id)}
