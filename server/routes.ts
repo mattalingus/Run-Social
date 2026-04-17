@@ -1174,12 +1174,12 @@ async function go(e){
       if (!Number.isFinite(minDist) || !Number.isFinite(maxDist)) return res.status(400).json({ message: "Distance values must be numbers" });
       if (minDist < 0 || maxDist < 0) return res.status(400).json({ message: "Distance values must be positive" });
       if (minDist > 200 || maxDist > 200) return res.status(400).json({ message: "Distance cannot exceed 200 miles" });
-      if (maxDist > 0 && minDist > 0 && minDist >= maxDist) return res.status(400).json({ message: "Minimum distance must be less than maximum distance" });
+      if (maxDist > 0 && minDist > 0 && minDist > maxDist) return res.status(400).json({ message: "Minimum distance cannot exceed maximum distance" });
       const minPaceVal = parseFloat(req.body.minPace ?? req.body.min_pace ?? 0);
       const maxPaceVal = parseFloat(req.body.maxPace ?? req.body.max_pace ?? 0);
       if ((minPaceVal > 0 && minPaceVal < 2) || minPaceVal > 60) return res.status(400).json({ message: "Pace must be between 2 and 60 min/mile" });
       if ((maxPaceVal > 0 && maxPaceVal < 2) || maxPaceVal > 60) return res.status(400).json({ message: "Pace must be between 2 and 60 min/mile" });
-      if (minPaceVal > 0 && maxPaceVal > 0 && minPaceVal >= maxPaceVal) return res.status(400).json({ message: "Minimum pace must be less than maximum pace" });
+      if (minPaceVal > 0 && maxPaceVal > 0 && minPaceVal > maxPaceVal) return res.status(400).json({ message: "Minimum pace cannot exceed maximum pace" });
       const maxParticipantsRaw = parseInt(req.body.maxParticipants ?? req.body.max_participants ?? 20, 10);
       if (!Number.isInteger(maxParticipantsRaw) || isNaN(maxParticipantsRaw) || maxParticipantsRaw < 1 || maxParticipantsRaw > 500) return res.status(400).json({ message: "Max participants must be between 1 and 500" });
       const run = await storage.createRun({ ...req.body, hostId: req.session.userId!, savedPathId: req.body.savedPathId || null });

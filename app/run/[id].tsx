@@ -471,7 +471,7 @@ export default function RunDetailScreen() {
       Alert.alert("Invalid format", "Could not parse the date or time.");
       return;
     }
-    if (parsed.getTime() < Date.now()) {
+    if (parsed.getTime() < Date.now() - 60_000) {
       Alert.alert("Invalid date", "Event date cannot be in the past.");
       return;
     }

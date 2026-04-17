@@ -245,7 +245,7 @@ export default function CreateRunScreen() {
 
       const dateTime = new Date(date.getFullYear(), date.getMonth(), date.getDate(), parsedTime.hours, parsedTime.minutes);
       if (isNaN(dateTime.getTime())) throw new Error("Invalid date or time");
-      if (dateTime.getTime() < Date.now()) throw new Error("Event date cannot be in the past");
+      if (dateTime.getTime() < Date.now() - 60_000) throw new Error("Event date cannot be in the past");
 
       const dist = isCrew ? parseFloat(plannedDistance) || 3 : parseFloat(minDistance);
       const distMax = isCrew ? dist : parseFloat(maxDistance);
