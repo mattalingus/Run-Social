@@ -1634,7 +1634,6 @@ async function go(e){
         if (joinErr.message === "EVENT_FULL") return res.status(409).json({ message: "This event is full" });
         if (joinErr.message === "RUN_CANCELLED") return res.status(409).json({ message: "This event has been cancelled" });
         if (joinErr.message === "RUN_COMPLETED") return res.status(409).json({ message: "This event has already completed" });
-        if (joinErr.message === "RUN_INACTIVE") return res.status(409).json({ message: "This event is no longer active" });
         if (joinErr.message === "RUN_NOT_FOUND") return res.status(404).json({ message: "Event not found" });
         throw joinErr;
       }

@@ -1733,7 +1733,7 @@ export async function joinRun(runId: string, userId: string, paceGroupLabel?: st
     await client.query('BEGIN');
     // Lock the run row first to serialize concurrent join attempts
     const runStateRes = await client.query(
-      `SELECT id, is_deleted, is_completed, is_active, max_participants FROM runs WHERE id = $1 FOR UPDATE`,
+      `SELECT id, is_deleted, is_completed, max_participants FROM runs WHERE id = $1 FOR UPDATE`,
       [runId]
     );
     if (!runStateRes.rows.length) {
@@ -1748,10 +1748,6 @@ export async function joinRun(runId: string, userId: string, paceGroupLabel?: st
     if (runState.is_completed) {
       await client.query('ROLLBACK');
       throw new Error("RUN_COMPLETED");
-    }
-    if (runState.is_active === false) {
-      await client.query('ROLLBACK');
-      throw new Error("RUN_INACTIVE");
     }
     const maxP: number | null = runState.max_participants ?? null;
 
