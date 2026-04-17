@@ -1983,13 +1983,23 @@ export async function cancelRun(runId: string, userId: string) {
   if (!run.rows.length) throw new Error("Run not found");
   if (run.rows[0].host_id !== userId) throw new Error("Only the host can cancel this run");
   const tokens = await getRunParticipantTokens(runId);
-  await pool.query(`DELETE FROM run_tracking_points WHERE run_id = $1`, [runId]);
-  await pool.query(`DELETE FROM planned_runs WHERE run_id = $1`, [runId]);
-  await pool.query(`DELETE FROM run_participants WHERE run_id = $1`, [runId]);
-  await pool.query(`DELETE FROM run_invites WHERE run_id = $1`, [runId]);
-  await pool.query(`DELETE FROM bookmarked_runs WHERE run_id = $1`, [runId]);
-  await pool.query(`DELETE FROM run_photos WHERE run_id = $1`, [runId]);
-  await pool.query(`DELETE FROM runs WHERE id = $1`, [runId]);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`DELETE FROM run_tracking_points WHERE run_id = $1`, [runId]);
+    await client.query(`DELETE FROM planned_runs WHERE run_id = $1`, [runId]);
+    await client.query(`DELETE FROM run_participants WHERE run_id = $1`, [runId]);
+    await client.query(`DELETE FROM run_invites WHERE run_id = $1`, [runId]);
+    await client.query(`DELETE FROM bookmarked_runs WHERE run_id = $1`, [runId]);
+    await client.query(`DELETE FROM run_photos WHERE run_id = $1`, [runId]);
+    await client.query(`DELETE FROM runs WHERE id = $1`, [runId]);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
   return { title: run.rows[0].title, tokens };
 }
 
