@@ -506,6 +506,15 @@ async function seed() {
     tags: ["cycling", "long-ride", "terry-hershey"], activityType: "ride", crewId: midnightRidersId, runStyle: "long",
   });
   await addParticipants(run5, [carlos.id, marcus.id, noah.id, jake.id]);
+  // Add speed groups to the ride event
+  await pool.query(
+    `UPDATE runs SET pace_groups = $2 WHERE id = $1`,
+    [run5, JSON.stringify([
+      { label: "A Group — Fast", minPace: "18", maxPace: "22" },
+      { label: "B Group — Steady", minPace: "14", maxPace: "18" },
+      { label: "C Group — Chill", minPace: "10", maxPace: "14" },
+    ])]
+  );
 
   const run6 = await createRun({
     hostId: noah.id,

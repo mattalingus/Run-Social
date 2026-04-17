@@ -302,6 +302,47 @@ function pickCoachPhrase(
   return [distLine, paceLine, paceContext, timeLine].filter(Boolean).join(" ") + closer;
 }
 
+function pickRideCoachPhrase(
+  triggerType: "distance" | "time",
+  value: number,
+  paceMinPerMile: number,
+  totalSeconds: number
+): string {
+  const speedMph = paceMinPerMile > 0 ? 60 / paceMinPerMile : 0;
+  const speedRounded = Math.round(speedMph * 10) / 10;
+  const elapsedMin = Math.floor(totalSeconds / 60);
+  const closers = [
+    "Keep the cadence.", "Stay aero.", "Hold that line.",
+    "Smooth pedal stroke.", "Good effort.", "Stay on it.",
+  ];
+  const closer = Math.random() < 0.4 ? " " + pick(closers) : "";
+
+  if (triggerType === "time") {
+    const hrStr = value === 60 ? "one hour" : value === 90 ? "ninety minutes" : "thirty minutes";
+    const speedLine = speedRounded > 0
+      ? pick([`Averaging ${speedRounded} miles per hour.`, `Speed is ${speedRounded} miles an hour.`, `Rolling at ${speedRounded} miles per hour.`])
+      : "";
+    return `${hrStr.charAt(0).toUpperCase() + hrStr.slice(1)} in.${speedLine ? " " + speedLine : ""}${closer}`;
+  }
+
+  // distance triggers: 5, 10, 25 miles
+  let distLine: string;
+  if (value === 5) {
+    distLine = pick(["Five miles done.", "Five miles in.", "That's five miles.", "Five mile mark."]);
+  } else if (value === 10) {
+    distLine = pick(["Ten miles.", "Ten miles complete.", "That's ten miles.", "Double digits."]);
+  } else if (value === 25) {
+    distLine = pick(["Quarter century done.", "Twenty-five miles.", "That's a quarter century.", "Twenty-five in."]);
+  } else {
+    distLine = `${value} miles.`;
+  }
+  const speedLine = speedRounded > 0
+    ? pick([`Averaging ${speedRounded} miles per hour.`, `Speed check: ${speedRounded} miles per hour.`, `Rolling at ${speedRounded} miles per hour.`, `${speedRounded} miles per hour.`])
+    : "";
+  const elapsedLine = `${elapsedMin} minutes elapsed.`;
+  return [distLine, speedLine, elapsedLine].filter(Boolean).join(" ") + closer;
+}
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function RunTrackingScreen() {
@@ -361,6 +402,8 @@ export default function RunTrackingScreen() {
   const coachVoiceRef = useRef<"nova" | "onyx" | "shimmer" | "echo">("nova");
   const lastAnnouncedMileRef = useRef(0);
   const lastAnnouncedPaceRef = useRef<number | null>(null);
+  const lastAnnouncedRideMileRef = useRef(0);
+  const lastAnnouncedRideTimeBlockRef = useRef(0);
 
   useEffect(() => { coachEnabledRef.current = coachEnabled; }, [coachEnabled]);
   useEffect(() => { coachIntervalRef.current = coachInterval; }, [coachInterval]);
@@ -585,6 +628,42 @@ export default function RunTrackingScreen() {
       }
     } catch (e) {}
   }, []);
+
+  const announceRide = useCallback(async (
+    triggerType: "distance" | "time",
+    value: number,
+    totalSeconds: number,
+    distanceMiles: number
+  ) => {
+    if (Platform.OS === "web") return;
+    await ensureAudioMode(true);
+    const paceMinPerMile = distanceMiles > 0.01 ? totalSeconds / 60 / distanceMiles : 0;
+    const text = pickRideCoachPhrase(triggerType, value, paceMinPerMile, totalSeconds);
+    try {
+      const res = await apiRequest("POST", "/api/tts", { text, voice: coachVoiceRef.current });
+      if (!res.ok) return;
+      const arrayBuffer = await res.arrayBuffer();
+      const base64 = Buffer.from(arrayBuffer).toString("base64");
+      const filename = `${FileSystem.cacheDirectory}ride_coach_${triggerType}_${value}.mp3`;
+      await FileSystem.writeAsStringAsync(filename, base64, { encoding: FileSystem.EncodingType.Base64 });
+      const { sound } = await Audio.Sound.createAsync({ uri: filename });
+      try {
+        await sound.playAsync();
+        const deadline = Date.now() + 30_000;
+        while (Date.now() < deadline) {
+          await new Promise<void>((r) => setTimeout(r, 250));
+          try {
+            const st = await sound.getStatusAsync();
+            if (st.isLoaded && st.didJustFinish) break;
+            if (!st.isLoaded) break;
+          } catch { break; }
+        }
+      } finally {
+        sound.unloadAsync().catch(() => {});
+      }
+      await ensureAudioMode(false);
+    } catch {}
+  }, [ensureAudioMode]);
 
   const announcePace = useCallback(async (distance: number, totalSeconds: number) => {
     if (Platform.OS === "web") return;
@@ -892,10 +971,32 @@ export default function RunTrackingScreen() {
 
         // Audio Coach logic
         if (coachEnabledRef.current && Platform.OS !== "web") {
-          const interval = parseFloat(coachIntervalRef.current);
-          if (totalDistRef.current >= lastAnnouncedMileRef.current + interval) {
-            lastAnnouncedMileRef.current += interval;
-            announcePace(lastAnnouncedMileRef.current, elapsedRef.current);
+          if (activityFilter === "ride") {
+            // Ride mode: trigger at 5, 10, 25 mile marks
+            const RIDE_MILE_MARKS = [5, 10, 25];
+            for (const mark of RIDE_MILE_MARKS) {
+              if (totalDistRef.current >= mark && lastAnnouncedRideMileRef.current < mark) {
+                lastAnnouncedRideMileRef.current = mark;
+                announceRide("distance", mark, elapsedRef.current, totalDistRef.current);
+                break;
+              }
+            }
+            // Ride mode: trigger at 30, 60, 90 minute marks
+            const elapsedMin = elapsedRef.current / 60;
+            const RIDE_TIME_MARKS = [30, 60, 90];
+            for (const mark of RIDE_TIME_MARKS) {
+              if (elapsedMin >= mark && lastAnnouncedRideTimeBlockRef.current < mark) {
+                lastAnnouncedRideTimeBlockRef.current = mark;
+                announceRide("time", mark, elapsedRef.current, totalDistRef.current);
+                break;
+              }
+            }
+          } else {
+            const interval = parseFloat(coachIntervalRef.current);
+            if (totalDistRef.current >= lastAnnouncedMileRef.current + interval) {
+              lastAnnouncedMileRef.current += interval;
+              announcePace(lastAnnouncedMileRef.current, elapsedRef.current);
+            }
           }
         }
 
@@ -1107,6 +1208,8 @@ export default function RunTrackingScreen() {
     setPathSaved(false);
     lastAnnouncedMileRef.current = 0;
     lastAnnouncedPaceRef.current = null;
+    lastAnnouncedRideMileRef.current = 0;
+    lastAnnouncedRideTimeBlockRef.current = 0;
     mileSplitsRef.current = [];
     lastSplitMileRef.current = 0;
     prevMileElapsedRef.current = 0;

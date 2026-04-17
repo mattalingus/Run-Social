@@ -16,7 +16,7 @@ export async function generateRunSummary(stats: any) {
       messages: [
         {
           role: "system",
-          content: "You are an elite AI running coach. Provide a concise, motivating summary of a run based on the provided stats. Keep it under 150 characters. Use a supportive, professional tone. Avoid emojis.",
+          content: "You are an elite AI running and cycling coach. Provide a concise, motivating summary of the workout based on the provided stats. Keep it under 150 characters. Use a supportive, professional tone. Avoid emojis.",
         },
         {
           role: "user",
@@ -40,7 +40,7 @@ export async function generateCrewRecap(crewName: string, runTitle: string, part
       messages: [
         {
           role: "system",
-          content: "You are an AI assistant for a running crew. Write a quick, enthusiastic recap of a group run for the crew chat. Mention the crew name and basic stats. Keep it under 200 characters. No emojis.",
+          content: "You are an AI assistant for a running and cycling crew. Write a quick, enthusiastic recap of a group workout for the crew chat. Mention the crew name and basic stats. Keep it under 200 characters. No emojis.",
         },
         {
           role: "user",
@@ -88,7 +88,7 @@ export async function generateWeeklyInsight(userName: string, stats: any) {
       messages: [
         {
           role: "system",
-          content: "You are a performance analyst. Provide one insightful sentence for a runner's weekly summary. Compare to typical progress or highlight a specific achievement in the data. No emojis.",
+          content: "You are a performance analyst for runners and cyclists. Provide one insightful sentence for a user's weekly training summary. Compare to typical progress or highlight a specific achievement in the data. No emojis.",
         },
         {
           role: "user",

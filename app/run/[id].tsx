@@ -320,20 +320,24 @@ export default function RunDetailScreen() {
   const myParticipation = participants.find((p) => p.id === user?.id);
   const bestPaceGroup = useMemo(() => {
     if (!run?.pace_groups || !user || (run.pace_groups as any[]).length === 0) return null;
-    const userPace = (user as any).avg_pace || 10;
+    const userAvgPace = (user as any).avg_pace || 10;
+    // For rides, pace groups store mph; compare against user's avg speed in mph
+    const userMetric = run?.activity_type === "ride"
+      ? (userAvgPace > 0 ? 60 / userAvgPace : 10)
+      : userAvgPace;
     const groups = run.pace_groups as any[];
     let best = groups[0];
-    let minDiff = Math.abs((groups[0].minPace + groups[0].maxPace) / 2 - userPace);
+    let minDiff = Math.abs((groups[0].minPace + groups[0].maxPace) / 2 - userMetric);
     for (const g of groups) {
       const avg = (g.minPace + g.maxPace) / 2;
-      const diff = Math.abs(avg - userPace);
+      const diff = Math.abs(avg - userMetric);
       if (diff < minDiff) {
         minDiff = diff;
         best = g;
       }
     }
     return best;
-  }, [run?.pace_groups, user]);
+  }, [run?.pace_groups, run?.activity_type, user]);
   const isParticipant = !!myParticipation && myParticipation.status !== "pending" && myParticipation.status !== "cancelled";
   const hasPendingRequest = !!myParticipation && myParticipation.status === "pending";
   const isPastRun = run ? new Date(run.date) < new Date() : false;
@@ -872,8 +876,12 @@ export default function RunDetailScreen() {
           <View style={styles.requirementsGrid}>
             <View style={styles.reqItem}>
               <Ionicons name="walk" size={20} color={C.orange} />
-              <Text style={styles.reqValue}>{run.min_pace === run.max_pace ? toDisplayPace(run.min_pace, distUnit) : `${toDisplayPace(run.min_pace, distUnit)} – ${toDisplayPace(run.max_pace, distUnit)}`}</Text>
-              <Text style={styles.reqLabel}>{`Pace (min/${unitLabel(distUnit)})`}</Text>
+              <Text style={styles.reqValue}>
+                {run.activity_type === "ride"
+                  ? (run.min_pace === run.max_pace ? `${run.min_pace} mph` : `${run.min_pace}–${run.max_pace} mph`)
+                  : (run.min_pace === run.max_pace ? toDisplayPace(run.min_pace, distUnit) : `${toDisplayPace(run.min_pace, distUnit)} – ${toDisplayPace(run.max_pace, distUnit)}`)}
+              </Text>
+              <Text style={styles.reqLabel}>{run.activity_type === "ride" ? "Speed (mph)" : `Pace (min/${unitLabel(distUnit)})`}</Text>
             </View>
             <View style={styles.reqDivider} />
             <View style={styles.reqItem}>
@@ -923,14 +931,21 @@ export default function RunDetailScreen() {
                 </View>
               );
             }
-            const paceOk = user.avg_pace >= run.min_pace && user.avg_pace <= run.max_pace;
+            const isRideEvent = run.activity_type === "ride";
+            // For rides, min/max pace are stored as mph; convert user avg_pace to mph for comparison
+            const userSpeedMph = user.avg_pace > 0 ? 60 / user.avg_pace : 0;
+            const paceOk = isRideEvent
+              ? (userSpeedMph >= run.min_pace && userSpeedMph <= run.max_pace)
+              : (user.avg_pace >= run.min_pace && user.avg_pace <= run.max_pace);
             const distOk = (recentDistances ?? []).some((d) => d >= run.min_distance * 0.7);
             const eligible = paceOk && distOk;
             let msg = "";
-            if (eligible) msg = "Pace and distance both qualify";
-            else if (!paceOk && !distOk) msg = "Pace and distance both fall short";
-            else if (!paceOk) msg = `Your pace (${toDisplayPace(user.avg_pace, distUnit)}) doesn't match this run`;
-            else msg = `No recent run covers 70%+ of the planned ${toDisplayDist(run.min_distance, distUnit)}`;
+            if (eligible) msg = isRideEvent ? "Speed and distance both qualify" : "Pace and distance both qualify";
+            else if (!paceOk && !distOk) msg = isRideEvent ? "Speed and distance both fall short" : "Pace and distance both fall short";
+            else if (!paceOk) msg = isRideEvent
+              ? `Your avg speed (${userSpeedMph > 0 ? userSpeedMph.toFixed(1) : "–"} mph) doesn't match this ride`
+              : `Your pace (${toDisplayPace(user.avg_pace, distUnit)}) doesn't match this run`;
+            else msg = `No recent ${isRideEvent ? "ride" : "run"} covers 70%+ of the planned ${toDisplayDist(run.min_distance, distUnit)}`;
             return (
               <View style={[styles.eligibilityRow, {
                 backgroundColor: eligible ? C.primaryMuted : C.danger + "22",
@@ -1108,11 +1123,11 @@ export default function RunDetailScreen() {
                               </View>
                               {groupDef && (
                                 <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted }}>
-                                  {groupDef.minPace}–{groupDef.maxPace} min/mi
+                                  {groupDef.minPace}–{groupDef.maxPace} {run?.activity_type === "ride" ? "mph" : "min/mi"}
                                 </Text>
                               )}
                               <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted }}>
-                                · {groups[label].length} runner{groups[label].length !== 1 ? "s" : ""}
+                                · {groups[label].length} participant{groups[label].length !== 1 ? "s" : ""}
                               </Text>
                             </View>
                             <View style={styles.participantsList}>
@@ -1754,13 +1769,15 @@ export default function RunDetailScreen() {
             <View style={[styles.editSheet, { paddingBottom: insets.bottom + 24, maxHeight: "75%" }]}>
               <View style={styles.frHandle} />
               <View style={styles.editSheetHeader}>
-                <Text style={styles.editSheetTitle}>Pick Your Pace Group</Text>
+                <Text style={styles.editSheetTitle}>{run?.activity_type === "ride" ? "Pick Your Speed Group" : "Pick Your Pace Group"}</Text>
                 <Pressable onPress={() => setShowPaceGroupSheet(false)} hitSlop={12}>
                   <Feather name="x" size={18} color={C.textSecondary} />
                 </Pressable>
               </View>
               <Text style={[styles.editSheetSub, { marginBottom: 16 }]}>
-                Choose the group that best matches your pace. This helps the host organize the run.
+                {run?.activity_type === "ride"
+                  ? "Choose the group that best matches your riding speed. This helps the host organize the ride."
+                  : "Choose the group that best matches your pace. This helps the host organize the run."}
               </Text>
               <ScrollView showsVerticalScrollIndicator={false}>
                 {(run.pace_groups as any[]).map((group: any, idx: number) => {
@@ -1787,7 +1804,9 @@ export default function RunDetailScreen() {
                           )}
                         </View>
                         <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary, marginTop: 2 }}>
-                          {group.minPace} – {group.maxPace} min/mi
+                          {run?.activity_type === "ride"
+                            ? `${group.minPace} – ${group.maxPace} mph`
+                            : `${group.minPace} – ${group.maxPace} min/mi`}
                         </Text>
                       </View>
                       <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: isSelected ? C.primary : C.border, backgroundColor: isSelected ? C.primary : "transparent", alignItems: "center", justifyContent: "center" }}>

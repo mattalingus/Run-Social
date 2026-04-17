@@ -2233,7 +2233,7 @@ export default function DiscoverScreen() {
                     </View>
                     <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 16, color: C.text, marginBottom: 4 }}>Find a Training Partner</Text>
                     <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary, textAlign: "center" }}>
-                      We've found runners in your area with similar goals and pace.
+                      We've found active members in your area with similar goals and pace.
                     </Text>
                   </Pressable>
                 )}
@@ -2552,7 +2552,7 @@ export default function DiscoverScreen() {
                         )}
                         <View style={{ flex: 1 }}>
                           <Text style={s.notifText}>
-                            <Text style={{ fontFamily: "Outfit_600SemiBold" }}>{req.from_name}</Text> wants to be your running buddy
+                            <Text style={{ fontFamily: "Outfit_600SemiBold" }}>{req.from_name}</Text> wants to be your training partner
                           </Text>
                           <View style={s.notifActions}>
                             <Pressable style={[s.notifBtn, s.notifBtnPrimary]} onPress={() => respondFriend(req.id, "accept")}>
@@ -3229,11 +3229,11 @@ export default function DiscoverScreen() {
               { icon: "users" as const,       title: "Walk together",                body: "Check in on slower walkers. A great host makes sure everyone finishes, not just those at the front." },
               { icon: "x-circle" as const,    title: "Cancel responsibly",           body: "If you can't make it, cancel your walk well in advance so participants can adjust their plans." },
             ] : [
-              { icon: "heart" as const,      title: "Be kind and respectful",       body: "Treat every participant with courtesy. No runner should feel unwelcome or judged." },
+              { icon: "heart" as const,      title: "Be kind and respectful",       body: "Treat every participant with courtesy. No one should feel unwelcome or judged on your run." },
               { icon: "clock" as const,       title: "Be on time",                   body: "Start and finish as scheduled. If something comes up, notify your group as early as possible." },
-              { icon: "target" as const,      title: "Set honest expectations",      body: "List accurate pace and distance ranges. Don't leave runners behind who joined based on your stated criteria." },
+              { icon: "target" as const,      title: "Set honest expectations",      body: "List accurate pace and distance ranges. Don't leave participants behind who joined based on your stated criteria." },
               { icon: "shield" as const,      title: "Prioritize safety",            body: "Choose safe routes. Watch out for traffic, uneven terrain, and the wellbeing of all participants." },
-              { icon: "users" as const,       title: "Leave no one behind",          body: "Check in on slower runners. A great host makes sure everyone finishes, not just the front of the pack." },
+              { icon: "users" as const,       title: "Leave no one behind",          body: "Check in on slower participants. A great host makes sure everyone finishes, not just the front of the pack." },
               { icon: "x-circle" as const,    title: "Cancel responsibly",           body: "If you can't make it, cancel your run well in advance so participants can adjust their plans." },
             ]).map((rule) => (
               <View key={rule.title} style={s.ruleRow}>

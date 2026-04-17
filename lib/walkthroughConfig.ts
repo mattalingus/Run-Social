@@ -89,7 +89,7 @@ export const WALKTHROUGH_STEPS: WalkthroughStep[] = [
   {
     id: "rankings",
     title: "Rankings",
-    description: "See how you stack up! Rankings track your best times across popular distances like 1 Mile, 5K, and 10K.",
+    description: "See how you stack up! Rankings track your best times across popular distances like 1 Mile, 5K, and 10K — or best speeds for 10 to 100 mile rides.",
     tab: "crew",
     tooltipPosition: "bottom",
   },
@@ -117,7 +117,7 @@ export const WALKTHROUGH_STEPS: WalkthroughStep[] = [
   {
     id: "achievements",
     title: "Achievements",
-    description: "Earn badges as you hit milestones — your first run, a 5K PR, a streak, and more. You're all set!",
+    description: "Earn badges as you hit milestones — your first run or ride, distance PRs, speed achievements, streaks, and more. You're all set!",
     tab: "profile",
     tooltipPosition: "bottom",
   },

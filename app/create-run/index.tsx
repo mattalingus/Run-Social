@@ -636,7 +636,7 @@ export default function CreateRunScreen() {
                 </View>
                 <View style={{ flexDirection: "row", gap: 8 }}>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.splitLabel, { textAlign: "left" }]}>Min Pace (min/mi)</Text>
+                    <Text style={[styles.splitLabel, { textAlign: "left" }]}>{activityType === "ride" ? "Min Speed (mph)" : "Min Pace (min/mi)"}</Text>
                     <TextInput
                       style={[styles.input, paceGroupErrors[idx] ? { borderColor: C.danger } : {}]}
                       value={group.minPace}
@@ -651,12 +651,12 @@ export default function CreateRunScreen() {
                         }
                       }}
                       keyboardType="decimal-pad"
-                      placeholder="7.0"
+                      placeholder={activityType === "ride" ? "12" : "7.0"}
                       placeholderTextColor={C.textMuted}
                     />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.splitLabel, { textAlign: "left" }]}>Max Pace (min/mi)</Text>
+                    <Text style={[styles.splitLabel, { textAlign: "left" }]}>{activityType === "ride" ? "Max Speed (mph)" : "Max Pace (min/mi)"}</Text>
                     <TextInput
                       style={[styles.input, paceGroupErrors[idx] ? { borderColor: C.danger } : {}]}
                       value={group.maxPace}
@@ -671,7 +671,7 @@ export default function CreateRunScreen() {
                         }
                       }}
                       keyboardType="decimal-pad"
-                      placeholder="9.0"
+                      placeholder={activityType === "ride" ? "18" : "9.0"}
                       placeholderTextColor={C.textMuted}
                     />
                   </View>
@@ -686,27 +686,27 @@ export default function CreateRunScreen() {
           </View>
         ) : (
           <View style={styles.field}>
-            <Text style={styles.label}>Pace Range (min/mile)</Text>
+            <Text style={styles.label}>{activityType === "ride" ? "Speed Range (mph)" : "Pace Range (min/mile)"}</Text>
             <View style={styles.row}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.splitLabel}>Fastest</Text>
+                <Text style={styles.splitLabel}>{activityType === "ride" ? "Slowest" : "Fastest"}</Text>
                 <TextInput
                   style={styles.input}
                   value={minPace}
                   onChangeText={setMinPace}
                   keyboardType="decimal-pad"
-                  placeholder="8.0"
+                  placeholder={activityType === "ride" ? "12" : "8.0"}
                   placeholderTextColor={C.textMuted}
                 />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.splitLabel}>Slowest</Text>
+                <Text style={styles.splitLabel}>{activityType === "ride" ? "Fastest" : "Slowest"}</Text>
                 <TextInput
                   style={styles.input}
                   value={maxPace}
                   onChangeText={setMaxPace}
                   keyboardType="decimal-pad"
-                  placeholder="12.0"
+                  placeholder={activityType === "ride" ? "20" : "12.0"}
                   placeholderTextColor={C.textMuted}
                 />
               </View>

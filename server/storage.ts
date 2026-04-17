@@ -2817,8 +2817,24 @@ export async function toggleCrewChatMute(crewId: string, userId: string): Promis
 }
 
 export async function checkAndAwardAchievements(userId: string, totalMiles: number, db: any = pool) {
-  const user = await db.query(`SELECT completed_runs, hosted_runs FROM users WHERE id = $1`, [userId]);
-  const { completed_runs, hosted_runs } = user.rows[0] ?? {};
+  const user = await db.query(`SELECT hosted_runs FROM users WHERE id = $1`, [userId]);
+  const { hosted_runs } = user.rows[0] ?? {};
+
+  // Count run-only completions to guard run-labeled badges from rides/walks
+  const runOnlyRes = await db.query(
+    `SELECT COUNT(*) as cnt FROM run_participants rp
+     JOIN runs r ON r.id = rp.run_id
+     WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND r.activity_type = 'run'`,
+    [userId]
+  );
+  const run_only_count = parseInt(runOnlyRes.rows[0]?.cnt ?? 0);
+
+  // Count run-only hosted events
+  const hostedRunOnlyRes = await db.query(
+    `SELECT COUNT(*) as cnt FROM runs WHERE host_id = $1 AND activity_type = 'run'`,
+    [userId]
+  );
+  const hosted_runs_only = parseInt(hostedRunOnlyRes.rows[0]?.cnt ?? 0);
 
   if (totalMiles >= 25) await awardSlug(userId, "miles_25", db);
   if (totalMiles >= 100) {
@@ -2827,14 +2843,16 @@ export async function checkAndAwardAchievements(userId: string, totalMiles: numb
   if (totalMiles >= 250) {
     await awardSlug(userId, "miles_250", db);
   }
-  if (completed_runs >= 1) await awardSlug(userId, "first_step", db);
-  if (completed_runs >= 5) await awardSlug(userId, "five_alive", db);
-  if (completed_runs >= 10) await awardSlug(userId, "ten_toes_down", db);
-  if (hosted_runs >= 1) await awardSlug(userId, "host_in_making", db);
-  if (hosted_runs >= 5) await awardSlug(userId, "crew_builder", db);
+  if (run_only_count >= 1) await awardSlug(userId, "first_step", db);
+  if (run_only_count >= 5) await awardSlug(userId, "five_alive", db);
+  if (run_only_count >= 10) await awardSlug(userId, "ten_toes_down", db);
+  if (hosted_runs_only >= 1) await awardSlug(userId, "host_in_making", db);
+  if (hosted_runs_only >= 5) await awardSlug(userId, "crew_builder", db);
 
   const maxSingleRun = await db.query(
-    `SELECT COALESCE(MAX(miles_logged), 0) as max FROM run_participants WHERE user_id = $1 AND status = 'confirmed'`,
+    `SELECT COALESCE(MAX(rp.miles_logged), 0) as max FROM run_participants rp
+     JOIN runs r ON r.id = rp.run_id
+     WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND r.activity_type = 'run'`,
     [userId]
   );
   const maxMiles = parseFloat(maxSingleRun.rows[0]?.max ?? 0);
@@ -3151,6 +3169,17 @@ export async function getAchievementStats(userId: string) {
   const rideTotalMiles = parseFloat(rideTotalMilesRes.rows[0]?.total ?? 0);
   const rideMaxSingle = parseFloat(rideMaxSingleRes.rows[0]?.max ?? 0);
 
+  const bestRidePaceRes = await pool.query(
+    `SELECT COALESCE(MIN(rp.final_pace), 999) as best_pace FROM run_participants rp
+     JOIN runs r ON r.id = rp.run_id
+     WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND r.activity_type = 'ride'
+     AND rp.final_pace IS NOT NULL AND rp.final_pace > 0`,
+    [userId]
+  );
+  const bestRidePace = parseFloat(bestRidePaceRes.rows[0]?.best_pace ?? 999);
+  // Convert min/mi pace to mph: mph = 60 / pace_min_per_mile
+  const bestRideSpeedMph = bestRidePace < 999 ? 60 / bestRidePace : 0;
+
   const committedStatRes = await pool.query(
     `SELECT COUNT(*) as cnt FROM run_participants rp JOIN runs r ON r.id = rp.run_id
      WHERE rp.user_id = $1 AND rp.status != 'cancelled' AND r.date < NOW()`,
@@ -3208,6 +3237,11 @@ export async function getAchievementStats(userId: string) {
     has_fast_ride: rideMaxSingle >= 20 ? 1 : 0,
     ride_pace_perfect_count: 0,
     attendance_rate_pct: attendanceRatePct,
+    has_metric_century: rideMaxSingle >= 62.1 ? 1 : 0,
+    ride_total_elevation_ft: 0,
+    has_strong_ride: bestRideSpeedMph >= 15 ? 1 : 0,
+    has_fast_ride_18: bestRideSpeedMph >= 18 ? 1 : 0,
+    has_blazing_ride: bestRideSpeedMph >= 22 ? 1 : 0,
   };
 }
 
@@ -3249,7 +3283,21 @@ export async function checkAndAwardRideAchievements(userId: string) {
   );
   const maxRideMiles = parseFloat(maxSingleRide.rows[0]?.max ?? 0);
   if (maxRideMiles >= 50) await awardSlug(userId, "half_century");
+  if (maxRideMiles >= 62.1) await awardSlug(userId, "metric_century");
   if (maxRideMiles >= 100) await awardSlug(userId, "century_ride");
+
+  // Speed-based ride achievements: avg speed = 60 / pace_min_per_mile (mph)
+  const fastRideRes = await pool.query(
+    `SELECT COALESCE(MIN(rp.final_pace), 999) as best_pace FROM run_participants rp JOIN runs r ON r.id = rp.run_id
+     WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND r.activity_type = 'ride'
+     AND rp.final_pace IS NOT NULL AND rp.final_pace > 0`,
+    [userId]
+  );
+  const bestRidePace = parseFloat(fastRideRes.rows[0]?.best_pace ?? 999);
+  // pace in min/mi; mph = 60 / pace_min_per_mile
+  if (bestRidePace < 999 && (60 / bestRidePace) >= 15) await awardSlug(userId, "strong_rider");
+  if (bestRidePace < 999 && (60 / bestRidePace) >= 18) await awardSlug(userId, "fast_rider");
+  if (bestRidePace < 999 && (60 / bestRidePace) >= 22) await awardSlug(userId, "blazing_rider");
 
   const publicRideRes = await pool.query(
     `SELECT COUNT(*) as cnt FROM run_participants rp JOIN runs r ON r.id = rp.run_id

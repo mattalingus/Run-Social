@@ -41,6 +41,20 @@ export default function OnboardingScreen() {
   const [selectedActivity, setSelectedActivity] = useState<ActivityType>("run");
   const [monthlyGoal, setMonthlyGoal] = useState("50");
   const [yearlyGoal, setYearlyGoal] = useState("500");
+
+  function handleActivitySelect(activity: ActivityType) {
+    setSelectedActivity(activity);
+    if (activity === "ride") {
+      setMonthlyGoal("200");
+      setYearlyGoal("2000");
+    } else if (activity === "walk") {
+      setMonthlyGoal("30");
+      setYearlyGoal("300");
+    } else {
+      setMonthlyGoal("50");
+      setYearlyGoal("500");
+    }
+  }
   const [loading, setLoading] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -134,7 +148,7 @@ export default function OnboardingScreen() {
               <TouchableOpacity
                 key={a.type}
                 style={[styles.activityCard, selected && styles.activityCardSelected]}
-                onPress={() => setSelectedActivity(a.type)}
+                onPress={() => handleActivitySelect(a.type)}
                 activeOpacity={0.8}
               >
                 <Text style={styles.activityEmoji}>{a.emoji}</Text>

@@ -379,12 +379,20 @@ interface RankingCategory {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const DISTANCE_CATEGORIES = [
+const RUN_DISTANCE_CATEGORIES = [
   { label: "1 Mile", miles: 1.0, tolerance: 0.15 },
   { label: "2 Miles", miles: 2.0, tolerance: 0.2 },
   { label: "5K", miles: 3.1, tolerance: 0.25 },
   { label: "5 Miles", miles: 5.0, tolerance: 0.3 },
   { label: "10K", miles: 6.2, tolerance: 0.35 },
+];
+
+const RIDE_DISTANCE_CATEGORIES = [
+  { label: "10 Miles", miles: 10.0, tolerance: 0.75 },
+  { label: "25 Miles", miles: 25.0, tolerance: 1.5 },
+  { label: "50 Miles", miles: 50.0, tolerance: 2.5 },
+  { label: "100 km", miles: 62.1, tolerance: 3.0 },
+  { label: "100 Miles", miles: 100.0, tolerance: 4.0 },
 ];
 
 const RANK_EMOJI = ["🥇", "🥈", "🥉"];
@@ -806,13 +814,23 @@ export default function SoloScreen() {
   );
 
   const rankings = useMemo<RankingCategory[]>(() => {
-    return DISTANCE_CATEGORIES.map((cat) => {
+    const cats = activityFilter === "ride" ? RIDE_DISTANCE_CATEGORIES : RUN_DISTANCE_CATEGORIES;
+    return cats.map((cat) => {
       const qualifying = completedRuns
         .filter((r) => Math.abs(r.distance_miles - cat.miles) <= cat.tolerance)
-        .sort((a, b) => (a.pace_min_per_mile ?? 99) - (b.pace_min_per_mile ?? 99));
+        .sort((a, b) => {
+          if (activityFilter === "ride") {
+            // Rank by avg speed (mph) descending — higher speed = better rank
+            const speedA = a.pace_min_per_mile && a.pace_min_per_mile > 0 ? 60 / a.pace_min_per_mile : 0;
+            const speedB = b.pace_min_per_mile && b.pace_min_per_mile > 0 ? 60 / b.pace_min_per_mile : 0;
+            return speedB - speedA;
+          }
+          // Run/walk: rank by pace ascending — lower min/mi = better rank
+          return (a.pace_min_per_mile ?? 99) - (b.pace_min_per_mile ?? 99);
+        });
       return qualifying.length > 0 ? { ...cat, runs: qualifying } : null;
     }).filter(Boolean) as RankingCategory[];
-  }, [completedRuns]);
+  }, [completedRuns, activityFilter]);
 
   const runBadges = useMemo(() => {
     const map: Record<string, { rank: number; category: string }> = {};

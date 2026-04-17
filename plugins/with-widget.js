@@ -111,7 +111,7 @@ struct PaceUpWidgetProvider: TimelineProvider {
         nextRunTimestamp: Date().addingTimeInterval(3600).timeIntervalSince1970,
         distanceRangeMiles: "3-5",
         weeklyMiles: 12.4,
-        monthlyGoal: 50
+        monthlyGoal: 0
       )
     )
   }

@@ -484,9 +484,9 @@ export default function MapScreen() {
     }
 
     const totalRunners = visibleRuns.reduce((acc, r) => acc + Number(r.participant_count), 0);
-    if (totalRunners > 0) result.push({ icon: "walk", lib: "ion", text: `${totalRunners} runner${totalRunners !== 1 ? "s" : ""} signed up`, color: C.primary });
+    if (totalRunners > 0) result.push({ icon: "walk", lib: "ion", text: `${totalRunners} participant${totalRunners !== 1 ? "s" : ""} signed up`, color: C.primary });
 
-    const fiveK = upcoming.filter((r) => r.min_distance <= 3.3 && r.max_distance >= 2.8);
+    const fiveK = upcoming.filter((r) => r.activity_type === "run" && r.min_distance <= 3.3 && r.max_distance >= 2.8);
     if (fiveK.length > 0) {
       const diffMin = Math.round((new Date(fiveK[0].date).getTime() - now) / 60000);
       if (diffMin < 1440) result.push({ icon: "flag", lib: "feather", text: `5K in ${diffMin < 60 ? diffMin + "m" : Math.floor(diffMin / 60) + "h"}`, color: C.orange });
