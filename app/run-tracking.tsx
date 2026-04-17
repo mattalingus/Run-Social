@@ -586,10 +586,13 @@ export default function RunTrackingScreen() {
 
   const announcePace = useCallback(async (distance: number, totalSeconds: number) => {
     if (Platform.OS === "web") return;
+    if (!distance || distance < 0.01 || !Number.isFinite(distance)) return;
+    if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) return;
 
     await ensureAudioMode(true);
 
     const paceMinTotal = totalSeconds / 60 / distance;
+    if (!Number.isFinite(paceMinTotal) || paceMinTotal <= 0) return;
     const text = pickCoachPhrase(distance, paceMinTotal, totalSeconds, lastAnnouncedPaceRef.current, activityFilter);
     lastAnnouncedPaceRef.current = paceMinTotal;
 
@@ -1072,6 +1075,7 @@ export default function RunTrackingScreen() {
   // ─── Actions ───────────────────────────────────────────────────────────────
 
   async function handleStart() {
+    if (phase !== "idle") return;
     if (Platform.OS !== "web") {
       let bgGranted = false;
       try {
@@ -1346,7 +1350,12 @@ export default function RunTrackingScreen() {
 
   async function saveRun() {
     const distance = totalDistRef.current;
-    const pace = distance > 0.01 ? (elapsed / 60) / distance : null;
+    if (distance < 0.05 || elapsedRef.current < 30) {
+      Alert.alert("Too short to save", "Record at least ~50 m and 30 s before saving.");
+      setSaving(false);
+      return;
+    }
+    const pace = distance > 0.01 ? (elapsedRef.current / 60) / distance : null;
     setSaving(true);
     const MAX_RETRIES = 3;
     const payload = {
@@ -1354,7 +1363,7 @@ export default function RunTrackingScreen() {
       date: new Date().toISOString(),
       distanceMiles: Math.max(distance, 0.001),
       paceMinPerMile: pace,
-      durationSeconds: elapsed,
+      durationSeconds: elapsedRef.current,
       completed: true,
       planned: false,
       routePath: routePathRef.current.length > 1 ? routePathRef.current : null,
@@ -1386,13 +1395,13 @@ export default function RunTrackingScreen() {
           try {
             const { saveWorkoutToHealthKit } = require("@/lib/healthKit");
             const runEndDate = new Date();
-            const runStartDate = new Date(runEndDate.getTime() - elapsed * 1000);
+            const runStartDate = new Date(runEndDate.getTime() - elapsedRef.current * 1000);
             await saveWorkoutToHealthKit({
               activityType: activityFilter as "run" | "ride" | "walk",
               startDate: runStartDate,
               endDate: runEndDate,
               distanceMiles: Math.max(distance, 0.001),
-              durationSeconds: elapsed,
+              durationSeconds: elapsedRef.current,
             });
           } catch (_) {}
         }
@@ -1401,13 +1410,13 @@ export default function RunTrackingScreen() {
           try {
             const { saveWorkoutToHealthConnect } = require("@/lib/healthConnect");
             const runEndDate = new Date();
-            const runStartDate = new Date(runEndDate.getTime() - elapsed * 1000);
+            const runStartDate = new Date(runEndDate.getTime() - elapsedRef.current * 1000);
             await saveWorkoutToHealthConnect({
               activityType: activityFilter as "run" | "ride" | "walk",
               startDate: runStartDate,
               endDate: runEndDate,
               distanceMeters: Math.max(distance, 0.001) * 1609.344,
-              durationSeconds: elapsed,
+              durationSeconds: elapsedRef.current,
             });
           } catch (_) {}
         }
