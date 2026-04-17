@@ -1,0 +1,75 @@
+Here you go — copy from the line below all the way to the end:
+
+---
+
+**C9 — Live-event participant dropout when host starts the run**
+
+**Symptom (real-world reproduction):**
+Host created an event. 3 participants (me, P3, P4) selected "planning to go." All four of us arrived. Host tapped "Start for all." Result:
+- Host sees: host + me (2 participants)
+- I see: host + me (2 participants)
+- P3 sees: host + me + P3 (3 participants, not P4)
+- P4 sees: host + me + P4 (3 participants, not P3)
+- P3 and P4 were NOT counted as participants at the end of the event.
+- Discover page still showed P3 and P4 as "joined" / "running" throughout.
+
+Asymmetric visibility like this (where everyone sees themselves, everyone sees the host + the one "stuck" participant, but the two dropped participants can't see each other and aren't in final results) is the signature of a **race condition between the host's start-snapshot and the participants' arrive/join state writes**, combined with **optimistic client state that never reconciles with the server**.
+
+**Likely root causes (in order of probability):**
+
+1. **Start-snapshot race.** When host presses Start, server snapshots `event_participants` into a live set. P3 and P4's `status='arrived'` write hadn't fully committed at snapshot time, so they were excluded. Their own client still thinks they're in because no server response told them otherwise.
+2. **Missing upsert on join/arrive writes.** If state transitions (`invited → joined → arrived → live`) use plain `INSERT` instead of `INSERT ... ON CONFLICT DO UPDATE`, duplicate writes fail silently and the state machine sticks mid-transition. Start-snapshot filter misses them.
+3. **Orphaned optimistic client state.** P3/P4's app flipped them to "running" on tap; request failed or was swallowed; no reconciliation on app resume. They see themselves "in" forever while backend disagrees and live-tracker never subscribes them.
+
+**Evidence-gathering SQL (run this to identify which case it was):**
+```sql
+-- Did all four ever make it into event_participants?
+SELECT user_id, status, joined_at, updated_at
+FROM event_participants
+WHERE event_id = '<event_id>'
+ORDER BY joined_at;
+
+-- Live participant snapshot (whatever the table is called — live_participants / event_live / etc.)
+SELECT user_id, created_at
+FROM live_participants
+WHERE event_id = '<event_id>';
+
+-- Are their solo_runs rows linked to the event?
+SELECT user_id, event_id, started_at, ended_at, status
+FROM solo_runs
+WHERE user_id IN ('<p3>', '<p4>')
+  AND started_at BETWEEN '<event_start - 10min>' AND '<event_end + 10min>';
+```
+
+Interpretation:
+- Missing from `event_participants` → case 3 (optimistic state, request never landed).
+- In `event_participants` but missing from live snapshot → case 1 (start-snapshot race). **Most likely.**
+- In both but `solo_runs.event_id IS NULL` → case 1 variant. Run exists but isn't attached to the event, so the live-tracker filter excludes them.
+
+**Fix (closes all three cases):**
+
+1. **Atomic start with row lock and upsert:**
+   ```sql
+   BEGIN;
+   SELECT * FROM events WHERE id=$1 FOR UPDATE;
+   UPDATE events SET status='live', started_at=now() WHERE id=$1;
+   INSERT INTO live_participants (event_id, user_id, started_at)
+     SELECT id, user_id, now()
+     FROM event_participants
+     WHERE event_id=$1 AND status IN ('joined','arrived')
+     ON CONFLICT (event_id, user_id) DO NOTHING;
+   COMMIT;
+   ```
+   `FOR UPDATE` serializes concurrent join writes against the start handler.
+
+2. **2-minute grace window after start.** For 2 minutes after `events.status='live'`, continue to accept join/arrive actions from users on the original "planning to go" list and upsert them into `live_participants` as late arrivals. Solves the human-latency case where multiple people tap "I'm here" at slightly different moments.
+
+3. **Server-side reconciliation on client resume.** Whenever a participant's app foregrounds during a live event, call `GET /api/events/:id/live-state` and trust the server. If the server says they're not in the event, show them "You weren't in the active run — rejoin?" Kill any optimistic state that silently disagrees with server truth.
+
+4. **Auto-enroll via push at start.** When host presses Start, server pushes via WebSocket/push notification to every `live_participants.user_id` telling their app "you're now in event X — begin tracking." Participant's app creates its `solo_runs` row with `event_id` pre-filled. Prevents the "run exists but isn't attached" failure mode.
+
+5. **Final reconciliation at event end.** When host ends the event, server does one sweep: for any user with a `solo_runs` row whose `started_at` falls within `[event.started_at, event.ended_at]` AND who was on the `joined`/`arrived` list, force-link them to the event and include them in final results. Belt-and-suspenders — catches any participant who slipped through the other four safeguards.
+
+**Also fix the "still showing as joined/running" UI:** The Discover-page card showing P3 and P4 as "running" when the backend had dropped them is a separate optimistic-state bug. The card should subscribe to the live-participant list from the server rather than reading cached local join state. Once #3 above is in place, this fixes itself.
+
+**Priority:** This is **CRITICAL**. Silent participant dropout during a multi-person live event is the single worst possible bug for a social running app — it makes group features look broken and actively discourages people from hosting. Fix before any promotion.
