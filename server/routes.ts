@@ -2120,31 +2120,19 @@ async function go(e){
       const run = await storage.startGroupRun(req.params.id as string, req.session.userId!);
       res.json(run);
       const verb = run.activity_type === "ride" ? "Ride" : run.activity_type === "walk" ? "Walk" : "Run";
-      Promise.all([
-        storage.getRunPresentParticipantTokensFiltered(req.params.id as string, "notif_run_reminders"),
-        storage.getRunParticipantTokensFiltered(req.params.id as string, "notif_run_reminders"),
-      ]).then(([presentTokens, allTokens]) => {
-        const presentSet = new Set(presentTokens);
-        const nonPresentTokens = allTokens.filter((t) => !presentSet.has(t));
-        // Already in-person → targeted auto-start notification
-        if (presentTokens.length) {
-          sendPushNotification(
-            presentTokens,
-            `${verb} is starting — tracking on! 🏃`,
-            run.title,
-            { type: "run_started_present", screen: "run-live", runId: req.params.id as string }
-          );
-        }
-        // Not yet present → standard "go now" notification
-        if (nonPresentTokens.length) {
-          sendPushNotification(
-            nonPresentTokens,
-            `${verb} has started — Let's go! 🚀`,
-            run.title,
-            { screen: "run-live", runId: req.params.id as string }
-          );
-        }
-      }).catch((err: any) => console.error("[bg]", err?.message ?? err));
+      // All RSVP'd participants are now marked present by startGroupRun, so send
+      // the autostart notification (run_started_present) to every one of them.
+      storage.getRunPresentParticipantTokensFiltered(req.params.id as string, "notif_run_reminders")
+        .then((presentTokens) => {
+          if (presentTokens.length) {
+            sendPushNotification(
+              presentTokens,
+              `${verb} is starting — tracking on! 🏃`,
+              run.title,
+              { type: "run_started_present", screen: "run-live", runId: req.params.id as string }
+            );
+          }
+        }).catch((err: any) => console.error("[bg]", err?.message ?? err));
     } catch (e: any) {
       const status = e.message === "Only the host can start the run" ? 403
         : e.message === "Run already started" ? 409 : 500;

@@ -2117,7 +2117,18 @@ export async function startGroupRun(runId: string, hostId: string) {
 
   await pool.query(`UPDATE runs SET is_active = true, started_at = NOW() WHERE id = $1`, [runId]);
 
-  // Guarantee the host has a participant row with is_present = true from the moment the run starts
+  // Mark ALL joined/confirmed participants as present immediately — so nobody is silently dropped
+  // at start just because they haven't opened the tracking screen yet.
+  await pool.query(
+    `INSERT INTO run_participants (run_id, user_id, status, is_present)
+     SELECT $1, user_id, status, true
+     FROM run_participants
+     WHERE run_id = $1 AND status IN ('joined', 'confirmed')
+     ON CONFLICT (run_id, user_id) DO UPDATE SET is_present = true`,
+    [runId]
+  );
+
+  // Also mark the host present (in case they don't have a participant row yet).
   await pool.query(
     `INSERT INTO run_participants (run_id, user_id, status, is_present)
      VALUES ($1, $2, 'joined', true)
@@ -2125,6 +2136,8 @@ export async function startGroupRun(runId: string, hostId: string) {
     [runId, hostId]
   );
 
+  // Proximity-only fallback: mark any nearby users with pre-existing pings as present,
+  // even if they're not on the RSVP list (walk-ins who pinged before the host started).
   const latestPings = await pool.query(
     `SELECT DISTINCT ON (user_id) user_id, latitude, longitude
      FROM run_tracking_points WHERE run_id = $1 ORDER BY user_id, recorded_at DESC`,
@@ -2133,8 +2146,13 @@ export async function startGroupRun(runId: string, hostId: string) {
   for (const ping of latestPings.rows) {
     const dist = haversineKm(ping.latitude, ping.longitude, run.location_lat, run.location_lng);
     if (dist <= 0.1524) {
+      // Upsert so this also creates a participant row for walk-ins not on the RSVP list.
       await pool.query(
-        `UPDATE run_participants SET is_present = true WHERE run_id = $1 AND user_id = $2 AND status != 'cancelled'`,
+        `INSERT INTO run_participants (run_id, user_id, status, is_present)
+         VALUES ($1, $2, 'joined', true)
+         ON CONFLICT (run_id, user_id) DO UPDATE
+           SET is_present = true
+           WHERE run_participants.status != 'cancelled'`,
         [runId, ping.user_id]
       );
     }
@@ -2153,7 +2171,7 @@ export async function pingRunLocation(
     [runId, userId, latitude, longitude, cumulativeDistance, pace]
   );
 
-  const runRes = await pool.query(`SELECT host_id, location_lat, location_lng, is_active FROM runs WHERE id = $1`, [runId]);
+  const runRes = await pool.query(`SELECT host_id, location_lat, location_lng, is_active, started_at FROM runs WHERE id = $1`, [runId]);
   if (!runRes.rows.length) return { isPresent: false, isActive: false };
   const run = runRes.rows[0];
 
@@ -2173,7 +2191,14 @@ export async function pingRunLocation(
     const within500ft = distKm <= 0.1524;
     const isHost = userId === run.host_id;
 
+    // 2-minute grace window: if the run started recently, mark any RSVP'd participant
+    // present on their first ping regardless of proximity — covers "late tappers" who open
+    // the app moments after start but are still walking to the start line.
+    const startedAt = run.started_at ? new Date(run.started_at).getTime() : 0;
+    const withinGraceWindow = startedAt > 0 && (Date.now() - startedAt) < 2 * 60 * 1000;
+
     if (within500ft || isHost) {
+      // Proximity / host: upsert regardless (handles walkins too).
       const upsertRes = await pool.query(
         `INSERT INTO run_participants (run_id, user_id, status, is_present)
          VALUES ($1, $2, 'joined', true)
@@ -2183,6 +2208,16 @@ export async function pingRunLocation(
         [runId, userId]
       );
       isPresent = (upsertRes.rowCount ?? 0) > 0;
+    } else if (withinGraceWindow) {
+      // Grace window: only mark present if the user was already RSVP'd — don't create
+      // new participant rows for non-RSVP'd users.
+      const graceRes = await pool.query(
+        `UPDATE run_participants SET is_present = true
+         WHERE run_id = $1 AND user_id = $2 AND status != 'cancelled'
+         RETURNING run_id`,
+        [runId, userId]
+      );
+      isPresent = (graceRes.rowCount ?? 0) > 0;
     } else {
       const presRes = await pool.query(
         `SELECT is_present FROM run_participants WHERE run_id = $1 AND user_id = $2 AND status != 'cancelled'`,
@@ -2614,6 +2649,27 @@ export async function forceCompleteRun(runId: string) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    // Final reconciliation: any RSVP'd participant who slipped through the start-snapshot
+    // (e.g. joined moments before start, force-complete called very quickly) but has actual
+    // GPS data recorded between started_at and now gets marked present so they appear in results.
+    await client.query(
+      `UPDATE run_participants rp
+       SET is_present = true
+       FROM runs r
+       WHERE rp.run_id = $1
+         AND r.id = $1
+         AND rp.status IN ('joined', 'confirmed')
+         AND rp.is_present = false
+         AND EXISTS (
+           SELECT 1 FROM run_tracking_points tp
+           WHERE tp.run_id = $1
+             AND tp.user_id = rp.user_id
+             AND tp.recorded_at >= COALESCE(r.started_at, NOW() - INTERVAL '2 hours')
+             AND tp.recorded_at <= NOW()
+         )`,
+      [runId]
+    );
 
     // Finalize stats for any is_present participants who haven't finished yet.
     // We derive their final_distance and final_pace from their latest tracking point.

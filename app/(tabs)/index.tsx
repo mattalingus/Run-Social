@@ -855,6 +855,11 @@ function RunCard({
   const { user: cardUser } = useAuth();
   const distUnit: DistanceUnit = ((cardUser as any)?.distance_unit ?? "miles") as DistanceUnit;
   const s = useMemo(() => makeStyles(C), [C]);
+  const qc = useQueryClient();
+  // Use the server's live presentCount when available (populated after card expansion),
+  // so the badge reflects the server's is_present list rather than cached join state.
+  const liveCache = run.is_active ? qc.getQueryData<any>(["/api/runs", run.id, "live"]) : undefined;
+  const liveParticipantCount: number | undefined = liveCache?.presentCount;
   const spotsLeft = run.max_participants - run.participant_count;
   const badge = getHostBadge(run.host_hosted_runs);
   const isLiveNow = !!run.is_active && !run.is_completed;
@@ -1010,13 +1015,13 @@ function RunCard({
                     <Ionicons name="people" size={13} color={run.is_active ? C.primary : C.textMuted} />
                     <Text numberOfLines={1} style={[s.statPillValue, run.is_active && { color: C.primary }]}>
                       {run.is_active
-                        ? run.participant_count
+                        ? (liveParticipantCount !== undefined ? liveParticipantCount : run.participant_count)
                         : run.crew_id
                           ? run.participant_count
                           : `${run.participant_count}/${run.max_participants}`}
                     </Text>
                   </View>
-                  <Text numberOfLines={1} style={s.statPillLabel}>{run.is_active ? "Arrived" : "Going"}</Text>
+                  <Text numberOfLines={1} style={s.statPillLabel}>{run.is_active ? "Running" : "Going"}</Text>
                 </View>
               </View>
 
