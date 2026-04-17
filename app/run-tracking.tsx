@@ -499,11 +499,11 @@ export default function RunTrackingScreen() {
         routePathRef.current = data.routePath ?? [];
         mileSplitsRef.current = data.splits ?? [];
         elevationGainRef.current = data.elevationGainFt ?? 0;
-        lastSplitMileRef.current = Math.floor(data.distanceMi ?? 0);
-        // Rehydrate prevMileElapsedRef from completed splits so the next split
-        // computes correct segment seconds.  Using total durationSeconds would
-        // make every post-recovery split look impossibly fast.
+        // Rehydrate split bookmarks from completed (non-partial) splits.
+        // Using total durationSeconds for prevMileElapsedRef (the old code) made
+        // post-recovery splits look impossibly fast.
         const completedSplits = (data.splits ?? []).filter((s: any) => !s.isPartial);
+        lastSplitMileRef.current = completedSplits.length;
         prevMileElapsedRef.current = completedSplits.reduce(
           (acc: number, s: any) => acc + (s.paceMinPerMile ?? 0) * 60,
           0
@@ -1408,7 +1408,7 @@ export default function RunTrackingScreen() {
           const fullMilesInRoute = Math.floor(routeDist);
           const keptSplits = finalSplits.filter((s) => !s.isPartial).slice(0, fullMilesInRoute);
           const fracDist = routeDist - fullMilesInRoute;
-          if (fracDist > 0.05) {
+          if (fracDist >= 0.1) {
             const avgPace = elapsedRef.current / 60 / routeDist;
             keptSplits.push({
               label: fracDist.toFixed(2),
