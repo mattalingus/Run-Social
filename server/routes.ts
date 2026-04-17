@@ -1174,14 +1174,14 @@ async function go(e){
       if (!Number.isFinite(minDist) || !Number.isFinite(maxDist)) return res.status(400).json({ message: "Distance values must be numbers" });
       if (minDist < 0 || maxDist < 0) return res.status(400).json({ message: "Distance values must be positive" });
       if (minDist > 200 || maxDist > 200) return res.status(400).json({ message: "Distance cannot exceed 200 miles" });
-      // Enforce strict ordering when both bounds are provided (crew runs send 0 as min, so this guard is skipped naturally)
-      if (maxDist > 0 && minDist > 0 && minDist >= maxDist) return res.status(400).json({ message: "Minimum distance must be less than maximum distance" });
+      // Enforce strict ordering unconditionally; crew runs send minDist=0 and maxDist=target so 0 < target passes naturally
+      if (minDist >= maxDist) return res.status(400).json({ message: "Minimum distance must be less than maximum distance" });
       const minPaceVal = parseFloat(req.body.minPace ?? req.body.min_pace ?? 0);
       const maxPaceVal = parseFloat(req.body.maxPace ?? req.body.max_pace ?? 0);
       if ((minPaceVal > 0 && minPaceVal < 2) || minPaceVal > 60) return res.status(400).json({ message: "Pace must be between 2 and 60 min/mile" });
       if ((maxPaceVal > 0 && maxPaceVal < 2) || maxPaceVal > 60) return res.status(400).json({ message: "Pace must be between 2 and 60 min/mile" });
-      // Enforce strict ordering when both bounds are provided (crew runs send 0 as min, so this guard is skipped naturally)
-      if (minPaceVal > 0 && maxPaceVal > 0 && minPaceVal >= maxPaceVal) return res.status(400).json({ message: "Minimum pace must be less than maximum pace" });
+      // Enforce strict ordering unconditionally; crew runs send minPace=0 and maxPace=target so 0 < target passes naturally
+      if (minPaceVal >= maxPaceVal) return res.status(400).json({ message: "Minimum pace must be less than maximum pace" });
       const maxParticipantsRaw = parseInt(req.body.maxParticipants ?? req.body.max_participants ?? 20, 10);
       // Crew runs send 9999 for "effectively unlimited"; public/private runs are capped at 500.
       if (!Number.isInteger(maxParticipantsRaw) || isNaN(maxParticipantsRaw) || maxParticipantsRaw < 1 || maxParticipantsRaw > 9999) return res.status(400).json({ message: "Max participants must be between 1 and 9999" });
