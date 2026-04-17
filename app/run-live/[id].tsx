@@ -84,6 +84,7 @@ export default function RunLiveScreen() {
   const mapRef = useRef<MapView>(null);
   const liveActivityStartedRef = useRef(false);
   const autostartAttemptedRef = useRef(false);
+  const gpsWarmupSubRef = useRef<Location.LocationSubscription | null>(null);
 
   // ── Tracking context (survives minimize/navigation) ──────────────────────
   const tracking = useLiveTracking();
@@ -163,12 +164,25 @@ export default function RunLiveScreen() {
     if (countdown === null) return;
     if (countdown > 0) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      // Start GPS warmup on the first tick so GPS warms up during countdown
+      if (countdown === 3 && Platform.OS !== "web" && !gpsWarmupSubRef.current) {
+        Location.getForegroundPermissionsAsync().then(({ granted }) => {
+          if (!granted || gpsWarmupSubRef.current) return;
+          Location.watchPositionAsync(
+            { accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 5 },
+            () => {} // warm up GPS chip; real tracking starts in handleStartTracking
+          ).then((sub) => { gpsWarmupSubRef.current = sub; }).catch(() => {});
+        });
+      }
       const timer = setTimeout(() => setCountdown((c) => (c !== null ? c - 1 : null)), 1000);
       return () => clearTimeout(timer);
     }
     // countdown === 0 — "GO!" — strong haptic then start tracking
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const timer = setTimeout(() => {
+      // Stop warmup subscription before handing off to handleStartTracking
+      gpsWarmupSubRef.current?.remove();
+      gpsWarmupSubRef.current = null;
       setCountdown(null);
       handleStartTracking();
     }, 700);
@@ -210,6 +224,9 @@ export default function RunLiveScreen() {
     return () => clearInterval(timer);
   }, []);
 
+  // Clean up GPS warmup sub on unmount
+  useEffect(() => () => { gpsWarmupSubRef.current?.remove(); gpsWarmupSubRef.current = null; }, []);
+
   // Restore minimized state when screen mounts
   useEffect(() => {
     restore();
@@ -232,7 +249,7 @@ export default function RunLiveScreen() {
     if (autostart) return; // handled by the autostart effect below
     if (autostartAttemptedRef.current) return;
     autostartAttemptedRef.current = true;
-    handleStartTracking();
+    setCountdown(3); // show 3-2-1-GO countdown then call handleStartTracking
   }, [liveState?.isActive]);
 
   // Auto-start via notification deep-link (?autostart=1):
@@ -248,7 +265,7 @@ export default function RunLiveScreen() {
     if (phase !== "idle") return;
     if (Platform.OS === "web") return;
     autostartAttemptedRef.current = true;
-    handleStartTracking();
+    setCountdown(3); // show 3-2-1-GO countdown then call handleStartTracking
   }, [liveState, run, autostart]);
 
   // Live Activity (iOS) + Android lock screen notification: update on each GPS fix

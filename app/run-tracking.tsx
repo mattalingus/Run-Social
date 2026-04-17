@@ -932,6 +932,7 @@ export default function RunTrackingScreen() {
 
   async function watchLocation() {
     if (Platform.OS === "web") {
+      if (webWatchIdRef.current !== null) return; // already watching
       if (typeof navigator !== "undefined" && navigator.geolocation) {
         webWatchIdRef.current = navigator.geolocation.watchPosition(
           (pos) => handleCoord(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy ?? undefined, pos.coords.speed, pos.coords.altitude),
@@ -941,6 +942,7 @@ export default function RunTrackingScreen() {
       }
       return;
     }
+    if (locationSubRef.current) return; // already watching — prevent duplicate subscription
     if (foregroundOnlyRef.current) {
       try {
         const sub = await Location.watchPositionAsync(
