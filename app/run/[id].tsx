@@ -71,11 +71,11 @@ function formatPace(pace: number) {
 
 function formatDateFull(dateStr: string) {
   const d = new Date(dateStr);
-  return d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+  return d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" });
 }
 
 function formatTime(dateStr: string) {
-  return new Date(dateStr).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  return new Date(dateStr).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
 export default function RunDetailScreen() {
@@ -471,7 +471,7 @@ export default function RunDetailScreen() {
       Alert.alert("Invalid format", "Could not parse the date or time.");
       return;
     }
-    if (parsed.getTime() < Date.now() - 60 * 1000) {
+    if (parsed.getTime() < Date.now()) {
       Alert.alert("Invalid date", "Event date cannot be in the past.");
       return;
     }
@@ -768,7 +768,7 @@ export default function RunDetailScreen() {
               hitSlop={8}
               onPress={async () => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                const date = run.date ? new Date(run.date).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }) : "";
+                const date = run.date ? new Date(run.date).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" }) : "";
                 const loc = run.location_name ? ` at ${run.location_name}` : "";
                 const msg = `Join me for ${run.title} on PaceUp!${date ? ` ${date}` : ""}${loc}`;
                 try {

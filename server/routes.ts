@@ -1161,7 +1161,7 @@ async function go(e){
       if (reqDateStr) {
         const reqDate = new Date(reqDateStr);
         if (isNaN(reqDate.getTime())) return res.status(400).json({ message: "Invalid date" });
-        if (reqDate.getTime() < Date.now() - 60 * 1000) return res.status(400).json({ message: "Event date cannot be in the past" });
+        if (reqDate.getTime() < Date.now()) return res.status(400).json({ message: "Event date cannot be in the past" });
       }
       const locationLat = parseFloat(req.body.locationLat ?? req.body.location_lat);
       const locationLng = parseFloat(req.body.locationLng ?? req.body.location_lng);
@@ -1716,7 +1716,7 @@ async function go(e){
       if (!date) return res.status(400).json({ message: "date is required" });
       const parsedPatchDate = new Date(date);
       if (isNaN(parsedPatchDate.getTime())) return res.status(400).json({ message: "Invalid date" });
-      if (parsedPatchDate.getTime() < Date.now() - 5 * 60 * 1000) return res.status(400).json({ message: "Event date cannot be in the past" });
+      if (parsedPatchDate.getTime() < Date.now()) return res.status(400).json({ message: "Event date cannot be in the past" });
       const updated = await storage.updateRunDateTime(req.params.id as string, req.session.userId!, date);
       const tokens = await storage.getRunBroadcastTokens(req.params.id as string);
       if (tokens.length) {
@@ -2200,19 +2200,24 @@ async function go(e){
       const parsedPace = parseFloat(finalPace);
       let safeDist = Number.isFinite(parsedDist) && parsedDist > 0 ? parsedDist : 0;
       let safePace = Number.isFinite(parsedPace) && parsedPace > 0 ? parsedPace : 0;
-      // DNF guard: if distance is negligible (<0.1 mi), treat as a DNF finish.
-      // Store safeDist=0 and safePace=0 as the DNF sentinel:
-      //   - final_pace IS NOT NULL (0 ≠ NULL) → runner is counted as "finished" (not stuck in-progress)
-      //   - final_pace = 0 → excluded from leaderboard rankings (leaderboard filters final_pace > 0)
-      //   - final_rank remains NULL (computeLeaderboardRanks only assigns ranks for final_pace > 0)
+      // DNF guard: distance <0.1 mi with no location pings → treat as DNF.
+      // Signals the runner is "done" (not stuck in-progress) but excluded from leaderboard.
+      let isDnf = false;
       if (safeDist < 0.1) {
-        safeDist = 0;
-        safePace = 0;
+        const pingsRes = await pool.query(
+          `SELECT 1 FROM run_tracking_points WHERE run_id = $1 AND user_id = $2 LIMIT 1`,
+          [req.params.id, req.session.userId]
+        );
+        if (pingsRes.rows.length === 0) {
+          isDnf = true;
+          safeDist = 0;
+          safePace = 0;
+        }
       }
       const safeSplits = Array.isArray(mileSplits) && mileSplits.length > 0 ? mileSplits : null;
       const result = await storage.finishRunnerRun(
         req.params.id as string, req.session.userId!,
-        safeDist, safePace, safeSplits
+        safeDist, safePace, safeSplits, isDnf
       );
       res.json({ success: result.success });
       // Fire-and-forget crew achievement check + crew recap if all finished

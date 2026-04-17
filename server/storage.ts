@@ -96,6 +96,7 @@ export async function initDb() {
     END $$;
 
     ALTER TYPE participant_status ADD VALUE IF NOT EXISTS 'pending';
+    ALTER TYPE participant_status ADD VALUE IF NOT EXISTS 'dnf';
 
     CREATE TABLE IF NOT EXISTS users (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -2464,11 +2465,12 @@ export async function createSoloRunForTagAlong(runId: string, tagAlongUserId: st
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function finishRunnerRun(runId: string, userId: string, finalDistance: number, finalPace: number, mileSplits?: any[] | null) {
+export async function finishRunnerRun(runId: string, userId: string, finalDistance: number, finalPace: number, mileSplits?: any[] | null, isDnf?: boolean) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
+    // Upsert participant, preserving any pre-existing status (e.g., 'joined'); only set 'joined' for new rows
     await client.query(
       `INSERT INTO run_participants (run_id, user_id, status, is_present)
        VALUES ($1, $2, 'joined', true)
@@ -2476,10 +2478,20 @@ export async function finishRunnerRun(runId: string, userId: string, finalDistan
       [runId, userId]
     );
 
-    await client.query(
-      `UPDATE run_participants SET final_distance = $3, final_pace = $4, mile_splits = $5 WHERE run_id = $1 AND user_id = $2`,
-      [runId, userId, finalDistance, finalPace, mileSplits && mileSplits.length > 0 ? JSON.stringify(mileSplits) : null]
-    );
+    // DNF: distance <0.1 mi with no pings — mark status as 'dnf', store sentinel values (0,0)
+    // so the runner is counted as "finished" (final_pace NOT NULL) but excluded from leaderboard
+    // rankings and final_rank (computeLeaderboardRanks filters final_pace > 0)
+    if (isDnf) {
+      await client.query(
+        `UPDATE run_participants SET final_distance = 0, final_pace = 0, mile_splits = NULL, status = 'dnf', final_rank = NULL WHERE run_id = $1 AND user_id = $2`,
+        [runId, userId]
+      );
+    } else {
+      await client.query(
+        `UPDATE run_participants SET final_distance = $3, final_pace = $4, mile_splits = $5 WHERE run_id = $1 AND user_id = $2`,
+        [runId, userId, finalDistance, finalPace, mileSplits && mileSplits.length > 0 ? JSON.stringify(mileSplits) : null]
+      );
+    }
 
     const runRes = await client.query(`SELECT host_id FROM runs WHERE id = $1`, [runId]);
     let shouldComplete = false;
