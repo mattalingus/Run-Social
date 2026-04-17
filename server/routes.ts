@@ -889,6 +889,7 @@ async function go(e){
 
   app.post("/api/runs/search-ai", requireAuth, async (req, res) => {
     if (!process.env.OPENAI_API_KEY) {
+      console.warn("[search-ai] Request received but OPENAI_API_KEY is not configured — returning 501");
       return res.status(501).json({ error: "AI search disabled" });
     }
     try {
