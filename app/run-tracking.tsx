@@ -752,6 +752,13 @@ export default function RunTrackingScreen() {
   }, [countdown]);
 
   const handleCoord = useCallback((latitude: number, longitude: number, accuracy?: number, speed?: number | null, altitude?: number | null) => {
+    // Ignore every callback that arrives after the run is finished — the GPS
+    // subscription may deliver a final stale fix between doFinish() and the
+    // GPS useEffect running stopWatching().  Any state setter called here
+    // while saving=true would batch with setSaving and could corrupt the
+    // done-screen render.
+    if (phaseRef.current === "done") return;
+
     // Skip poor-accuracy fixes that occur during GPS warm-up (first few seconds)
     // Native threshold: 40m, web threshold: 100m (web GPS is inherently less accurate)
     const maxAccuracy = Platform.OS === "web" ? 100 : 40;
@@ -1171,6 +1178,12 @@ export default function RunTrackingScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     if (Platform.OS !== "web") Speech.stop();
     stopPedometer();
+    // Stop GPS immediately so no more handleCoord calls can fire while we build
+    // the done-screen state or while the user is viewing the summary.
+    stopWatching();
+    // Clear any in-flight countdown so the countdown effect cannot call
+    // setPhase("active") after we set phase to "done" below.
+    setCountdown(null);
     const finalPaceNum =
       totalDistRef.current > 0.01
         ? elapsedRef.current / 60 / totalDistRef.current
