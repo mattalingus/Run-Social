@@ -29,8 +29,9 @@ function resolveImgUrl(url: string | null | undefined): string | null {
 
 function formatPace(p: number) {
   if (!p || p <= 0) return "—";
-  const mins = Math.floor(p);
-  const secs = Math.round((p - mins) * 60);
+  let mins = Math.floor(p);
+  let secs = Math.round((p - mins) * 60);
+  if (secs === 60) { secs = 0; mins += 1; }
   return `${mins}:${secs.toString().padStart(2, "0")}/mi`;
 }
 

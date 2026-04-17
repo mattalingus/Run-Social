@@ -281,8 +281,9 @@ function haversine(lat1: number, lng1: number, lat2: number, lng2: number): numb
 }
 
 function formatPace(pace: number) {
-  const mins = Math.floor(pace);
-  const secs = Math.round((pace - mins) * 60);
+  let mins = Math.floor(pace);
+  let secs = Math.round((pace - mins) * 60);
+  if (secs === 60) { secs = 0; mins += 1; }
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
@@ -677,7 +678,8 @@ function LiveCardExpansion({ runId }: { runId: string }) {
     : undefined;
 
   const fmtPace = (p: number) => {
-    const m = Math.floor(p); const s = Math.round((p - m) * 60);
+    let m = Math.floor(p); let s = Math.round((p - m) * 60);
+    if (s === 60) { s = 0; m += 1; }
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
@@ -1411,8 +1413,9 @@ export default function DiscoverScreen() {
   }
 
   function formatPaceMM(pace: number): string {
-    const mins = Math.floor(pace);
-    const secs = Math.round((pace % 1) * 60);
+    let mins = Math.floor(pace);
+    let secs = Math.round((pace % 1) * 60);
+    if (secs === 60) { secs = 0; mins += 1; }
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   }
 

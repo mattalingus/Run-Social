@@ -64,8 +64,9 @@ const RUN_TAG_ICONS: Record<string, string> = {
 };
 
 function formatPace(pace: number) {
-  const mins = Math.floor(pace);
-  const secs = Math.round((pace - mins) * 60);
+  let mins = Math.floor(pace);
+  let secs = Math.round((pace - mins) * 60);
+  if (secs === 60) { secs = 0; mins += 1; }
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 

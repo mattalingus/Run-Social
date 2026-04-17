@@ -392,8 +392,9 @@ const RANK_EMOJI = ["🥇", "🥈", "🥉"];
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatPace(p: number) {
-  const m = Math.floor(p);
-  const s = Math.round((p - m) * 60);
+  let m = Math.floor(p);
+  let s = Math.round((p - m) * 60);
+  if (s === 60) { s = 0; m += 1; }
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 

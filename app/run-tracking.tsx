@@ -99,8 +99,9 @@ function pick<T>(arr: T[]): T {
 }
 
 function spokenPace(paceMinTotal: number): string {
-  const m = Math.floor(paceMinTotal);
-  const s = Math.round((paceMinTotal - m) * 60);
+  let m = Math.floor(paceMinTotal);
+  let s = Math.round((paceMinTotal - m) * 60);
+  if (s === 60) { s = 0; m += 1; }
   if (s === 0) return `${m} minutes flat`;
   if (s === 30) return `${m} thirty`;
   if (s === 15) return `${m} fifteen`;
@@ -127,8 +128,9 @@ function pickCoachPhrase(
   const isRide = activityType === "ride";
   const pS = spokenPace(paceMinTotal);
   const tS = spokenTime(totalSeconds);
-  const pM = Math.floor(paceMinTotal);
-  const pSec = Math.round((paceMinTotal - pM) * 60);
+  let pM = Math.floor(paceMinTotal);
+  let pSec = Math.round((paceMinTotal - pM) * 60);
+  if (pSec === 60) { pSec = 0; pM += 1; }
   const totalM = Math.floor(totalSeconds / 60);
   const isWhole = distance % 1 === 0;
   const isHalf = distance === 0.5;
@@ -731,9 +733,10 @@ export default function RunTrackingScreen() {
           if (Date.now() - doneAt < 3000) return;
           const dist = totalDistRef.current;
           const pace = dist > 0.01 ? (elapsedRef.current / 60) / dist : null;
-          const paceStr = pace
-            ? `${Math.floor(pace)}:${Math.round((pace - Math.floor(pace)) * 60).toString().padStart(2, "0")}/mi`
-            : "";
+          let _pm = pace ? Math.floor(pace) : 0;
+          let _ps = pace ? Math.round((pace - _pm) * 60) : 0;
+          if (_ps === 60) { _ps = 0; _pm += 1; }
+          const paceStr = pace ? `${_pm}:${_ps.toString().padStart(2, "0")}/mi` : "";
           Share.share({
             message: `Just finished a ${(Math.floor(dist * 100) / 100).toFixed(2)} mile ${activityFilter}${paceStr ? ` at ${paceStr} pace` : ""}! ${activityFilter === "ride" ? "🚴" : activityFilter === "walk" ? "🚶" : "🏃"} Tracked on PaceUp.`,
           }).catch(() => {});
@@ -1551,8 +1554,9 @@ export default function RunTrackingScreen() {
     const distance = totalDistRef.current;
     const pace = distance > 0.01 ? (elapsed / 60) / distance : null;
     const displayPace = pace && distUnit === "km" ? pace / 1.60934 : pace;
-    const paceM = displayPace ? Math.floor(displayPace) : 0;
-    const paceS = displayPace ? Math.round((displayPace - paceM) * 60) : 0;
+    let paceM = displayPace ? Math.floor(displayPace) : 0;
+    let paceS = displayPace ? Math.round((displayPace - paceM) * 60) : 0;
+    if (paceS === 60) { paceS = 0; paceM += 1; }
     const hasRoute = IS_NATIVE && routeState.length > 1;
     const lastPt = routeState[routeState.length - 1];
 
@@ -1930,8 +1934,9 @@ export default function RunTrackingScreen() {
     if (displayDist < 0.01 || elapsed < 1) return "--:--";
     const minPerMile = elapsed / 60 / displayDist;
     const p = distUnit === "km" ? minPerMile / 1.60934 : minPerMile;
-    const m = Math.floor(p);
-    const s = Math.round((p - m) * 60);
+    let m = Math.floor(p);
+    let s = Math.round((p - m) * 60);
+    if (s === 60) { s = 0; m += 1; }
     return `${m}:${s.toString().padStart(2, "0")}`;
   })();
 
@@ -2105,8 +2110,9 @@ export default function RunTrackingScreen() {
             contentContainerStyle={{ flexDirection: "row", gap: 8, paddingHorizontal: 16 }}
           >
             {mileSplits.map((split) => {
-              const m = Math.floor(split.paceMinPerMile);
-              const s = Math.round((split.paceMinPerMile - m) * 60);
+              let m = Math.floor(split.paceMinPerMile);
+              let s = Math.round((split.paceMinPerMile - m) * 60);
+              if (s === 60) { s = 0; m += 1; }
               const paceStr = `${m}:${s.toString().padStart(2, "0")}`;
               return (
                 <View key={split.label} style={t.splitChip}>

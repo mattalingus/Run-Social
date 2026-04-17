@@ -17,8 +17,9 @@ const BORDER = "#182B1F";
 
 function formatPace(pace: number | null | undefined): string {
   if (!pace || pace <= 0) return "--:--";
-  const m = Math.floor(pace);
-  const sec = Math.round((pace - m) * 60);
+  let m = Math.floor(pace);
+  let sec = Math.round((pace - m) * 60);
+  if (sec === 60) { sec = 0; m += 1; }
   return `${m}:${sec.toString().padStart(2, "0")}`;
 }
 

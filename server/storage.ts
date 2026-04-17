@@ -765,9 +765,10 @@ export async function getNotifications(userId: string) {
   }
 
   function fmtPace(p: number) {
-    const m = Math.floor(p);
-    const s = Math.round((p - m) * 60).toString().padStart(2, '0');
-    return `${m}:${s}`;
+    let m = Math.floor(p);
+    let s = Math.round((p - m) * 60);
+    if (s === 60) { s = 0; m += 1; }
+    return `${m}:${s.toString().padStart(2, '0')}`;
   }
 
   const now = new Date();
@@ -2791,8 +2792,10 @@ export async function checkSoloRunPRs(
     );
     const bestPace = parseFloat(prevBest.rows[0]?.best ?? 999);
     if (bestPace < 900 && paceMinPerMile < bestPace) {
-      const mins = Math.floor(paceMinPerMile);
-      const secs = Math.round((paceMinPerMile - mins) * 60).toString().padStart(2, '0');
+      let mins = Math.floor(paceMinPerMile);
+      let secsNum = Math.round((paceMinPerMile - mins) * 60);
+      if (secsNum === 60) { secsNum = 0; mins += 1; }
+      const secs = secsNum.toString().padStart(2, '0');
       messages.push(`⚡ ${userName} just set a new pace PR — ${mins}:${secs} /mi!`);
     }
   }

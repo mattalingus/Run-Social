@@ -26,8 +26,9 @@ const DOT_COLORS = ["#FF6B6B", "#4ECDC4", "#FFE66D", "#A855F7", "#F97316", "#38B
 
 function formatPace(paceNum: number): string {
   if (!paceNum || paceNum <= 0) return "--:--";
-  const m = Math.floor(paceNum);
-  const s = Math.round((paceNum - m) * 60);
+  let m = Math.floor(paceNum);
+  let s = Math.round((paceNum - m) * 60);
+  if (s === 60) { s = 0; m += 1; }
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 

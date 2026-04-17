@@ -39,8 +39,9 @@ function formatElapsed(s: number): string {
 
 function formatPace(p: number): string {
   if (p <= 0) return "--:--";
-  const m = Math.floor(p);
-  const s = Math.round((p - m) * 60);
+  let m = Math.floor(p);
+  let s = Math.round((p - m) * 60);
+  if (s === 60) { s = 0; m += 1; }
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 

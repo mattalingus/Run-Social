@@ -27,8 +27,9 @@ import ShareActivityModal from "@/components/ShareActivityModal";
 
 function formatPace(pace: number | null): string {
   if (!pace || pace <= 0) return "--:--";
-  const m = Math.floor(pace);
-  const s = Math.round((pace - m) * 60);
+  let m = Math.floor(pace);
+  let s = Math.round((pace - m) * 60);
+  if (s === 60) { s = 0; m += 1; }
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 

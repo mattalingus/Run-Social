@@ -114,8 +114,11 @@ export async function generateSoloActivityPost(
 ): Promise<string> {
   const activity = activityType === "ride" ? "bike ride" : activityType === "walk" ? "walk" : "run";
   const distStr = `${distanceMiles.toFixed(1)} mi`;
+  let _aiPaceM = paceMinPerMile ? Math.floor(paceMinPerMile) : 0;
+  let _aiPaceS = paceMinPerMile ? Math.round((paceMinPerMile % 1) * 60) : 0;
+  if (_aiPaceS === 60) { _aiPaceS = 0; _aiPaceM += 1; }
   const paceStr = paceMinPerMile
-    ? `${Math.floor(paceMinPerMile)}:${String(Math.round((paceMinPerMile % 1) * 60)).padStart(2, "0")} /mi`
+    ? `${_aiPaceM}:${String(_aiPaceS).padStart(2, "0")} /mi`
     : null;
   const timeStr = durationSeconds ? `${Math.floor(durationSeconds / 60)} min` : null;
   const details = [distStr, paceStr ? `${paceStr} pace` : null, timeStr].filter(Boolean).join(", ");

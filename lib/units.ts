@@ -33,8 +33,9 @@ export function toDisplayDistShort(miles: number | null | undefined, unit: Dista
 export function toDisplayPace(minPerMile: number | null | undefined, unit: DistanceUnit): string {
   if (minPerMile == null || !isFinite(minPerMile) || isNaN(minPerMile)) return unit === "km" ? "—" : "—";
   const pace = unit === "km" ? minPerMile / KM_PER_MILE : minPerMile;
-  const mins = Math.floor(pace);
-  const secs = Math.round((pace - mins) * 60);
+  let mins = Math.floor(pace);
+  let secs = Math.round((pace - mins) * 60);
+  if (secs === 60) { secs = 0; mins += 1; }
   const pad = secs < 10 ? "0" : "";
   return `${mins}:${pad}${secs} /${unit === "km" ? "km" : "mi"}`;
 }
