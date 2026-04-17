@@ -184,7 +184,9 @@ export default function RunLiveScreen() {
             // Second guard: GO may have fired while watchPositionAsync was setting up
             if (warmupCancelledRef.current) { sub.remove(); return; }
             gpsWarmupSubRef.current = sub;
-          } catch { }
+          } catch (e) {
+            if (__DEV__) console.warn("[GPS warmup]", e);
+          }
         })();
       }
       const timer = setTimeout(() => setCountdown((c) => (c !== null ? c - 1 : null)), 1000);
