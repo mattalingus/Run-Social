@@ -2267,7 +2267,11 @@ export async function getLiveRunState(runId: string) {
     const lastPingAge = r.recorded_at ? now - new Date(r.recorded_at).getTime() : null;
     // Stale only applies to runners still actively tracking (not yet finished)
     const isStale = r.is_present && !isFinished && lastPingAge != null && lastPingAge > STALE_THRESHOLD_MS;
-    return { ...r, isStale: !!isStale, isFinished };
+    // For finished runners: suppress live-ping position/distance so clients use final_distance
+    const latitude = isFinished ? null : r.latitude;
+    const longitude = isFinished ? null : r.longitude;
+    const cumulative_distance = isFinished ? null : r.cumulative_distance;
+    return { ...r, latitude, longitude, cumulative_distance, isStale: !!isStale, isFinished };
   });
 
   const activeCount = participants.filter((r: any) => r.is_present && !r.isStale && r.final_pace == null).length;

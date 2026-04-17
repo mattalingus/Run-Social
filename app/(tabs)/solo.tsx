@@ -31,7 +31,7 @@ import { darkColors as C, type ColorScheme } from "@/constants/colors";
 import { useTheme } from "@/contexts/ThemeContext";
 import MiniCalendarPicker from "@/components/MiniCalendarPicker";
 import { formatDistance } from "@/lib/formatDistance";
-import { toDisplayDist, toDisplayPace, unitLabel, type DistanceUnit } from "@/lib/units";
+import { toDisplayDist, toDisplayDistShort, toDisplayPace, unitLabel, type DistanceUnit } from "@/lib/units";
 import MAP_STYLE from "@/lib/mapStyle";
 import MapView, { Polyline } from "react-native-maps";
 const MAP_TYPE = Platform.OS === "ios" ? ("mutedStandard" as const) : ("standard" as const);
@@ -934,7 +934,8 @@ export default function SoloScreen() {
   const renderHistoryItem = useCallback(({ item: run }: { item: SoloRun }) => {
     const badge = runBadges[run.id];
     const actTypeLabel = run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run";
-    const label = run.title || (run.distance_miles ? `${toDisplayDist(run.distance_miles, distUnit)} ${actTypeLabel}` : actTypeLabel);
+    const distLabel = toDisplayDistShort(run.distance_miles, distUnit);
+    const label = run.title || (distLabel === "—" ? actTypeLabel : `${distLabel} ${actTypeLabel}`);
     const isExpanded = expandedRunId === run.id;
     const parsedRoutePath = parseRoutePath(run.route_path);
     const hasRoutePath = parsedRoutePath.length > 1;
@@ -1309,7 +1310,8 @@ export default function SoloScreen() {
             <Text style={s.sectionTitle}>{activityFilter === "ride" ? "Scheduled Rides" : activityFilter === "walk" ? "Scheduled Walks" : "Scheduled Runs"}</Text>
             {scheduledRuns.map((run) => {
               const scheduledActLabel = run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run";
-              const label = run.title || (run.distance_miles ? `${toDisplayDist(run.distance_miles, distUnit)} ${scheduledActLabel}` : scheduledActLabel);
+              const scheduledDistLabel = toDisplayDistShort(run.distance_miles, distUnit);
+              const label = run.title || (scheduledDistLabel === "—" ? scheduledActLabel : `${scheduledDistLabel} ${scheduledActLabel}`);
               return (
                 <Pressable
                   key={run.id}

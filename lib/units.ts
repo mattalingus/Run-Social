@@ -23,7 +23,8 @@ export function toDisplayDist(miles: number | null | undefined, unit: DistanceUn
 }
 
 export function toDisplayDistShort(miles: number | null | undefined, unit: DistanceUnit): string {
-  if (miles == null || !isFinite(miles) || isNaN(miles)) return unit === "km" ? "0 km" : "0 mi";
+  if (miles == null) return "—";
+  if (!isFinite(miles) || isNaN(miles)) return "—";
   if (unit === "km") {
     return `${truncate1(miles * KM_PER_MILE).toFixed(1)} km`;
   }

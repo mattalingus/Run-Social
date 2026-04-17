@@ -1210,12 +1210,18 @@ export default function DiscoverScreen() {
   const { isActive: walkthroughActive } = useWalkthrough();
 
   const [search, setSearch] = useState("");
+  const [aiSearchDisabled, setAiSearchDisabled] = useState(false);
   async function handleSearch(text: string) {
     setSearch(text);
     if (text.length > 5) {
       try {
         const res = await apiRequest("POST", "/api/runs/search-ai", { q: text });
+        if (res.status === 501) {
+          setAiSearchDisabled(true);
+          return;
+        }
         if (res.ok) {
+          setAiSearchDisabled(false);
           const aiFilters = await res.json();
           setDraft(prev => ({
             ...prev,
@@ -1226,6 +1232,8 @@ export default function DiscoverScreen() {
           }));
         }
       } catch (e) {}
+    } else {
+      setAiSearchDisabled(false);
     }
   }
   const [sortOption, setSortOption] = useState<SortOption>("nearest");
@@ -2004,6 +2012,11 @@ export default function DiscoverScreen() {
             </Pressable>
           )}
         </View>
+        {aiSearchDisabled && search.length > 5 && (
+          <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted, paddingHorizontal: 16, marginTop: -4, marginBottom: 4 }}>
+            AI search unavailable — showing keyword results
+          </Text>
+        )}
 
         {/* Activity toggle + filter */}
         <WalkthroughPulse stepId="activity-toggle" style={{ borderRadius: 20 }}>
