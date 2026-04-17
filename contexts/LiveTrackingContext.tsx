@@ -92,6 +92,10 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
   const activeActivityTypeRef = useRef<"run" | "ride" | "walk">("run");
   const isPausedRef = useRef(false);
 
+  // GPS warm-up refs: discard first 5 updates or first 8 seconds to avoid start-jump
+  const gpsWarmupCountRef = useRef(0);
+  const gpsStartTimeRef = useRef<number | null>(null);
+
   useEffect(() => {
     if (phase === "active") {
       intervalRef.current = setInterval(() => {
@@ -130,7 +134,6 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
   }, []);
 
   function handleCoord(latitude: number, longitude: number) {
-    routePathRef.current = [...routePathRef.current, { latitude, longitude }];
     setUserLocation({ latitude, longitude });
 
     // GPS gap reconciliation: if the app was backgrounded with foreground-only
@@ -150,7 +153,21 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
     }
     lastCoordTimestampRef.current = now;
 
-    if (!isPausedRef.current && lastCoordRef.current) {
+    // GPS warm-up: skip distance counting for first 5 updates or first 8 seconds
+    // to avoid start-jump from initial GPS lock correction.
+    if (gpsStartTimeRef.current === null) {
+      gpsStartTimeRef.current = now;
+    }
+    gpsWarmupCountRef.current += 1;
+    const inWarmup =
+      gpsWarmupCountRef.current <= 5 ||
+      now - gpsStartTimeRef.current < 8000;
+
+    if (!inWarmup) {
+      routePathRef.current = [...routePathRef.current, { latitude, longitude }];
+    }
+
+    if (!inWarmup && !isPausedRef.current && lastCoordRef.current) {
       const d = haversineMi(
         lastCoordRef.current.latitude,
         lastCoordRef.current.longitude,
@@ -272,6 +289,8 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
     lastSplitMileRef.current = 0;
     prevMileElapsedRef.current = 0;
     markedPresentRef.current = false;
+    gpsWarmupCountRef.current = 0;
+    gpsStartTimeRef.current = null;
     setDisplayDist(0);
     setElapsed(0);
     setUserLocation(null);
@@ -365,6 +384,8 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
     lastCoordRef.current = null;
     lastCoordTimestampRef.current = null;
     markedPresentRef.current = false;
+    gpsWarmupCountRef.current = 0;
+    gpsStartTimeRef.current = null;
     setHasBeenPresent(false);
     setPresentConfirmed(false);
     setUserLocation(null);

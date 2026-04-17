@@ -641,8 +641,14 @@ export default function RunTrackingScreen() {
   const elevationGainRef = useRef(0);
   const altitudeBufferRef = useRef<number[]>([]);
   const lastSmoothedAltRef = useRef<number | null>(null);
+  const prevSmoothedAltRef = useRef<number | null>(null);
+  const elevConsecutiveUpRef = useRef(0);
   const moveTimeRef = useRef(0);
   const lastMoveTimestampRef = useRef<number | null>(null);
+
+  // GPS warm-up refs: discard first N updates or first ~8s to avoid start-jump
+  const gpsWarmupCountRef = useRef(0);
+  const gpsStartTimeRef = useRef<number | null>(null);
 
   // ─── Location permission nudge banner ────────────────────────────────────
   const [showPermNudge, setShowPermNudge] = useState(false);
@@ -740,21 +746,36 @@ export default function RunTrackingScreen() {
 
     if (altitude != null && Platform.OS !== "web") {
       altitudeBufferRef.current.push(altitude);
-      if (altitudeBufferRef.current.length > 5) {
+      if (altitudeBufferRef.current.length > 15) {
         altitudeBufferRef.current.shift();
       }
-      if (altitudeBufferRef.current.length === 5) {
-        const smoothed = altitudeBufferRef.current.reduce((a, b) => a + b, 0) / 5;
-        if (lastSmoothedAltRef.current != null) {
-          const deltaM = smoothed - lastSmoothedAltRef.current;
-          if (deltaM > 0.6) {
-            elevationGainRef.current += deltaM * 3.28084;
-            lastSmoothedAltRef.current = smoothed;
-          } else if (deltaM < -0.6) {
-            lastSmoothedAltRef.current = smoothed;
-          }
-        } else {
+      if (altitudeBufferRef.current.length === 15) {
+        const smoothed = altitudeBufferRef.current.reduce((a, b) => a + b, 0) / 15;
+        if (lastSmoothedAltRef.current == null) {
+          // First smoothed reading — set baseline
           lastSmoothedAltRef.current = smoothed;
+          prevSmoothedAltRef.current = smoothed;
+        } else {
+          const stepDelta = smoothed - (prevSmoothedAltRef.current ?? lastSmoothedAltRef.current);
+          if (stepDelta > 0) {
+            // Consistent upward movement — increment streak
+            elevConsecutiveUpRef.current += 1;
+            const totalRise = smoothed - lastSmoothedAltRef.current;
+            if (elevConsecutiveUpRef.current >= 3 && totalRise >= 2.0) {
+              // Confirmed real climb: credit the accumulated gain and advance baseline
+              elevationGainRef.current += totalRise * 3.28084;
+              lastSmoothedAltRef.current = smoothed;
+              // Keep consecutive count >= 3 so ongoing climb credits immediately
+            }
+          } else {
+            // Flat or descent: reset upward streak
+            elevConsecutiveUpRef.current = 0;
+            if (smoothed < lastSmoothedAltRef.current) {
+              // Advance baseline down so we don't re-credit a recovery to the old high
+              lastSmoothedAltRef.current = smoothed;
+            }
+          }
+          prevSmoothedAltRef.current = smoothed;
         }
       }
     }
@@ -785,10 +806,24 @@ export default function RunTrackingScreen() {
     lastCoordTimestampRef.current = now;
 
     const coord: Coord = { latitude, longitude };
-    routePathRef.current.push(coord);
-    setRouteState((prev) => [...prev, coord]);
 
-    if (lastCoordRef.current) {
+    // GPS warm-up: skip route recording and distance counting for first 5 updates
+    // or first 8 seconds to avoid start-jump from initial GPS lock correction.
+    // The map is still panned (below) so the user sees their location immediately.
+    if (gpsStartTimeRef.current === null) {
+      gpsStartTimeRef.current = now;
+    }
+    gpsWarmupCountRef.current += 1;
+    const inWarmup =
+      gpsWarmupCountRef.current <= 5 ||
+      now - gpsStartTimeRef.current < 8000;
+
+    if (!inWarmup) {
+      routePathRef.current.push(coord);
+      setRouteState((prev) => [...prev, coord]);
+    }
+
+    if (!inWarmup && lastCoordRef.current) {
       const d = haversine(
         lastCoordRef.current.latitude,
         lastCoordRef.current.longitude,
@@ -1021,9 +1056,14 @@ export default function RunTrackingScreen() {
     elevationGainRef.current = 0;
     altitudeBufferRef.current = [];
     lastSmoothedAltRef.current = null;
+    prevSmoothedAltRef.current = null;
+    elevConsecutiveUpRef.current = 0;
     moveTimeRef.current = 0;
     lastMoveTimestampRef.current = null;
     stepCountRef.current = 0;
+    // Reset GPS warm-up state
+    gpsWarmupCountRef.current = 0;
+    gpsStartTimeRef.current = null;
 
     // Check permission level and show nudge if only foreground was granted
     if (Platform.OS !== "web") {
