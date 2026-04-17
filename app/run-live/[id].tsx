@@ -342,11 +342,14 @@ export default function RunLiveScreen() {
     wasHostRef.current = nowHost;
   }, [liveState?.hostId, liveState?.isActive]);
 
-  // Auto-redirect participants when run is force-completed by host
+  // Auto-redirect participants when run is force-completed by host.
+  // Shares navigatedAwayRef with the isActive effect below so only one fires.
   useEffect(() => {
     if (!liveState?.isCompleted) return;
     // Host navigates themselves via handleEndForEveryone or when run auto-completes
     if (isHost && !hostFinished) return;
+    if (navigatedAwayRef.current) return;
+    navigatedAwayRef.current = true;
     if (phase === "active" || phase === "paused") {
       const finalPace = calcPaceNum(totalDistRef.current, elapsedRef.current);
       const autoSplits = buildFinalSplits(mileSplitsRef.current, totalDistRef.current, elapsedRef.current);
@@ -386,11 +389,11 @@ export default function RunLiveScreen() {
         mileSplits: autoSplits.length > 0 ? autoSplits : null,
       }).catch(() => {}).finally(() => {
         resetTracking();
-        setTimeout(() => { router.replace(`/run-results/${id}?autoShare=1` as any); }, 0);
+        setTimeout(() => { router.replace(`/run-results/${id}?autoShare=1`); }, 0);
       });
     } else {
       resetTracking();
-      setTimeout(() => { router.replace(`/run-results/${id}` as any); }, 0);
+      setTimeout(() => { router.replace(`/run-results/${id}?autoShare=1`); }, 0);
     }
   }, [liveState?.isActive]);
 
