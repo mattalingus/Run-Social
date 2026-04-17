@@ -161,7 +161,6 @@ export default function RunLiveScreen() {
   const [hostFinished, setHostFinished] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const navigatedAwayRef = useRef(false);
-  const seenActiveRef = useRef(false);
 
   // Countdown tick: 3→2→1→0(GO!)→call handleStartTracking
   useEffect(() => {
@@ -367,35 +366,6 @@ export default function RunLiveScreen() {
     }
   }, [liveState?.isCompleted]);
 
-  // Event-ended auto-navigation: redirect participants when the host ends the run
-  // by watching isActive (covers the case where isCompleted hasn't propagated yet).
-  useEffect(() => {
-    if (!liveState) return;
-    if (liveState.isActive) {
-      seenActiveRef.current = true;
-      return;
-    }
-    // Only act if we previously saw the run as active (avoids pre-event false-positive)
-    if (!seenActiveRef.current) return;
-    if (isHost) return;
-    if (navigatedAwayRef.current) return;
-    navigatedAwayRef.current = true;
-    if (phase === "active" || phase === "paused") {
-      const finalPace = calcPaceNum(totalDistRef.current, elapsedRef.current);
-      const autoSplits = buildFinalSplits(mileSplitsRef.current, totalDistRef.current, elapsedRef.current);
-      apiRequest("POST", `/api/runs/${id}/runner-finish`, {
-        finalDistance: totalDistRef.current,
-        finalPace,
-        mileSplits: autoSplits.length > 0 ? autoSplits : null,
-      }).catch(() => {}).finally(() => {
-        resetTracking();
-        setTimeout(() => { router.replace(`/run-results/${id}?autoShare=1`); }, 0);
-      });
-    } else {
-      resetTracking();
-      setTimeout(() => { router.replace(`/run-results/${id}?autoShare=1`); }, 0);
-    }
-  }, [liveState?.isActive]);
 
   // ── Start Solo (leave group → go solo) ───────────────────────────────────
 
@@ -667,8 +637,6 @@ export default function RunLiveScreen() {
 
   // ── Tag-Along derived state ────────────────────────────────────────────────
   // Participant record for the current user (carries tag_along_of_user_id from the server)
-  const myParticipantEntry = liveState?.participants?.find((p: any) => p.user_id === user?.id);
-  const isTagAlong = !!myParticipantEntry?.tag_along_of_user_id;
 
   const tagAlongRequests: any[] = liveState?.tagAlongRequests ?? [];
   // Pending requests targeting the current user (they need to respond)
@@ -1106,7 +1074,7 @@ export default function RunLiveScreen() {
       ) : (
         <KAV style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}>
           <View style={s.chatContainer}>
-            {!(canChatNearby || hasBeenPresent || isTagAlong) ? (
+            {!(canChatNearby || hasBeenPresent) ? (
               <View style={s.notPresentContainer}>
                 <Text style={s.notPresentText}>
                   You'll be able to chat once you arrive at the start point 📍

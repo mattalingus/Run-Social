@@ -437,7 +437,7 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
           {/* ── B. Pace ─────────────────────────────────────────────────── */}
           <View style={fm.section}>
             <View style={fm.sectionHead}>
-              <Text style={fm.sectionTitle}>My pace fits this event</Text>
+              <Text style={fm.sectionTitle}>Pace</Text>
               <Text style={fm.sectionValue}>
                 {toDisplayPace(draft.paceMin, distUnit)} – {toDisplayPace(draft.paceMax, distUnit)}
               </Text>
@@ -1723,8 +1723,8 @@ export default function DiscoverScreen() {
         r.title.toLowerCase().includes(q) ||
         r.location_name.toLowerCase().includes(q) ||
         r.host_name.toLowerCase().includes(q);
-      // Pace fit: event's full range must fit inside the user's selected window
-      const matchPace = r.min_pace >= applied.paceMin && r.max_pace <= applied.paceMax;
+      // Pace overlap: event's pace range intersects the user's selected window
+      const matchPace = r.min_pace <= applied.paceMax && r.max_pace >= applied.paceMin;
       // Distance (run length) overlap
       const matchDist = r.min_distance <= applied.distMax && r.max_distance >= applied.distMin;
       // Proximity
@@ -1814,8 +1814,8 @@ export default function DiscoverScreen() {
           r.title.toLowerCase().includes(q) ||
           r.location_name.toLowerCase().includes(q) ||
           r.host_name.toLowerCase().includes(q);
-        // Pace fit: event's full range must fit inside the user's selected window
-        const matchPace = r.min_pace >= applied.paceMin && r.max_pace <= applied.paceMax;
+        // Pace overlap: event's pace range intersects the user's selected window
+        const matchPace = r.min_pace <= applied.paceMax && r.max_pace >= applied.paceMin;
         const matchDist = r.min_distance <= applied.distMax && r.max_distance >= applied.distMin;
         const matchStyle = applied.styles.length === 0 || r.tags?.some((t) => applied.styles.includes(t));
         const matchVisibility =
