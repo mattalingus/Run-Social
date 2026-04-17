@@ -294,6 +294,7 @@ export default function CreateRunScreen() {
     },
     onSuccess: (run: any) => {
       qc.refetchQueries({ queryKey: ["/api/runs"] });
+      qc.invalidateQueries({ queryKey: ["/api/runs"] });
       qc.invalidateQueries({ queryKey: ["/api/runs/mine"] });
       qc.invalidateQueries({ queryKey: ["/api/solo-runs"] });
       if (effectiveCrewId) {

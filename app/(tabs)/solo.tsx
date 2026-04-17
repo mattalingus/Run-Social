@@ -955,7 +955,7 @@ export default function SoloScreen() {
               </View>
               <Text style={s.historyMeta}>
                 {formatDisplayDate(run.date)}
-                {run.pace_min_per_mile ? ` · ${toDisplayPace(run.pace_min_per_mile, distUnit)}` : ""}
+                {` · ${toDisplayPace(run.pace_min_per_mile, distUnit)}`}
                 {run.duration_seconds ? ` · ${formatDuration(run.duration_seconds)}` : ""}
               </Text>
             </View>

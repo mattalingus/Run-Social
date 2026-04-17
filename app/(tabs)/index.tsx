@@ -436,7 +436,7 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
           {/* ── B. Pace ─────────────────────────────────────────────────── */}
           <View style={fm.section}>
             <View style={fm.sectionHead}>
-              <Text style={fm.sectionTitle}>Pace</Text>
+              <Text style={fm.sectionTitle}>My pace fits this event</Text>
               <Text style={fm.sectionValue}>
                 {toDisplayPace(draft.paceMin, distUnit)} – {toDisplayPace(draft.paceMax, distUnit)}
               </Text>
