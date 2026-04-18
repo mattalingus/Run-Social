@@ -674,10 +674,14 @@ export async function initDb() {
   // authoritative source (solo_runs + run_participants) so that abandoned ghost
   // runs — which were marked is_abandoned = true by Task #203 — no longer inflate
   // user totals. Safe to run even on a fresh DB (values will already be correct).
-  const recalcFlag = await pool.query(
-    `SELECT 1 FROM migration_flags WHERE name = 'ghost_run_stat_recalc_v1'`
+  //
+  // Concurrency safety: the INSERT ... ON CONFLICT DO NOTHING is atomic; only the
+  // instance that successfully inserts the flag row (rowCount = 1) runs the UPDATE,
+  // preventing duplicate execution on concurrent server startups.
+  const flagInsert = await pool.query(
+    `INSERT INTO migration_flags (name) VALUES ('ghost_run_stat_recalc_v1') ON CONFLICT DO NOTHING`
   );
-  if (recalcFlag.rows.length === 0) {
+  if ((flagInsert.rowCount ?? 0) > 0) {
     await pool.query(`
       UPDATE users u SET
         total_miles = GREATEST(0, COALESCE((
@@ -709,9 +713,6 @@ export async function initDb() {
             AND rp.final_distance > 0
         ), 0))
     `);
-    await pool.query(
-      `INSERT INTO migration_flags (name) VALUES ('ghost_run_stat_recalc_v1')`
-    );
     console.log("[migration] ghost_run_stat_recalc_v1 applied — user stats recalculated from authoritative sources");
   }
 }
