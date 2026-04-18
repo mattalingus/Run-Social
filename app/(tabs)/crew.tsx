@@ -33,7 +33,7 @@ import WalkthroughPulse from "@/components/WalkthroughPulse";
 import { usePurchases } from "@/contexts/PurchasesContext";
 import PaywallSheet, { type PaywallPlan } from "@/components/PaywallSheet";
 import { darkColors, type ColorScheme } from "@/constants/colors";
-import { toDisplayPace, toDisplayDist, unitLabel, type DistanceUnit } from "@/lib/units";
+import { toDisplayPace, toDisplaySpeed, toDisplayDist, unitLabel, type DistanceUnit } from "@/lib/units";
 import { Image as ExpoImage } from "expo-image";
 
 const C = darkColors;
@@ -781,8 +781,14 @@ function MemberProfileSheet({
                   </View>
                   {activityStats.avg_pace > 0 && (
                     <View style={{ alignItems: "center" }}>
-                      <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 17, color: C.text }}>{toDisplayPace(activityStats.avg_pace, distUnit)}</Text>
-                      <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted }}>Avg Pace</Text>
+                      <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 17, color: C.text }}>
+                        {activityTab === "ride"
+                          ? toDisplaySpeed(activityStats.avg_pace, distUnit)
+                          : toDisplayPace(activityStats.avg_pace, distUnit)}
+                      </Text>
+                      <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted }}>
+                        {activityTab === "ride" ? "Avg Speed" : "Avg Pace"}
+                      </Text>
                     </View>
                   )}
                 </View>
@@ -1875,7 +1881,9 @@ function CrewDetailSheet({
                             </View>
                             <Text style={s.memberMeta}>
                               {memberRole === "crew_chief" ? "Crew Chief" : memberRole === "officer" ? "Officer" : "Member"}
-                              {m.avg_pace && m.avg_pace > 0 ? ` · ${toDisplayPace(m.avg_pace, distUnit)} avg` : ""}
+                              {m.avg_pace && m.avg_pace > 0
+                                ? ` · ${activityTab === "ride" ? toDisplaySpeed(m.avg_pace, distUnit) : toDisplayPace(m.avg_pace, distUnit)} avg`
+                                : ""}
                             </Text>
                           </View>
                           {canManage && (
@@ -1931,7 +1939,9 @@ function CrewDetailSheet({
                                 <>
                                   <Text style={s.historyRunDot}>·</Text>
                                   <Text style={s.historyRunMetaTxt}>
-                                    {toDisplayPace(Number(run.avg_attendee_pace), distUnit)} avg pace
+                                    {(run.activity_type ?? "run") === "ride"
+                                      ? `${toDisplaySpeed(Number(run.avg_attendee_pace), distUnit)} avg`
+                                      : `${toDisplayPace(Number(run.avg_attendee_pace), distUnit)} avg pace`}
                                   </Text>
                                 </>
                               )}

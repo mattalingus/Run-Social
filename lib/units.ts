@@ -44,3 +44,13 @@ export function toDisplayPace(minPerMile: number | null | undefined, unit: Dista
 export function unitLabel(unit: DistanceUnit): string {
   return unit === "km" ? "km" : "mi";
 }
+
+export function toDisplaySpeed(minPerMile: number | null | undefined, unit: DistanceUnit): string {
+  if (minPerMile == null || !isFinite(minPerMile) || isNaN(minPerMile) || minPerMile <= 0) return "—";
+  if (unit === "km") {
+    const kmh = (KM_PER_MILE * 60) / minPerMile;
+    return `${kmh.toFixed(1)} km/h`;
+  }
+  const mph = 60 / minPerMile;
+  return `${mph.toFixed(1)} mph`;
+}

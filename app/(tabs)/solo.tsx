@@ -31,7 +31,7 @@ import { darkColors as C, type ColorScheme } from "@/constants/colors";
 import { useTheme } from "@/contexts/ThemeContext";
 import MiniCalendarPicker from "@/components/MiniCalendarPicker";
 import { formatDistance } from "@/lib/formatDistance";
-import { toDisplayDist, toDisplayDistShort, toDisplayPace, unitLabel, type DistanceUnit } from "@/lib/units";
+import { toDisplayDist, toDisplayDistShort, toDisplayPace, toDisplaySpeed, unitLabel, type DistanceUnit } from "@/lib/units";
 import MAP_STYLE from "@/lib/mapStyle";
 import MapView, { Polyline } from "react-native-maps";
 const MAP_TYPE = Platform.OS === "ios" ? ("mutedStandard" as const) : ("standard" as const);
@@ -988,7 +988,9 @@ export default function SoloScreen() {
               </View>
               <Text style={s.historyMeta}>
                 {formatDisplayDate(run.date)}
-                {` · ${toDisplayPace(run.pace_min_per_mile, distUnit)}`}
+                {run.pace_min_per_mile != null
+                  ? ` · ${run.activity_type === "ride" ? toDisplaySpeed(run.pace_min_per_mile, distUnit) : toDisplayPace(run.pace_min_per_mile, distUnit)}`
+                  : ""}
                 {run.duration_seconds ? ` · ${formatDuration(run.duration_seconds)}` : ""}
               </Text>
             </View>
@@ -1066,8 +1068,12 @@ export default function SoloScreen() {
               {run.pace_min_per_mile != null && (
                 <View style={s.statItem}>
                   <Feather name="zap" size={13} color={C.primary} />
-                  <Text style={s.statLabel}>Pace</Text>
-                  <Text style={s.statValue}>{toDisplayPace(run.pace_min_per_mile, distUnit)}</Text>
+                  <Text style={s.statLabel}>{run.activity_type === "ride" ? "Speed" : "Pace"}</Text>
+                  <Text style={s.statValue}>
+                    {run.activity_type === "ride"
+                      ? toDisplaySpeed(run.pace_min_per_mile, distUnit)
+                      : toDisplayPace(run.pace_min_per_mile, distUnit)}
+                  </Text>
                 </View>
               )}
               <View style={s.statItem}>
@@ -1369,7 +1375,11 @@ export default function SoloScreen() {
                       {run.pace_min_per_mile ? (
                         <View style={s.scheduledChip}>
                           <Feather name="zap" size={11} color={C.textMuted} />
-                          <Text style={s.scheduledChipTxt}>{toDisplayPace(run.pace_min_per_mile, distUnit)}</Text>
+                          <Text style={s.scheduledChipTxt}>
+                            {run.activity_type === "ride"
+                              ? toDisplaySpeed(run.pace_min_per_mile, distUnit)
+                              : toDisplayPace(run.pace_min_per_mile, distUnit)}
+                          </Text>
                         </View>
                       ) : null}
                     </View>
@@ -1425,7 +1435,11 @@ export default function SoloScreen() {
                 <View style={s.rankHeader}>
                   <Text style={s.rankCategory}>{cat.label}</Text>
                   <Text style={s.rankBest}>
-                    Best: {cat.runs[0].pace_min_per_mile ? toDisplayPace(cat.runs[0].pace_min_per_mile, distUnit) : "—"}
+                    Best: {cat.runs[0].pace_min_per_mile
+                      ? (cat.runs[0].activity_type === "ride"
+                          ? toDisplaySpeed(cat.runs[0].pace_min_per_mile, distUnit)
+                          : toDisplayPace(cat.runs[0].pace_min_per_mile, distUnit))
+                      : "—"}
                   </Text>
                 </View>
                 {cat.runs.slice(0, 3).map((run, i) => (
@@ -1434,7 +1448,11 @@ export default function SoloScreen() {
                     <Text style={s.rankDate}>{formatDisplayDate(run.date)}</Text>
                     <Text style={s.rankDist}>{toDisplayDist(run.distance_miles, distUnit)}</Text>
                     <Text style={s.rankPace}>
-                      {run.pace_min_per_mile ? toDisplayPace(run.pace_min_per_mile, distUnit) : "—"}
+                      {run.pace_min_per_mile
+                        ? (run.activity_type === "ride"
+                            ? toDisplaySpeed(run.pace_min_per_mile, distUnit)
+                            : toDisplayPace(run.pace_min_per_mile, distUnit))
+                        : "—"}
                     </Text>
                   </View>
                 ))}
@@ -1912,8 +1930,12 @@ export default function SoloScreen() {
               {selectedScheduled.pace_min_per_mile ? (
                 <View style={s.scheduledModalStat}>
                   <Feather name="zap" size={14} color={C.primary} />
-                  <Text style={s.scheduledModalStatLabel}>Target Pace</Text>
-                  <Text style={s.scheduledModalStatValue}>{toDisplayPace(selectedScheduled.pace_min_per_mile, distUnit)}</Text>
+                  <Text style={s.scheduledModalStatLabel}>{selectedScheduled.activity_type === "ride" ? "Target Speed" : "Target Pace"}</Text>
+                  <Text style={s.scheduledModalStatValue}>
+                    {selectedScheduled.activity_type === "ride"
+                      ? toDisplaySpeed(selectedScheduled.pace_min_per_mile, distUnit)
+                      : toDisplayPace(selectedScheduled.pace_min_per_mile, distUnit)}
+                  </Text>
                 </View>
               ) : null}
             </View>
@@ -2048,9 +2070,19 @@ export default function SoloScreen() {
                     <Text style={s.pathStatUnit}>runs</Text>
                   </View>
                   <View style={[s.pathStatCell, s.pathStatCellRight]}>
-                    <Text style={s.pathStatLabel}>Fastest Pace</Text>
-                    <Text style={s.pathStatValue}>{pathStats.bestPace ? toDisplayPace(pathStats.bestPace, distUnit) : "--"}</Text>
-                    <Text style={s.pathStatUnit}>{`min/${unitLabel(distUnit)}`}</Text>
+                    <Text style={s.pathStatLabel}>{selectedSavedPath.activity_type === "ride" ? "Top Speed" : "Fastest Pace"}</Text>
+                    <Text style={s.pathStatValue}>
+                      {pathStats.bestPace
+                        ? (selectedSavedPath.activity_type === "ride"
+                            ? toDisplaySpeed(pathStats.bestPace, distUnit)
+                            : toDisplayPace(pathStats.bestPace, distUnit))
+                        : "--"}
+                    </Text>
+                    <Text style={s.pathStatUnit}>
+                      {selectedSavedPath.activity_type === "ride"
+                        ? (distUnit === "km" ? "km/h" : "mph")
+                        : `min/${unitLabel(distUnit)}`}
+                    </Text>
                   </View>
                   <View style={[s.pathStatCell, s.pathStatCellBottom]}>
                     <Text style={s.pathStatLabel}>Longest Dist</Text>
@@ -2086,7 +2118,13 @@ export default function SoloScreen() {
                         </View>
                         <View style={s.pathRunStats}>
                           <Text style={s.pathRunStat}>{toDisplayDist(run.distance_miles, distUnit)}</Text>
-                          {run.pace_min_per_mile ? <Text style={s.pathRunStatMuted}>{toDisplayPace(run.pace_min_per_mile, distUnit)}</Text> : null}
+                          {run.pace_min_per_mile
+                            ? <Text style={s.pathRunStatMuted}>
+                                {run.activity_type === "ride"
+                                  ? toDisplaySpeed(run.pace_min_per_mile, distUnit)
+                                  : toDisplayPace(run.pace_min_per_mile, distUnit)}
+                              </Text>
+                            : null}
                           {run.duration_seconds ? <Text style={s.pathRunStatMuted}>{formatDuration(run.duration_seconds)}</Text> : null}
                         </View>
                       </View>

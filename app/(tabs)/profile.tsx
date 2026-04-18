@@ -31,7 +31,7 @@ import ShareActivityModal, { ShareRunData } from "@/components/ShareActivityModa
 import { darkColors as C } from "@/constants/colors";
 import { ACHIEVEMENTS, type AchievementDef } from "@/constants/achievements";
 import { formatDistance } from "@/lib/formatDistance";
-import { toDisplayDist, toDisplayPace, unitLabel, type DistanceUnit } from "@/lib/units";
+import { toDisplayDist, toDisplayPace, toDisplaySpeed, unitLabel, type DistanceUnit } from "@/lib/units";
 import { pickAndUploadImage } from "@/lib/uploadImage";
 import MileSplitsChart from "@/components/MileSplitsChart";
 import ProfileCharts from "@/components/ProfileCharts";
@@ -1017,9 +1017,13 @@ function ProfileScreenInner() {
           onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setTopRunsModal("fastest"); }}
         >
           <Text style={styles.statNum}>
-            {computedTopRuns.fastest[0]?.pace != null ? toDisplayPace(computedTopRuns.fastest[0].pace, distUnit) : "—"}
+            {computedTopRuns.fastest[0]?.pace != null
+              ? (profileActivity === "ride"
+                  ? toDisplaySpeed(computedTopRuns.fastest[0].pace, distUnit)
+                  : toDisplayPace(computedTopRuns.fastest[0].pace, distUnit))
+              : "—"}
           </Text>
-          <Text style={styles.statName}>Fastest Pace</Text>
+          <Text style={styles.statName}>{profileActivity === "ride" ? "Top Speed" : "Fastest Pace"}</Text>
           <Feather name="chevron-right" size={10} color={C.textMuted} style={{ marginTop: 2 }} />
         </Pressable>
       </View>
@@ -1071,10 +1075,12 @@ function ProfileScreenInner() {
             <View>
               <Text style={styles.statsVal}>
                 {actStats.avgPace != null
-                  ? toDisplayPace(actStats.avgPace, distUnit)
+                  ? (profileActivity === "ride"
+                      ? toDisplaySpeed(actStats.avgPace, distUnit)
+                      : toDisplayPace(actStats.avgPace, distUnit))
                   : "—"}
               </Text>
-              <Text style={styles.statsLabel}>Avg Pace</Text>
+              <Text style={styles.statsLabel}>{profileActivity === "ride" ? "Avg Speed" : "Avg Pace"}</Text>
             </View>
           </View>
           <View style={styles.statsItem}>
@@ -1966,7 +1972,9 @@ function ProfileScreenInner() {
                             </View>
                             <Text style={styles.soloHistMeta}>
                               {formatDisplayDate(run.date)}
-                              {run.pace_min_per_mile ? ` · ${toDisplayPace(run.pace_min_per_mile, distUnit)}` : ""}
+                              {run.pace_min_per_mile
+                                ? ` · ${run.activity_type === "ride" ? toDisplaySpeed(run.pace_min_per_mile, distUnit) : toDisplayPace(run.pace_min_per_mile, distUnit)}`
+                                : ""}
                               {run.duration_seconds ? ` · ${formatDurationSolo(run.duration_seconds)}` : ""}
                               {!isSolo && run.host_name ? ` · ${run.is_host ? "You hosted" : `by ${run.host_name}`}` : ""}
                               {isSolo && run.elevation_gain_ft ? ` · ${Math.round(run.elevation_gain_ft)}ft elev` : ""}
@@ -2020,8 +2028,12 @@ function ProfileScreenInner() {
                             {run.pace_min_per_mile != null && (
                               <View style={styles.soloStatItem}>
                                 <Feather name="zap" size={13} color={C.primary} />
-                                <Text style={styles.soloStatLabel}>Pace</Text>
-                                <Text style={styles.soloStatValue}>{toDisplayPace(run.pace_min_per_mile, distUnit)}</Text>
+                                <Text style={styles.soloStatLabel}>{run.activity_type === "ride" ? "Speed" : "Pace"}</Text>
+                                <Text style={styles.soloStatValue}>
+                                  {run.activity_type === "ride"
+                                    ? toDisplaySpeed(run.pace_min_per_mile, distUnit)
+                                    : toDisplayPace(run.pace_min_per_mile, distUnit)}
+                                </Text>
                               </View>
                             )}
                             <View style={styles.soloStatItem}>
@@ -2065,7 +2077,7 @@ function ProfileScreenInner() {
                         <View style={[styles.soloStatPanel, { paddingVertical: 10 }]}>
                           {run.pace_min_per_mile != null && (
                             <Text style={[styles.soloHistMeta, { textAlign: "center" }]}>
-                              Pace: {toDisplayPace(run.pace_min_per_mile, distUnit)}
+                              {run.activity_type === "ride" ? "Speed" : "Pace"}: {run.activity_type === "ride" ? toDisplaySpeed(run.pace_min_per_mile, distUnit) : toDisplayPace(run.pace_min_per_mile, distUnit)}
                               {run.duration_seconds ? `  ·  Duration: ${formatDurationSolo(run.duration_seconds)}` : ""}
                             </Text>
                           )}
@@ -2202,7 +2214,9 @@ function ProfileScreenInner() {
                             <Text style={styles.soloHistMeta}>
                               {formatDisplayDate(run.date)}
                               {run.duration_seconds ? ` · ${formatDurationSolo(run.duration_seconds)}` : ""}
-                              {run.pace_min_per_mile ? ` · ${toDisplayPace(run.pace_min_per_mile, distUnit)}` : ""}
+                              {run.pace_min_per_mile
+                                ? ` · ${run.activity_type === "ride" ? toDisplaySpeed(run.pace_min_per_mile, distUnit) : toDisplayPace(run.pace_min_per_mile, distUnit)}`
+                                : ""}
                               {run.elevation_gain_ft ? ` · ${Math.round(run.elevation_gain_ft)}ft` : ""}
                             </Text>
                           </View>
@@ -2235,8 +2249,12 @@ function ProfileScreenInner() {
                             {run.pace_min_per_mile != null && (
                               <View style={styles.soloStatItem}>
                                 <Feather name="zap" size={13} color={C.primary} />
-                                <Text style={styles.soloStatLabel}>Pace</Text>
-                                <Text style={styles.soloStatValue}>{toDisplayPace(run.pace_min_per_mile, distUnit)}</Text>
+                                <Text style={styles.soloStatLabel}>{run.activity_type === "ride" ? "Speed" : "Pace"}</Text>
+                                <Text style={styles.soloStatValue}>
+                                  {run.activity_type === "ride"
+                                    ? toDisplaySpeed(run.pace_min_per_mile, distUnit)
+                                    : toDisplayPace(run.pace_min_per_mile, distUnit)}
+                                </Text>
                               </View>
                             )}
                             <View style={styles.soloStatItem}>
@@ -2353,7 +2371,9 @@ function ProfileScreenInner() {
                     </Text>
                     <Text style={styles.topRunMeta}>
                       {run.date ? fmtDate(run.date) : ""}
-                      {run.pace ? ` · ${toDisplayPace(run.pace, distUnit)}` : ""}
+                      {run.pace
+                        ? ` · ${profileActivity === "ride" ? toDisplaySpeed(run.pace, distUnit) : toDisplayPace(run.pace, distUnit)}`
+                        : ""}
                     </Text>
                   </View>
                   <View style={styles.topRunStat}>
@@ -2363,7 +2383,9 @@ function ProfileScreenInner() {
                         <Text style={styles.topRunStatUnit}>{unitLabel(distUnit)}</Text>
                       </>
                     ) : (
-                      <Text style={styles.topRunStatNum}>{toDisplayPace(run.pace, distUnit)}</Text>
+                      <Text style={styles.topRunStatNum}>
+                        {profileActivity === "ride" ? toDisplaySpeed(run.pace, distUnit) : toDisplayPace(run.pace, distUnit)}
+                      </Text>
                     )}
                     <View style={[styles.topRunTypePill, { backgroundColor: run.run_type === "solo" ? C.primaryMuted : C.blue + "22" }]}>
                       <Text style={[styles.topRunTypeTxt, { color: run.run_type === "solo" ? C.primary : C.blue }]}>
