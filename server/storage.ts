@@ -251,6 +251,7 @@ export async function initDb() {
     ALTER TABLE run_participants ADD COLUMN IF NOT EXISTS final_rank INTEGER;
     ALTER TABLE run_participants ADD COLUMN IF NOT EXISTS abandoned BOOLEAN DEFAULT false;
     CREATE UNIQUE INDEX IF NOT EXISTS run_participants_run_user_unique ON run_participants (run_id, user_id);
+    CREATE INDEX IF NOT EXISTS run_participants_abandoned_idx ON run_participants (abandoned);
 
     CREATE TABLE IF NOT EXISTS run_tracking_points (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1277,6 +1278,7 @@ export async function getUserRecentDistances(userId: string, limit = 10): Promis
        SELECT rp.final_distance AS distance, r.date FROM run_participants rp
        JOIN runs r ON r.id = rp.run_id
        WHERE rp.user_id = $1 AND rp.final_distance IS NOT NULL
+         AND (rp.abandoned IS NULL OR rp.abandoned = false)
      ) combined
      ORDER BY date DESC
      LIMIT $2`,
@@ -1948,13 +1950,13 @@ export async function getUserRuns(userId: string) {
       ) as my_route_path
      FROM runs r
      JOIN users u ON u.id = r.host_id
-     WHERE (r.host_id = $1 OR r.id IN (SELECT run_id FROM run_participants WHERE user_id = $1 AND status != 'cancelled'))
+     WHERE (r.host_id = $1 OR r.id IN (SELECT run_id FROM run_participants WHERE user_id = $1 AND status != 'cancelled' AND (abandoned IS NULL OR abandoned = false)))
        AND r.is_deleted IS NOT TRUE
        AND r.is_abandoned IS NOT TRUE
        AND (
          r.date > NOW()
          OR r.host_id = $1
-         OR EXISTS (SELECT 1 FROM run_participants rp4 WHERE rp4.run_id = r.id AND rp4.user_id = $1 AND rp4.status != 'cancelled')
+         OR EXISTS (SELECT 1 FROM run_participants rp4 WHERE rp4.run_id = r.id AND rp4.user_id = $1 AND rp4.status != 'cancelled' AND (rp4.abandoned IS NULL OR rp4.abandoned = false))
        )
      ORDER BY r.date DESC`,
     [userId]
@@ -2856,7 +2858,8 @@ async function computeLeaderboardRanksWithClient(runId: string, db: any) {
   if (isCrewRun) {
     const groupsRes = await db.query(
       `SELECT DISTINCT pace_group_label FROM run_participants
-       WHERE run_id = $1 AND final_pace IS NOT NULL AND final_pace > 0`,
+       WHERE run_id = $1 AND final_pace IS NOT NULL AND final_pace > 0
+         AND (abandoned IS NULL OR abandoned = false)`,
       [runId]
     );
     for (const groupRow of groupsRes.rows) {
@@ -2864,6 +2867,7 @@ async function computeLeaderboardRanksWithClient(runId: string, db: any) {
       const finishedRes = await db.query(
         `SELECT user_id, final_pace FROM run_participants
          WHERE run_id = $1 AND final_pace IS NOT NULL AND final_pace > 0
+           AND (abandoned IS NULL OR abandoned = false)
            AND (pace_group_label = $2 OR ($2::text IS NULL AND pace_group_label IS NULL))
          ORDER BY final_pace ASC`,
         [runId, label]
@@ -2878,7 +2882,8 @@ async function computeLeaderboardRanksWithClient(runId: string, db: any) {
   } else {
     const finishedRes = await db.query(
       `SELECT user_id, final_pace FROM run_participants
-       WHERE run_id = $1 AND final_pace IS NOT NULL AND final_pace > 0 ORDER BY final_pace ASC`,
+       WHERE run_id = $1 AND final_pace IS NOT NULL AND final_pace > 0
+         AND (abandoned IS NULL OR abandoned = false) ORDER BY final_pace ASC`,
       [runId]
     );
     for (let i = 0; i < finishedRes.rows.length; i++) {
@@ -2996,6 +3001,7 @@ export async function getRunResults(runId: string) {
      JOIN users u ON u.id = rp.user_id
      WHERE rp.run_id = $1
        AND rp.status != 'cancelled'
+       AND (rp.abandoned IS NULL OR rp.abandoned = false)
        AND (rp.is_present = true OR rp.final_distance IS NOT NULL)
      ORDER BY rp.pace_group_label ASC NULLS LAST, rp.final_rank ASC NULLS LAST, rp.joined_at ASC`,
     [runId]
@@ -3232,14 +3238,16 @@ export async function checkAndAwardAchievements(userId: string, totalMiles: numb
 
   const committedRes = await db.query(
     `SELECT COUNT(*) as cnt FROM run_participants rp JOIN runs r ON r.id = rp.run_id
-     WHERE rp.user_id = $1 AND rp.status != 'cancelled' AND r.date < NOW()`,
+     WHERE rp.user_id = $1 AND rp.status != 'cancelled' AND r.date < NOW()
+       AND (rp.abandoned IS NULL OR rp.abandoned = false)`,
     [userId]
   );
   const committedCount = parseInt(committedRes.rows[0]?.cnt ?? 0);
   if (committedCount >= 5) {
     const presentRes = await db.query(
       `SELECT COUNT(*) as cnt FROM run_participants rp JOIN runs r ON r.id = rp.run_id
-       WHERE rp.user_id = $1 AND rp.status != 'cancelled' AND rp.is_present = true AND r.date < NOW()`,
+       WHERE rp.user_id = $1 AND rp.status != 'cancelled' AND rp.is_present = true AND r.date < NOW()
+         AND (rp.abandoned IS NULL OR rp.abandoned = false)`,
       [userId]
     );
     const presentCount = parseInt(presentRes.rows[0]?.cnt ?? 0);
@@ -3492,7 +3500,8 @@ export async function getAchievementStats(userId: string) {
 
   const committedStatRes = await pool.query(
     `SELECT COUNT(*) as cnt FROM run_participants rp JOIN runs r ON r.id = rp.run_id
-     WHERE rp.user_id = $1 AND rp.status != 'cancelled' AND r.date < NOW()`,
+     WHERE rp.user_id = $1 AND rp.status != 'cancelled' AND r.date < NOW()
+       AND (rp.abandoned IS NULL OR rp.abandoned = false)`,
     [userId]
   );
   const committedStatCount = parseInt(committedStatRes.rows[0]?.cnt ?? 0);
@@ -3500,7 +3509,8 @@ export async function getAchievementStats(userId: string) {
   if (committedStatCount >= 5) {
     const presentStatRes = await pool.query(
       `SELECT COUNT(*) as cnt FROM run_participants rp JOIN runs r ON r.id = rp.run_id
-       WHERE rp.user_id = $1 AND rp.status != 'cancelled' AND rp.is_present = true AND r.date < NOW()`,
+       WHERE rp.user_id = $1 AND rp.status != 'cancelled' AND rp.is_present = true AND r.date < NOW()
+         AND (rp.abandoned IS NULL OR rp.abandoned = false)`,
       [userId]
     );
     const presentStatCount = parseInt(presentStatRes.rows[0]?.cnt ?? 0);
@@ -4260,7 +4270,8 @@ export async function getPublicUserProfile(userId: string) {
           0
         ) + COALESCE(
           (SELECT SUM(rp.final_distance) FROM run_participants rp
-           WHERE rp.user_id = $1 AND rp.final_distance IS NOT NULL AND rp.final_distance > 0),
+           WHERE rp.user_id = $1 AND rp.final_distance IS NOT NULL AND rp.final_distance > 0
+             AND (rp.abandoned IS NULL OR rp.abandoned = false)),
           0
         ) AS total_miles,
         COALESCE(
@@ -4269,7 +4280,8 @@ export async function getPublicUserProfile(userId: string) {
           0
         ) + COALESCE(
           (SELECT COUNT(*) FROM run_participants rp
-           WHERE rp.user_id = $1 AND rp.final_distance IS NOT NULL AND rp.final_distance > 0),
+           WHERE rp.user_id = $1 AND rp.final_distance IS NOT NULL AND rp.final_distance > 0
+             AND (rp.abandoned IS NULL OR rp.abandoned = false)),
           0
         ) AS completed_runs,
         COALESCE(
@@ -4324,6 +4336,7 @@ export async function getUserTopRuns(userId: string) {
        FROM run_participants rp
        JOIN runs r ON r.id = rp.run_id
        WHERE rp.user_id = $1 AND rp.final_distance IS NOT NULL AND rp.final_distance > 0
+         AND (rp.abandoned IS NULL OR rp.abandoned = false)
      ) combined
      ORDER BY dist DESC LIMIT 5`,
     [userId]
@@ -4339,6 +4352,7 @@ export async function getUserTopRuns(userId: string) {
        FROM run_participants rp
        JOIN runs r ON r.id = rp.run_id
        WHERE rp.user_id = $1 AND rp.final_pace IS NOT NULL AND rp.final_pace > 0
+         AND (rp.abandoned IS NULL OR rp.abandoned = false)
      ) combined
      ORDER BY pace ASC LIMIT 5`,
     [userId]
@@ -4364,6 +4378,7 @@ export async function getUserRunRecords(userId: string) {
        SELECT distance_miles as dist FROM solo_runs WHERE user_id = $1 AND completed = true
        UNION ALL
        SELECT final_distance as dist FROM run_participants WHERE user_id = $1 AND final_distance IS NOT NULL AND final_distance > 0
+         AND (abandoned IS NULL OR abandoned = false)
      ) combined`,
     [userId]
   );
@@ -4788,10 +4803,10 @@ export async function getCrewRunHistory(crewId: string) {
     `SELECT r.id, r.title, r.date, r.min_distance, r.activity_type, r.host_id,
             u.name AS host_name,
             COALESCE(
-              AVG(rp.final_pace) FILTER (WHERE rp.is_present = true AND rp.final_pace IS NOT NULL),
+              AVG(rp.final_pace) FILTER (WHERE rp.is_present = true AND rp.final_pace IS NOT NULL AND (rp.abandoned IS NULL OR rp.abandoned = false)),
               0
             ) AS avg_attendee_pace,
-            COUNT(rp.user_id) FILTER (WHERE rp.is_present = true) AS attendee_count
+            COUNT(rp.user_id) FILTER (WHERE rp.is_present = true AND (rp.abandoned IS NULL OR rp.abandoned = false)) AS attendee_count
      FROM runs r
      JOIN users u ON u.id = r.host_id
      LEFT JOIN run_participants rp ON rp.run_id = r.id
@@ -4818,6 +4833,7 @@ export async function getCrewStats(crewId: string) {
        (SELECT COUNT(*) FROM crew_members WHERE crew_id = $1 AND status = 'member') AS total_members
      FROM runs r
      LEFT JOIN run_participants rp ON rp.run_id = r.id AND rp.final_distance IS NOT NULL AND rp.final_distance > 0
+       AND (rp.abandoned IS NULL OR rp.abandoned = false)
      WHERE r.crew_id = $1 AND r.date < NOW()`,
     [crewId]
   );
