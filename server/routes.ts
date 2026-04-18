@@ -748,7 +748,7 @@ async function go(e){
           ) + COALESCE(
             (SELECT SUM(rp.final_distance) FROM run_participants rp
              JOIN runs r ON r.id = rp.run_id
-             WHERE rp.user_id = $1 AND rp.final_distance IS NOT NULL
+             WHERE rp.user_id = $1 AND rp.final_distance IS NOT NULL AND rp.final_distance > 0
              AND ($2 = 'mixed' OR r.activity_type = $2)),
             0
           ) AS total_miles,
@@ -760,7 +760,7 @@ async function go(e){
           ) + COALESCE(
             (SELECT COUNT(*) FROM run_participants rp
              JOIN runs r ON r.id = rp.run_id
-             WHERE rp.user_id = $1 AND rp.final_distance IS NOT NULL
+             WHERE rp.user_id = $1 AND rp.final_distance IS NOT NULL AND rp.final_distance > 0
              AND ($2 = 'mixed' OR r.activity_type = $2)),
             0
           ) AS count,
@@ -2970,7 +2970,7 @@ async function go(e){
                 FROM run_participants rp
                 JOIN runs r ON r.id = rp.run_id
                 JOIN crew_members cm3 ON cm3.user_id = rp.user_id AND cm3.crew_id = c.id AND cm3.status = 'member'
-                WHERE rp.final_distance IS NOT NULL
+                WHERE rp.final_distance IS NOT NULL AND rp.final_distance > 0
                 AND ($1 = 'mixed' OR r.activity_type = $1)
               ), 0)
             ) AS total_miles

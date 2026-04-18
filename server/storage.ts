@@ -3162,7 +3162,7 @@ export async function checkAndAwardAchievements(userId: string, totalMiles: numb
   const maxSingleRun = await db.query(
     `SELECT COALESCE(MAX(rp.miles_logged), 0) as max FROM run_participants rp
      JOIN runs r ON r.id = rp.run_id
-     WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND r.activity_type = 'run'`,
+     WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND rp.miles_logged > 0 AND r.activity_type = 'run'`,
     [userId]
   );
   const maxMiles = parseFloat(maxSingleRun.rows[0]?.max ?? 0);
@@ -3300,7 +3300,7 @@ export async function getAchievementStats(userId: string) {
       [userId]
     ),
     pool.query(
-      `SELECT COALESCE(MAX(miles_logged), 0) as max FROM run_participants WHERE user_id = $1 AND status = 'confirmed'`,
+      `SELECT COALESCE(MAX(miles_logged), 0) as max FROM run_participants WHERE user_id = $1 AND status = 'confirmed' AND miles_logged > 0`,
       [userId]
     ),
     pool.query(
@@ -3390,12 +3390,12 @@ export async function getAchievementStats(userId: string) {
     ),
     pool.query(
       `SELECT COALESCE(SUM(rp.miles_logged), 0) as total FROM run_participants rp JOIN runs r ON r.id = rp.run_id
-       WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND r.activity_type = 'ride'`,
+       WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND rp.miles_logged > 0 AND r.activity_type = 'ride'`,
       [userId]
     ),
     pool.query(
       `SELECT COALESCE(MAX(rp.miles_logged), 0) as max FROM run_participants rp JOIN runs r ON r.id = rp.run_id
-       WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND r.activity_type = 'ride'`,
+       WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND rp.miles_logged > 0 AND r.activity_type = 'ride'`,
       [userId]
     ),
     pool.query(
@@ -3577,7 +3577,7 @@ export async function checkAndAwardRideAchievements(userId: string) {
 
   const rideMilesRes = await pool.query(
     `SELECT COALESCE(SUM(rp.miles_logged), 0) as total FROM run_participants rp JOIN runs r ON r.id = rp.run_id
-     WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND r.activity_type = 'ride'`,
+     WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND rp.miles_logged > 0 AND r.activity_type = 'ride'`,
     [userId]
   );
   const totalRideMiles = parseFloat(rideMilesRes.rows[0]?.total ?? 0);
@@ -3588,7 +3588,7 @@ export async function checkAndAwardRideAchievements(userId: string) {
 
   const maxSingleRide = await pool.query(
     `SELECT COALESCE(MAX(rp.miles_logged), 0) as max FROM run_participants rp JOIN runs r ON r.id = rp.run_id
-     WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND r.activity_type = 'ride'`,
+     WHERE rp.user_id = $1 AND rp.status = 'confirmed' AND rp.miles_logged > 0 AND r.activity_type = 'ride'`,
     [userId]
   );
   const maxRideMiles = parseFloat(maxSingleRide.rows[0]?.max ?? 0);
@@ -4260,7 +4260,7 @@ export async function getPublicUserProfile(userId: string) {
           0
         ) + COALESCE(
           (SELECT SUM(rp.final_distance) FROM run_participants rp
-           WHERE rp.user_id = $1 AND rp.final_distance IS NOT NULL),
+           WHERE rp.user_id = $1 AND rp.final_distance IS NOT NULL AND rp.final_distance > 0),
           0
         ) AS total_miles,
         COALESCE(
@@ -4269,7 +4269,7 @@ export async function getPublicUserProfile(userId: string) {
           0
         ) + COALESCE(
           (SELECT COUNT(*) FROM run_participants rp
-           WHERE rp.user_id = $1 AND rp.final_distance IS NOT NULL),
+           WHERE rp.user_id = $1 AND rp.final_distance IS NOT NULL AND rp.final_distance > 0),
           0
         ) AS completed_runs,
         COALESCE(
@@ -4323,7 +4323,7 @@ export async function getUserTopRuns(userId: string) {
        SELECT rp.final_distance as dist, r.date, rp.final_pace as pace, r.title, 'group' as run_type
        FROM run_participants rp
        JOIN runs r ON r.id = rp.run_id
-       WHERE rp.user_id = $1 AND rp.final_distance IS NOT NULL
+       WHERE rp.user_id = $1 AND rp.final_distance IS NOT NULL AND rp.final_distance > 0
      ) combined
      ORDER BY dist DESC LIMIT 5`,
     [userId]
@@ -4363,7 +4363,7 @@ export async function getUserRunRecords(userId: string) {
     `SELECT MAX(dist) as longest FROM (
        SELECT distance_miles as dist FROM solo_runs WHERE user_id = $1 AND completed = true
        UNION ALL
-       SELECT final_distance as dist FROM run_participants WHERE user_id = $1 AND final_distance IS NOT NULL
+       SELECT final_distance as dist FROM run_participants WHERE user_id = $1 AND final_distance IS NOT NULL AND final_distance > 0
      ) combined`,
     [userId]
   );
@@ -4817,7 +4817,7 @@ export async function getCrewStats(crewId: string) {
        )) AS total_events,
        (SELECT COUNT(*) FROM crew_members WHERE crew_id = $1 AND status = 'member') AS total_members
      FROM runs r
-     LEFT JOIN run_participants rp ON rp.run_id = r.id AND rp.final_distance IS NOT NULL
+     LEFT JOIN run_participants rp ON rp.run_id = r.id AND rp.final_distance IS NOT NULL AND rp.final_distance > 0
      WHERE r.crew_id = $1 AND r.date < NOW()`,
     [crewId]
   );
@@ -5244,18 +5244,29 @@ export async function getUsersForWeeklySummary(): Promise<{ id: string; name: st
 
 export async function getWeeklyStatsForUser(userId: string): Promise<{ runs: number; totalMi: number; totalSeconds: number }> {
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  const res = await pool.query(
-    `SELECT COUNT(*) as runs,
-            COALESCE(SUM(distance_miles), 0) as total_mi,
-            COALESCE(SUM(duration_seconds), 0) as total_seconds
-     FROM solo_runs
-     WHERE user_id = $1 AND completed = true AND created_at >= $2 AND is_deleted IS NOT TRUE`,
-    [userId, since]
-  );
+  const [soloRes, groupRes] = await Promise.all([
+    pool.query(
+      `SELECT COUNT(*) as runs,
+              COALESCE(SUM(distance_miles), 0) as total_mi,
+              COALESCE(SUM(duration_seconds), 0) as total_seconds
+       FROM solo_runs
+       WHERE user_id = $1 AND completed = true AND created_at >= $2 AND is_deleted IS NOT TRUE`,
+      [userId, since]
+    ),
+    pool.query(
+      `SELECT COUNT(*) as runs,
+              COALESCE(SUM(rp.final_distance), 0) as total_mi
+       FROM run_participants rp
+       JOIN runs r ON r.id = rp.run_id
+       WHERE rp.user_id = $1 AND rp.final_distance IS NOT NULL AND rp.final_distance > 0
+         AND r.date >= $2 AND r.is_deleted IS NOT TRUE`,
+      [userId, since]
+    ),
+  ]);
   return {
-    runs: parseInt(res.rows[0].runs, 10),
-    totalMi: parseFloat(res.rows[0].total_mi),
-    totalSeconds: parseInt(res.rows[0].total_seconds, 10),
+    runs: parseInt(soloRes.rows[0].runs, 10) + parseInt(groupRes.rows[0].runs, 10),
+    totalMi: parseFloat(soloRes.rows[0].total_mi) + parseFloat(groupRes.rows[0].total_mi),
+    totalSeconds: parseInt(soloRes.rows[0].total_seconds, 10),
   };
 }
 
