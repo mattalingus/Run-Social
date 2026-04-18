@@ -63,6 +63,9 @@ try {
 
 async function registerPushToken(userId: string) {
   try {
+    // If the user explicitly deferred during onboarding, the solo-tab banner will handle prompting
+    const deferred = await AsyncStorage.getItem("@paceup_notif_deferred");
+    if (deferred === "true") return;
     const { status: existing } = await Notifications.getPermissionsAsync();
     if (existing === "denied") return; // user already declined — don't re-prompt
     const { status } = await Notifications.requestPermissionsAsync();
@@ -108,9 +111,10 @@ function RootLayoutNav() {
     }
   }, [isLoading, user, isSuspended]);
 
-  // Register push token once when user logs in
+  // Register push token once when user logs in — skip if onboarding not yet complete
+  // (the onboarding notifications step handles the initial permission request)
   useEffect(() => {
-    if (user && !pushRegistered.current && Platform.OS !== "web") {
+    if (user && !pushRegistered.current && Platform.OS !== "web" && user.onboarding_complete !== false) {
       pushRegistered.current = true;
       registerPushToken(user.id);
     }
@@ -123,7 +127,7 @@ function RootLayoutNav() {
   useEffect(() => {
     if (Platform.OS === "web") return;
     const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active" && user) {
+      if (state === "active" && user && user.onboarding_complete !== false) {
         registerPushToken(user.id);
       }
     });

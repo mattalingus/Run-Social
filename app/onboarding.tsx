@@ -13,11 +13,15 @@ import {
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActivity, ActivityType } from "@/contexts/ActivityContext";
 import { useWalkthrough } from "@/contexts/WalkthroughContext";
 import { getApiUrl, apiFetch } from "@/lib/query-client";
 import { buildOnboardingInviteSmsUrl } from "@/lib/shareLinks";
+import * as Notifications from "@/lib/safeNotifications";
+
+const NOTIF_DEFERRED_KEY = "@paceup_notif_deferred";
 
 type ActivityOption = {
   type: ActivityType;
@@ -32,15 +36,28 @@ const ACTIVITIES: ActivityOption[] = [
   { type: "walk", label: "Walking", icon: "footsteps", emoji: "🚶" },
 ];
 
+const NOTIF_BENEFITS = [
+  { icon: "timer-outline" as const, text: "Run starting soon reminders" },
+  { icon: "people-outline" as const, text: "Friend requests & crew invites" },
+  { icon: "flash-outline" as const, text: "Live alerts from your crew" },
+  { icon: "trophy-outline" as const, text: "Personal milestone celebrations" },
+];
+
 export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
   const { user, refreshUser } = useAuth();
   const { setActivityFilter } = useActivity();
   const { startWalkthrough } = useWalkthrough();
 
+  const [step, setStep] = useState<"prefs" | "notifications">("prefs");
   const [selectedActivity, setSelectedActivity] = useState<ActivityType>("run");
   const [monthlyGoal, setMonthlyGoal] = useState("50");
   const [yearlyGoal, setYearlyGoal] = useState("500");
+  const [loading, setLoading] = useState(false);
+  const [notifLoading, setNotifLoading] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const firstName = user?.name?.split(" ")[0] ?? "there";
 
   function handleActivitySelect(activity: ActivityType) {
     setSelectedActivity(activity);
@@ -55,17 +72,13 @@ export default function OnboardingScreen() {
       setYearlyGoal("500");
     }
   }
-  const [loading, setLoading] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-
-  const firstName = user?.name?.split(" ")[0] ?? "there";
 
   function parseGoal(raw: string, fallback: number): number {
     const n = parseFloat(raw);
     return Number.isFinite(n) && n > 0 ? n : fallback;
   }
 
-  async function handleGetStarted() {
+  async function handleSavePrefs() {
     setSaveError(null);
     setLoading(true);
     try {
@@ -86,18 +99,44 @@ export default function OnboardingScreen() {
         return;
       }
       setActivityFilter(selectedActivity);
-      await refreshUser();
+      // Do NOT call refreshUser() here — keeping onboarding_complete=false locally
+      // prevents _layout.tsx from silently firing push registration before the
+      // user sees the notifications step. refreshUser() is called in completeOnboarding().
     } catch (_) {
       setSaveError("Network error. Please try again.");
       setLoading(false);
       return;
     }
     setLoading(false);
+    setStep("notifications");
+  }
+
+  async function completeOnboarding() {
+    // Refresh user now that onboarding is truly complete (user has made a notif choice).
+    // This triggers push registration in _layout.tsx — at this point either the
+    // permission is already granted (enable path) or the deferred key is set (later path).
+    await refreshUser().catch(() => {});
     router.replace("/(tabs)");
     startWalkthrough();
   }
 
+  async function handleEnableNotifs() {
+    setNotifLoading(true);
+    try {
+      await Notifications.requestPermissionsAsync();
+    } catch (_) {}
+    setNotifLoading(false);
+    completeOnboarding();
+  }
+
+  async function handleLaterNotifs() {
+    await AsyncStorage.setItem(NOTIF_DEFERRED_KEY, "true").catch(() => {});
+    completeOnboarding();
+  }
+
   async function handleSkip() {
+    // Also defer notifications for skip users — the solo-tab banner will prompt after first run
+    await AsyncStorage.setItem(NOTIF_DEFERRED_KEY, "true").catch(() => {});
     try {
       const url = new URL("/api/users/me/onboarding", getApiUrl()).toString();
       const res = await apiFetch(url, {
@@ -119,6 +158,64 @@ export default function OnboardingScreen() {
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
+
+  if (step === "notifications") {
+    return (
+      <View style={[styles.root, { paddingTop: topPad }]}>
+        <ScrollView
+          contentContainerStyle={[styles.scroll, styles.notifScroll, { paddingBottom: bottomPad + 32 }]}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Bell icon */}
+          <View style={styles.notifIconWrap}>
+            <Ionicons name="notifications" size={38} color="#00D97E" />
+          </View>
+
+          <Text style={styles.notifHeadline}>Stay in the loop</Text>
+          <Text style={styles.notifSubtitle}>
+            Let PaceUp nudge you at the right moments so you never miss a beat.
+          </Text>
+
+          {/* Benefits list */}
+          <View style={styles.benefitsList}>
+            {NOTIF_BENEFITS.map((b, i) => (
+              <View key={i} style={styles.benefitRow}>
+                <View style={styles.benefitIcon}>
+                  <Ionicons name={b.icon} size={18} color="#00D97E" />
+                </View>
+                <Text style={styles.benefitText}>{b.text}</Text>
+              </View>
+            ))}
+          </View>
+
+          {/* Enable button */}
+          <TouchableOpacity
+            style={[styles.ctaBtn, notifLoading && styles.ctaBtnDisabled]}
+            onPress={handleEnableNotifs}
+            activeOpacity={0.85}
+            disabled={notifLoading}
+            testID="notif-enable-btn"
+          >
+            {notifLoading ? (
+              <ActivityIndicator color="#050C09" />
+            ) : (
+              <Text style={styles.ctaLabel}>Enable notifications</Text>
+            )}
+          </TouchableOpacity>
+
+          {/* Maybe later */}
+          <TouchableOpacity
+            onPress={handleLaterNotifs}
+            style={styles.skipBtn}
+            disabled={notifLoading}
+            testID="notif-later-btn"
+          >
+            <Text style={styles.skipLabel}>Maybe later</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.root, { paddingTop: topPad }]}>
@@ -218,7 +315,7 @@ export default function OnboardingScreen() {
         {/* CTA */}
         <TouchableOpacity
           style={[styles.ctaBtn, loading && styles.ctaBtnDisabled]}
-          onPress={handleGetStarted}
+          onPress={handleSavePrefs}
           activeOpacity={0.85}
           disabled={loading}
         >
@@ -246,6 +343,11 @@ const styles = StyleSheet.create({
   scroll: {
     paddingHorizontal: 24,
     paddingTop: 24,
+  },
+  notifScroll: {
+    flex: 1,
+    justifyContent: "center",
+    paddingTop: 40,
   },
   logoRow: {
     flexDirection: "row",
@@ -432,5 +534,63 @@ const styles = StyleSheet.create({
     color: "#FF6B35",
     textAlign: "center",
     marginBottom: 12,
+  },
+  notifIconWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "#0A1F14",
+    borderWidth: 1.5,
+    borderColor: "#1A3D22",
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "center",
+    marginBottom: 28,
+  },
+  notifHeadline: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 28,
+    color: "#FFFFFF",
+    textAlign: "center",
+    marginBottom: 10,
+  },
+  notifSubtitle: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 15,
+    color: "#6FAB84",
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 32,
+    paddingHorizontal: 8,
+  },
+  benefitsList: {
+    backgroundColor: "#0D1510",
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: "#1A2E20",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginBottom: 32,
+    gap: 2,
+  },
+  benefitRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    paddingVertical: 12,
+  },
+  benefitIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#132019",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  benefitText: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 15,
+    color: "#D0E8DA",
+    flex: 1,
   },
 });

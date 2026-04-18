@@ -530,6 +530,7 @@ export default function SoloScreen() {
   const s = useMemo(() => makeStyles(C), [C]);
   const qc = useQueryClient();
   const [ghostSoloDone, setGhostSoloDone] = useState(true);
+  const [showNotifBanner, setShowNotifBanner] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -820,6 +821,19 @@ export default function SoloScreen() {
     }
   }, [historyRuns.length, user?.id, ghostSoloDone]);
 
+  // Show a one-time soft banner to users who deferred push notifications during onboarding,
+  // once they've completed their first activity and permission is still undetermined.
+  useEffect(() => {
+    if (!user?.id || historyRuns.length === 0 || Platform.OS === "web") return;
+    AsyncStorage.getItem("@paceup_notif_deferred").then(async (val) => {
+      if (val !== "true") return;
+      const { status } = await Notifications.getPermissionsAsync();
+      if (status === "undetermined") {
+        setShowNotifBanner(true);
+      }
+    }).catch(() => {});
+  }, [user?.id, historyRuns.length]);
+
   const completedRuns = useMemo(
     () => filteredSoloRuns.filter((r) => r.completed && r.pace_min_per_mile),
     [filteredSoloRuns]
@@ -861,6 +875,25 @@ export default function SoloScreen() {
   const currentMiles = period === "monthly" ? (user?.miles_this_month ?? 0) : (user?.miles_this_year ?? 0);
   const distUnit: DistanceUnit = ((user as any)?.distance_unit ?? "miles") as DistanceUnit;
   const currentPace = user?.avg_pace ?? 0;
+
+  // ─── Deferred notif banner ───────────────────────────────────────────────────
+
+  const handleNotifBannerEnable = useCallback(async () => {
+    setShowNotifBanner(false);
+    await AsyncStorage.setItem("@paceup_notif_deferred", "done").catch(() => {});
+    const { status } = await Notifications.requestPermissionsAsync();
+    if (status === "granted") {
+      try {
+        const tokenData = await Notifications.getExpoPushTokenAsync();
+        await apiRequest("POST", "/api/users/me/push-token", { token: tokenData.data });
+      } catch (_) {}
+    }
+  }, []);
+
+  const handleNotifBannerDismiss = useCallback(async () => {
+    setShowNotifBanner(false);
+    await AsyncStorage.setItem("@paceup_notif_deferred", "done").catch(() => {});
+  }, []);
 
   // ─── Open goals modal ────────────────────────────────────────────────────────
 
@@ -1180,6 +1213,30 @@ export default function SoloScreen() {
           <Text style={s.planBtnTxt}>{activityFilter === "ride" ? "Plan Ride" : activityFilter === "walk" ? "Plan Walk" : "Plan Run"}</Text>
         </Pressable>
       </View>
+
+      {/* ─── Deferred notification banner ────────────────────────────── */}
+      {showNotifBanner && (
+        <View style={s.notifBanner}>
+          <View style={s.notifBannerIcon}>
+            <Ionicons name="notifications-outline" size={18} color="#00D97E" />
+          </View>
+          <Text style={s.notifBannerText}>Enable run reminders and crew alerts?</Text>
+          <Pressable
+            style={s.notifBannerBtn}
+            onPress={handleNotifBannerEnable}
+            testID="notif-banner-enable"
+          >
+            <Text style={s.notifBannerBtnTxt}>Enable</Text>
+          </Pressable>
+          <Pressable
+            onPress={handleNotifBannerDismiss}
+            style={s.notifBannerClose}
+            testID="notif-banner-dismiss"
+          >
+            <Ionicons name="close" size={16} color={C.textMuted} />
+          </Pressable>
+        </View>
+      )}
 
       {/* ─── Activity Toggle ─────────────────────────────────────────── */}
       <View style={s.activityToggleRow}>
@@ -1571,7 +1628,7 @@ export default function SoloScreen() {
         )}
       </View>
     </>
-  ), [activityFilter, C, s, buddyEligible, buddies, goalPct, distGoal, currentMiles, currentPace, paceGoal, period, distUnit, scheduledRuns, filteredSavedPaths, rankings, historyRuns, showHistory, isLoading, ghostSoloDone, historyFilter, displayedRuns]);
+  ), [activityFilter, C, s, buddyEligible, buddies, goalPct, distGoal, currentMiles, currentPace, paceGoal, period, distUnit, scheduledRuns, filteredSavedPaths, rankings, historyRuns, showHistory, isLoading, ghostSoloDone, historyFilter, displayedRuns, showNotifBanner, handleNotifBannerEnable, handleNotifBannerDismiss]);
 
   return (
     <View style={[s.container, { backgroundColor: C.bg }]}>
@@ -2473,6 +2530,50 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   },
   notifyCheckOn: { backgroundColor: C.primary, borderColor: C.primary },
   notifyLabel: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary, flex: 1 },
+
+  notifBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: C.primaryMuted,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.primary + "44",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 14,
+  },
+  notifBannerIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: C.primary + "22",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  notifBannerText: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 13,
+    color: C.text,
+    flex: 1,
+  },
+  notifBannerBtn: {
+    backgroundColor: C.primary,
+    borderRadius: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    flexShrink: 0,
+  },
+  notifBannerBtnTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 13,
+    color: C.bg,
+  },
+  notifBannerClose: {
+    padding: 4,
+    flexShrink: 0,
+  },
 
   sheetFooter: { flexDirection: "row", gap: 12, paddingTop: 20, borderTopWidth: 1, borderTopColor: C.border, marginTop: 8 },
   resetBtn: { flex: 1, height: 52, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: C.card, borderWidth: 1, borderColor: C.border },
