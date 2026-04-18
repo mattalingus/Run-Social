@@ -543,6 +543,79 @@ export async function initDb() {
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS is_route_public BOOLEAN DEFAULT false;
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS public_route_id VARCHAR REFERENCES public_routes(id) ON DELETE SET NULL;
     ALTER TABLE runs ADD COLUMN IF NOT EXISTS timezone TEXT DEFAULT NULL;
+
+    -- Login lockout
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INT DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ DEFAULT NULL;
+
+    -- Profile bio
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT DEFAULT NULL;
+
+    -- Email verification (existing users are considered pre-verified since they registered with email)
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE;
+    UPDATE users SET email_verified = TRUE WHERE email_verified = FALSE AND created_at < NOW() - INTERVAL '1 minute';
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_email TEXT DEFAULT NULL;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_email_token TEXT DEFAULT NULL;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_email_token_at TIMESTAMPTZ DEFAULT NULL;
+
+    -- Suspension (auto-moderation)
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_until TIMESTAMPTZ DEFAULT NULL;
+
+    -- Reports table
+    CREATE TABLE IF NOT EXISTS reports (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      reporter_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      target_type TEXT NOT NULL CHECK (target_type IN ('user', 'comment', 'run', 'crew_message')),
+      target_id TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      resolved BOOLEAN DEFAULT false,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_reports_target ON reports(target_type, target_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_reports_reporter ON reports(reporter_id);
+
+    -- Audit logs (moderation actions)
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id SERIAL PRIMARY KEY,
+      action TEXT NOT NULL,
+      actor TEXT NOT NULL DEFAULT 'system',
+      target_type TEXT,
+      target_id TEXT,
+      detail JSONB DEFAULT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    -- DB-level length constraints (idempotent via named constraint check)
+    DO $chk_solo_runs$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'chk_solo_runs_title_len'
+      ) THEN
+        ALTER TABLE solo_runs ADD CONSTRAINT chk_solo_runs_title_len CHECK (length(title) <= 80);
+      END IF;
+    END $chk_solo_runs$;
+
+    DO $chk_users_bio$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'chk_users_bio_len'
+      ) THEN
+        ALTER TABLE users ADD CONSTRAINT chk_users_bio_len CHECK (bio IS NULL OR length(bio) <= 300);
+      END IF;
+    END $chk_users_bio$;
+
+    -- Achievements uniqueness: remove duplicate slug rows then add unique constraint
+    DO $ach_uniq$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'achievements_user_slug_unique'
+      ) THEN
+        DELETE FROM achievements a1
+          USING achievements a2
+          WHERE a1.ctid > a2.ctid
+            AND a1.user_id = a2.user_id
+            AND a1.slug IS NOT NULL
+            AND a1.slug = a2.slug;
+        ALTER TABLE achievements ADD CONSTRAINT achievements_user_slug_unique UNIQUE (user_id, slug);
+      END IF;
+    END $ach_uniq$;
   `);
 
   const dummyCheck = await pool.query(`SELECT COUNT(*) FROM users WHERE email LIKE 'dummy-%@paceup.dev'`);
@@ -1178,6 +1251,12 @@ export async function searchUsers(query: string, currentUserId: string) {
   const result = await pool.query(
     `SELECT id, name, username, photo_url, completed_runs, total_miles FROM users
      WHERE id != $1 AND username ILIKE $2
+       AND id NOT IN (
+         SELECT blocked_id FROM user_blocks WHERE blocker_id = $1
+         UNION
+         SELECT blocker_id FROM user_blocks WHERE blocked_id = $1
+       )
+       AND (suspended_until IS NULL OR suspended_until < NOW())
      LIMIT 20`,
     [currentUserId, `%${query}%`]
   );
@@ -1751,12 +1830,14 @@ export async function getPublicRuns(filters?: {
   swLng?: number;
   neLat?: number;
   neLng?: number;
+  currentUserId?: string;
 }) {
   let query = `SELECT r.*, u.name as host_name, u.avg_rating as host_rating, u.rating_count as host_rating_count, u.photo_url as host_photo, u.marker_icon as host_marker_icon, u.hosted_runs as host_hosted_runs,
     (1 + (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status IS DISTINCT FROM 'cancelled' AND rp.user_id != r.host_id)) as participant_count,
     (SELECT COUNT(*) FROM planned_runs pr WHERE pr.run_id = r.id) as plan_count
     FROM runs r JOIN users u ON u.id = r.host_id
-    WHERE r.privacy = 'public' AND (r.is_active = true OR r.date > NOW() - INTERVAL '90 minutes') AND r.is_completed = false AND r.crew_id IS NULL AND r.is_deleted IS NOT TRUE`;
+    WHERE r.privacy = 'public' AND (r.is_active = true OR r.date > NOW() - INTERVAL '90 minutes') AND r.is_completed = false AND r.crew_id IS NULL AND r.is_deleted IS NOT TRUE
+    AND (u.suspended_until IS NULL OR u.suspended_until < NOW())`;
   const params: any[] = [];
   let idx = 1;
   if (filters?.minPace !== undefined) { query += ` AND r.max_pace >= $${idx++}`; params.push(filters.minPace); }
@@ -1775,6 +1856,15 @@ export async function getPublicRuns(filters?: {
   if (filters?.swLng !== undefined && filters.neLng !== undefined) {
     query += ` AND r.location_lng BETWEEN $${idx++} AND $${idx++}`;
     params.push(filters.swLng, filters.neLng);
+  }
+  if (filters?.currentUserId) {
+    query += ` AND r.host_id NOT IN (
+      SELECT blocked_id FROM user_blocks WHERE blocker_id = $${idx}
+      UNION
+      SELECT blocker_id FROM user_blocks WHERE blocked_id = $${idx}
+    )`;
+    params.push(filters.currentUserId);
+    idx++;
   }
   query += ` ORDER BY r.date ASC LIMIT 200`;
   const result = await pool.query(query, params);
@@ -2910,18 +3000,11 @@ export async function getHostUnlockProgress(userId: string) {
 }
 
 async function awardSlug(userId: string, slug: string, db: any = pool): Promise<boolean> {
-  const existing = await db.query(
-    `SELECT id FROM achievements WHERE user_id = $1 AND slug = $2`,
+  const res = await db.query(
+    `INSERT INTO achievements (user_id, milestone, slug) VALUES ($1, 0, $2) ON CONFLICT (user_id, slug) DO NOTHING RETURNING id`,
     [userId, slug]
   );
-  if (existing.rows.length === 0) {
-    await db.query(
-      `INSERT INTO achievements (user_id, milestone, slug) VALUES ($1, 0, $2)`,
-      [userId, slug]
-    );
-    return true;
-  }
-  return false;
+  return (res.rowCount ?? 0) > 0;
 }
 
 export async function postMilestoneToAllCrews(userId: string, milestoneMessage: string): Promise<void> {
@@ -5225,6 +5308,81 @@ export async function getBlockList(userId: string): Promise<string[]> {
     [userId]
   );
   return res.rows.map((r: any) => r.blocked_id);
+}
+
+// ─── Reports & Auto-Moderation ────────────────────────────────────────────────
+
+export async function createReport(
+  reporterId: string,
+  targetType: string,
+  targetId: string,
+  reason: string
+): Promise<{ id: string; alreadyReported: boolean }> {
+  // Prevent duplicate reports from same reporter
+  const dup = await pool.query(
+    `SELECT id FROM reports WHERE reporter_id = $1 AND target_type = $2 AND target_id = $3`,
+    [reporterId, targetType, targetId]
+  );
+  if (dup.rows.length > 0) return { id: dup.rows[0].id, alreadyReported: true };
+
+  const res = await pool.query(
+    `INSERT INTO reports (reporter_id, target_type, target_id, reason) VALUES ($1, $2, $3, $4) RETURNING id`,
+    [reporterId, targetType, targetId, reason]
+  );
+
+  await pool.query(
+    `INSERT INTO audit_logs (action, actor, target_type, target_id, detail) VALUES ('report_created', $1, $2, $3, $4)`,
+    [reporterId, targetType, targetId, JSON.stringify({ reason })]
+  );
+
+  // Auto-moderation: check reporter count for this target (≥3 unique reporters)
+  const countRes = await pool.query(
+    `SELECT COUNT(DISTINCT reporter_id) as cnt FROM reports WHERE target_type = $1 AND target_id = $2 AND resolved = false`,
+    [targetType, targetId]
+  );
+  const cnt = parseInt(countRes.rows[0]?.cnt ?? 0);
+  if (cnt >= 3) {
+    if (targetType === 'user') {
+      // Suspend account for 7 days
+      const already = await pool.query(
+        `SELECT suspended_until FROM users WHERE id = $1`,
+        [targetId]
+      );
+      const existingSuspension = already.rows[0]?.suspended_until;
+      if (!existingSuspension || new Date(existingSuspension) < new Date()) {
+        const suspendUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        await pool.query(
+          `UPDATE users SET suspended_until = $2 WHERE id = $1`,
+          [targetId, suspendUntil]
+        );
+        await pool.query(
+          `INSERT INTO audit_logs (action, actor, target_type, target_id, detail) VALUES ('auto_suspend_7d', 'system', $1, $2, $3)`,
+          [targetType, targetId, JSON.stringify({ triggerReportCount: cnt })]
+        );
+        // Mark reports as resolved
+        await pool.query(
+          `UPDATE reports SET resolved = true WHERE target_type = $1 AND target_id = $2`,
+          [targetType, targetId]
+        );
+      }
+    } else {
+      // For comments/messages: hide the content by logging (UI reads this)
+      await pool.query(
+        `INSERT INTO audit_logs (action, actor, target_type, target_id, detail) VALUES ('auto_hide_content', 'system', $1, $2, $3) ON CONFLICT DO NOTHING`,
+        [targetType, targetId, JSON.stringify({ triggerReportCount: cnt })]
+      ).catch(() => {});
+    }
+  }
+
+  return { id: res.rows[0].id, alreadyReported: false };
+}
+
+export async function isContentHidden(targetType: string, targetId: string): Promise<boolean> {
+  const res = await pool.query(
+    `SELECT 1 FROM audit_logs WHERE action = 'auto_hide_content' AND target_type = $1 AND target_id = $2 LIMIT 1`,
+    [targetType, targetId]
+  );
+  return res.rows.length > 0;
 }
 
 // ─── Public Routes (Global Map) ───────────────────────────────────────────────

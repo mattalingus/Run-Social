@@ -108,6 +108,22 @@ Key columns: `runs.activity_type` ("run" | "ride"), `runs.is_active`, `runs.is_c
 - Skip available at every step; Done button on final step
 - Step config defined in `lib/walkthroughConfig.ts`; mock data stubs in `lib/walkthroughMockData.ts`
 
+### Security & Moderation (Task #177 — April 2026)
+- **Login lockout:** 10 failed login attempts per account triggers a 15-minute lock (`users.failed_login_attempts`, `users.locked_until`)
+- **Report system:** `POST /api/reports` — any authenticated user can report a user/comment/run/crew message with a reason; `reports` table; `audit_logs` table for moderation history
+- **Auto-moderation:** ≥3 unique reporters on a user account triggers a 7-day suspension (`users.suspended_until`); ≥3 reports on a comment/message triggers `auto_hide_content` audit log entry
+- **Block filtering:** `searchUsers` and `getPublicRuns` now exclude users who are blocked/blocking the current user, and hide suspended accounts
+- **Solo run splits validation:** `POST /api/solo-runs` now validates `mileSplits` — each entry must have `mile ≥ 1`, `time > 0`, and mile values must be strictly increasing
+- **DB CHECK constraints:** `solo_runs.title` length ≤ 80 chars (`chk_solo_runs_title_len`), `users.bio` length ≤ 300 chars (`chk_users_bio_len`)
+- **Achievements uniqueness:** `UNIQUE(user_id, slug)` constraint on `achievements` table; `awardSlug` uses `ON CONFLICT DO NOTHING`
+- **Profile bio field:** `users.bio` column added; exposed via `PUT /api/users/me`
+- **Logout clears all cache:** `AuthContext.logout()` now removes all `@paceup_*` AsyncStorage keys
+- **Settings — Change Email:** New `POST /api/users/me/email/request-change` + `GET /api/users/me/email/confirm` endpoints with verification link flow; Change Email row in Settings Account section
+- **Settings — Export My Data:** `POST /api/users/export` stub sends confirmation email; Export My Data row in Settings Account section
+- **Report button:** Block/Report buttons shown on other-user profile screen (`app/user-profile/[id].tsx`)
+- **Unblock refreshes feed:** Block/unblock mutations now also invalidate `/api/runs` and `/api/users/search` query caches
+- **Email verification:** `users.email_verified` column; existing users marked verified by migration
+
 ### Recent Bug Fixes (Session March 2026)
 - `app/(tabs)/index.tsx`: `Run` interface now includes `is_completed: boolean` and `plan_count: string`; `notifications` query typed as `any[]`
 - `app/run-live/[id].tsx`: Moved `liveState` useQuery declaration above the `useEffect` that depends on it (fixes TDZ/used-before-declaration runtime error)

@@ -181,8 +181,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!identifier || !password) return res.status(400).json({ message: "Username/email and password required" });
       const user = await storage.getUserByEmailOrUsername(identifier.trim());
       if (!user) return res.status(401).json({ message: "Invalid credentials" });
+
+      // Check per-account login lockout
+      if (user.locked_until && new Date(user.locked_until) > new Date()) {
+        const minutesLeft = Math.ceil((new Date(user.locked_until).getTime() - Date.now()) / 60000);
+        return res.status(429).json({ message: `Account locked. Try again in ${minutesLeft} minute${minutesLeft !== 1 ? "s" : ""}.` });
+      }
+
       const valid = await storage.verifyPassword(password, user.password);
-      if (!valid) return res.status(401).json({ message: "Invalid credentials" });
+      if (!valid) {
+        const attempts = (user.failed_login_attempts ?? 0) + 1;
+        if (attempts >= 10) {
+          const lockUntil = new Date(Date.now() + 15 * 60 * 1000);
+          await storage.updateUser(user.id, { failedLoginAttempts: 0, lockedUntil: lockUntil });
+          return res.status(429).json({ message: "Too many failed attempts. Account locked for 15 minutes." });
+        }
+        await storage.updateUser(user.id, { failedLoginAttempts: attempts });
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+
+      // Successful login — clear lockout state
+      if ((user.failed_login_attempts ?? 0) > 0 || user.locked_until) {
+        await storage.updateUser(user.id, { failedLoginAttempts: 0, lockedUntil: null });
+      }
+
       req.session.userId = user.id;
       const rememberToken = await storage.createRememberToken(user.id);
       const { password: _, ...safeUser } = user;
@@ -358,13 +380,16 @@ async function go(e){
 
   app.put("/api/users/me", requireAuth, async (req, res) => {
     try {
-      const allowed = ["name", "avgPace", "avgDistance", "photoUrl", "notificationsEnabled", "distanceUnit", "profilePrivacy", "notifRunReminders", "notifFriendRequests", "notifCrewActivity", "notifWeeklySummary", "showRunRoutes", "gender", "appleHealthConnected", "healthConnectConnected"];
+      const allowed = ["name", "avgPace", "avgDistance", "photoUrl", "notificationsEnabled", "distanceUnit", "profilePrivacy", "notifRunReminders", "notifFriendRequests", "notifCrewActivity", "notifWeeklySummary", "showRunRoutes", "gender", "appleHealthConnected", "healthConnectConnected", "bio"];
       const updates: Record<string, any> = {};
       for (const key of allowed) {
         if (req.body[key] !== undefined) updates[key] = req.body[key];
       }
       if (updates.gender && !["Man", "Woman", "Prefer not to say"].includes(updates.gender)) {
         return res.status(400).json({ message: "Invalid gender selection" });
+      }
+      if (updates.bio !== undefined && updates.bio !== null && typeof updates.bio === "string" && updates.bio.length > 300) {
+        return res.status(400).json({ message: "Bio must be 300 characters or less" });
       }
       const user = await storage.updateUser(req.session.userId!, updates);
       if (!user) return res.status(404).json({ message: "User not found" });
@@ -838,7 +863,7 @@ async function go(e){
         ? { swLat: filters.swLat, neLat: filters.neLat, swLng: filters.swLng, neLng: filters.neLng }
         : undefined;
       const [publicRuns, publicCrewRuns] = await Promise.all([
-        storage.getPublicRuns(filters),
+        storage.getPublicRuns({ ...filters, currentUserId: req.session.userId }),
         storage.getPublicCrewRuns(bounds),
       ]);
       if (req.session.userId) {
@@ -2036,6 +2061,22 @@ async function go(e){
           ) {
             return res.status(400).json({ message: "routePath contains invalid coordinates" });
           }
+        }
+      }
+
+      if (Array.isArray(mileSplits) && mileSplits.length > 0) {
+        let prevMile = 0;
+        for (const split of mileSplits) {
+          if (typeof split.mile !== "number" || split.mile < 1) {
+            return res.status(400).json({ message: "Each mileSplit must have mile >= 1" });
+          }
+          if (typeof split.time !== "number" || split.time <= 0) {
+            return res.status(400).json({ message: "Each mileSplit time must be > 0" });
+          }
+          if (split.mile <= prevMile) {
+            return res.status(400).json({ message: "mileSplits must have strictly increasing mile values" });
+          }
+          prevMile = split.mile;
         }
       }
 
@@ -3481,6 +3522,139 @@ async function go(e){
       res.json(result.rows);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
+    }
+  });
+
+  // ─── Reports ─────────────────────────────────────────────────────────────────
+
+  app.post("/api/reports", requireAuth, async (req, res) => {
+    try {
+      const { targetType, targetId, reason } = req.body;
+      const validTypes = ["user", "comment", "run", "crew_message"];
+      if (!targetType || !validTypes.includes(targetType)) {
+        return res.status(400).json({ message: "Invalid target type" });
+      }
+      if (!targetId || typeof targetId !== "string") {
+        return res.status(400).json({ message: "targetId required" });
+      }
+      if (!reason || typeof reason !== "string" || reason.trim().length < 3) {
+        return res.status(400).json({ message: "Reason required (min 3 characters)" });
+      }
+      if (targetType === "user" && targetId === req.session.userId!) {
+        return res.status(400).json({ message: "You cannot report yourself" });
+      }
+      const result = await storage.createReport(req.session.userId!, targetType, targetId, reason.trim());
+      if (result.alreadyReported) {
+        return res.status(409).json({ message: "You have already reported this content" });
+      }
+      res.status(201).json({ ok: true, id: result.id });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  // ─── Data Export ──────────────────────────────────────────────────────────────
+
+  app.post("/api/users/export", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const user = await storage.getUserById(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const smtpUser = process.env.SMTP_USER;
+      const smtpPass = process.env.SMTP_PASS;
+      if (smtpUser && smtpPass) {
+        const transporter = nodemailer.createTransport({
+          host: "smtp.gmail.com",
+          port: 587,
+          secure: false,
+          auth: { user: smtpUser, pass: smtpPass },
+        });
+        await transporter.sendMail({
+          from: `"PaceUp" <${smtpUser}>`,
+          to: user.email,
+          subject: "Your PaceUp data export request",
+          html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px;">
+            <h2 style="color:#00D97E;">PaceUp</h2>
+            <p>Hi ${user.name},</p>
+            <p>We've received your data export request. Our team will prepare your data and email it to you within 30 days, as required by privacy law.</p>
+            <p>If you have questions, contact us at <a href="mailto:support@paceupapp.com">support@paceupapp.com</a>.</p>
+          </div>`,
+        }).catch((err: any) => console.error("[export-email]", err?.message));
+      }
+      res.json({ ok: true, message: "Export request received. You will receive an email within 30 days." });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  // ─── Change Email ─────────────────────────────────────────────────────────────
+
+  app.post("/api/users/me/email/request-change", requireAuth, async (req, res) => {
+    try {
+      const { newEmail } = req.body;
+      if (!newEmail || typeof newEmail !== "string") return res.status(400).json({ message: "newEmail required" });
+      const trimmed = newEmail.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return res.status(400).json({ message: "Invalid email address" });
+      const existing = await storage.getUserByEmail(trimmed);
+      if (existing) return res.status(409).json({ message: "This email is already in use" });
+      const token = crypto.randomBytes(32).toString("hex");
+      const user = await storage.updateUser(req.session.userId!, {
+        pendingEmail: trimmed,
+        pendingEmailToken: token,
+        pendingEmailTokenAt: new Date(),
+      });
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const smtpUser = process.env.SMTP_USER;
+      const smtpPass = process.env.SMTP_PASS;
+      if (smtpUser && smtpPass) {
+        const host = process.env.REPLIT_DEV_DOMAIN
+          ? `https://${process.env.REPLIT_DEV_DOMAIN}:5000`
+          : "https://PaceUp.replit.app";
+        const verifyUrl = `${host}/api/users/me/email/confirm?token=${token}`;
+        const transporter = nodemailer.createTransport({
+          host: "smtp.gmail.com",
+          port: 587,
+          secure: false,
+          auth: { user: smtpUser, pass: smtpPass },
+        });
+        await transporter.sendMail({
+          from: `"PaceUp" <${smtpUser}>`,
+          to: trimmed,
+          subject: "Confirm your new PaceUp email address",
+          html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px;">
+            <h2 style="color:#00D97E;">PaceUp</h2>
+            <p>Hi ${user.name},</p>
+            <p>Click the button below to confirm your new email address:</p>
+            <a href="${verifyUrl}" style="display:inline-block;background:#00D97E;color:#000;font-weight:bold;padding:12px 24px;border-radius:8px;text-decoration:none;margin:16px 0;">Confirm Email Change</a>
+            <p style="color:#666;font-size:12px;">This link expires in 24 hours. If you didn't request this, ignore this email.</p>
+          </div>`,
+        }).catch((err: any) => console.error("[change-email]", err?.message));
+      }
+      res.json({ ok: true, message: "Verification email sent to your new address" });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/users/me/email/confirm", async (req, res) => {
+    try {
+      const { token } = req.query as { token: string };
+      if (!token) return res.status(400).send("Invalid token");
+      const result = await pool.query(
+        `SELECT id, pending_email, pending_email_token_at FROM users WHERE pending_email_token = $1 AND pending_email IS NOT NULL`,
+        [token]
+      );
+      if (!result.rows.length) return res.status(400).send("Token not found or already used");
+      const user = result.rows[0];
+      const tokenAge = Date.now() - new Date(user.pending_email_token_at).getTime();
+      if (tokenAge > 24 * 60 * 60 * 1000) return res.status(400).send("Token expired. Please request a new email change.");
+      await pool.query(
+        `UPDATE users SET email = pending_email, pending_email = NULL, pending_email_token = NULL, pending_email_token_at = NULL, email_verified = TRUE WHERE id = $1`,
+        [user.id]
+      );
+      res.send(`<html><body style="font-family:sans-serif;text-align:center;padding:48px;"><h2 style="color:#00D97E;">✓ Email updated</h2><p>Your email address has been successfully updated. You can close this page.</p></body></html>`);
+    } catch (e: any) {
+      res.status(500).send("An error occurred");
     }
   });
 

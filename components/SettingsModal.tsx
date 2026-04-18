@@ -157,6 +157,8 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
+  const [changeEmailLoading, setChangeEmailLoading] = useState(false);
   const [garminSyncing, setGarminSyncing] = useState(false);
   const [garminSyncMsg, setGarminSyncMsg] = useState<string | null>(null);
   const [showMapPinPicker, setShowMapPinPicker] = useState(false);
@@ -658,6 +660,82 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
     }
   }
 
+  function handleChangeEmail() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const submit = async (newEmail: string) => {
+      if (!newEmail || !newEmail.includes("@")) {
+        Alert.alert("Invalid Email", "Please enter a valid email address.");
+        return;
+      }
+      setChangeEmailLoading(true);
+      try {
+        const res = await apiRequest("POST", "/api/users/me/email/request-change", { newEmail: newEmail.trim() });
+        const data = await res.json();
+        if (!res.ok) {
+          Alert.alert("Error", data.message ?? "Could not request email change");
+        } else {
+          Alert.alert("Check your inbox", "A verification link has been sent to your new email address. Click it to confirm the change.");
+        }
+      } catch {
+        Alert.alert("Error", "Could not request email change. Please try again.");
+      } finally {
+        setChangeEmailLoading(false);
+      }
+    };
+    if (Platform.OS === "ios") {
+      Alert.prompt(
+        "Change Email",
+        "Enter your new email address. We'll send a verification link to confirm.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Send Link", onPress: (v) => submit(v ?? "") },
+        ],
+        "plain-text",
+        "",
+        "email-address"
+      );
+    } else {
+      Alert.alert(
+        "Change Email",
+        `To change your email, contact support at support@paceupapp.com with subject "Email Change Request".`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Email Support", onPress: () => Linking.openURL("mailto:support@paceupapp.com?subject=Email%20Change%20Request").catch(() => {}) },
+        ]
+      );
+    }
+  }
+
+  async function handleExportData() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Alert.alert(
+      "Export My Data",
+      "We'll email a copy of your data to your registered address within 30 days.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Request Export",
+          onPress: async () => {
+            setExportLoading(true);
+            try {
+              const res = await apiRequest("POST", "/api/users/export");
+              const data = await res.json();
+              if (!res.ok) {
+                Alert.alert("Error", data.message ?? "Could not submit request");
+              } else {
+                Alert.alert("Request Received", "We'll email your data to your registered address within 30 days.");
+              }
+            } catch {
+              Alert.alert("Error", "Could not submit export request. Please try again.");
+            } finally {
+              setExportLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  }
+
   async function handleRestorePurchases() {
     if (restoringPurchases) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -1112,6 +1190,18 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
             <Divider C={C} />
             <SettingRow
               C={C}
+              iconBg="#1A1A2E"
+              icon={changeEmailLoading
+                ? <ActivityIndicator size="small" color="#9B7FFF" />
+                : <Feather name="mail" size={17} color="#9B7FFF" />
+              }
+              label="Change Email"
+              sublabel={(user as any)?.email ? `Current: ${(user as any).email}` : "Update your sign-in email"}
+              onPress={changeEmailLoading ? undefined : handleChangeEmail}
+            />
+            <Divider C={C} />
+            <SettingRow
+              C={C}
               iconBg="#1A2A1A"
               icon={<Feather name="share-2" size={17} color={C.primary} />}
               label="Invite Friends"
@@ -1156,6 +1246,18 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
                 <Divider C={C} />
               </>
             )}
+            <SettingRow
+              C={C}
+              iconBg="#0A2A1A"
+              icon={exportLoading
+                ? <ActivityIndicator size="small" color={C.primary} />
+                : <Feather name="download" size={17} color={C.primary} />
+              }
+              label="Export My Data"
+              sublabel="Request a copy of your account data"
+              onPress={exportLoading ? undefined : handleExportData}
+            />
+            <Divider C={C} />
             <SettingRow
               C={C}
               iconBg="#2A1A0A"

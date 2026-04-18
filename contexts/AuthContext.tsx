@@ -218,6 +218,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {}
     await clearToken();
     await clearCachedUser();
+    try {
+      const allKeys = await AsyncStorage.getAllKeys();
+      const paceupKeys = allKeys.filter((k) => k.startsWith("@paceup_"));
+      if (paceupKeys.length > 0) await AsyncStorage.multiRemove(paceupKeys);
+    } catch {}
     setUser(null);
   }
 

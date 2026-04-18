@@ -109,6 +109,9 @@ export default function UserProfileScreen() {
     onSuccess: (_, blocking) => {
       qc.invalidateQueries({ queryKey: ["/api/users", id, "block-status"] });
       qc.invalidateQueries({ queryKey: ["/api/users", id, "friendship"] });
+      // Refresh feed and search so blocked/unblocked users appear/disappear correctly
+      qc.invalidateQueries({ queryKey: ["/api/runs"] });
+      qc.invalidateQueries({ queryKey: ["/api/users/search"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       if (blocking) {
         Alert.alert("Blocked", `You've blocked this user. They can no longer view your profile or interact with you.`);
@@ -116,6 +119,29 @@ export default function UserProfileScreen() {
     },
     onError: () => Alert.alert("Error", "Could not update block status"),
   });
+
+  const reportMutation = useMutation({
+    mutationFn: async (reason: string) => {
+      const res = await apiRequest("POST", "/api/reports", { targetType: "user", targetId: id, reason });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message ?? "Could not submit report");
+      }
+    },
+    onSuccess: () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert("Report Submitted", "Thanks for letting us know. Our team will review this report.");
+    },
+    onError: (e: any) => Alert.alert("Error", e.message ?? "Could not submit report"),
+  });
+
+  function handleReportPress() {
+    const reasons = ["Spam or fake account", "Harassment or bullying", "Inappropriate content", "Impersonation", "Other"];
+    Alert.alert("Report User", "Why are you reporting this account?", [
+      ...reasons.map((r) => ({ text: r, onPress: () => reportMutation.mutate(r) })),
+      { text: "Cancel", style: "cancel" },
+    ]);
+  }
 
   function handleBlockPress() {
     if (blockStatus?.amBlocking) {
@@ -232,20 +258,30 @@ export default function UserProfileScreen() {
                   </Pressable>
                 </View>
 
-                <Pressable
-                  style={s.blockBtn}
-                  disabled={blockMutation.isPending}
-                  onPress={handleBlockPress}
-                >
-                  <Feather
-                    name={blockStatus?.amBlocking ? "slash" : "slash"}
-                    size={12}
-                    color={blockStatus?.amBlocking ? C.textSecondary : "#F87171"}
-                  />
-                  <Text style={[s.blockBtnTxt, blockStatus?.amBlocking && { color: C.textSecondary }]}>
-                    {blockMutation.isPending ? "…" : blockStatus?.amBlocking ? "Unblock User" : "Block User"}
-                  </Text>
-                </Pressable>
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  <Pressable
+                    style={s.blockBtn}
+                    disabled={blockMutation.isPending}
+                    onPress={handleBlockPress}
+                  >
+                    <Feather
+                      name="slash"
+                      size={12}
+                      color={blockStatus?.amBlocking ? C.textSecondary : "#F87171"}
+                    />
+                    <Text style={[s.blockBtnTxt, blockStatus?.amBlocking && { color: C.textSecondary }]}>
+                      {blockMutation.isPending ? "…" : blockStatus?.amBlocking ? "Unblock" : "Block"}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    style={[s.blockBtn, { borderColor: "#F87171" + "44" }]}
+                    disabled={reportMutation.isPending}
+                    onPress={handleReportPress}
+                  >
+                    <Feather name="flag" size={12} color="#F87171" />
+                    <Text style={s.blockBtnTxt}>{reportMutation.isPending ? "…" : "Report"}</Text>
+                  </Pressable>
+                </View>
               </View>
             )}
 
