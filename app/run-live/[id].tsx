@@ -511,8 +511,8 @@ export default function RunLiveScreen() {
         const body = await res.json().catch(() => ({})) as { error?: string; message?: string };
         if (body.error === "run_too_short") {
           Alert.alert(
-            "No Distance Recorded",
-            "No distance was recorded for this run. Are you sure you want to end it?",
+            "Very Short Run",
+            "No distance was recorded. Are you sure you want to end it?",
             [
               { text: "Keep Running", style: "cancel" },
               {

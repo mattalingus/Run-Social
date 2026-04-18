@@ -2650,18 +2650,33 @@ async function go(e){
       if (run.host_id !== req.session.userId) return res.status(403).json({ message: "Only the host can end the run for everyone" });
       if (!run.is_active) return res.status(400).json({ message: "Run is not active" });
 
-      // Short-run guard: if no meaningful distance was recorded by anyone, require
-      // explicit force=true from the client to prevent accidental zero-distance completions.
+      // Short-run guard: if neither the host nor total participant distance reaches 0.1 mi,
+      // require explicit force=true from the client to prevent accidental zero-distance completions.
       const force = req.body?.force === true;
       if (!force) {
-        const distResult = await pool.query<{ max_dist: string }>(
-          `SELECT COALESCE(MAX(cumulative_distance), 0) AS max_dist
-           FROM run_tracking_points
-           WHERE run_id = $1`,
-          [req.params.id]
+        const distResult = await pool.query<{ host_dist: string; total_dist: string }>(
+          `SELECT
+             COALESCE(
+               (SELECT MAX(cumulative_distance)
+                FROM run_tracking_points
+                WHERE run_id = $1 AND user_id = $2),
+               0
+             ) AS host_dist,
+             COALESCE(
+               (SELECT SUM(max_d)
+                FROM (
+                  SELECT MAX(cumulative_distance) AS max_d
+                  FROM run_tracking_points
+                  WHERE run_id = $1
+                  GROUP BY user_id
+                ) sub),
+               0
+             ) AS total_dist`,
+          [req.params.id, req.session.userId]
         );
-        const maxDist = parseFloat(distResult.rows[0]?.max_dist ?? "0") || 0;
-        if (maxDist < 0.1) {
+        const hostDist = parseFloat(distResult.rows[0]?.host_dist ?? "0") || 0;
+        const totalDist = parseFloat(distResult.rows[0]?.total_dist ?? "0") || 0;
+        if (hostDist < 0.1 && totalDist < 0.1) {
           return res.status(400).json({
             error: "run_too_short",
             message: "This run has no recorded distance. End it anyway?",
