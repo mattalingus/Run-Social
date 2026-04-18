@@ -1026,12 +1026,12 @@ export default function RunTrackingScreen() {
     }
 
     // Move time: accumulate when actively moving (speed > 0.5 m/s ≈ 1.1 mph)
-    const now = Date.now();
+    const nowMs = Date.now();
     if (lastMoveTimestampRef.current != null && speed != null && speed > 0.5) {
-      const deltaSec = (now - lastMoveTimestampRef.current) / 1000;
+      const deltaSec = (nowMs - lastMoveTimestampRef.current) / 1000;
       if (deltaSec < 30) moveTimeRef.current += deltaSec; // cap to avoid jumps after pauses
     }
-    lastMoveTimestampRef.current = now;
+    lastMoveTimestampRef.current = nowMs;
 
     // GPS gap reconciliation: if the app was backgrounded with foreground-only permission,
     // the location (and our timer) pauses, but the user kept moving. When we get a new fix
@@ -1039,7 +1039,7 @@ export default function RunTrackingScreen() {
     // distance and time stay proportional and pace stays accurate.
     const GPS_GAP_THRESHOLD_SEC = 30;
     if (lastCoordTimestampRef.current !== null) {
-      const gapSec = (now - lastCoordTimestampRef.current) / 1000;
+      const gapSec = (nowMs - lastCoordTimestampRef.current) / 1000;
       if (gapSec > GPS_GAP_THRESHOLD_SEC) {
         setElapsed((prev) => {
           const adjusted = prev + Math.round(gapSec);
@@ -1048,7 +1048,7 @@ export default function RunTrackingScreen() {
         });
       }
     }
-    lastCoordTimestampRef.current = now;
+    lastCoordTimestampRef.current = nowMs;
 
     const coord: Coord = { latitude, longitude };
 

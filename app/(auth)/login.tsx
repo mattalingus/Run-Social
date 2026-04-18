@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -14,7 +14,9 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "@/contexts/AuthContext";
+import { SUSPENDED_NOTICE_KEY } from "@/contexts/AuthContext";
 import C from "@/constants/colors";
 
 export default function LoginScreen() {
@@ -26,6 +28,29 @@ export default function LoginScreen() {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [suspendedUntil, setSuspendedUntil] = useState<string | null>(null);
+
+  useEffect(() => {
+    AsyncStorage.getItem(SUSPENDED_NOTICE_KEY).then((val) => {
+      if (val) {
+        setSuspendedUntil(val);
+        AsyncStorage.removeItem(SUSPENDED_NOTICE_KEY).catch(() => {});
+      }
+    }).catch(() => {});
+  }, []);
+
+  function formatSuspendedDate(isoStr: string | null): string {
+    if (!isoStr) return "soon";
+    try {
+      return new Date(isoStr).toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
+    } catch {
+      return "soon";
+    }
+  }
 
   async function handleLogin() {
     if (!identifier.trim() || !password) {
@@ -33,18 +58,25 @@ export default function LoginScreen() {
       return;
     }
     setError("");
+    setSuspendedUntil(null);
     setLoading(true);
     try {
       await login(identifier.trim(), password);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace("/(tabs)");
     } catch (e: any) {
-      setError(e.message || "Login failed");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      if (e.code === "SUSPENDED") {
+        setSuspendedUntil(e.suspendedUntil ?? "1");
+      } else {
+        setError(e.message || "Login failed");
+      }
     } finally {
       setLoading(false);
     }
   }
+
+  const showSuspendedBanner = suspendedUntil != null;
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.root}>
@@ -63,16 +95,28 @@ export default function LoginScreen() {
 
         <View style={styles.form}>
           {resetSuccess === "1" ? (
-            <View style={[styles.errorBanner, { backgroundColor: C.primary + "18", borderColor: C.primary + "30" }]}>
+            <View style={[styles.banner, styles.successBanner]}>
               <Feather name="check-circle" size={14} color={C.primary} />
-              <Text style={[styles.errorText, { color: C.primary }]}>Password reset successfully. Sign in with your new password.</Text>
+              <Text style={[styles.bannerText, { color: C.primary }]}>Password reset successfully. Sign in with your new password.</Text>
+            </View>
+          ) : null}
+
+          {showSuspendedBanner ? (
+            <View style={[styles.banner, styles.suspendedBanner]}>
+              <Feather name="slash" size={14} color="#F59E0B" />
+              <Text style={[styles.bannerText, { color: "#F59E0B" }]}>
+                {"Your account is temporarily suspended due to community reports. "}
+                {suspendedUntil && suspendedUntil !== "1"
+                  ? `Try again after ${formatSuspendedDate(suspendedUntil)}.`
+                  : "Please try again later."}
+              </Text>
             </View>
           ) : null}
 
           {error ? (
-            <View style={styles.errorBanner}>
+            <View style={[styles.banner, styles.errorBanner]}>
               <Feather name="alert-circle" size={14} color={C.danger} />
-              <Text style={styles.errorText}>{error}</Text>
+              <Text style={[styles.bannerText, { color: C.danger }]}>{error}</Text>
             </View>
           ) : null}
 
@@ -162,17 +206,27 @@ const styles = StyleSheet.create({
   title: { fontFamily: "Outfit_700Bold", fontSize: 28, color: C.text, textAlign: "center" },
   subtitle: { fontFamily: "Outfit_400Regular", fontSize: 15, color: C.textSecondary, marginTop: 6, textAlign: "center" },
   form: { gap: 16 },
-  errorBanner: {
+  banner: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: C.danger + "22",
     padding: 12,
     borderRadius: 10,
     borderWidth: 1,
+  },
+  bannerText: { fontFamily: "Outfit_400Regular", fontSize: 13, flex: 1 },
+  successBanner: {
+    backgroundColor: C.primary + "18",
+    borderColor: C.primary + "30",
+  },
+  suspendedBanner: {
+    backgroundColor: "#F59E0B18",
+    borderColor: "#F59E0B30",
+  },
+  errorBanner: {
+    backgroundColor: C.danger + "22",
     borderColor: C.danger + "44",
   },
-  errorText: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.danger, flex: 1 },
   inputGroup: { gap: 6 },
   label: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary, marginLeft: 2 },
   inputWrap: {

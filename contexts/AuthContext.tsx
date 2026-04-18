@@ -1,7 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo } from "react";
-import { apiRequest, getApiUrl } from "@/lib/query-client";
+import { apiRequest, getApiUrl, setHandleSuspendedSession } from "@/lib/query-client";
 import { fetch } from "expo/fetch";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+
+export const SUSPENDED_NOTICE_KEY = "paceup_suspended_notice";
 
 const REMEMBER_TOKEN_KEY = "paceup_remember_token";
 const CACHED_USER_KEY = "paceup_cached_user";
@@ -53,6 +55,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     fetchMe();
+  }, []);
+
+  useEffect(() => {
+    setHandleSuspendedSession(async () => {
+      await clearToken();
+      await clearCachedUser();
+      await AsyncStorage.setItem(SUSPENDED_NOTICE_KEY, "1").catch(() => {});
+      setUser(null);
+    });
+    return () => setHandleSuspendedSession(null);
   }, []);
 
   async function storeToken(token: string) {
@@ -114,6 +126,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signal: controller.signal,
       });
       clearTimeout(timer);
+      if (res.status === 403) {
+        // Account suspended — treat as definitive rejection, clear token and show notice
+        await clearToken();
+        await AsyncStorage.setItem(SUSPENDED_NOTICE_KEY, "1").catch(() => {});
+        return null;
+      }
       if (res.status === 401 || res.status === 400) {
         // Server definitively rejected the token — credentials are invalid
         await clearToken();

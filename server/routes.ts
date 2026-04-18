@@ -74,8 +74,18 @@ function storageExt(ext: string): string {
   return ext === "heic" || ext === "heif" ? "jpg" : ext;
 }
 
-function requireAuth(req: Request, res: Response, next: Function) {
+async function requireAuth(req: Request, res: Response, next: Function) {
   if (!req.session.userId) return res.status(401).json({ message: "Unauthorized" });
+  try {
+    const row = await pool.query(
+      "SELECT suspended_until FROM users WHERE id = $1",
+      [req.session.userId]
+    );
+    const suspUntil = row.rows[0]?.suspended_until;
+    if (suspUntil && new Date(suspUntil) > new Date()) {
+      return res.status(403).json({ error: "suspended", suspended_until: suspUntil });
+    }
+  } catch {}
   next();
 }
 
@@ -301,6 +311,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Invalid credentials" });
       }
 
+      // Check account suspension
+      if (user.suspended_until && new Date(user.suspended_until) > new Date()) {
+        return res.status(403).json({
+          error: "suspended",
+          suspended_until: user.suspended_until,
+          message: "Your account has been temporarily suspended due to community reports.",
+        });
+      }
+
       // Successful login — clear lockout state
       if ((user.failed_login_attempts ?? 0) > 0 || user.locked_until) {
         await storage.updateUser(user.id, { failedLoginAttempts: 0, lockedUntil: null });
@@ -332,6 +351,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!userId) return res.status(401).json({ message: "Invalid or expired token" });
       const user = await storage.getUserById(userId);
       if (!user) return res.status(401).json({ message: "User not found" });
+      if (user.suspended_until && new Date(user.suspended_until) > new Date()) {
+        await storage.deleteRememberToken(token).catch(() => {});
+        return res.status(403).json({ error: "suspended", suspended_until: user.suspended_until });
+      }
       req.session.userId = userId;
       const newToken = await storage.createRememberToken(userId);
       const { password: _, ...safeUser } = user;

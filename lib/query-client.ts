@@ -12,9 +12,29 @@ export function getApiUrl(): string {
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
-    const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    let text: string | undefined;
+    let data: any;
+    try {
+      text = await res.text();
+      data = JSON.parse(text!);
+    } catch {
+      text = res.statusText;
+    }
+    if (res.status === 403 && data?.error === "suspended") {
+      _handleSuspendedSession?.();
+      throw Object.assign(new Error("Account suspended"), {
+        code: "SUSPENDED",
+        suspendedUntil: data.suspended_until as string | undefined,
+      });
+    }
+    throw new Error(data?.message || `${res.status}: ${text || res.statusText}`);
   }
+}
+
+let _handleSuspendedSession: (() => void) | null = null;
+
+export function setHandleSuspendedSession(handler: (() => void) | null): void {
+  _handleSuspendedSession = handler;
 }
 
 export async function apiRequest(
