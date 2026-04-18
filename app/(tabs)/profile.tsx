@@ -419,6 +419,7 @@ function ProfileScreenInner() {
   const { data: friendsList = [] } = useQuery<any[]>({
     queryKey: ["/api/friends"],
     enabled: !!user,
+    staleTime: 0,
   });
 
   const { data: friendRequests } = useQuery<{ incoming: any[]; sent: any[] }>({

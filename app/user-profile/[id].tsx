@@ -106,18 +106,37 @@ export default function UserProfileScreen() {
         await apiRequest("DELETE", `/api/users/${id}/block`);
       }
     },
+    onMutate: async (blocking: boolean) => {
+      if (!blocking) return;
+      // Optimistically remove the blocked user from the friends list immediately.
+      await qc.cancelQueries({ queryKey: ["/api/friends"] });
+      const previous = qc.getQueryData<any[]>(["/api/friends"]);
+      qc.setQueryData<any[]>(["/api/friends"], (old) =>
+        old ? old.filter((f: any) => f.id !== id) : old
+      );
+      return { previous };
+    },
     onSuccess: (_, blocking) => {
       qc.invalidateQueries({ queryKey: ["/api/users", id, "block-status"] });
       qc.invalidateQueries({ queryKey: ["/api/users", id, "friendship"] });
-      // Refresh feed and search so blocked/unblocked users appear/disappear correctly
+      // Refresh feed, search, and friends list so the blocked user disappears everywhere.
       qc.invalidateQueries({ queryKey: ["/api/runs"] });
       qc.invalidateQueries({ queryKey: ["/api/users/search"] });
+      if (blocking) {
+        qc.invalidateQueries({ queryKey: ["/api/friends"] });
+      }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       if (blocking) {
         Alert.alert("Blocked", `You've blocked this user. They can no longer view your profile or interact with you.`);
       }
     },
-    onError: () => Alert.alert("Error", "Could not update block status"),
+    onError: (_err, blocking, context: any) => {
+      // Roll back the optimistic removal if the block request failed.
+      if (blocking && context?.previous !== undefined) {
+        qc.setQueryData(["/api/friends"], context.previous);
+      }
+      Alert.alert("Error", "Could not update block status");
+    },
   });
 
   const reportMutation = useMutation({
