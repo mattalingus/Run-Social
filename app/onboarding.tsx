@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActivity, ActivityType } from "@/contexts/ActivityContext";
 import { useWalkthrough } from "@/contexts/WalkthroughContext";
-import { getApiUrl } from "@/lib/query-client";
+import { getApiUrl, apiFetch } from "@/lib/query-client";
 import { buildOnboardingInviteSmsUrl } from "@/lib/shareLinks";
 
 type ActivityOption = {
@@ -70,10 +70,9 @@ export default function OnboardingScreen() {
     setLoading(true);
     try {
       const url = new URL("/api/users/me/onboarding", getApiUrl()).toString();
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({
           activityType: selectedActivity,
           monthlyGoal: parseGoal(monthlyGoal, 50),
@@ -101,10 +100,9 @@ export default function OnboardingScreen() {
   async function handleSkip() {
     try {
       const url = new URL("/api/users/me/onboarding", getApiUrl()).toString();
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({ activityType: selectedActivity }),
       });
       if (res.ok) {

@@ -24,7 +24,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActivity } from "@/contexts/ActivityContext";
-import { apiRequest, getApiUrl } from "@/lib/query-client";
+import { apiRequest, getApiUrl, apiFetch } from "@/lib/query-client";
 import AICoachCard from "@/components/AICoachCard";
 import { resolvePhotoUrl } from "@/lib/photoUrl";
 import { darkColors as C, type ColorScheme } from "@/constants/colors";
@@ -302,7 +302,7 @@ function SoloRunPhotos({ runId }: { runId: string }) {
     setUploading(true);
     try {
       const url = new URL(`/api/solo-runs/${runId}/photos`, getApiUrl()).toString();
-      const response = await fetch(url, { method: "POST", body: formData, credentials: "include" });
+      const response = await apiFetch(url, { method: "POST", body: formData });
       if (!response.ok) throw new Error("Upload failed");
       refetch();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

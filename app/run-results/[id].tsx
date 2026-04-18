@@ -18,7 +18,7 @@ import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
-import { apiRequest, getApiUrl } from "@/lib/query-client";
+import { apiRequest, getApiUrl, apiFetch } from "@/lib/query-client";
 import { useTheme } from "@/contexts/ThemeContext";
 import { type ColorScheme } from "@/constants/colors";
 import ShareActivityModal from "@/components/ShareActivityModal";
@@ -121,11 +121,7 @@ export default function RunResultsScreen() {
         type: "image/jpeg",
       } as any);
       const url = new URL(`/api/runs/${id}/photos`, getApiUrl());
-      await fetch(url.toString(), {
-        method: "POST",
-        credentials: "include",
-        body: formData,
-      });
+      await apiFetch(url.toString(), { method: "POST", body: formData });
       qc.invalidateQueries({ queryKey: ["/api/runs", id, "photos"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (_) {

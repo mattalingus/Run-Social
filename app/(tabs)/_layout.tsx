@@ -6,7 +6,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getApiUrl, apiRequest } from "@/lib/query-client";
+import { getApiUrl, apiRequest, apiFetch } from "@/lib/query-client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const CREW_SINCE_KEY = "@paceup_crew_last_visited";
@@ -53,7 +53,7 @@ export default function TabLayout() {
   const { data: notifData } = useQuery<{ items: any[]; lastReadAt: string | null }>({
     queryKey: ["/api/notifications"],
     queryFn: async () => {
-      const res = await fetch(new URL("/api/notifications", getApiUrl()).toString(), { credentials: "include" });
+      const res = await apiFetch(new URL("/api/notifications", getApiUrl()).toString());
       return res.json();
     },
     enabled: !!user,
@@ -86,7 +86,7 @@ export default function TabLayout() {
     queryFn: async () => {
       const url = new URL("/api/crew-chat/has-new", getApiUrl());
       url.searchParams.set("since", crewSince!);
-      const res = await fetch(url.toString(), { credentials: "include" });
+      const res = await apiFetch(url.toString());
       return res.json();
     },
     enabled: !!user && !onCrewTab && crewSince !== null,

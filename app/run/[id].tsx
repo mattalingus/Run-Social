@@ -27,7 +27,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLiveTracking } from "@/contexts/LiveTrackingContext";
-import { apiRequest, getApiUrl } from "@/lib/query-client";
+import { apiRequest, getApiUrl, apiFetch } from "@/lib/query-client";
 import { darkColors as C, type ColorScheme } from "@/constants/colors";
 import { useTheme } from "@/contexts/ThemeContext";
 import { formatDistance } from "@/lib/formatDistance";
@@ -256,7 +256,7 @@ export default function RunDetailScreen() {
     setUploadingPhoto(true);
     try {
       const url = new URL(`/api/runs/${id}/photos`, getApiUrl()).toString();
-      const response = await fetch(url, { method: "POST", body: formData, credentials: "include" });
+      const response = await apiFetch(url, { method: "POST", body: formData });
       if (!response.ok) {
         const err = await response.json();
         throw new Error(err.message || "Upload failed");

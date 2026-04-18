@@ -42,7 +42,7 @@ import * as ImagePicker from "expo-image-picker";
 import { Pedometer, Barometer } from "expo-sensors";
 import { router, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiRequest, getApiUrl } from "@/lib/query-client";
+import { apiRequest, getApiUrl, apiFetch } from "@/lib/query-client";
 import { useActivity } from "@/contexts/ActivityContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { type ColorScheme } from "@/constants/colors";
@@ -1743,7 +1743,7 @@ export default function RunTrackingScreen() {
     const formData = new FormData();
     formData.append("photo", { uri, type: mimeType, name: "photo.jpg" } as any);
     const url = new URL(`/api/solo-runs/${runId}/photos`, getApiUrl()).toString();
-    const response = await fetch(url, { method: "POST", body: formData, credentials: "include" });
+    const response = await apiFetch(url, { method: "POST", body: formData });
     if (!response.ok) {
       if (attempt < 2) {
         await new Promise((r) => setTimeout(r, (attempt + 1) * 1500));

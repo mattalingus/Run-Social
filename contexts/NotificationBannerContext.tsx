@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "./AuthContext";
-import { getApiUrl, apiRequest } from "@/lib/query-client";
+import { getApiUrl, apiRequest, apiFetch } from "@/lib/query-client";
 
 type NotifEventListener = () => void;
 const openNotifListeners = new Set<NotifEventListener>();
@@ -101,7 +101,7 @@ export function NotificationBannerProvider({ children }: { children: React.React
       try {
         const baseUrl = getApiUrl();
         const url = new URL("/api/notifications", baseUrl);
-        const res = await fetch(url.toString(), { credentials: "include" });
+        const res = await apiFetch(url.toString());
         if (!res.ok) return;
         const json = await res.json();
         const notifications: BannerNotification[] = Array.isArray(json) ? json : (json.items ?? []);

@@ -18,7 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "@/contexts/ThemeContext";
 import { darkColors, type ColorScheme } from "@/constants/colors";
-import { apiRequest, getApiUrl } from "@/lib/query-client";
+import { apiRequest, getApiUrl, apiFetch } from "@/lib/query-client";
 import { useAuth } from "@/contexts/AuthContext";
 
 interface DmMessage {
@@ -365,7 +365,7 @@ export default function DmThread() {
       const url = new URL("/api/gifs/search", getApiUrl());
       if (query.trim()) url.searchParams.set("q", query.trim());
       url.searchParams.set("limit", "20");
-      const resp = await fetch(url.toString(), { credentials: "include" });
+      const resp = await apiFetch(url.toString());
       const data = await resp.json();
       setGifResults(Array.isArray(data) ? data : []);
     } catch {

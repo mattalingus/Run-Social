@@ -27,7 +27,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActivity } from "@/contexts/ActivityContext";
-import { apiRequest, getApiUrl } from "@/lib/query-client";
+import { apiRequest, getApiUrl, apiFetch } from "@/lib/query-client";
 import { useTheme } from "@/contexts/ThemeContext";
 import WalkthroughPulse from "@/components/WalkthroughPulse";
 import { usePurchases } from "@/contexts/PurchasesContext";
@@ -284,10 +284,9 @@ function CreateCrewSheet({ visible, onClose, onCreated }: { visible: boolean; on
       const ext = asset.uri.split(".").pop() ?? "jpg";
       formData.append("photo", { uri: asset.uri, name: `crew-image.${ext}`, type: `image/${ext}` } as any);
       const base = getApiUrl();
-      const res = await fetch(new URL("/api/upload/photo", base).toString(), {
+      const res = await apiFetch(new URL("/api/upload/photo", base).toString(), {
         method: "POST",
         body: formData,
-        credentials: "include",
       });
       const data = await res.json();
       if (data.url) setImageUrl(data.url);
@@ -519,7 +518,7 @@ function InviteUserSheet({
       try {
         const url = new URL("/api/users/search", getApiUrl());
         url.searchParams.set("q", q);
-        const res = await fetch(url.toString(), { credentials: "include" });
+        const res = await apiFetch(url.toString());
         const data = await res.json();
         setResults(data.filter((u: UserSearchResult) => !existingMemberIds.includes(u.id)));
       } catch {}
@@ -646,7 +645,7 @@ function MemberProfileSheet({
   }>({
     queryKey: ["/api/users", userId, "profile"],
     queryFn: async () => {
-      const res = await fetch(new URL(`/api/users/${userId}/profile`, getApiUrl()).toString(), { credentials: "include" });
+      const res = await apiFetch(new URL(`/api/users/${userId}/profile`, getApiUrl()).toString());
       return res.json();
     },
     enabled: !!userId && visible,
@@ -658,7 +657,7 @@ function MemberProfileSheet({
     queryFn: async () => {
       const url = new URL(`/api/users/${userId}/stats`, getApiUrl());
       url.searchParams.set("activityType", activityTab);
-      const res = await fetch(url.toString(), { credentials: "include" });
+      const res = await apiFetch(url.toString());
       return res.json();
     },
     enabled: !!userId && visible,
@@ -668,7 +667,7 @@ function MemberProfileSheet({
   const { data: friendship, isLoading: friendLoading } = useQuery<{ status: string; friendshipId: string | null }>({
     queryKey: ["/api/users", userId, "friendship"],
     queryFn: async () => {
-      const res = await fetch(new URL(`/api/users/${userId}/friendship`, getApiUrl()).toString(), { credentials: "include" });
+      const res = await apiFetch(new URL(`/api/users/${userId}/friendship`, getApiUrl()).toString());
       return res.json();
     },
     enabled: !!userId && visible && userId !== currentUserId,
@@ -1066,7 +1065,7 @@ function CrewDetailSheet({
     queryKey: ["/api/crews", crew?.id, activityFilter],
     queryFn: async () => {
       const url = new URL(`/api/crews/${crew!.id}?activityType=${activityFilter}`, getApiUrl());
-      const res = await fetch(url.toString(), { credentials: "include" });
+      const res = await apiFetch(url.toString());
       if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
       return res.json();
     },
@@ -1337,7 +1336,7 @@ function CrewDetailSheet({
       const url = new URL("/api/gifs/search", getApiUrl());
       if (query.trim()) url.searchParams.set("q", query.trim());
       url.searchParams.set("limit", "20");
-      const resp = await fetch(url.toString(), { credentials: "include" });
+      const resp = await apiFetch(url.toString());
       const data = await resp.json();
       setGifResults(Array.isArray(data) ? data : []);
     } catch {
@@ -2569,7 +2568,7 @@ function RankingsModal({ visible, onClose, myCrewIds, myCrewId }: { visible: boo
       url.searchParams.set("activityType", activityType);
       url.searchParams.set("scope", rankingTab);
       if (scopeValue) url.searchParams.set("value", scopeValue);
-      const res = await fetch(url.toString(), { credentials: "include" });
+      const res = await apiFetch(url.toString());
       return res.json();
     },
     enabled: visible,

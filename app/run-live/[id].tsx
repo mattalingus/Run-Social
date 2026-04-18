@@ -22,7 +22,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLiveTracking } from "@/contexts/LiveTrackingContext";
 import { useActivity } from "@/contexts/ActivityContext";
-import { apiRequest, getApiUrl } from "@/lib/query-client";
+import { apiRequest, getApiUrl, apiFetch } from "@/lib/query-client";
 import C from "@/constants/colors";
 import MAP_STYLE from "@/lib/mapStyle";
 import { LiveActivity } from "@/lib/liveActivity";
@@ -211,7 +211,7 @@ export default function RunLiveScreen() {
   const { data: liveState } = useQuery<any>({
     queryKey: ["/api/runs", id, "live"],
     queryFn: async () => {
-      const res = await fetch(new URL(`/api/runs/${id}/live`, getApiUrl()).toString(), { credentials: "include" });
+      const res = await apiFetch(new URL(`/api/runs/${id}/live`, getApiUrl()).toString());
       return res.json();
     },
     refetchInterval: 5000,
