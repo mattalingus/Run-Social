@@ -1,4 +1,4 @@
-import { pool } from "./storage";
+import { pool, checkAndAwardAchievements, checkAndAwardRideAchievements, checkAndAwardCrewAchievements } from "./storage";
 import { sendPushNotification } from "./notifications";
 
 const CHECK_INTERVAL_MS = 5 * 60 * 1000;
@@ -77,13 +77,15 @@ async function cleanupUnstartedRuns(): Promise<void> {
 
 async function cleanupStaleActiveRuns(): Promise<void> {
   try {
-    const stale = await pool.query(
-      `SELECT id, title, crew_id FROM runs
+    const stale = await pool.query<{ id: string; title: string; crew_id: string | null; activity_type: string }>(
+      `SELECT id, title, crew_id, activity_type FROM runs
        WHERE is_active = true
          AND is_completed = false
          AND started_at < NOW() - INTERVAL '8 hours'`
     );
     for (const r of stale.rows) {
+      // Track users and their new total_miles for post-commit achievement crediting
+      const creditedUsers: Array<{ userId: string; totalMiles: number }> = [];
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
@@ -114,15 +116,18 @@ async function cleanupStaleActiveRuns(): Promise<void> {
             `UPDATE run_participants SET status = 'confirmed', miles_logged = $3 WHERE run_id = $1 AND user_id = $2`,
             [r.id, p.user_id, miles]
           );
-          await client.query(
+          const userRes = await client.query<{ total_miles: string }>(
             `UPDATE users SET
               completed_runs = completed_runs + 1,
               total_miles = total_miles + $2,
               miles_this_year = miles_this_year + $2,
               miles_this_month = miles_this_month + $2
-             WHERE id = $1`,
+             WHERE id = $1
+             RETURNING total_miles`,
             [p.user_id, miles]
           );
+          const newTotalMiles = parseFloat(userRes.rows[0]?.total_miles ?? "0") || 0;
+          creditedUsers.push({ userId: p.user_id, totalMiles: newTotalMiles });
         }
         if (r.crew_id && anyRealDistance) {
           const crew = await client.query(
@@ -188,8 +193,31 @@ async function cleanupStaleActiveRuns(): Promise<void> {
       } catch (err: any) {
         await client.query('ROLLBACK').catch(() => {});
         console.error(`[late-start] Auto-completion failed for run ${r.id}:`, err?.message);
+        creditedUsers.length = 0; // Don't award achievements if transaction rolled back
       } finally {
         client.release();
+      }
+
+      // Post-commit: award personal achievements and crew milestones (fire-and-forget, non-blocking)
+      // Skipped if transaction rolled back (creditedUsers was cleared above) or no distance credited
+      if (creditedUsers.length > 0) {
+        const isRide = r.activity_type === "ride";
+        for (const { userId, totalMiles } of creditedUsers) {
+          checkAndAwardAchievements(userId, totalMiles).catch((e: any) =>
+            console.error(`[ghost-run] checkAndAwardAchievements failed for user ${userId}:`, e?.message)
+          );
+          if (isRide) {
+            checkAndAwardRideAchievements(userId).catch((e: any) =>
+              console.error(`[ghost-run] checkAndAwardRideAchievements failed for user ${userId}:`, e?.message)
+            );
+          }
+        }
+        if (r.crew_id) {
+          checkAndAwardCrewAchievements(r.crew_id).catch((e: any) =>
+            console.error(`[ghost-run] checkAndAwardCrewAchievements failed for crew ${r.crew_id}:`, e?.message)
+          );
+        }
+        console.log(`[ghost-run] Queued achievement checks for ${creditedUsers.length} participant(s) in run ${r.id}`);
       }
     }
 
