@@ -2649,6 +2649,27 @@ async function go(e){
       if (!run) return res.status(404).json({ message: "Run not found" });
       if (run.host_id !== req.session.userId) return res.status(403).json({ message: "Only the host can end the run for everyone" });
       if (!run.is_active) return res.status(400).json({ message: "Run is not active" });
+
+      // Short-run guard: if no meaningful distance was recorded by anyone, require
+      // explicit force=true from the client to prevent accidental zero-distance completions.
+      const force = req.body?.force === true;
+      if (!force) {
+        const distResult = await pool.query<{ max_dist: string }>(
+          `SELECT COALESCE(MAX(cumulative_distance), 0) AS max_dist
+           FROM run_tracking_points
+           WHERE run_id = $1`,
+          [req.params.id]
+        );
+        const maxDist = parseFloat(distResult.rows[0]?.max_dist ?? "0") || 0;
+        if (maxDist < 0.1) {
+          return res.status(400).json({
+            error: "run_too_short",
+            message: "This run has no recorded distance. End it anyway?",
+            allowForce: true,
+          });
+        }
+      }
+
       await storage.forceCompleteRun(req.params.id as string);
       storage.finalizeTagAlongsForRun(req.params.id as string).catch((e: any) =>
         console.error('[tag-along] finalizeTagAlongsForRun error', e?.message)

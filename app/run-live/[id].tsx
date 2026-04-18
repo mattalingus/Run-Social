@@ -499,7 +499,42 @@ export default function RunLiveScreen() {
 
   // ── End for Everyone (host only, after they've finished) ─────────────────
 
-  async function handleEndForEveryone() {
+  async function doHostEnd(force: boolean) {
+    try {
+      const url = new URL(`/api/runs/${id}/host-end`, getApiUrl()).toString();
+      const res = await apiFetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ force }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string; message?: string };
+        if (body.error === "run_too_short") {
+          Alert.alert(
+            "No Distance Recorded",
+            "No distance was recorded for this run. Are you sure you want to end it?",
+            [
+              { text: "Keep Running", style: "cancel" },
+              {
+                text: "End Anyway",
+                style: "destructive",
+                onPress: () => doHostEnd(true),
+              },
+            ]
+          );
+        } else {
+          Alert.alert("Error", body.message || "Could not end run for everyone");
+        }
+        return;
+      }
+      qc.invalidateQueries({ queryKey: ["/api/runs"] });
+      setTimeout(() => { router.replace(`/run-results/${id}?autoShare=1`); }, 0);
+    } catch (e: any) {
+      Alert.alert("Error", e.message || "Could not end run for everyone");
+    }
+  }
+
+  function handleEndForEveryone() {
     Alert.alert(
       "End Run for Everyone?",
       "This will end the run for all participants still running.",
@@ -508,15 +543,7 @@ export default function RunLiveScreen() {
         {
           text: "End for Everyone",
           style: "destructive",
-          onPress: async () => {
-            try {
-              await apiRequest("POST", `/api/runs/${id}/host-end`, {});
-              qc.invalidateQueries({ queryKey: ["/api/runs"] });
-              setTimeout(() => { router.replace(`/run-results/${id}?autoShare=1`); }, 0);
-            } catch (e: any) {
-              Alert.alert("Error", e.message || "Could not end run for everyone");
-            }
-          },
+          onPress: () => doHostEnd(false),
         },
       ]
     );
