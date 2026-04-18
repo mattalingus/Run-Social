@@ -372,6 +372,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { email } = req.body;
       if (!email) return res.status(400).json({ message: "Email is required" });
+      // Check SMTP availability before any user lookup so the response is
+      // consistent regardless of whether the email exists (prevents enumeration).
+      const smtpUser = process.env.SMTP_USER;
+      const smtpPass = process.env.SMTP_PASS;
+      if (!smtpUser || !smtpPass) {
+        console.warn("[forgot-password] SMTP_USER or SMTP_PASS not configured — email unavailable");
+        return res.status(503).json({ error: "email_unavailable", message: "email_unavailable" });
+      }
       const user = await storage.getUserByEmail(email.trim());
       if (!user) return res.json({ ok: true });
       if (!user.email_verified) return res.status(403).json({ message: "Please verify your email address before resetting your password." });
@@ -380,20 +388,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ? `https://${process.env.REPLIT_DEV_DOMAIN}:5000`
         : "https://PaceUp.replit.app";
       const resetUrl = `${host}/auth/reset?token=${token}`;
-      const smtpUser = process.env.SMTP_USER;
-      const smtpPass = process.env.SMTP_PASS;
-      if (!smtpUser || !smtpPass) {
-        console.warn("[forgot-password] SMTP_USER or SMTP_PASS not configured — email unavailable");
-        return res.status(503).json({ error: "email_unavailable", message: "email_unavailable" });
-      }
+      const smtpHost = process.env.SMTP_HOST || "smtp.gmail.com";
+      const smtpPort = parseInt(process.env.SMTP_PORT || "587", 10);
+      const smtpFrom = process.env.SMTP_FROM || `"PaceUp" <${smtpUser}>`;
       const transporter = nodemailer.createTransport({
-        host: "smtp.gmail.com",
-        port: 587,
-        secure: false,
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpPort === 465,
         auth: { user: smtpUser, pass: smtpPass },
       });
       await transporter.sendMail({
-        from: `"PaceUp" <${smtpUser}>`,
+        from: smtpFrom,
         to: user.email,
         subject: "Reset your PaceUp password",
         html: `
