@@ -128,9 +128,11 @@ export default function CrewProfileScreen() {
         </View>
       ) : null}
 
-      <Text style={s.createdBy}>
-        Created by {crew.created_by_name}
-      </Text>
+      {crew.created_by_name ? (
+        <Text style={s.createdBy}>
+          Led by {crew.created_by_name}
+        </Text>
+      ) : null}
 
       {user ? (
         <Pressable

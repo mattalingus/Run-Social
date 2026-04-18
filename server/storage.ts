@@ -4717,36 +4717,85 @@ export async function leaveCrewById(crewId: string, userId: string) {
   return { disbanded: false, newOwnerId, crewName };
 }
 
-export async function declineCrewChiefPromotion(crewId: string, userId: string): Promise<{ newOwnerId: string | null; disbanded: boolean }> {
-  // Mark the promotion as declined
-  await pool.query(
+export async function declineCrewChiefPromotion(
+  crewId: string,
+  userId: string
+): Promise<{ newOwnerId: string | null; disbanded: boolean; forced: boolean }> {
+  // Mark current promotion as declined (idempotent — no-op if already declined)
+  const updateRes = await pool.query(
     `UPDATE crew_chief_promotions SET declined = true WHERE crew_id = $1 AND user_id = $2 AND declined = false`,
     [crewId, userId]
   );
-
-  // Find the next candidate (excluding the decliner)
-  const nextRes = await pool.query(
-    `SELECT user_id FROM crew_members WHERE crew_id = $1 AND user_id != $2 AND status = 'member' ORDER BY joined_at ASC LIMIT 1`,
-    [crewId, userId]
-  );
-  const nextOwnerId: string | null = nextRes.rows[0]?.user_id ?? null;
-
-  if (!nextOwnerId) {
-    // No other members — disband the crew
-    await pool.query(`DELETE FROM crews WHERE id = $1`, [crewId]);
-    return { newOwnerId: null, disbanded: true };
+  // If no row was updated, this user had no pending promotion (already declined or never offered).
+  // Return the current chief without re-running cascade logic.
+  if (updateRes.rowCount === 0) {
+    const crewCurrent = await pool.query<{ created_by: string }>(
+      `SELECT created_by FROM crews WHERE id = $1`,
+      [crewId]
+    );
+    if (!crewCurrent.rows[0]) return { newOwnerId: null, disbanded: true, forced: false };
+    return { newOwnerId: crewCurrent.rows[0].created_by, disbanded: false, forced: false };
   }
 
-  // Get crew name for the new promotion record
-  const crewRes = await pool.query(`SELECT name FROM crews WHERE id = $1`, [crewId]);
-  const crewName: string = crewRes.rows[0]?.name ?? "Crew";
+  // Count total decline events for this crew (cap at 5)
+  const declineCountRes = await pool.query<{ cnt: string }>(
+    `SELECT COUNT(*) AS cnt FROM crew_chief_promotions WHERE crew_id = $1 AND declined = true`,
+    [crewId]
+  );
+  const declineCount = parseInt(declineCountRes.rows[0]?.cnt ?? "0") || 0;
 
+  // Collect all user_ids that have already declined in this promotion cycle
+  const declinedRes = await pool.query<{ user_id: string }>(
+    `SELECT user_id FROM crew_chief_promotions WHERE crew_id = $1 AND declined = true`,
+    [crewId]
+  );
+  const declinedUserIds: string[] = declinedRes.rows.map((r) => r.user_id);
+
+  // Get crew name
+  const crewRes = await pool.query<{ name: string; created_by: string }>(
+    `SELECT name, created_by FROM crews WHERE id = $1`,
+    [crewId]
+  );
+  if (!crewRes.rows[0]) {
+    // Crew already gone
+    return { newOwnerId: null, disbanded: true, forced: false };
+  }
+  const crewName: string = crewRes.rows[0].name ?? "Crew";
+
+  // Count remaining members (excluding all who declined)
+  const membersRes = await pool.query<{ user_id: string }>(
+    `SELECT user_id FROM crew_members
+     WHERE crew_id = $1 AND status = 'member'
+     ORDER BY joined_at ASC`,
+    [crewId]
+  );
+  const allMembers: string[] = membersRes.rows.map((r) => r.user_id);
+
+  if (allMembers.length === 0) {
+    // No members left at all — disband
+    await pool.query(`DELETE FROM crews WHERE id = $1`, [crewId]);
+    return { newOwnerId: null, disbanded: true, forced: false };
+  }
+
+  // When decline count reaches 5 OR no willing candidates remain, assign unconditionally
+  const eligibleCandidates = allMembers.filter((id) => !declinedUserIds.includes(id));
+  const forceAssign = declineCount >= 5 || eligibleCandidates.length === 0;
+
+  if (forceAssign) {
+    // Assign the longest-standing member unconditionally (first by joined_at ASC)
+    const assignee = allMembers[0];
+    await pool.query(`UPDATE crews SET created_by = $1 WHERE id = $2`, [assignee, crewId]);
+    return { newOwnerId: assignee, disbanded: false, forced: true };
+  }
+
+  // Promote the next eligible candidate
+  const nextOwnerId = eligibleCandidates[0];
   await pool.query(`UPDATE crews SET created_by = $1 WHERE id = $2`, [nextOwnerId, crewId]);
   await pool.query(
     `INSERT INTO crew_chief_promotions (crew_id, user_id, crew_name) VALUES ($1, $2, $3)`,
     [crewId, nextOwnerId, crewName]
   );
-  return { newOwnerId: nextOwnerId, disbanded: false };
+  return { newOwnerId: nextOwnerId, disbanded: false, forced: false };
 }
 
 export async function storeEmailVerificationCode(userId: string, code: string) {

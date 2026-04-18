@@ -3293,14 +3293,21 @@ async function go(e){
       // Notify the next promoted chief (non-blocking)
       if (!result.disbanded && result.newOwnerId) {
         storage.getUserById(result.newOwnerId).then(async (newChief) => {
-          if (!newChief) return;
+          if (!newChief?.push_token || newChief.notifications_enabled === false) return;
           const crewRes = await storage.pool.query(`SELECT name FROM crews WHERE id = $1`, [req.params.id]);
           const crewName = crewRes.rows[0]?.name ?? "your crew";
-          if (newChief.push_token && newChief.notifications_enabled !== false) {
+          if (result.forced) {
             sendPushNotification(
               newChief.push_token,
-              "You're now Crew Chief!",
-              `You've been promoted to chief of ${crewName}`,
+              "You're Crew Chief!",
+              `You're the longest-standing member — we've made you chief of ${crewName}.`,
+              { screen: "crew-chat", crewId: req.params.id }
+            );
+          } else {
+            sendPushNotification(
+              newChief.push_token,
+              "You've Been Offered Crew Chief",
+              `You're now the crew chief of ${crewName}. Tap to accept or decline.`,
               { screen: "crew-chat", crewId: req.params.id }
             );
           }
