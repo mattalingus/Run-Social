@@ -1,4 +1,10 @@
-import { pool, finishRunnerRun } from "./storage";
+import {
+  pool,
+  finishRunnerRun,
+  confirmRunCompletion,
+  checkAndAwardRideAchievements,
+  checkAndAwardCrewAchievements,
+} from "./storage";
 import { sendPushNotification } from "./notifications";
 
 const CHECK_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
@@ -121,6 +127,14 @@ async function markParticipantsAbandoned(runId: string): Promise<void> {
  */
 async function reconcileGhostRunParticipants(runId: string): Promise<void> {
   try {
+    // Fetch run metadata needed for stat crediting and achievement checks
+    const runMeta = await pool.query<{ activity_type: string | null; crew_id: string | null }>(
+      `SELECT activity_type, crew_id FROM runs WHERE id = $1`,
+      [runId]
+    );
+    const activityType = runMeta.rows[0]?.activity_type ?? "run";
+    const crewId = runMeta.rows[0]?.crew_id ?? null;
+
     // Get all present (not yet finished, not yet abandoned) participants
     const participants = await pool.query<{ user_id: string }>(
       `SELECT user_id FROM run_participants
@@ -183,9 +197,36 @@ async function reconcileGhostRunParticipants(runId: string): Promise<void> {
       // Use the canonical finishRunnerRun path so all side-effects (leaderboard
       // rank computation, run auto-completion) are handled identically to a normal finish.
       await finishRunnerRun(runId, user_id, finalDistance, finalPace, null, false);
+
+      // Credit user stats (total_miles, completed_runs, miles_this_year/month),
+      // award personal achievements, and update crew streak — same as the normal
+      // save-run route does via confirmRunCompletion.
+      try {
+        await confirmRunCompletion(runId, user_id, finalDistance);
+      } catch (creditErr: any) {
+        console.error(
+          `[ghost-run-cleanup] confirmRunCompletion failed for user ${user_id} in run ${runId}:`,
+          creditErr?.message ?? creditErr
+        );
+      }
+
+      // Award ride-specific achievements if this is a ride activity.
+      if (activityType === "ride") {
+        checkAndAwardRideAchievements(user_id).catch((err: any) =>
+          console.error(`[ghost-run-cleanup] checkAndAwardRideAchievements(${user_id}):`, err?.message ?? err)
+        );
+      }
+
       console.log(
         `[ghost-run-cleanup] Reconciled participant ${user_id} in run ${runId}: ` +
         `${finalDistance.toFixed(2)} mi in ${finalDuration}s (pace ${finalPace.toFixed(2)} min/mi)`
+      );
+    }
+
+    // Award crew milestones once after all participants are reconciled.
+    if (crewId) {
+      checkAndAwardCrewAchievements(crewId).catch((err: any) =>
+        console.error(`[ghost-run-cleanup] checkAndAwardCrewAchievements(${crewId}):`, err?.message ?? err)
       );
     }
   } catch (err: any) {
