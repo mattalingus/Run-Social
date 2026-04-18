@@ -21,7 +21,7 @@ import C from "@/constants/colors";
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
-  const { resetSuccess } = useLocalSearchParams<{ resetSuccess?: string }>();
+  const { resetSuccess, suspended } = useLocalSearchParams<{ resetSuccess?: string; suspended?: string }>();
   const { login } = useAuth();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -29,15 +29,28 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [suspendedUntil, setSuspendedUntil] = useState<string | null>(null);
+  const [isSuspended, setIsSuspended] = useState(false);
 
   useEffect(() => {
+    // Read the suspended notice from AsyncStorage (set by AuthContext on suspension).
+    // The ?suspended=1 URL param signals that this notice should be present.
     AsyncStorage.getItem(SUSPENDED_NOTICE_KEY).then((val) => {
       if (val) {
-        setSuspendedUntil(val);
+        setIsSuspended(true);
+        setSuspendedUntil(val !== "1" ? val : null);
         AsyncStorage.removeItem(SUSPENDED_NOTICE_KEY).catch(() => {});
+      } else if (suspended === "1") {
+        // Param present but AsyncStorage already cleared — show generic notice
+        setIsSuspended(true);
+        setSuspendedUntil(null);
       }
-    }).catch(() => {});
-  }, []);
+    }).catch(() => {
+      if (suspended === "1") {
+        setIsSuspended(true);
+        setSuspendedUntil(null);
+      }
+    });
+  }, [suspended]);
 
   function formatSuspendedDate(isoStr: string | null): string {
     if (!isoStr) return "soon";
@@ -59,6 +72,7 @@ export default function LoginScreen() {
     }
     setError("");
     setSuspendedUntil(null);
+    setIsSuspended(false);
     setLoading(true);
     try {
       await login(identifier.trim(), password);
@@ -67,7 +81,8 @@ export default function LoginScreen() {
     } catch (e: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       if (e.code === "SUSPENDED") {
-        setSuspendedUntil(e.suspendedUntil ?? "1");
+        setIsSuspended(true);
+        setSuspendedUntil(e.suspendedUntil ?? null);
       } else {
         setError(e.message || "Login failed");
       }
@@ -76,7 +91,7 @@ export default function LoginScreen() {
     }
   }
 
-  const showSuspendedBanner = suspendedUntil != null;
+  const showSuspendedBanner = isSuspended;
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.root}>
@@ -106,7 +121,7 @@ export default function LoginScreen() {
               <Feather name="slash" size={14} color="#F59E0B" />
               <Text style={[styles.bannerText, { color: "#F59E0B" }]}>
                 {"Your account is temporarily suspended due to community reports. "}
-                {suspendedUntil && suspendedUntil !== "1"
+                {suspendedUntil
                   ? `Try again after ${formatSuspendedDate(suspendedUntil)}.`
                   : "Please try again later."}
               </Text>

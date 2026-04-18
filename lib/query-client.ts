@@ -21,19 +21,20 @@ async function throwIfResNotOk(res: Response) {
       text = res.statusText;
     }
     if (res.status === 403 && data?.error === "suspended") {
-      _handleSuspendedSession?.();
+      const suspUntil = data.suspended_until as string | undefined;
+      _handleSuspendedSession?.(suspUntil);
       throw Object.assign(new Error("Account suspended"), {
         code: "SUSPENDED",
-        suspendedUntil: data.suspended_until as string | undefined,
+        suspendedUntil: suspUntil,
       });
     }
     throw new Error(data?.message || `${res.status}: ${text || res.statusText}`);
   }
 }
 
-let _handleSuspendedSession: (() => void) | null = null;
+let _handleSuspendedSession: ((suspendedUntil?: string) => void) | null = null;
 
-export function setHandleSuspendedSession(handler: (() => void) | null): void {
+export function setHandleSuspendedSession(handler: ((suspendedUntil?: string) => void) | null): void {
   _handleSuspendedSession = handler;
 }
 

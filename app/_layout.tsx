@@ -79,7 +79,7 @@ async function registerPushToken(userId: string) {
 }
 
 function RootLayoutNav() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, suspendedUntil } = useAuth();
   const { C, theme } = useTheme();
   useFonts({ Outfit_400Regular, Outfit_600SemiBold, Outfit_700Bold, PlayfairDisplay_700Bold, DancingScript_700Bold, Nunito_800ExtraBold });
   const splashHidden = useRef(false);
@@ -96,14 +96,14 @@ function RootLayoutNav() {
         SplashScreen.hideAsync();
       }
       if (!user) {
-        router.replace("/(auth)/login");
+        router.replace(suspendedUntil ? ("/(auth)/login?suspended=1" as any) : "/(auth)/login");
       } else if (user.email_verified === false) {
         router.replace("/verify-email" as any);
       } else if (user.onboarding_complete === false) {
         router.replace("/onboarding");
       }
     }
-  }, [isLoading, user]);
+  }, [isLoading, user, suspendedUntil]);
 
   // Register push token once when user logs in
   useEffect(() => {

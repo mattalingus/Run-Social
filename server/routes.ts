@@ -83,9 +83,12 @@ async function requireAuth(req: Request, res: Response, next: Function) {
     );
     const suspUntil = row.rows[0]?.suspended_until;
     if (suspUntil && new Date(suspUntil) > new Date()) {
-      return res.status(403).json({ error: "suspended", suspended_until: suspUntil });
+      return res.status(403).json({ error: "suspended", suspended_until: suspUntil, reason: "Your account has been temporarily suspended." });
     }
-  } catch {}
+  } catch (err) {
+    console.error("[requireAuth] DB error checking suspension:", err);
+    return res.status(503).json({ message: "Service temporarily unavailable" });
+  }
   next();
 }
 
@@ -316,6 +319,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({
           error: "suspended",
           suspended_until: user.suspended_until,
+          reason: "Your account has been temporarily suspended due to community reports.",
           message: "Your account has been temporarily suspended due to community reports.",
         });
       }
@@ -353,7 +357,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!user) return res.status(401).json({ message: "User not found" });
       if (user.suspended_until && new Date(user.suspended_until) > new Date()) {
         await storage.deleteRememberToken(token).catch(() => {});
-        return res.status(403).json({ error: "suspended", suspended_until: user.suspended_until });
+        return res.status(403).json({ error: "suspended", suspended_until: user.suspended_until, reason: "Your account has been temporarily suspended." });
       }
       req.session.userId = userId;
       const newToken = await storage.createRememberToken(userId);
