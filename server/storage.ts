@@ -1412,7 +1412,7 @@ export async function deleteUserRememberTokens(userId: string): Promise<void> {
 }
 
 export async function getFriendPrivateRuns(userId: string, bounds?: { swLat: number; neLat: number; swLng: number; neLng: number }) {
-  let query = `SELECT r.id, r.title, r.date, r.location_lat, r.location_lng, r.location_name,
+  let query = `SELECT r.id, r.title, r.date, r.timezone, r.location_lat, r.location_lng, r.location_name,
     r.min_pace, r.max_pace, r.min_distance, r.max_distance, r.max_participants, r.privacy,
     u.name as host_name, u.photo_url as host_photo, u.marker_icon as host_marker_icon, u.avg_rating as host_rating, u.rating_count as host_rating_count, u.hosted_runs as host_hosted_runs,
     (1 + (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status IS DISTINCT FROM 'cancelled' AND rp.user_id != r.host_id)) as participant_count,
@@ -4800,7 +4800,7 @@ export async function getCrewRuns(crewId: string) {
 
 export async function getCrewRunHistory(crewId: string) {
   const res = await pool.query(
-    `SELECT r.id, r.title, r.date, r.min_distance, r.activity_type, r.host_id,
+    `SELECT r.id, r.title, r.date, r.timezone, r.min_distance, r.activity_type, r.host_id,
             u.name AS host_name,
             COALESCE(
               AVG(rp.final_pace) FILTER (WHERE rp.is_present = true AND rp.final_pace IS NOT NULL AND (rp.abandoned IS NULL OR rp.abandoned = false)),
@@ -4812,7 +4812,7 @@ export async function getCrewRunHistory(crewId: string) {
      LEFT JOIN run_participants rp ON rp.run_id = r.id
      WHERE r.crew_id = $1
        AND r.date < NOW()
-     GROUP BY r.id, u.name
+     GROUP BY r.id, r.timezone, u.name
      ORDER BY r.date DESC
      LIMIT 20`,
     [crewId]
