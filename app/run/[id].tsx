@@ -71,15 +71,6 @@ function formatPace(pace: number) {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
-function formatDateFull(dateStr: string) {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" });
-}
-
-function formatTime(dateStr: string) {
-  return new Date(dateStr).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-}
-
 export default function RunDetailScreen() {
   const { C } = useTheme();
   const styles = useMemo(() => makeStyles(C), [C]);

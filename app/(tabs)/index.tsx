@@ -41,7 +41,7 @@ import WalkthroughPulse from "@/components/WalkthroughPulse";
 import { useWalkthrough } from "@/contexts/WalkthroughContext";
 import MiniCalendarPicker from "@/components/MiniCalendarPicker";
 import SharedPathPreviewModal from "@/components/SharedPathPreviewModal";
-import { formatEventDateTime, formatEventDateLabel } from "@/lib/formatDate";
+import { formatEventDateTime } from "@/lib/formatDate";
 
 function formatDaysAgo(dateStr: string): string {
   const d = new Date(dateStr);
@@ -294,22 +294,6 @@ function getPaceColor(minPace: number, maxPace: number, C: { orange: string; gol
   if (minPace < 6) return "#C0392B";
   if (minPace < 9) return C.orange;
   return C.gold;
-}
-
-function formatDate(dateStr: string) {
-  const d = new Date(dateStr);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const runDay = new Date(d);
-  runDay.setHours(0, 0, 0, 0);
-  const days = Math.round((runDay.getTime() - today.getTime()) / 86400000);
-  if (days === 0) return "Today";
-  if (days === 1) return "Tomorrow";
-  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-}
-
-function formatTime(dateStr: string) {
-  return new Date(dateStr).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 }
 
 // ─── Filter Modal ─────────────────────────────────────────────────────────────

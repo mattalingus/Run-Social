@@ -168,12 +168,6 @@ interface UserSearchResult {
   hosted_runs?: number;
 }
 
-function formatDate(dateStr: string) {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-}
-
-
 // ─── Invite Banner ────────────────────────────────────────────────────────────
 function InviteBanner({ invite, onAccept, onDecline }: { invite: CrewInvite; onAccept: () => void; onDecline: () => void }) {
   const { C } = useTheme();
