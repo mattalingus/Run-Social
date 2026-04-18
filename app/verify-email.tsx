@@ -245,7 +245,7 @@ export default function VerifyEmailScreen() {
           style={[styles.verifyBtn, (loading || success || code.length < DIGIT_COUNT) && styles.verifyBtnDisabled]}
           onPress={() => handleVerify()}
           activeOpacity={0.85}
-          disabled={loading || success}
+          disabled={loading || success || code.length < DIGIT_COUNT}
           testID="verify-btn"
         >
           {loading ? (
@@ -258,10 +258,12 @@ export default function VerifyEmailScreen() {
         <View style={styles.resendRow}>
           {resendLoading ? (
             <ActivityIndicator size="small" color="#00D97E" />
-          ) : editingEmail ? (
+          ) : editingEmail && cooldown === 0 ? (
             <TouchableOpacity onPress={handleResend} style={styles.resendBtn}>
               <Text style={styles.resendText}>Send code to new address</Text>
             </TouchableOpacity>
+          ) : editingEmail ? (
+            <Text style={styles.cooldownText}>Can resend in {cooldown}s</Text>
           ) : cooldown > 0 ? (
             <Text style={styles.cooldownText}>
               {resendDone ? `Code sent! Resend in ${cooldown}s` : `Resend in ${cooldown}s`}
