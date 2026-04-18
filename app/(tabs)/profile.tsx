@@ -1460,7 +1460,7 @@ function ProfileScreenInner() {
         <View style={[styles.modalSheet, styles.friendModalSheet, { paddingBottom: insets.bottom + 24 }]}>
           <ScrollView showsVerticalScrollIndicator={false} bounces={false} keyboardShouldPersistTaps="handled">
           <View style={styles.modalTitleRow}>
-            <Text style={styles.modalTitle}>Find Friends</Text>
+            <Text style={styles.modalTitle}>Search by Username</Text>
             <Pressable onPress={() => { setShowAddFriend(false); setFriendSearch(""); }} hitSlop={12}>
               <Feather name="x" size={20} color={C.textMuted} />
             </Pressable>

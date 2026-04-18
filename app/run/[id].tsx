@@ -119,12 +119,24 @@ export default function RunDetailScreen() {
   const [editSaving, setEditSaving] = useState(false);
   const [cancelling, setCancelling] = useState(false);
 
+  const [runDeleted, setRunDeleted] = useState(false);
+
   const { data: run, isLoading, refetch } = useQuery<any>({
     queryKey: ["/api/runs", id],
     queryFn: async () => {
-      const res = await apiRequest("GET", `/api/runs/${id}`);
+      const { getApiUrl } = await import("@/lib/query-client");
+      const url = new URL(`/api/runs/${id}`, getApiUrl()).toString();
+      const { fetch: expoFetch } = await import("expo/fetch");
+      const res = await expoFetch(url, { credentials: "include" });
+      if (res.status === 410) {
+        setRunDeleted(true);
+        return null;
+      }
+      if (res.status === 404) {
+        return null;
+      }
       if (!res.ok) {
-        const body = await res.json();
+        const body = await res.json().catch(() => ({}));
         return body;
       }
       return res.json();
@@ -660,7 +672,7 @@ export default function RunDetailScreen() {
   if (!run) {
     return (
       <View style={[styles.container, { backgroundColor: C.bg, justifyContent: "center", alignItems: "center" }]}>
-        <Text style={styles.errorText}>Run not found</Text>
+        <Text style={styles.errorText}>{runDeleted ? "This run was deleted" : "Run not found"}</Text>
         <Pressable onPress={() => router.back()} style={styles.backLink}>
           <Text style={styles.backLinkText}>Go back</Text>
         </Pressable>

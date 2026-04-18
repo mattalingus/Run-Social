@@ -189,6 +189,14 @@ export async function initDb() {
     ALTER TABLE users ALTER COLUMN avg_distance SET DEFAULT NULL;
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT false;
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS mile_splits JSONB DEFAULT NULL;
+    ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS client_run_id TEXT DEFAULT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_solo_runs_client_run_id ON solo_runs (user_id, client_run_id) WHERE client_run_id IS NOT NULL;
+    CREATE TABLE IF NOT EXISTS run_notification_hidden (
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      run_id TEXT NOT NULL,
+      hidden_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (user_id, run_id)
+    );
 
     CREATE TABLE IF NOT EXISTS solo_runs (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -641,7 +649,8 @@ export async function getNotifications(userId: string) {
      FROM run_participants rp
      JOIN runs r ON r.id = rp.run_id
      JOIN users u ON u.id = rp.user_id
-     WHERE r.host_id = $1 AND rp.status = 'pending'`,
+     WHERE r.host_id = $1 AND rp.status = 'pending'
+       AND (r.is_deleted IS NOT TRUE)`,
     [userId]
   );
 
@@ -656,6 +665,7 @@ export async function getNotifications(userId: string) {
        AND r.host_id != $1
        AND r.date BETWEEN NOW() AND NOW() + INTERVAL '24 hours'
        AND (r.is_active = false OR r.is_active IS NULL)
+       AND (r.is_deleted IS NOT TRUE)
      ORDER BY r.date ASC`,
     [userId]
   );
@@ -671,6 +681,7 @@ export async function getNotifications(userId: string) {
        AND r.host_id != $1
        AND r.is_active = true
        AND r.started_at >= NOW() - INTERVAL '4 hours'
+       AND (r.is_deleted IS NOT TRUE)
      ORDER BY r.started_at DESC`,
     [userId]
   );
@@ -682,6 +693,7 @@ export async function getNotifications(userId: string) {
      WHERE sr.user_id = $1
        AND sr.completed = true
        AND sr.is_deleted IS NOT TRUE
+       AND NOT EXISTS (SELECT 1 FROM run_notification_hidden rnh WHERE rnh.user_id = $1 AND rnh.run_id = sr.id)
        AND sr.date >= NOW() - INTERVAL '72 hours'
        AND EXISTS (
          SELECT 1 FROM solo_runs s3
@@ -705,6 +717,7 @@ export async function getNotifications(userId: string) {
      WHERE sr.user_id = $1
        AND sr.completed = true
        AND sr.is_deleted IS NOT TRUE
+       AND NOT EXISTS (SELECT 1 FROM run_notification_hidden rnh WHERE rnh.user_id = $1 AND rnh.run_id = sr.id)
        AND sr.distance_miles > 0.5
        AND sr.pace_min_per_mile >= 2.0
        AND sr.date >= NOW() - INTERVAL '72 hours'
@@ -764,6 +777,7 @@ export async function getNotifications(userId: string) {
      JOIN users u ON u.id = r.host_id
      WHERE r.created_at >= NOW() - INTERVAL '24 hours'
        AND r.host_id != $1
+       AND (r.is_deleted IS NOT TRUE)
        AND r.host_id IN (
          SELECT CASE WHEN requester_id = $1 THEN addressee_id ELSE requester_id END
          FROM friends
@@ -1139,7 +1153,7 @@ export async function getUserRecentDistances(userId: string, limit = 10): Promis
 export async function searchUsers(query: string, currentUserId: string) {
   const result = await pool.query(
     `SELECT id, name, username, photo_url, completed_runs, total_miles FROM users
-     WHERE id != $1 AND (username ILIKE $2 OR name ILIKE $2)
+     WHERE id != $1 AND username ILIKE $2
      LIMIT 20`,
     [currentUserId, `%${query}%`]
   );
@@ -1498,10 +1512,14 @@ export async function createSoloRun(data: {
   elevationGainFt?: number | null;
   stepCount?: number | null;
   moveTimeSeconds?: number | null;
+  clientRunId?: string | null;
 }) {
   const result = await pool.query(
-    `INSERT INTO solo_runs (user_id, title, date, distance_miles, pace_min_per_mile, duration_seconds, completed, planned, notes, route_path, activity_type, saved_path_id, mile_splits, elevation_gain_ft, step_count, move_time_seconds)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
+    `INSERT INTO solo_runs (user_id, title, date, distance_miles, pace_min_per_mile, duration_seconds, completed, planned, notes, route_path, activity_type, saved_path_id, mile_splits, elevation_gain_ft, step_count, move_time_seconds, client_run_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+     ON CONFLICT (user_id, client_run_id) WHERE client_run_id IS NOT NULL
+     DO UPDATE SET title = solo_runs.title
+     RETURNING *`,
     [
       data.userId,
       data.title ?? null,
@@ -1519,6 +1537,7 @@ export async function createSoloRun(data: {
       data.elevationGainFt ?? null,
       data.stepCount ?? null,
       data.moveTimeSeconds ?? null,
+      data.clientRunId ?? null,
     ]
   );
   return result.rows[0];
@@ -1629,6 +1648,11 @@ export async function deleteSoloRun(id: string, userId: string) {
   await pool.query(
     `UPDATE solo_runs SET is_deleted = true WHERE id = $1 AND user_id = $2`,
     [id, userId]
+  );
+  // Suppress any notifications linked to this run so they are hidden immediately
+  await pool.query(
+    `INSERT INTO run_notification_hidden (user_id, run_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+    [userId, id]
   );
 }
 
@@ -4952,10 +4976,10 @@ export async function getWeeklyStatsForUser(userId: string): Promise<{ runs: num
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   const res = await pool.query(
     `SELECT COUNT(*) as runs,
-            COALESCE(SUM(distance_mi), 0) as total_mi,
+            COALESCE(SUM(distance_miles), 0) as total_mi,
             COALESCE(SUM(duration_seconds), 0) as total_seconds
      FROM solo_runs
-     WHERE user_id = $1 AND completed_at >= $2`,
+     WHERE user_id = $1 AND completed = true AND created_at >= $2 AND is_deleted IS NOT TRUE`,
     [userId, since]
   );
   return {

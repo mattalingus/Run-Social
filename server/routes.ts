@@ -1567,6 +1567,7 @@ async function go(e){
     try {
       const run = await storage.getRunById(req.params.id as string);
       if (!run) return res.status(404).json({ message: "Run not found" });
+      if (run.is_deleted) return res.status(410).json({ message: "This run has been cancelled", isDeleted: true });
       if (run.crew_id) {
         if (!req.session.userId) return res.status(403).json({ message: "Crew run — members only", isCrewRun: true });
         // Host always has access to their own crew run regardless of membership
@@ -1966,17 +1967,60 @@ async function go(e){
 
   app.post("/api/solo-runs", requireAuth, async (req, res) => {
     try {
-      const { title, date, distanceMiles, paceMinPerMile, durationSeconds, completed, planned, notes, routePath, activityType, savedPathId, mileSplits, elevationGainFt, stepCount, moveTimeSeconds } = req.body;
-      if (!date || !distanceMiles) return res.status(400).json({ message: "date and distanceMiles required" });
+      const { title, date, distanceMiles, paceMinPerMile, durationSeconds, completed, planned, notes, routePath, activityType, savedPathId, mileSplits, elevationGainFt, stepCount, moveTimeSeconds, clientRunId } = req.body;
+      if (date == null || distanceMiles == null) return res.status(400).json({ message: "date and distanceMiles required" });
+
       const parsedDist = parseFloat(distanceMiles);
-      const parsedPace = paceMinPerMile ? parseFloat(paceMinPerMile) : null;
+      if (!isFinite(parsedDist) || parsedDist < 0 || parsedDist > 200) {
+        return res.status(400).json({ message: "distanceMiles must be between 0 and 200" });
+      }
+
+      const parsedDuration = durationSeconds != null ? parseInt(durationSeconds) : null;
+      if (parsedDuration != null && !isFinite(parsedDuration)) {
+        return res.status(400).json({ message: "durationSeconds must be a valid number" });
+      }
+      if (completed && parsedDuration == null) {
+        return res.status(400).json({ message: "durationSeconds is required for completed activities" });
+      }
+      if (completed && parsedDuration != null && (parsedDuration < 30 || parsedDuration > 86400)) {
+        return res.status(400).json({ message: "durationSeconds must be between 30 and 86400 for completed activities" });
+      }
+
+      let parsedPace = paceMinPerMile != null ? parseFloat(paceMinPerMile) : null;
+      if (parsedPace != null) {
+        if (!isFinite(parsedPace) || parsedPace < 3.0 || parsedPace > 60.0) {
+          return res.status(400).json({ message: "paceMinPerMile must be between 3.0 and 60.0" });
+        }
+      }
+      if (parsedDist > 0.01 && parsedDuration != null && parsedDuration > 0) {
+        const recomputedPace = (parsedDuration / 60) / parsedDist;
+        if (!isFinite(recomputedPace) || recomputedPace < 3.0 || recomputedPace > 60.0) {
+          return res.status(400).json({ message: "The combination of distance and duration produces an impossible pace. Please verify your activity data." });
+        }
+        if (parsedPace == null || Math.abs(parsedPace - recomputedPace) > recomputedPace * 0.25) {
+          parsedPace = recomputedPace;
+        }
+      }
+
+      if (Array.isArray(routePath) && routePath.length > 0) {
+        for (const coord of routePath) {
+          if (
+            typeof coord.latitude !== "number" || typeof coord.longitude !== "number" ||
+            coord.latitude < -90 || coord.latitude > 90 ||
+            coord.longitude < -180 || coord.longitude > 180
+          ) {
+            return res.status(400).json({ message: "routePath contains invalid coordinates" });
+          }
+        }
+      }
+
       const run = await storage.createSoloRun({
         userId: req.session.userId!,
         title,
         date,
         distanceMiles: parsedDist,
         paceMinPerMile: parsedPace,
-        durationSeconds: durationSeconds ? parseInt(durationSeconds) : null,
+        durationSeconds: parsedDuration,
         completed: !!completed,
         planned: !!planned,
         notes,
@@ -1987,6 +2031,7 @@ async function go(e){
         elevationGainFt: elevationGainFt != null ? parseFloat(elevationGainFt) : null,
         stepCount: stepCount != null ? parseInt(stepCount) : null,
         moveTimeSeconds: moveTimeSeconds != null ? parseInt(moveTimeSeconds) : null,
+        clientRunId: clientRunId ? String(clientRunId) : null,
       });
       // Compute PR tiers for completed runs
       let prTiers: { distanceTier: number | null; paceTier: number | null } = { distanceTier: null, paceTier: null };

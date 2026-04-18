@@ -39,7 +39,7 @@ import {
   safeStopLocationUpdates,
 } from "@/lib/locationTasks";
 import * as ImagePicker from "expo-image-picker";
-import { Pedometer } from "expo-sensors";
+import { Pedometer, Barometer } from "expo-sensors";
 import { router, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
@@ -778,6 +778,8 @@ export default function RunTrackingScreen() {
   const lastSmoothedAltRef = useRef<number | null>(null);
   const prevSmoothedAltRef = useRef<number | null>(null);
   const elevConsecutiveUpRef = useRef(0);
+  const baroAltRef = useRef<number | null>(null);
+  const baroSubRef = useRef<{ remove: () => void } | null>(null);
   const moveTimeRef = useRef(0);
   const lastMoveTimestampRef = useRef<number | null>(null);
 
@@ -861,13 +863,36 @@ export default function RunTrackingScreen() {
   useEffect(() => {
     if (phase === "active" || phase === "countdown") {
       watchLocation();
+      // Start barometer when active (fall back gracefully if unavailable)
+      if (Platform.OS !== "web" && !baroSubRef.current) {
+        Barometer.isAvailableAsync().then((available) => {
+          if (!available) return;
+          Barometer.setUpdateInterval(1000);
+          baroSubRef.current = Barometer.addListener(({ pressure }) => {
+            // Convert pressure (hPa) to altitude (m) using standard atmosphere formula
+            // Relative: store first reading as baseline; altitude = 44330 * (1 - (p/p0)^0.1903)
+            const altM = 44330 * (1 - Math.pow(pressure / 1013.25, 0.1903));
+            baroAltRef.current = altM;
+          });
+        }).catch(() => {});
+      }
     } else {
       stopWatching();
+      if (baroSubRef.current) {
+        baroSubRef.current.remove();
+        baroSubRef.current = null;
+      }
     }
   }, [phase]);
 
   // Stop GPS on unmount
-  useEffect(() => () => { stopWatching(); }, []);
+  useEffect(() => () => {
+    stopWatching();
+    if (baroSubRef.current) {
+      baroSubRef.current.remove();
+      baroSubRef.current = null;
+    }
+  }, []);
 
   // Countdown tick: 3→2→1→0(GO!)→null then activate
   useEffect(() => {
@@ -888,7 +913,7 @@ export default function RunTrackingScreen() {
     return () => clearTimeout(t);
   }, [countdown]);
 
-  const handleCoord = useCallback((latitude: number, longitude: number, accuracy?: number, speed?: number | null, altitude?: number | null) => {
+  const handleCoord = useCallback((latitude: number, longitude: number, accuracy?: number, speed?: number | null, altitude?: number | null, altitudeAccuracy?: number | null) => {
     // Ignore every callback that arrives after the run is finished — the GPS
     // subscription may deliver a final stale fix between doFinish() and the
     // GPS useEffect running stopWatching().  Any state setter called here
@@ -909,38 +934,51 @@ export default function RunTrackingScreen() {
     }
     setIsDriving(false);
 
-    if (altitude != null && Platform.OS !== "web") {
-      altitudeBufferRef.current.push(altitude);
-      if (altitudeBufferRef.current.length > 15) {
-        altitudeBufferRef.current.shift();
-      }
-      if (altitudeBufferRef.current.length === 15) {
-        const smoothed = altitudeBufferRef.current.reduce((a, b) => a + b, 0) / 15;
-        if (lastSmoothedAltRef.current == null) {
-          // First smoothed reading — set baseline
-          lastSmoothedAltRef.current = smoothed;
-          prevSmoothedAltRef.current = smoothed;
+    if (Platform.OS !== "web") {
+      // Prefer barometric altitude (much more accurate); fall back to GPS if unavailable
+      // Discard GPS altitude if altitudeAccuracy is worse than 10 m
+      const useBaroAlt = baroAltRef.current != null;
+      const gpsAltOk = altitude != null && (altitudeAccuracy == null || altitudeAccuracy <= 10);
+      const rawAlt = useBaroAlt ? baroAltRef.current! : (gpsAltOk ? altitude! : null);
+
+      if (rawAlt != null) {
+        // Clamp per-sample delta to 20 m to filter outlier spikes
+        if (altitudeBufferRef.current.length > 0) {
+          const prev = altitudeBufferRef.current[altitudeBufferRef.current.length - 1];
+          const clamped = Math.max(prev - 20, Math.min(prev + 20, rawAlt));
+          altitudeBufferRef.current.push(clamped);
         } else {
-          const stepDelta = smoothed - (prevSmoothedAltRef.current ?? lastSmoothedAltRef.current);
-          if (stepDelta > 0) {
-            // Consistent upward movement — increment streak
-            elevConsecutiveUpRef.current += 1;
-            const totalRise = smoothed - lastSmoothedAltRef.current;
-            if (elevConsecutiveUpRef.current >= 3 && totalRise >= 2.0) {
-              // Confirmed real climb: credit the accumulated gain and advance baseline
-              elevationGainRef.current += totalRise * 3.28084;
-              lastSmoothedAltRef.current = smoothed;
-              // Keep consecutive count >= 3 so ongoing climb credits immediately
-            }
+          altitudeBufferRef.current.push(rawAlt);
+        }
+        if (altitudeBufferRef.current.length > 15) {
+          altitudeBufferRef.current.shift();
+        }
+        if (altitudeBufferRef.current.length === 15) {
+          const smoothed = altitudeBufferRef.current.reduce((a, b) => a + b, 0) / 15;
+          if (lastSmoothedAltRef.current == null) {
+            lastSmoothedAltRef.current = smoothed;
+            prevSmoothedAltRef.current = smoothed;
           } else {
-            // Flat or descent: reset upward streak
-            elevConsecutiveUpRef.current = 0;
-            if (smoothed < lastSmoothedAltRef.current) {
-              // Advance baseline down so we don't re-credit a recovery to the old high
-              lastSmoothedAltRef.current = smoothed;
+            const stepDelta = smoothed - (prevSmoothedAltRef.current ?? lastSmoothedAltRef.current);
+            if (stepDelta > 0) {
+              elevConsecutiveUpRef.current += 1;
+              const totalRise = smoothed - lastSmoothedAltRef.current;
+              // Require ≥ 5 consecutive upward readings AND ≥ 3.0 m total rise
+              if (elevConsecutiveUpRef.current >= 5 && totalRise >= 3.0) {
+                elevationGainRef.current += totalRise * 3.28084;
+                lastSmoothedAltRef.current = smoothed;
+              }
+            } else {
+              // Hysteresis: only reset streak and advance baseline if descent > 0.5 m
+              if (stepDelta < -0.5) {
+                elevConsecutiveUpRef.current = 0;
+                if (smoothed < lastSmoothedAltRef.current - 0.5) {
+                  lastSmoothedAltRef.current = smoothed;
+                }
+              }
             }
+            prevSmoothedAltRef.current = smoothed;
           }
-          prevSmoothedAltRef.current = smoothed;
         }
       }
     }
@@ -1117,8 +1155,8 @@ export default function RunTrackingScreen() {
         const sub = await Location.watchPositionAsync(
           { accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 5 },
           (loc) => {
-            const { latitude, longitude, speed, altitude, accuracy } = loc.coords;
-            handleCoord(latitude, longitude, accuracy ?? undefined, speed, altitude);
+            const { latitude, longitude, speed, altitude, accuracy, altitudeAccuracy } = loc.coords;
+            handleCoord(latitude, longitude, accuracy ?? undefined, speed, altitude, altitudeAccuracy);
           }
         );
         locationSubRef.current = sub;
@@ -1151,8 +1189,8 @@ export default function RunTrackingScreen() {
         const sub = await Location.watchPositionAsync(
           { accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 5 },
           (loc) => {
-            const { latitude, longitude, speed, altitude, accuracy } = loc.coords;
-            handleCoord(latitude, longitude, accuracy ?? undefined, speed, altitude);
+            const { latitude, longitude, speed, altitude, accuracy, altitudeAccuracy } = loc.coords;
+            handleCoord(latitude, longitude, accuracy ?? undefined, speed, altitude, altitudeAccuracy);
           }
         );
         locationSubRef.current = sub;
@@ -1485,11 +1523,16 @@ export default function RunTrackingScreen() {
     ]);
   }
 
+  const savingGuardRef = useRef(false);
+
   async function saveRun() {
+    if (savingGuardRef.current) return;
+    savingGuardRef.current = true;
     const distance = totalDistRef.current;
     if (distance < 0.05 || elapsedRef.current < 30) {
       Alert.alert("Too short to save", "Record at least ~50 m and 30 s before saving.");
       setSaving(false);
+      savingGuardRef.current = false;
       return;
     }
     const pace = distance > 0.01 ? (elapsedRef.current / 60) / distance : null;
@@ -1510,12 +1553,17 @@ export default function RunTrackingScreen() {
       elevationGainFt: elevationGainRef.current > 0 ? Math.round(elevationGainRef.current) : null,
       stepCount: activityFilter === "run" && stepCountRef.current > 0 ? stepCountRef.current : null,
       moveTimeSeconds: moveTimeRef.current > 0 ? Math.round(moveTimeRef.current) : null,
+      clientRunId: draftIdRef.current,
     };
 
     let lastErr: any = null;
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
         const res = await apiRequest("POST", "/api/solo-runs", payload);
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.message || "Save failed");
+        }
         const saved = await res.json();
         setSavedRunId(saved.id);
         setRunTitle(saved.title ?? "");
@@ -1564,12 +1612,12 @@ export default function RunTrackingScreen() {
         return;
       } catch (e: any) {
         lastErr = e;
-        
         if (attempt < MAX_RETRIES) {
           await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
         }
       }
     }
+    savingGuardRef.current = false;
     setSaving(false);
     Alert.alert("Save Failed", lastErr?.message ?? "Could not save your activity. Your data has been preserved — try again.");
   }
