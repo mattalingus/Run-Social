@@ -10,18 +10,24 @@ export function getApiUrl(): string {
   return new URL(`https://${host}`).href;
 }
 
+interface ApiErrorPayload {
+  error?: string;
+  message?: string;
+  suspended_until?: string;
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     let text: string | undefined;
-    let data: any;
+    let data: ApiErrorPayload | undefined;
     try {
       text = await res.text();
-      data = JSON.parse(text!);
+      data = JSON.parse(text!) as ApiErrorPayload;
     } catch {
       text = res.statusText;
     }
     if (res.status === 403 && data?.error === "suspended") {
-      const suspUntil = data.suspended_until as string | undefined;
+      const suspUntil = data.suspended_until;
       _handleSuspendedSession?.(suspUntil);
       throw Object.assign(new Error("Account suspended"), {
         code: "SUSPENDED",
