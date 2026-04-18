@@ -503,6 +503,9 @@ async function go(e){
     if (!req.session.userId) return res.status(401).json({ message: "Not authenticated" });
     const user = await storage.getUserById(req.session.userId);
     if (!user) return res.status(401).json({ message: "User not found" });
+    if (user.suspended_until && new Date(user.suspended_until) > new Date()) {
+      return res.status(403).json({ error: "suspended", suspended_until: user.suspended_until, reason: "Your account has been temporarily suspended." });
+    }
     const { password: _, ...safeUser } = user;
     res.json(safeUser);
   });

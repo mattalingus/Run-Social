@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -14,18 +14,46 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "@/contexts/AuthContext";
+import { SUSPENDED_NOTICE_KEY } from "@/contexts/AuthContext";
 import C from "@/constants/colors";
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
-  const { resetSuccess } = useLocalSearchParams<{ resetSuccess?: string }>();
-  const { login, suspendedUntil } = useAuth();
+  const { resetSuccess, suspended } = useLocalSearchParams<{ resetSuccess?: string; suspended?: string }>();
+  const { login, suspendedUntil: contextSuspendedUntil } = useAuth();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  // Local suspended state for when the notice comes from URL param + AsyncStorage on fresh mount
+  // (e.g., after app restart where context state is lost but AsyncStorage persists).
+  const [storedSuspendedUntil, setStoredSuspendedUntil] = useState<string | null>(null);
+  const [suspendedNoticeVisible, setSuspendedNoticeVisible] = useState(false);
+
+  // Primary source: context (set live by AuthContext during this session).
+  // Fallback: ?suspended=1 param + AsyncStorage (survives app restart).
+  useEffect(() => {
+    if (contextSuspendedUntil !== null) {
+      setStoredSuspendedUntil(contextSuspendedUntil);
+      setSuspendedNoticeVisible(true);
+      return;
+    }
+    if (suspended !== "1") return;
+    // URL param signals a suspended redirect — read the lift date from AsyncStorage.
+    AsyncStorage.getItem(SUSPENDED_NOTICE_KEY)
+      .then((val) => {
+        setSuspendedNoticeVisible(true);
+        setStoredSuspendedUntil(val && val !== "1" ? val : null);
+        AsyncStorage.removeItem(SUSPENDED_NOTICE_KEY).catch(() => {});
+      })
+      .catch(() => {
+        setSuspendedNoticeVisible(true);
+        setStoredSuspendedUntil(null);
+      });
+  }, [contextSuspendedUntil, suspended]);
 
   function formatSuspendedDate(isoStr: string): string {
     try {
@@ -45,6 +73,8 @@ export default function LoginScreen() {
       return;
     }
     setError("");
+    setSuspendedNoticeVisible(false);
+    setStoredSuspendedUntil(null);
     setLoading(true);
     try {
       await login(identifier.trim(), password);
@@ -52,16 +82,20 @@ export default function LoginScreen() {
       router.replace("/(tabs)");
     } catch (e: unknown) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      if (e instanceof Error && (e as Error & { code?: string }).code === "SUSPENDED") {
-        // suspendedUntil is now set in AuthContext by _handleSuspendedSession
-        // the banner will render from context — no local state needed
+      const err = e instanceof Error ? e : new Error(String(e));
+      if ((err as Error & { code?: string }).code === "SUSPENDED") {
+        // AuthContext._handleSuspendedSession already set contextSuspendedUntil,
+        // which triggers the useEffect above to show the notice.
       } else {
-        setError(e instanceof Error ? e.message : "Login failed");
+        setError(err.message || "Login failed");
       }
     } finally {
       setLoading(false);
     }
   }
+
+  // The notice is shown when the URL param or context signals suspension.
+  const effectiveSuspendedUntil = contextSuspendedUntil ?? storedSuspendedUntil;
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.root}>
@@ -86,13 +120,13 @@ export default function LoginScreen() {
             </View>
           ) : null}
 
-          {suspendedUntil !== null ? (
+          {suspendedNoticeVisible ? (
             <View style={[styles.banner, styles.suspendedBanner]}>
               <Feather name="slash" size={14} color="#F59E0B" />
               <Text style={[styles.bannerText, { color: "#F59E0B" }]}>
                 {"Your account is temporarily suspended due to community reports. "}
-                {suspendedUntil
-                  ? `Try again after ${formatSuspendedDate(suspendedUntil)}.`
+                {effectiveSuspendedUntil
+                  ? `Try again after ${formatSuspendedDate(effectiveSuspendedUntil)}.`
                   : "Please try again later."}
               </Text>
             </View>
