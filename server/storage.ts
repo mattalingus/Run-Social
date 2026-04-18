@@ -758,7 +758,7 @@ export async function getNotifications(userId: string) {
 
   // Upcoming confirmed runs within the next 24 hours
   const eventReminders = await pool.query(
-    `SELECT r.id, r.title, r.date, r.location_name, u.name as host_name, r.activity_type
+    `SELECT r.id, r.title, r.date, r.location_name, r.timezone, u.name as host_name, r.activity_type
      FROM run_participants rp
      JOIN runs r ON r.id = rp.run_id
      JOIN users u ON u.id = r.host_id
@@ -981,7 +981,7 @@ export async function getNotifications(userId: string) {
         type: 'event_reminder',
         title: `Upcoming ${actLabel === 'ride' ? 'Ride' : actLabel === 'walk' ? 'Walk' : 'Run'}`,
         body: `"${r.title}" with ${r.host_name} starts in ${timeStr}${r.location_name ? ` · ${r.location_name}` : ''}`,
-        data: { run_id: r.id, host_name: r.host_name, location_name: r.location_name, date: r.date, activity_type: r.activity_type },
+        data: { run_id: r.id, host_name: r.host_name, location_name: r.location_name, date: r.date, timezone: r.timezone ?? null, activity_type: r.activity_type },
         created_at: now.toISOString(),
       };
     }),

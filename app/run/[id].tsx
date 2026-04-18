@@ -34,6 +34,7 @@ import { formatDistance } from "@/lib/formatDistance";
 import { toDisplayDist, toDisplayPace, unitLabel, type DistanceUnit } from "@/lib/units";
 import HostProfileSheet from "@/components/HostProfileSheet";
 import { resolvePhotoUrl } from "@/lib/photoUrl";
+import { formatEventDateFull, formatEventTime } from "@/lib/formatDate";
 
 function haversineKmDetail(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371;
@@ -786,7 +787,7 @@ export default function RunDetailScreen() {
               hitSlop={8}
               onPress={async () => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                const date = run.date ? new Date(run.date).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" }) : "";
+                const date = run.date ? formatEventDateFull(run.date, run.timezone) : "";
                 const loc = run.location_name ? ` at ${run.location_name}` : "";
                 const msg = `Join me for ${run.title} on PaceUp!${date ? ` ${date}` : ""}${loc}`;
                 try {
@@ -851,8 +852,8 @@ export default function RunDetailScreen() {
           <View style={styles.infoCard}>
             <Feather name="calendar" size={18} color={C.primary} />
             <View>
-              <Text style={styles.infoValue}>{formatDateFull(run.date)}</Text>
-              <Text style={styles.infoLabel}>at {formatTime(run.date)}</Text>
+              <Text style={styles.infoValue}>{formatEventDateFull(run.date, run.timezone)}</Text>
+              <Text style={styles.infoLabel}>at {formatEventTime(run.date, run.timezone)}</Text>
             </View>
           </View>
           <Pressable

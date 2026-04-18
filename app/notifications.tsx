@@ -18,6 +18,7 @@ import { router } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/query-client";
 import { useTheme } from "@/contexts/ThemeContext";
+import { formatEventDateTime } from "@/lib/formatDate";
 
 type FeatherIconName = ComponentProps<typeof Feather>["name"];
 
@@ -41,6 +42,7 @@ interface NotifData {
   location_name?: string;
   activity_type?: string;
   date?: string;
+  timezone?: string | null;
 }
 
 interface NotifItem {
@@ -231,6 +233,11 @@ export default function NotificationsScreen() {
         )}
         <View style={st.rowContent}>
           <Text style={[st.rowBody, { color: C.text }]} numberOfLines={2}>{item.body}</Text>
+          {item.type === "event_reminder" && item.data?.date ? (
+            <Text style={[st.rowTime, { color: C.primary }]}>
+              {formatEventDateTime(item.data.date, item.data.timezone)}
+            </Text>
+          ) : null}
           <Text style={[st.rowTime, { color: C.textMuted }]}>{timeAgo(item.created_at)}</Text>
           {isFriendReq && (
             <View style={st.actionRow}>

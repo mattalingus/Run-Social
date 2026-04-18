@@ -35,6 +35,7 @@ import PaywallSheet, { type PaywallPlan } from "@/components/PaywallSheet";
 import { darkColors, type ColorScheme } from "@/constants/colors";
 import { toDisplayPace, toDisplaySpeed, toDisplayDist, unitLabel, type DistanceUnit } from "@/lib/units";
 import { Image as ExpoImage } from "expo-image";
+import { formatEventDateTime } from "@/lib/formatDate";
 
 const C = darkColors;
 
@@ -143,6 +144,7 @@ interface Run {
   distance_miles?: number;
   min_distance?: number;
   participant_count?: number;
+  timezone?: string | null;
 }
 
 interface CrewHistoryRun {
@@ -155,6 +157,7 @@ interface CrewHistoryRun {
   host_name: string;
   avg_attendee_pace: number;
   attendee_count: number;
+  timezone?: string | null;
 }
 
 interface UserSearchResult {
@@ -1561,7 +1564,7 @@ function CrewDetailSheet({
                         <View style={s.eventCardMeta}>
                           <View style={s.eventMetaChip}>
                             <Ionicons name="calendar-outline" size={12} color={C.textMuted} />
-                            <Text style={s.eventMetaChipTxt}>{formatDate(run.date)}</Text>
+                            <Text style={s.eventMetaChipTxt}>{formatEventDateTime(run.date, run.timezone)}</Text>
                           </View>
                           {run.min_distance ? (
                             <View style={s.eventMetaChip}>
@@ -1928,7 +1931,7 @@ function CrewDetailSheet({
                             <Text style={s.historyRunTitle} numberOfLines={1}>{run.title}</Text>
                             <View style={s.historyRunMeta}>
                               <Text style={s.historyRunMetaTxt}>
-                                {formatDate(run.date)}
+                                {formatEventDateTime(run.date, run.timezone)}
                               </Text>
                               <Text style={s.historyRunDot}>·</Text>
                               <Text style={s.historyRunMetaTxt}>

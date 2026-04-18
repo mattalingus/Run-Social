@@ -41,6 +41,7 @@ import WalkthroughPulse from "@/components/WalkthroughPulse";
 import { useWalkthrough } from "@/contexts/WalkthroughContext";
 import MiniCalendarPicker from "@/components/MiniCalendarPicker";
 import SharedPathPreviewModal from "@/components/SharedPathPreviewModal";
+import { formatEventDateTime, formatEventDateLabel } from "@/lib/formatDate";
 
 function formatDaysAgo(dateStr: string): string {
   const d = new Date(dateStr);
@@ -219,6 +220,7 @@ interface Run {
   pace_groups?: { label: string; minPace: number; maxPace: number }[] | null;
   plan_count?: string;
   user_is_crew_member?: boolean;
+  timezone?: string | null;
 }
 
 // ─── Route thumbnail helpers ──────────────────────────────────────────────────
@@ -981,7 +983,7 @@ function RunCard({
                         : `Ended ${minsAgoCard < 60 ? `${minsAgoCard}m` : `${Math.floor(minsAgoCard / 60)}h ${minsAgoCard % 60}m`} ago · Still joinable`}
                     </Text>
                   ) : (
-                    <Text style={s.metaText}>{formatDate(run.date)} · {formatTime(run.date)}</Text>
+                    <Text style={s.metaText}>{formatEventDateTime(run.date, run.timezone)}</Text>
                   )}
                 </View>
                 <View style={s.metaItem}>
@@ -1165,7 +1167,7 @@ function MiniRunCard({
             <Text style={s.plannedCardTitle} numberOfLines={2}>{run.title}</Text>
             <View style={s.savedCardMeta}>
               <Feather name="calendar" size={11} color={C.textMuted} />
-              <Text style={s.savedCardMetaTxt} numberOfLines={1}>{formatDate(run.date)}</Text>
+              <Text style={s.savedCardMetaTxt} numberOfLines={1}>{formatEventDateTime(run.date, run.timezone)}</Text>
             </View>
             <View style={s.savedCardMeta}>
               <Feather name="map-pin" size={11} color={C.textMuted} />
@@ -1182,7 +1184,7 @@ function MiniRunCard({
             </View>
             <View style={s.savedCardMeta}>
               <Feather name="calendar" size={11} color={C.textMuted} />
-              <Text style={s.savedCardMetaTxt} numberOfLines={1}>{formatDate(run.date)}</Text>
+              <Text style={s.savedCardMetaTxt} numberOfLines={1}>{formatEventDateTime(run.date, run.timezone)}</Text>
             </View>
             <View style={s.savedCardMeta}>
               <Feather name="map-pin" size={11} color={C.textMuted} />
