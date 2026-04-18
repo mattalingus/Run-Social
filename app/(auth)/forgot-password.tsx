@@ -22,6 +22,7 @@ export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const [unavailable, setUnavailable] = useState(false);
   const [error, setError] = useState("");
 
   async function handleSubmit() {
@@ -31,14 +32,20 @@ export default function ForgotPasswordScreen() {
       return;
     }
     setError("");
+    setUnavailable(false);
     setLoading(true);
     try {
       await apiRequest("POST", "/api/auth/forgot-password", { email: trimmed });
       setSent(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e: any) {
-      setError(e.message || "Something went wrong");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      if (e.message === "email_unavailable") {
+        setUnavailable(true);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      } else {
+        setError(e.message || "Something went wrong");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
     } finally {
       setLoading(false);
     }
@@ -68,6 +75,8 @@ export default function ForgotPasswordScreen() {
           <Text style={styles.subtitle}>
             {sent
               ? "Check your email for a reset link. It may take a minute to arrive."
+              : unavailable
+              ? "Email reset isn't available at the moment."
               : "Enter the email address associated with your account and we'll send you a link to reset your password."}
           </Text>
         </View>
@@ -80,6 +89,20 @@ export default function ForgotPasswordScreen() {
             <Text style={styles.sentTitle}>Email Sent</Text>
             <Text style={styles.sentDetail}>
               If an account exists with that email, you'll receive a password reset link shortly.
+            </Text>
+            <Pressable style={styles.primaryBtn} onPress={() => router.back()}>
+              <Text style={styles.primaryBtnText}>Back to Login</Text>
+            </Pressable>
+          </View>
+        ) : unavailable ? (
+          <View style={styles.sentWrap}>
+            <View style={[styles.checkCircle, { backgroundColor: C.surface }]}>
+              <Feather name="mail" size={32} color={C.textMuted} />
+            </View>
+            <Text style={styles.sentTitle}>Not Available</Text>
+            <Text style={styles.sentDetail}>
+              Password reset by email isn't available right now. Please contact support at{" "}
+              <Text style={{ color: C.primary }}>support@paceup.app</Text> for help accessing your account.
             </Text>
             <Pressable style={styles.primaryBtn} onPress={() => router.back()}>
               <Text style={styles.primaryBtnText}>Back to Login</Text>

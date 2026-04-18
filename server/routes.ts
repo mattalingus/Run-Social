@@ -383,8 +383,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const smtpUser = process.env.SMTP_USER;
       const smtpPass = process.env.SMTP_PASS;
       if (!smtpUser || !smtpPass) {
-        console.error("[forgot-password] SMTP_USER or SMTP_PASS not configured");
-        return res.json({ ok: true });
+        console.warn("[forgot-password] SMTP_USER or SMTP_PASS not configured — email unavailable");
+        return res.status(503).json({ error: "email_unavailable", message: "email_unavailable" });
       }
       const transporter = nodemailer.createTransport({
         host: "smtp.gmail.com",
@@ -420,7 +420,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (password.length < 6) return res.status(400).json({ message: "Password must be at least 6 characters" });
       const userId = await storage.consumePasswordResetToken(token);
       if (!userId) return res.status(400).json({ message: "Invalid or expired reset link" });
-      await storage.updateUserPassword(userId, password);
+      await storage.updateUserPasswordAndInvalidateTokens(userId, password);
       res.json({ ok: true });
     } catch (e: any) {
       res.status(500).json({ message: e.message });
