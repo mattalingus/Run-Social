@@ -822,9 +822,11 @@ export default function SoloScreen() {
   }, [historyRuns.length, user?.id, ghostSoloDone]);
 
   // Show a one-time soft banner to users who deferred push notifications during onboarding,
-  // once they've completed their first activity and permission is still undetermined.
+  // once they've completed their first activity (solo or group, any type) and permission
+  // is still undetermined. Use total mileage stats so group runs also qualify.
+  const hasCompletedAnyActivity = (user?.miles_this_month ?? 0) > 0 || (user?.miles_this_year ?? 0) > 0;
   useEffect(() => {
-    if (!user?.id || historyRuns.length === 0 || Platform.OS === "web") return;
+    if (!user?.id || !hasCompletedAnyActivity || Platform.OS === "web") return;
     AsyncStorage.getItem("@paceup_notif_deferred").then(async (val) => {
       if (val !== "true") return;
       const { status } = await Notifications.getPermissionsAsync();
@@ -832,7 +834,7 @@ export default function SoloScreen() {
         setShowNotifBanner(true);
       }
     }).catch(() => {});
-  }, [user?.id, historyRuns.length]);
+  }, [user?.id, hasCompletedAnyActivity]);
 
   const completedRuns = useMemo(
     () => filteredSoloRuns.filter((r) => r.completed && r.pace_min_per_mile),
