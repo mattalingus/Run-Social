@@ -101,8 +101,15 @@ async function cleanupStaleActiveRuns(): Promise<void> {
            WHERE rp.run_id = $1 AND rp.final_pace IS NOT NULL AND rp.status != 'confirmed'`,
           [r.id]
         );
+        let anyRealDistance = false;
         for (const p of finishedParticipants.rows) {
-          const miles = parseFloat(p.final_distance) || 3;
+          const miles = parseFloat(p.final_distance);
+          if (!miles || miles <= 0) {
+            // No real distance recorded — do not credit any stats for this participant
+            console.log(`[late-start] Skipping stats for user ${p.user_id} in run ${r.id} — no real distance recorded`);
+            continue;
+          }
+          anyRealDistance = true;
           await client.query(
             `UPDATE run_participants SET status = 'confirmed', miles_logged = $3 WHERE run_id = $1 AND user_id = $2`,
             [r.id, p.user_id, miles]
@@ -117,7 +124,7 @@ async function cleanupStaleActiveRuns(): Promise<void> {
             [p.user_id, miles]
           );
         }
-        if (r.crew_id && finishedParticipants.rows.length > 0) {
+        if (r.crew_id && anyRealDistance) {
           const crew = await client.query(
             `SELECT id, current_streak_weeks, last_run_week FROM crews WHERE id = $1 FOR UPDATE`,
             [r.crew_id]
@@ -161,12 +168,23 @@ async function cleanupStaleActiveRuns(): Promise<void> {
             [r.id, ranksRes.rows[i].user_id, i + 1]
           );
         }
-        await client.query(
-          `UPDATE runs SET is_completed = true, is_active = false WHERE id = $1`,
-          [r.id]
-        );
-        await client.query('COMMIT');
-        console.log(`[late-start] Auto-completed stale run ${r.id} ("${r.title}") with ${finishedParticipants.rows.length} credited`);
+        if (anyRealDistance) {
+          await client.query(
+            `UPDATE runs SET is_completed = true, is_active = false WHERE id = $1`,
+            [r.id]
+          );
+          await client.query('COMMIT');
+          console.log(`[late-start] Auto-completed stale run ${r.id} ("${r.title}") with real distance credited`);
+        } else {
+          // No participant logged real GPS distance — mark as abandoned so the run is
+          // excluded from profile history, leaderboards, and weekly summaries
+          await client.query(
+            `UPDATE runs SET is_active = false, is_abandoned = true WHERE id = $1`,
+            [r.id]
+          );
+          await client.query('COMMIT');
+          console.log(`[late-start] Abandoned stale run ${r.id} ("${r.title}") — no real distance recorded, not counted`);
+        }
       } catch (err: any) {
         await client.query('ROLLBACK').catch(() => {});
         console.error(`[late-start] Auto-completion failed for run ${r.id}:`, err?.message);

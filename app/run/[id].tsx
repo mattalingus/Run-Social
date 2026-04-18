@@ -1386,36 +1386,48 @@ export default function RunDetailScreen() {
             <Text style={styles.ratedText}>You rated this host {myRating.stars}/5</Text>
           </View>
         )}
-        {!isHost && !isParticipant && !run.is_completed && user && (
-          <Pressable
-            style={({ pressed }) => [
-              isPlanned ? [styles.planBtn, styles.planBtnActive] : styles.primaryBtn,
-              { opacity: pressed || planMutation.isPending ? 0.8 : 1 },
-            ]}
-            onPress={() => {
-              if (isPlanned) {
-                planMutation.mutate();
-              } else {
-                setPlanInfoPage(0);
-                setShowPlanInfoModal(true);
-              }
-            }}
-            disabled={planMutation.isPending}
-          >
-            {planMutation.isPending ? <ActivityIndicator color={isPlanned ? C.primary : C.text} /> : (
-              <>
-                <Ionicons
-                  name={isPlanned ? "calendar" : "calendar-outline"}
-                  size={18}
-                  color={isPlanned ? C.primary : C.text}
-                />
-                <Text style={isPlanned ? [styles.planBtnText, styles.planBtnTextActive] : styles.primaryBtnText}>
-                  {isPlanned ? "I'm Not Coming" : run?.activity_type === "ride" ? "I Plan To Ride" : run?.activity_type === "walk" ? "I Plan To Walk" : "I Plan To Run"}
-                </Text>
-              </>
-            )}
-          </Pressable>
-        )}
+        {!isHost && !isParticipant && user && (() => {
+          const notJoinable = run.is_deleted || run.is_completed || isPastRun;
+          if (notJoinable) {
+            const label = run.is_deleted ? "Event Cancelled" : "Event Ended";
+            return (
+              <View style={[styles.primaryBtn, { opacity: 0.45 }]} pointerEvents="none">
+                <Ionicons name="calendar-outline" size={18} color={C.text} />
+                <Text style={styles.primaryBtnText}>{label}</Text>
+              </View>
+            );
+          }
+          return (
+            <Pressable
+              style={({ pressed }) => [
+                isPlanned ? [styles.planBtn, styles.planBtnActive] : styles.primaryBtn,
+                { opacity: pressed || planMutation.isPending ? 0.8 : 1 },
+              ]}
+              onPress={() => {
+                if (isPlanned) {
+                  planMutation.mutate();
+                } else {
+                  setPlanInfoPage(0);
+                  setShowPlanInfoModal(true);
+                }
+              }}
+              disabled={planMutation.isPending}
+            >
+              {planMutation.isPending ? <ActivityIndicator color={isPlanned ? C.primary : C.text} /> : (
+                <>
+                  <Ionicons
+                    name={isPlanned ? "calendar" : "calendar-outline"}
+                    size={18}
+                    color={isPlanned ? C.primary : C.text}
+                  />
+                  <Text style={isPlanned ? [styles.planBtnText, styles.planBtnTextActive] : styles.primaryBtnText}>
+                    {isPlanned ? "I'm Not Coming" : run?.activity_type === "ride" ? "I Plan To Ride" : run?.activity_type === "walk" ? "I Plan To Walk" : "I Plan To Run"}
+                  </Text>
+                </>
+              )}
+            </Pressable>
+          );
+        })()}
         {isParticipant && !run.is_completed && isLive && (
           <View style={styles.joinedBanner}>
             <Feather name="map-pin" size={14} color={C.primary} style={{ marginTop: 2 }} />

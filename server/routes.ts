@@ -707,19 +707,29 @@ async function go(e){
   });
 
   app.post("/api/users/:id/block", requireAuth, async (req, res) => {
+    const client = await pool.connect();
     try {
       const targetId = req.params.id as string;
       const requesterId = req.session.userId!;
       if (targetId === requesterId) return res.status(400).json({ message: "Cannot block yourself" });
-      await storage.blockUser(requesterId, targetId);
-      // Remove any existing friendship between the two users
-      await pool.query(
-        `DELETE FROM friendships WHERE (requester_id = $1 AND recipient_id = $2) OR (requester_id = $2 AND recipient_id = $1)`,
+      await client.query("BEGIN");
+      // Insert block row
+      await client.query(
+        `INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
         [requesterId, targetId]
       );
+      // Atomically remove any existing friendship or pending friend request in either direction
+      await client.query(
+        `DELETE FROM friends WHERE (requester_id = $1 AND addressee_id = $2) OR (requester_id = $2 AND addressee_id = $1)`,
+        [requesterId, targetId]
+      );
+      await client.query("COMMIT");
       res.json({ ok: true });
     } catch (e: any) {
+      await client.query("ROLLBACK").catch(() => {});
       res.status(500).json({ message: e.message });
+    } finally {
+      client.release();
     }
   });
 
@@ -1583,6 +1593,9 @@ async function go(e){
       const run = await storage.getRunById(req.params.id as string);
       if (!run) return res.status(404).json({ message: "Run not found" });
       if (run.host_id === req.session.userId) return res.status(400).json({ message: "You are the host" });
+      if (run.is_deleted) return res.status(400).json({ message: "This event has been cancelled" });
+      if (run.is_completed) return res.status(400).json({ message: "This event has already ended" });
+      if (run.date && new Date(run.date) < new Date()) return res.status(400).json({ message: "This event has already passed" });
       const result = await storage.togglePlan(req.session.userId!, req.params.id as string);
       res.json(result);
       // Notify host only when planning (not unplanning), fire-and-forget

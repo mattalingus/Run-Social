@@ -616,6 +616,9 @@ export async function initDb() {
         ALTER TABLE achievements ADD CONSTRAINT achievements_user_slug_unique UNIQUE (user_id, slug);
       END IF;
     END $ach_uniq$;
+
+    -- Abandoned runs (stale with no real GPS distance — excluded from profile/leaderboard/totals)
+    ALTER TABLE runs ADD COLUMN IF NOT EXISTS is_abandoned BOOLEAN DEFAULT false;
   `);
 
   const dummyCheck = await pool.query(`SELECT COUNT(*) FROM users WHERE email LIKE 'dummy-%@paceup.dev'`);
@@ -1912,6 +1915,7 @@ export async function getUserRuns(userId: string) {
      JOIN users u ON u.id = r.host_id
      WHERE (r.host_id = $1 OR r.id IN (SELECT run_id FROM run_participants WHERE user_id = $1 AND status != 'cancelled'))
        AND r.is_deleted IS NOT TRUE
+       AND r.is_abandoned IS NOT TRUE
        AND (
          r.date > NOW()
          OR r.host_id = $1
