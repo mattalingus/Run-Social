@@ -556,6 +556,8 @@ export async function initDb() {
     -- Email verification (existing users are considered pre-verified since they registered with email)
     ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE;
     UPDATE users SET email_verified = TRUE WHERE email_verified = FALSE AND created_at < NOW() - INTERVAL '1 minute';
+    -- Safety net: any row where email_verified is NULL should be treated as verified (legacy accounts)
+    UPDATE users SET email_verified = TRUE WHERE email_verified IS NULL;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_email TEXT DEFAULT NULL;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_email_token TEXT DEFAULT NULL;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_email_token_at TIMESTAMPTZ DEFAULT NULL;

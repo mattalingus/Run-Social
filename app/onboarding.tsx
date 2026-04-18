@@ -133,6 +133,12 @@ export default function OnboardingScreen() {
           <Text style={[styles.logoText, styles.logoGreen]}>UP</Text>
         </View>
 
+        {/* Email verified badge */}
+        <View style={styles.verifiedBadge}>
+          <Ionicons name="checkmark-circle" size={14} color="#00D97E" />
+          <Text style={styles.verifiedBadgeText}>Email verified</Text>
+        </View>
+
         {/* Welcome */}
         <Text style={styles.welcome}>Welcome to PaceUp, {firstName}!</Text>
         <Text style={styles.subtitle}>Let's set up your experience</Text>
@@ -253,6 +259,24 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
   logoGreen: {
+    color: "#00D97E",
+  },
+  verifiedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#0A1F14",
+    borderRadius: 20,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "#1A3D22",
+    alignSelf: "flex-start",
+    marginBottom: 20,
+  },
+  verifiedBadgeText: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 13,
     color: "#00D97E",
   },
   welcome: {

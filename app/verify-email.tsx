@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -16,25 +16,54 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiUrl } from "@/lib/query-client";
 
+const COOLDOWN_SECONDS = 60;
+const DIGIT_COUNT = 6;
+
 export default function VerifyEmailScreen() {
   const insets = useSafeAreaInsets();
   const { user, refreshUser, logout } = useAuth();
-  const [code, setCode] = useState("");
+  const [digits, setDigits] = useState<string[]>(Array(DIGIT_COUNT).fill(""));
+  const digitRefs = useRef<(TextInput | null)[]>(Array(DIGIT_COUNT).fill(null));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
   const [resendDone, setResendDone] = useState(false);
+  const [cooldown, setCooldown] = useState(COOLDOWN_SECONDS);
+  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [editingEmail, setEditingEmail] = useState(false);
   const [emailInput, setEmailInput] = useState(user?.email ?? "");
-  const codeRef = useRef<TextInput>(null);
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
 
-  async function handleVerify() {
-    const trimmed = code.trim();
-    if (trimmed.length < 6) {
+  function startCooldown(seconds = COOLDOWN_SECONDS) {
+    if (cooldownRef.current) clearInterval(cooldownRef.current);
+    setCooldown(seconds);
+    cooldownRef.current = setInterval(() => {
+      setCooldown((prev) => {
+        if (prev <= 1) {
+          clearInterval(cooldownRef.current!);
+          cooldownRef.current = null;
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }
+
+  useEffect(() => {
+    startCooldown();
+    return () => {
+      if (cooldownRef.current) clearInterval(cooldownRef.current);
+    };
+  }, []);
+
+  const code = digits.join("");
+
+  const handleVerify = useCallback(async (codeOverride?: string) => {
+    const trimmed = (codeOverride ?? code).trim();
+    if (trimmed.length < DIGIT_COUNT) {
       setError("Please enter your 6-digit verification code.");
       return;
     }
@@ -62,9 +91,39 @@ export default function VerifyEmailScreen() {
       setError("Network error. Please check your connection.");
     }
     setLoading(false);
+  }, [code, refreshUser]);
+
+  function onDigitChange(idx: number, text: string) {
+    const digit = text.replace(/\D/g, "").slice(-1);
+    const newDigits = [...digits];
+    newDigits[idx] = digit;
+    setDigits(newDigits);
+    setError(null);
+    if (digit && idx < DIGIT_COUNT - 1) {
+      digitRefs.current[idx + 1]?.focus();
+    }
+    if (digit && idx === DIGIT_COUNT - 1 && newDigits.every((d) => d.length === 1)) {
+      handleVerify(newDigits.join(""));
+    }
+  }
+
+  function onDigitKeyPress(idx: number, key: string) {
+    if (key === "Backspace") {
+      if (digits[idx]) {
+        const newDigits = [...digits];
+        newDigits[idx] = "";
+        setDigits(newDigits);
+      } else if (idx > 0) {
+        const newDigits = [...digits];
+        newDigits[idx - 1] = "";
+        setDigits(newDigits);
+        digitRefs.current[idx - 1]?.focus();
+      }
+    }
   }
 
   async function handleResend() {
+    if (cooldown > 0 && resendDone) return;
     setResendLoading(true);
     setResendDone(false);
     setError(null);
@@ -85,8 +144,10 @@ export default function VerifyEmailScreen() {
       } else {
         setResendDone(true);
         setEditingEmail(false);
-        setCode("");
+        setDigits(Array(DIGIT_COUNT).fill(""));
+        startCooldown();
         if (data.email) await refreshUser();
+        setTimeout(() => digitRefs.current[0]?.focus(), 300);
       }
     } catch {
       setError("Network error. Please try again.");
@@ -127,7 +188,7 @@ export default function VerifyEmailScreen() {
         </Text>
 
         {!editingEmail ? (
-          <TouchableOpacity onPress={() => setEditingEmail(true)} style={styles.changeEmailBtn}>
+          <TouchableOpacity onPress={() => setEditingEmail(true)} style={styles.changeEmailBtn} hitSlop={8}>
             <Text style={styles.changeEmailText}>Wrong address? Tap to change it</Text>
           </TouchableOpacity>
         ) : (
@@ -146,18 +207,25 @@ export default function VerifyEmailScreen() {
         )}
 
         <Text style={styles.label}>Verification Code</Text>
-        <TextInput
-          ref={codeRef}
-          style={styles.codeInput}
-          value={code}
-          onChangeText={(t) => setCode(t.replace(/\D/g, "").slice(0, 6))}
-          keyboardType="number-pad"
-          placeholder="______"
-          placeholderTextColor="#3D6B52"
-          maxLength={6}
-          textAlign="center"
-          testID="verify-code-input"
-        />
+
+        <View style={styles.digitRow}>
+          {digits.map((digit, idx) => (
+            <TextInput
+              key={idx}
+              ref={(ref) => { digitRefs.current[idx] = ref; }}
+              style={[styles.digitBox, digit ? styles.digitBoxFilled : null]}
+              value={digit}
+              onChangeText={(t) => onDigitChange(idx, t)}
+              onKeyPress={({ nativeEvent }) => onDigitKeyPress(idx, nativeEvent.key)}
+              keyboardType="number-pad"
+              maxLength={1}
+              textAlign="center"
+              selectTextOnFocus
+              testID={`verify-digit-${idx}`}
+              caretHidden
+            />
+          ))}
+        </View>
 
         {error ? (
           <View style={styles.errorBanner}>
@@ -174,8 +242,8 @@ export default function VerifyEmailScreen() {
         ) : null}
 
         <TouchableOpacity
-          style={[styles.verifyBtn, (loading || success) && styles.verifyBtnDisabled]}
-          onPress={handleVerify}
+          style={[styles.verifyBtn, (loading || success || code.length < DIGIT_COUNT) && styles.verifyBtnDisabled]}
+          onPress={() => handleVerify()}
           activeOpacity={0.85}
           disabled={loading || success}
           testID="verify-btn"
@@ -188,21 +256,19 @@ export default function VerifyEmailScreen() {
         </TouchableOpacity>
 
         <View style={styles.resendRow}>
-          {resendDone ? (
-            <Text style={styles.resendDoneText}>New code sent!</Text>
+          {resendLoading ? (
+            <ActivityIndicator size="small" color="#00D97E" />
+          ) : editingEmail ? (
+            <TouchableOpacity onPress={handleResend} style={styles.resendBtn}>
+              <Text style={styles.resendText}>Send code to new address</Text>
+            </TouchableOpacity>
+          ) : cooldown > 0 ? (
+            <Text style={styles.cooldownText}>
+              {resendDone ? `Code sent! Resend in ${cooldown}s` : `Resend in ${cooldown}s`}
+            </Text>
           ) : (
-            <TouchableOpacity
-              onPress={handleResend}
-              disabled={resendLoading}
-              style={styles.resendBtn}
-            >
-              {resendLoading ? (
-                <ActivityIndicator size="small" color="#00D97E" />
-              ) : (
-                <Text style={styles.resendText}>
-                  {editingEmail ? "Send code to new address" : "Resend code"}
-                </Text>
-              )}
+            <TouchableOpacity onPress={handleResend} style={styles.resendBtn}>
+              <Text style={styles.resendText}>Resend code</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -300,22 +366,32 @@ const styles = StyleSheet.create({
     color: "#6FAB84",
     letterSpacing: 0.8,
     textTransform: "uppercase",
-    marginBottom: 10,
+    marginBottom: 12,
     alignSelf: "flex-start",
   },
-  codeInput: {
-    width: "100%",
+  digitRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 20,
+    alignSelf: "stretch",
+    justifyContent: "center",
+  },
+  digitBox: {
+    flex: 1,
+    maxWidth: 52,
+    height: 60,
     backgroundColor: "#0D1510",
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1.5,
     borderColor: "#1A2E20",
     color: "#FFFFFF",
     fontFamily: "Outfit_700Bold",
-    fontSize: 32,
-    letterSpacing: 12,
-    paddingVertical: 18,
-    paddingHorizontal: 16,
-    marginBottom: 20,
+    fontSize: 24,
+    textAlignVertical: "center",
+  },
+  digitBoxFilled: {
+    borderColor: "#00D97E",
+    backgroundColor: "#0A1F14",
   },
   errorBanner: {
     flexDirection: "row",
@@ -364,7 +440,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   verifyBtnDisabled: {
-    opacity: 0.7,
+    opacity: 0.5,
   },
   verifyBtnLabel: {
     fontFamily: "Outfit_700Bold",
@@ -375,6 +451,8 @@ const styles = StyleSheet.create({
   resendRow: {
     alignItems: "center",
     marginBottom: 16,
+    minHeight: 36,
+    justifyContent: "center",
   },
   resendBtn: {
     paddingVertical: 8,
@@ -385,10 +463,10 @@ const styles = StyleSheet.create({
     color: "#00D97E",
     textDecorationLine: "underline",
   },
-  resendDoneText: {
+  cooldownText: {
     fontFamily: "Outfit_400Regular",
     fontSize: 14,
-    color: "#6FAB84",
+    color: "#3D6B52",
   },
   logoutBtn: {
     paddingVertical: 8,
