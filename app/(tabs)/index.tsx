@@ -1198,6 +1198,8 @@ function MiniRunCard({
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 const PARTICIPANT_STEPS = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 40, 50, 75, 100, 0]; // 0 = unlimited
+const PACE_SLIDER_MIN = 4;  // min/mile (fastest)
+const PACE_SLIDER_MAX = 20; // min/mile (slowest)
 
 export default function DiscoverScreen() {
   const insets = useSafeAreaInsets();
@@ -3171,12 +3173,14 @@ export default function DiscoverScreen() {
             {/* Pace Range */}
             <View style={fm.sectionHead}>
               <Text style={s.hLabel}>
-                {hActivityType === "ride" ? "Pace Range (Min/Mile) · Riders" : hActivityType === "walk" ? "Pace Range (Min/Mile) · Walkers" : "Pace Range (Min/Mile) · Runners"}
+                {hActivityType === "ride" ? "Speed Range (mph) · Riders" : hActivityType === "walk" ? "Pace Range (Min/Mile) · Walkers" : "Pace Range (Min/Mile) · Runners"}
               </Text>
-              <Text style={fm.sectionValue}>{formatPaceMM(hMinPace)} – {formatPaceMM(hMaxPace)}</Text>
+              {hActivityType === "ride"
+                ? <Text style={fm.sectionValue}>{(60 / hMaxPace).toFixed(1)} – {(60 / hMinPace).toFixed(1)} mph</Text>
+                : <Text style={fm.sectionValue}>{formatPaceMM(hMinPace)} – {formatPaceMM(hMaxPace)}</Text>}
             </View>
             <RangeSlider
-              min={4} max={20} step={0.5}
+              min={PACE_SLIDER_MIN} max={PACE_SLIDER_MAX} step={0.5}
               low={hMinPace} high={hMaxPace}
               onLowChange={(v) => setHMinPace(v)}
               onHighChange={(v) => setHMaxPace(v)}
@@ -3184,8 +3188,8 @@ export default function DiscoverScreen() {
               trackColor={C.border}
             />
             <View style={fm.edgeRow}>
-              <Text style={fm.edgeLabel}>4:00</Text>
-              <Text style={fm.edgeLabel}>20:00</Text>
+              <Text style={fm.edgeLabel}>{hActivityType === "ride" ? `${(60 / PACE_SLIDER_MIN).toFixed(1)} mph` : "4:00"}</Text>
+              <Text style={fm.edgeLabel}>{hActivityType === "ride" ? `${(60 / PACE_SLIDER_MAX).toFixed(1)} mph` : "20:00"}</Text>
             </View>
 
             {/* Host Style */}
