@@ -500,6 +500,40 @@ export async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_path_shares_to ON path_shares(to_user_id);
     ALTER TABLE saved_paths ADD COLUMN IF NOT EXISTS community_path_id VARCHAR REFERENCES community_paths(id) ON DELETE SET NULL;
     ALTER TABLE run_participants ADD COLUMN IF NOT EXISTS mile_splits JSONB DEFAULT NULL;
+
+    CREATE TABLE IF NOT EXISTS public_routes (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      route_hash VARCHAR NOT NULL UNIQUE,
+      activity_type TEXT NOT NULL DEFAULT 'run',
+      path JSONB NOT NULL,
+      distance_miles REAL,
+      elevation_gain_ft REAL,
+      bbox_sw_lat REAL NOT NULL,
+      bbox_sw_lng REAL NOT NULL,
+      bbox_ne_lat REAL NOT NULL,
+      bbox_ne_lng REAL NOT NULL,
+      start_lat REAL NOT NULL,
+      start_lng REAL NOT NULL,
+      times_completed INTEGER NOT NULL DEFAULT 1,
+      is_hidden BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_public_routes_hash ON public_routes(route_hash);
+    CREATE INDEX IF NOT EXISTS idx_public_routes_bbox ON public_routes(bbox_sw_lat, bbox_sw_lng, bbox_ne_lat, bbox_ne_lng);
+    CREATE INDEX IF NOT EXISTS idx_public_routes_activity ON public_routes(activity_type);
+
+    CREATE TABLE IF NOT EXISTS public_route_completions (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      public_route_id VARCHAR NOT NULL REFERENCES public_routes(id) ON DELETE CASCADE,
+      solo_run_id VARCHAR NOT NULL REFERENCES solo_runs(id) ON DELETE CASCADE,
+      completed_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(solo_run_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_prc_route ON public_route_completions(public_route_id, completed_at DESC);
+
+    ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS is_route_public BOOLEAN DEFAULT false;
+    ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS public_route_id VARCHAR REFERENCES public_routes(id) ON DELETE SET NULL;
   `);
 
   const dummyCheck = await pool.query(`SELECT COUNT(*) FROM users WHERE email LIKE 'dummy-%@paceup.dev'`);
@@ -5095,4 +5129,277 @@ export async function getBlockList(userId: string): Promise<string[]> {
     [userId]
   );
   return res.rows.map((r: any) => r.blocked_id);
+}
+
+// ─── Public Routes (Global Map) ───────────────────────────────────────────────
+
+import { createHash } from "crypto";
+
+type Coord = { latitude: number; longitude: number };
+
+function rdpSimplify(pts: Coord[], epsilon: number): Coord[] {
+  if (pts.length <= 2) return pts;
+  let maxDist = 0;
+  let maxIdx = 0;
+  const start = pts[0];
+  const end = pts[pts.length - 1];
+  const dx = end.longitude - start.longitude;
+  const dy = end.latitude - start.latitude;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  for (let i = 1; i < pts.length - 1; i++) {
+    let d: number;
+    if (len === 0) {
+      const ddx = pts[i].longitude - start.longitude;
+      const ddy = pts[i].latitude - start.latitude;
+      d = Math.sqrt(ddx * ddx + ddy * ddy);
+    } else {
+      const t = ((pts[i].longitude - start.longitude) * dx + (pts[i].latitude - start.latitude) * dy) / (len * len);
+      const px = start.longitude + t * dx;
+      const py = start.latitude + t * dy;
+      const ex = pts[i].longitude - px;
+      const ey = pts[i].latitude - py;
+      d = Math.sqrt(ex * ex + ey * ey);
+    }
+    if (d > maxDist) { maxDist = d; maxIdx = i; }
+  }
+  if (maxDist > epsilon) {
+    const left = rdpSimplify(pts.slice(0, maxIdx + 1), epsilon);
+    const right = rdpSimplify(pts.slice(maxIdx), epsilon);
+    return [...left.slice(0, -1), ...right];
+  }
+  return [start, end];
+}
+
+function cleanGpsPath(pts: Coord[]): Coord[] {
+  if (pts.length < 2) return pts;
+  const MAX_JUMP_DEG = 0.01;
+  const result: Coord[] = [pts[0]];
+  for (let i = 1; i < pts.length; i++) {
+    const dlat = Math.abs(pts[i].latitude - result[result.length - 1].latitude);
+    const dlng = Math.abs(pts[i].longitude - result[result.length - 1].longitude);
+    if (dlat < MAX_JUMP_DEG && dlng < MAX_JUMP_DEG) result.push(pts[i]);
+  }
+  return result;
+}
+
+function computeRouteHash(pts: Coord[]): string {
+  const step = Math.max(1, Math.floor(pts.length / 20));
+  const sample = pts.filter((_, i) => i % step === 0);
+  const str = sample.map(p =>
+    `${Math.round(p.latitude * 1000) / 1000},${Math.round(p.longitude * 1000) / 1000}`
+  ).join("|");
+  return createHash("sha256").update(str).digest("hex").slice(0, 32);
+}
+
+export async function publishPublicRoute(params: {
+  soloRunId: string;
+  userId: string;
+  rawPath: Coord[];
+  activityType: string;
+  distanceMiles: number;
+  elevationGainFt?: number | null;
+}): Promise<{ publicRouteId: string; isNew: boolean; timesCompleted: number }> {
+  const { soloRunId, rawPath, activityType, distanceMiles, elevationGainFt } = params;
+
+  const cleaned = cleanGpsPath(rawPath);
+  const isRide = activityType === "ride";
+  const epsilon = isRide ? 0.00018 : 0.00005;
+  const simplified = rdpSimplify(cleaned, epsilon);
+  if (simplified.length < 2) throw new Error("Route too short to publish");
+
+  const hash = computeRouteHash(simplified);
+
+  const lats = simplified.map(p => p.latitude);
+  const lngs = simplified.map(p => p.longitude);
+  const bboxSwLat = Math.min(...lats);
+  const bboxSwLng = Math.min(...lngs);
+  const bboxNeLat = Math.max(...lats);
+  const bboxNeLng = Math.max(...lngs);
+  const startLat = simplified[0].latitude;
+  const startLng = simplified[0].longitude;
+
+  let publicRouteId: string;
+  let isNew: boolean;
+  let timesCompleted: number;
+
+  const ins = await pool.query(
+    `INSERT INTO public_routes
+       (route_hash, activity_type, path, distance_miles, elevation_gain_ft,
+        bbox_sw_lat, bbox_sw_lng, bbox_ne_lat, bbox_ne_lng, start_lat, start_lng, times_completed)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 0)
+     ON CONFLICT (route_hash) DO NOTHING
+     RETURNING id`,
+    [hash, activityType, JSON.stringify(simplified), distanceMiles,
+     elevationGainFt ?? null, bboxSwLat, bboxSwLng, bboxNeLat, bboxNeLng, startLat, startLng]
+  );
+
+  if (ins.rowCount && ins.rowCount > 0) {
+    publicRouteId = ins.rows[0].id;
+    isNew = true;
+    timesCompleted = 0;
+  } else {
+    const existing = await pool.query(
+      `SELECT id, times_completed FROM public_routes WHERE route_hash = $1`,
+      [hash]
+    );
+    publicRouteId = existing.rows[0].id;
+    isNew = false;
+    timesCompleted = existing.rows[0].times_completed;
+  }
+
+  const completionResult = await pool.query(
+    `INSERT INTO public_route_completions (public_route_id, solo_run_id) VALUES ($1, $2) ON CONFLICT DO NOTHING RETURNING id`,
+    [publicRouteId, soloRunId]
+  );
+
+  if (completionResult.rowCount && completionResult.rowCount > 0) {
+    const updated = await pool.query(
+      `UPDATE public_routes SET times_completed = times_completed + 1, updated_at = NOW() WHERE id = $1 RETURNING times_completed`,
+      [publicRouteId]
+    );
+    timesCompleted = updated.rows[0]?.times_completed ?? timesCompleted + 1;
+  }
+
+  await pool.query(
+    `UPDATE solo_runs SET is_route_public = true, public_route_id = $1 WHERE id = $2`,
+    [publicRouteId, soloRunId]
+  );
+
+  return { publicRouteId, isNew, timesCompleted };
+}
+
+
+export async function setSoloRunRoutePublic(soloRunId: string, isPublic: boolean): Promise<void> {
+  await pool.query(
+    `UPDATE solo_runs SET is_route_public = $1 WHERE id = $2`,
+    [isPublic, soloRunId]
+  );
+}
+
+export async function getMapRoutes(params: {
+  swLat: number; swLng: number; neLat: number; neLng: number;
+  layer?: string; limit?: number; zoom?: number;
+}) {
+  const { swLat, swLng, neLat, neLng, layer, limit = 500, zoom = 13 } = params;
+
+  let activityFilter = "";
+  const qParams: any[] = [swLat, neLat, swLng, neLng, limit];
+  if (layer === "foot") {
+    activityFilter = `AND pr.activity_type IN ('run', 'walk')`;
+  } else if (layer === "ride") {
+    activityFilter = `AND pr.activity_type = 'ride'`;
+  }
+
+  const res = await pool.query(`
+    SELECT pr.id, pr.activity_type, pr.path, pr.distance_miles, pr.elevation_gain_ft,
+           pr.times_completed, pr.bbox_sw_lat, pr.bbox_sw_lng, pr.bbox_ne_lat, pr.bbox_ne_lng,
+           COALESCE(
+             (SELECT COUNT(*) FROM public_route_completions prc
+              WHERE prc.public_route_id = pr.id
+                AND prc.completed_at >= NOW() - INTERVAL '90 days'),
+             0
+           ) AS recent_completions
+    FROM public_routes pr
+    WHERE pr.bbox_sw_lat <= $2
+      AND pr.bbox_ne_lat >= $1
+      AND pr.bbox_sw_lng <= $4
+      AND pr.bbox_ne_lng >= $3
+      ${activityFilter}
+      AND EXISTS (
+        SELECT 1 FROM solo_runs sr
+        JOIN public_route_completions prc ON prc.solo_run_id = sr.id
+        WHERE prc.public_route_id = pr.id AND sr.is_route_public = true
+      )
+    ORDER BY pr.times_completed DESC
+    LIMIT $5
+  `, qParams);
+
+  const zoomEpsilon = zoom >= 14 ? 0 : zoom >= 12 ? 0.00005 : zoom >= 10 ? 0.0002 : 0.0008;
+
+  return res.rows.map((r: any) => {
+    let path = typeof r.path === "string" ? JSON.parse(r.path) : r.path;
+    if (zoomEpsilon > 0 && Array.isArray(path) && path.length > 2) {
+      path = rdpSimplify(path.map((p: any) => ({ latitude: p.latitude ?? p.lat, longitude: p.longitude ?? p.lng })), zoomEpsilon);
+    }
+    return {
+      id: r.id,
+      activity_type: r.activity_type,
+      path,
+      distance_miles: r.distance_miles,
+      elevation_gain_ft: r.elevation_gain_ft,
+      times_completed: parseInt(r.times_completed),
+      recent_completions: parseInt(r.recent_completions),
+    };
+  });
+}
+
+export async function getPublicRouteDetail(routeId: string) {
+  const res = await pool.query(
+    `SELECT pr.id, pr.activity_type, pr.path, pr.distance_miles, pr.elevation_gain_ft,
+            pr.times_completed,
+            COALESCE(
+              (SELECT COUNT(*) FROM public_route_completions prc
+               WHERE prc.public_route_id = pr.id
+                 AND prc.completed_at >= NOW() - INTERVAL '90 days'),
+              0
+            ) AS recent_completions,
+            (SELECT json_agg(json_build_object('dow', dow_val, 'hour', hour_val, 'count', cnt))
+             FROM (
+               SELECT EXTRACT(DOW FROM completed_at)::int AS dow_val,
+                      EXTRACT(HOUR FROM completed_at)::int AS hour_val,
+                      COUNT(*) AS cnt
+               FROM public_route_completions
+               WHERE public_route_id = pr.id
+               GROUP BY dow_val, hour_val
+             ) sub
+            ) AS busy_matrix
+     FROM public_routes pr
+     WHERE pr.id = $1`,
+    [routeId]
+  );
+  if (!res.rows.length) return null;
+  const row = res.rows[0];
+
+  const recentCompletions = parseInt(row.recent_completions);
+  let busynessLabel: string;
+  if (recentCompletions <= 5) busynessLabel = "green";
+  else if (recentCompletions <= 20) busynessLabel = "yellow";
+  else if (recentCompletions <= 50) busynessLabel = "orange";
+  else busynessLabel = "red";
+
+  const busy_matrix_7x24: number[][] = Array.from({ length: 7 }, () => new Array(24).fill(0));
+  const busy_by_dow: number[] = [0, 0, 0, 0, 0, 0, 0];
+  if (row.busy_matrix) {
+    const items = Array.isArray(row.busy_matrix) ? row.busy_matrix : JSON.parse(row.busy_matrix);
+    for (const item of items) {
+      const dow = parseInt(item.dow ?? 0);
+      const hour = parseInt(item.hour ?? 0);
+      const cnt = parseInt(item.count ?? 0);
+      if (dow >= 0 && dow <= 6 && hour >= 0 && hour <= 23) {
+        busy_matrix_7x24[dow][hour] = cnt;
+        busy_by_dow[dow] += cnt;
+      }
+    }
+  }
+
+  return {
+    id: row.id,
+    activity_type: row.activity_type,
+    path: typeof row.path === "string" ? JSON.parse(row.path) : row.path,
+    distance_miles: row.distance_miles,
+    elevation_gain_ft: row.elevation_gain_ft,
+    times_completed: parseInt(row.times_completed),
+    recent_completions: recentCompletions,
+    busyness_label: busynessLabel,
+    busy_matrix_7x24,
+    busy_by_dow,
+  };
+}
+
+export async function getPublicRouteIdForSoloRun(soloRunId: string): Promise<string | null> {
+  const res = await pool.query(
+    `SELECT public_route_id FROM solo_runs WHERE id = $1`,
+    [soloRunId]
+  );
+  return res.rows[0]?.public_route_id ?? null;
 }

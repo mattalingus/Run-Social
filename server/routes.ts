@@ -3263,6 +3263,157 @@ async function go(e){
     }
   });
 
+  // ─── Public Routes (Global Map) ─────────────────────────────────────────────
+
+  app.post("/api/solo-runs/:id/share-public-route", requireAuth, async (req: any, res) => {
+    try {
+      const soloRunId = req.params.id;
+      const userId = req.session.userId as string;
+      const run = await pool.query(
+        `SELECT id, user_id, route_path, activity_type, distance_miles, elevation_gain_ft
+         FROM solo_runs WHERE id = $1`,
+        [soloRunId]
+      );
+      if (!run.rows.length) return res.status(404).json({ message: "Run not found" });
+      if (run.rows[0].user_id !== userId) return res.status(403).json({ message: "Forbidden" });
+      const rawPath = run.rows[0].route_path;
+      if (!rawPath || !Array.isArray(rawPath) || rawPath.length < 2) {
+        return res.status(400).json({ message: "No GPS route data for this run" });
+      }
+      const result = await storage.publishPublicRoute({
+        soloRunId,
+        userId,
+        rawPath,
+        activityType: run.rows[0].activity_type ?? "run",
+        distanceMiles: run.rows[0].distance_miles ?? 0,
+        elevationGainFt: run.rows[0].elevation_gain_ft,
+      });
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.patch("/api/solo-runs/:id/route-visibility", requireAuth, async (req: any, res) => {
+    try {
+      const soloRunId = req.params.id;
+      const userId = req.session.userId as string;
+      const { isPublic } = req.body;
+      const run = await pool.query(
+        `SELECT user_id, route_path, activity_type, distance_miles, elevation_gain_ft, public_route_id
+         FROM solo_runs WHERE id = $1`,
+        [soloRunId]
+      );
+      if (!run.rows.length) return res.status(404).json({ message: "Run not found" });
+      if (run.rows[0].user_id !== userId) return res.status(403).json({ message: "Forbidden" });
+
+      if (!!isPublic && !run.rows[0].public_route_id) {
+        const rawPath = run.rows[0].route_path;
+        if (!rawPath || !Array.isArray(rawPath) || rawPath.length < 2) {
+          return res.status(400).json({ message: "No GPS route data for this run" });
+        }
+        await storage.publishPublicRoute({
+          soloRunId,
+          userId,
+          rawPath,
+          activityType: run.rows[0].activity_type ?? "run",
+          distanceMiles: run.rows[0].distance_miles ?? 0,
+          elevationGainFt: run.rows[0].elevation_gain_ft,
+        });
+      } else {
+        await storage.setSoloRunRoutePublic(soloRunId, !!isPublic);
+      }
+      res.json({ success: true, isPublic: !!isPublic });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.patch("/api/public-routes/:id/visibility", requireAuth, async (req: any, res) => {
+    try {
+      const routeId = req.params.id;
+      const userId = req.session.userId as string;
+      const { hidden } = req.body;
+      const soloRun = await pool.query(
+        `SELECT sr.id FROM solo_runs sr
+         JOIN public_route_completions prc ON prc.solo_run_id = sr.id
+         WHERE prc.public_route_id = $1 AND sr.user_id = $2
+         LIMIT 1`,
+        [routeId, userId]
+      );
+      if (!soloRun.rows.length) return res.status(403).json({ message: "Forbidden" });
+      await pool.query(
+        `UPDATE solo_runs SET is_route_public = $1 WHERE id = $2`,
+        [!hidden, soloRun.rows[0].id]
+      );
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/map/routes", async (req, res) => {
+    try {
+      const swLat = parseFloat(req.query.swLat as string);
+      const swLng = parseFloat(req.query.swLng as string);
+      const neLat = parseFloat(req.query.neLat as string);
+      const neLng = parseFloat(req.query.neLng as string);
+      if ([swLat, swLng, neLat, neLng].some(isNaN)) {
+        return res.status(400).json({ message: "swLat, swLng, neLat, neLng required" });
+      }
+      const snapBbox = (v: number) => Math.round(v / 0.05) * 0.05;
+      const snapped = { swLat: snapBbox(swLat), swLng: snapBbox(swLng), neLat: snapBbox(neLat), neLng: snapBbox(neLng) };
+      const layer = (req.query.layer as string) || "all";
+      const limit = Math.min(parseInt(req.query.limit as string) || 500, 500);
+      const zoom = parseInt(req.query.zoom as string) || 13;
+      const routes = await storage.getMapRoutes({ ...snapped, layer, limit, zoom });
+      res.json(routes);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/map/routes/:id", async (req, res) => {
+    try {
+      const route = await storage.getPublicRouteDetail(req.params.id);
+      if (!route) return res.status(404).json({ message: "Route not found" });
+      res.json(route);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/map/events", async (req, res) => {
+    try {
+      const swLat = parseFloat(req.query.swLat as string);
+      const swLng = parseFloat(req.query.swLng as string);
+      const neLat = parseFloat(req.query.neLat as string);
+      const neLng = parseFloat(req.query.neLng as string);
+      const now = new Date();
+      let query = `
+        SELECT r.id, r.title, r.date, r.location_lat, r.location_lng, r.location_name,
+               r.activity_type, r.is_active,
+               r.is_active AND r.started_at IS NOT NULL AS is_live,
+               u.name AS host_name
+        FROM runs r
+        JOIN users u ON u.id = r.host_id
+        WHERE r.is_deleted IS NOT TRUE
+          AND r.is_completed IS NOT TRUE
+          AND r.date >= $1 - INTERVAL '2 hours'
+      `;
+      const params: any[] = [now];
+      if (!isNaN(swLat) && !isNaN(swLng) && !isNaN(neLat) && !isNaN(neLng)) {
+        query += ` AND r.location_lat BETWEEN $2 AND $3 AND r.location_lng BETWEEN $4 AND $5`;
+        params.push(swLat, neLat, swLng, neLng);
+      }
+      query += ` ORDER BY r.date ASC LIMIT 100`;
+      const result = await pool.query(query, params);
+      res.json(result.rows);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

@@ -452,6 +452,9 @@ export default function RunTrackingScreen() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [prTiers, setPrTiers] = useState<{ distanceTier: number | null; paceTier: number | null } | null>(null);
+  const [showShareRoutePrompt, setShowShareRoutePrompt] = useState(false);
+  const [shareRouteLoading, setShareRouteLoading] = useState(false);
+  const [shareRouteResult, setShareRouteResult] = useState<{ isNew: boolean; timesCompleted: number } | null>(null);
 
 
   const { data: savedPaths = [] } = useQuery<any[]>({
@@ -1520,6 +1523,9 @@ export default function RunTrackingScreen() {
         qc.invalidateQueries({ queryKey: ["/api/solo-runs"] });
         qc.invalidateQueries({ queryKey: ["/api/runs/mine"] });
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        if (routePathRef.current.length > 1) {
+          setTimeout(() => setShowShareRoutePrompt(true), 900);
+        }
         if (user) {
           await AsyncStorage.setItem(`paceup_saved_draft_${user.id}`, draftIdRef.current);
           await AsyncStorage.removeItem(`paceup_draft_run_${user.id}`).catch(() => {});
@@ -2041,6 +2047,73 @@ export default function RunTrackingScreen() {
             </KeyboardAvoidingView>
           </Modal>
         )}
+
+        {/* ─── Share Route to Public Map prompt ────────────────────────────── */}
+        <Modal
+          visible={showShareRoutePrompt}
+          transparent
+          animationType="fade"
+          onRequestClose={() => { setShowShareRoutePrompt(false); setShareRouteResult(null); }}
+          onDismiss={() => setShareRouteResult(null)}
+        >
+          <Pressable style={t.modalOverlay} onPress={() => { setShowShareRoutePrompt(false); setShareRouteResult(null); }} />
+          <View style={[t.nameModal, { paddingBottom: insets.bottom + 24 }]}>
+            <View style={t.nameModalHandle} />
+            {shareRouteResult ? (
+              <>
+                <View style={{ alignItems: "center", marginBottom: 12 }}>
+                  <Text style={{ fontSize: 28, marginBottom: 8 }}>🗺️</Text>
+                  <Text style={[t.nameModalTitle, { textAlign: "center" }]}>
+                    {shareRouteResult.isNew ? "Route is on the map!" : `Joined ${shareRouteResult.timesCompleted} others!`}
+                  </Text>
+                  <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textMuted, textAlign: "center", marginTop: 6 }}>
+                    {shareRouteResult.isNew
+                      ? "Your route shape is now visible on the PaceUp global map."
+                      : `${shareRouteResult.timesCompleted} people have run this route. Added to the map!`}
+                  </Text>
+                </View>
+                <Pressable style={t.nameModalSaveBtn} onPress={() => { setShowShareRoutePrompt(false); setShareRouteResult(null); }}>
+                  <Text style={t.nameModalSaveTxt}>Done</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <View style={{ alignItems: "center", marginBottom: 14 }}>
+                  <Text style={{ fontSize: 28, marginBottom: 8 }}>🌍</Text>
+                  <Text style={[t.nameModalTitle, { textAlign: "center" }]}>Share your route?</Text>
+                  <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textMuted, textAlign: "center", marginTop: 6, lineHeight: 18 }}>
+                    Add your route to the public PaceUp map.{"\n"}Others see the path — not your name or pace.
+                  </Text>
+                </View>
+                <Pressable
+                  style={[t.nameModalSaveBtn, shareRouteLoading && { opacity: 0.6 }]}
+                  disabled={shareRouteLoading}
+                  onPress={async () => {
+                    if (!savedRunId) return;
+                    setShareRouteLoading(true);
+                    try {
+                      const res = await apiRequest("POST", `/api/solo-runs/${savedRunId}/share-public-route`, {});
+                      const data = await res.json();
+                      setShareRouteResult({ isNew: data.isNew, timesCompleted: data.timesCompleted });
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    } catch (_) {
+                      setShowShareRoutePrompt(false);
+                    } finally {
+                      setShareRouteLoading(false);
+                    }
+                  }}
+                >
+                  {shareRouteLoading
+                    ? <ActivityIndicator color={C.bg} />
+                    : <Text style={t.nameModalSaveTxt}>Share route</Text>}
+                </Pressable>
+                <Pressable style={t.nameModalCancelBtn} onPress={() => { setShowShareRoutePrompt(false); setShareRouteResult(null); }}>
+                  <Text style={t.nameModalCancelTxt}>No thanks</Text>
+                </Pressable>
+              </>
+            )}
+          </View>
+        </Modal>
 
         {/* ─── Share activity modal ─────────────────────────────────────────── */}
         <ShareActivityModal

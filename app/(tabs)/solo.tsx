@@ -63,6 +63,8 @@ interface SoloRun {
   source?: string | null;
   garmin_activity_id?: string | null;
   apple_health_id?: string | null;
+  is_route_public?: boolean | null;
+  public_route_id?: string | null;
 }
 
 interface SavedPath {
@@ -745,6 +747,16 @@ export default function SoloScreen() {
     },
   });
 
+  const routeVisibilityMutation = useMutation({
+    mutationFn: async ({ id, makePublic }: { id: string; makePublic: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/solo-runs/${id}/route-visibility`, { isPublic: makePublic });
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/solo-runs"] });
+    },
+  });
+
   const goalsMutation = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiRequest("PUT", "/api/users/me/goals", data);
@@ -1086,7 +1098,7 @@ export default function SoloScreen() {
           </View>
         )}
         {isExpanded && run.completed && hasRoutePath && (
-          <View style={{ paddingHorizontal: 12, paddingBottom: 14 }}>
+          <View style={{ paddingHorizontal: 12, paddingBottom: 14, flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
             {savedRunPathIds.has(run.id) ? (
               <View style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 4, paddingVertical: 8, alignSelf: "flex-start" }}>
                 <Feather name="bookmark" size={13} color="#FF6B35" />
@@ -1110,6 +1122,30 @@ export default function SoloScreen() {
                 <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: "#FF6B35" }}>Save Route</Text>
               </Pressable>
             )}
+            {/* Public/private route toggle */}
+            {(() => {
+              const isPublic = run.is_route_public;
+              return (
+                <Pressable
+                  style={({ pressed }) => ({
+                    flexDirection: "row", alignItems: "center", gap: 6,
+                    backgroundColor: isPublic ? "#2E86AB18" : "#88888811", borderRadius: 10,
+                    paddingHorizontal: 12, paddingVertical: 8,
+                    alignSelf: "flex-start", opacity: pressed ? 0.7 : 1,
+                    borderWidth: 1, borderColor: isPublic ? "#2E86AB44" : "#88888844",
+                  })}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    routeVisibilityMutation.mutate({ id: run.id, makePublic: !isPublic });
+                  }}
+                >
+                  <Feather name={isPublic ? "globe" : "eye-off"} size={13} color={isPublic ? "#2E86AB" : C.textMuted} />
+                  <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: isPublic ? "#2E86AB" : C.textMuted }}>
+                    {isPublic ? "Public" : "Private"}
+                  </Text>
+                </Pressable>
+              );
+            })()}
           </View>
         )}
         {isExpanded && run.completed && (
@@ -1117,7 +1153,7 @@ export default function SoloScreen() {
         )}
       </View>
     );
-  }, [expandedRunId, runBadges, achievementsMap, distUnit, C, s, setShareRunData, starMutation, setSaveRunPathTarget, setSaveRunPathName, savedRunPathIds]);
+  }, [expandedRunId, runBadges, achievementsMap, distUnit, C, s, setShareRunData, starMutation, setSaveRunPathTarget, setSaveRunPathName, savedRunPathIds, routeVisibilityMutation]);
 
   const renderSectionHeader = useCallback(({ section }: { section: { title: string } }) => (
     <View style={[s.monthHeader, { backgroundColor: C.bg }]}>

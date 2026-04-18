@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo } from "react";
+import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
   TextInput,
   Dimensions,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 
@@ -352,8 +353,51 @@ export default function MapScreen() {
   const [bounds, setBounds] = useState<Bounds | null>(regionToBounds(HOUSTON));
   const boundsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [layers, setLayers] = useState<{ foot: boolean; ride: boolean; events: boolean }>({ foot: true, ride: true, events: true });
+  const [selectedPublicRouteId, setSelectedPublicRouteId] = useState<string | null>(null);
+  const [currentZoom, setCurrentZoom] = useState<number>(13);
+  const pubRouteSheetAnim = useRef(new Animated.Value(500)).current;
+  const pubRouteSheetOpacity = useRef(new Animated.Value(0)).current;
+
   const pathSlideAnim = useRef(new Animated.Value(400)).current;
   const pathCardOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    AsyncStorage.getItem("paceup_map_layers").then(v => {
+      if (v) { try { setLayers(JSON.parse(v)); } catch {} }
+    }).catch(() => {});
+  }, []);
+
+  function toggleLayer(key: "foot" | "ride" | "events") {
+    setLayers(prev => {
+      const next = { ...prev, [key]: !prev[key] };
+      AsyncStorage.setItem("paceup_map_layers", JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+  }
+
+  const publicRoutesLayer = layers.foot || layers.ride ? (layers.foot && layers.ride ? "all" : layers.foot ? "foot" : "ride") : null;
+
+  const zoomTier = currentZoom >= 14 ? 14 : currentZoom >= 12 ? 12 : currentZoom >= 10 ? 10 : 8;
+
+  const publicRoutesQueryKey = useMemo(() => {
+    if (!bounds || !publicRoutesLayer) return null;
+    const snap = (v: number) => Math.round(v / 0.05) * 0.05;
+    return `/api/map/routes?swLat=${snap(bounds.swLat)}&swLng=${snap(bounds.swLng)}&neLat=${snap(bounds.neLat)}&neLng=${snap(bounds.neLng)}&layer=${publicRoutesLayer}&limit=500&zoom=${zoomTier}`;
+  }, [bounds, publicRoutesLayer, zoomTier]);
+
+  const { data: publicRoutes = [] } = useQuery<any[]>({
+    queryKey: [publicRoutesQueryKey],
+    enabled: !!publicRoutesQueryKey,
+    staleTime: 120_000,
+    placeholderData: (prev) => prev,
+  });
+
+  const { data: publicRouteDetail } = useQuery<any>({
+    queryKey: [`/api/map/routes/${selectedPublicRouteId}`],
+    enabled: !!selectedPublicRouteId,
+    staleTime: 60_000,
+  });
 
   const [showFilter, setShowFilter] = useState(false);
 
@@ -519,6 +563,8 @@ export default function MapScreen() {
     if (boundsTimer.current) clearTimeout(boundsTimer.current);
     boundsTimer.current = setTimeout(() => {
       setBounds(regionToBounds(r));
+      const zoom = Math.round(Math.log2(360 / r.longitudeDelta));
+      setCurrentZoom(Math.max(1, Math.min(22, zoom)));
     }, 400);
   }
 
@@ -540,8 +586,28 @@ export default function MapScreen() {
     ]).start(() => setSelectedRun(null));
   }
 
+  function openPublicRouteSheet(routeId: string) {
+    if (selectedRun) closeCard();
+    if (selectedCommunityPath) closePathCard();
+    setSelectedPublicRouteId(routeId);
+    pubRouteSheetAnim.setValue(500);
+    pubRouteSheetOpacity.setValue(0);
+    Animated.parallel([
+      Animated.spring(pubRouteSheetAnim, { toValue: 0, useNativeDriver: true, damping: 18, stiffness: 200 }),
+      Animated.timing(pubRouteSheetOpacity, { toValue: 1, duration: 180, useNativeDriver: true }),
+    ]).start();
+  }
+
+  function closePublicRouteSheet() {
+    Animated.parallel([
+      Animated.spring(pubRouteSheetAnim, { toValue: 500, useNativeDriver: true, damping: 22 }),
+      Animated.timing(pubRouteSheetOpacity, { toValue: 0, duration: 140, useNativeDriver: true }),
+    ]).start(() => setSelectedPublicRouteId(null));
+  }
+
   function openPathCard(path: CommunityPath) {
     if (selectedRun) closeCard();
+    if (selectedPublicRouteId) closePublicRouteSheet();
     setSelectedCommunityPath(path);
     pathCardOpacity.setValue(0);
     pathSlideAnim.setValue(400);
@@ -616,8 +682,38 @@ export default function MapScreen() {
           rotateEnabled={false}
           pitchEnabled={false}
           onRegionChangeComplete={onRegionChange}
-          onPress={() => { if (selectedRun) closeCard(); if (selectedCommunityPath) closePathCard(); }}
+          onPress={() => {
+            if (selectedRun) closeCard();
+            if (selectedCommunityPath) closePathCard();
+            if (selectedPublicRouteId) closePublicRouteSheet();
+          }}
         >
+          {publicRoutes.map((route: any) => {
+            const isFootRoute = route.activity_type !== "ride";
+            const isRideRoute = route.activity_type === "ride";
+            if (isFootRoute && !layers.foot) return null;
+            if (isRideRoute && !layers.ride) return null;
+            const baseColor = isRideRoute ? "#2E86AB" : "#FF6B35";
+            const maxCompleted = Math.max(...publicRoutes.map((r: any) => r.times_completed || 1));
+            const opacity = 0.3 + 0.7 * Math.min(1, (route.times_completed || 1) / Math.max(maxCompleted, 1));
+            const strokeColor = baseColor + Math.round(opacity * 255).toString(16).padStart(2, "0");
+            const path = typeof route.path === "string" ? JSON.parse(route.path) : (route.path || []);
+            if (!path || path.length < 2) return null;
+            const baseWidth = currentZoom >= 14 ? 4 : 2.5;
+            return (
+              <Polyline
+                key={route.id}
+                coordinates={path}
+                strokeColor={selectedPublicRouteId === route.id ? "#FFFFFF" : strokeColor}
+                strokeWidth={selectedPublicRouteId === route.id ? 5 : baseWidth}
+                tappable
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  openPublicRouteSheet(route.id);
+                }}
+              />
+            );
+          })}
           {communityPaths.map((path) => (
             <Polyline
               key={path.id}
@@ -631,7 +727,7 @@ export default function MapScreen() {
               }}
             />
           ))}
-          {visibleRuns.map((run) => (
+          {layers.events && visibleRuns.map((run) => (
             <RunMarker
               key={run.id}
               run={run}
@@ -648,6 +744,22 @@ export default function MapScreen() {
 
         {/* ─── Sidebar (inside map card) ────────────────────────────────── */}
         <View style={s.sideBar}>
+          {/* Layer toggles */}
+          <View style={s.layerToggleGroup}>
+            {(["foot", "ride", "events"] as const).map((key) => {
+              const on = layers[key];
+              const label = key === "foot" ? "🏃" : key === "ride" ? "🚴" : "📍";
+              return (
+                <Pressable
+                  key={key}
+                  style={[s.layerBtn, on && s.layerBtnOn]}
+                  onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); toggleLayer(key); }}
+                >
+                  <Text style={{ fontSize: 13 }}>{label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
           {visiblePaths.length > 0 && (
             <View style={s.routeCountChip}>
               <Text style={s.routeCountTxt}>{visiblePaths.length} route{visiblePaths.length !== 1 ? "s" : ""}</Text>
@@ -849,6 +961,86 @@ export default function MapScreen() {
               <Text style={s.pathStartBtnTxt}>Start Run Here</Text>
               <Feather name="play" size={18} color="#FFF" />
             </Pressable>
+          </Animated.View>
+        )}
+
+        {/* ─── Public Route Info Sheet ──────────────────────────────────── */}
+        {selectedPublicRouteId && (
+          <Animated.View
+            style={[
+              s.pathSheet,
+              { bottom: 0, opacity: pubRouteSheetOpacity, transform: [{ translateY: pubRouteSheetAnim }] },
+            ]}
+          >
+            <Pressable style={s.closeSheetBtn} onPress={closePublicRouteSheet}>
+              <Feather name="x" size={20} color={C.textMuted} />
+            </Pressable>
+
+            {!publicRouteDetail ? (
+              <ActivityIndicator color={C.primary} style={{ marginVertical: 24 }} />
+            ) : (
+              <>
+                {/* Busyness badge */}
+                {(() => {
+                  const labelMap: Record<string, { text: string; color: string }> = {
+                    green: { text: "Quiet", color: "#27AE60" },
+                    yellow: { text: "Moderate", color: "#F4C542" },
+                    orange: { text: "Busy", color: "#E67E22" },
+                    red: { text: "Very Busy", color: "#C0392B" },
+                  };
+                  const info = labelMap[publicRouteDetail.busyness_label] ?? labelMap.green;
+                  return (
+                    <View style={[s.busynessBadge, { backgroundColor: info.color + "22", borderColor: info.color + "55" }]}>
+                      <View style={[s.busynessDot, { backgroundColor: info.color }]} />
+                      <Text style={[s.busynessTxt, { color: info.color }]}>{info.text}</Text>
+                    </View>
+                  );
+                })()}
+
+                <Text style={s.pathSheetTitle}>
+                  {publicRouteDetail.activity_type === "ride" ? "Bike Route" : publicRouteDetail.activity_type === "walk" ? "Walk Route" : "Run Route"}
+                </Text>
+
+                <View style={s.pathStatRow}>
+                  {publicRouteDetail.distance_miles && (
+                    <View style={s.pathChip}>
+                      <Feather name="move" size={13} color={C.primary} />
+                      <Text style={s.pathChipTxt}>{toDisplayDist(publicRouteDetail.distance_miles, distUnit)}</Text>
+                    </View>
+                  )}
+                  {publicRouteDetail.elevation_gain_ft && (
+                    <View style={s.pathChip}>
+                      <Feather name="trending-up" size={13} color={C.textSecondary} />
+                      <Text style={s.pathChipTxt}>{Math.round(publicRouteDetail.elevation_gain_ft)} ft</Text>
+                    </View>
+                  )}
+                  <View style={s.pathChip}>
+                    <Feather name="users" size={13} color={C.textSecondary} />
+                    <Text style={s.pathChipTxt}>{publicRouteDetail.times_completed} {publicRouteDetail.times_completed === 1 ? "time" : "times"}</Text>
+                  </View>
+                </View>
+
+                {/* Busiest times bar chart */}
+                {publicRouteDetail.busy_by_dow && (
+                  <View style={{ marginBottom: 16 }}>
+                    <Text style={[s.pathMutedTxt, { marginBottom: 8 }]}>Busiest days</Text>
+                    <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 4, height: 48 }}>
+                      {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day, i) => {
+                        const counts: number[] = publicRouteDetail.busy_by_dow;
+                        const maxCount = Math.max(...counts, 1);
+                        const h = Math.max(4, (counts[i] / maxCount) * 44);
+                        return (
+                          <View key={day} style={{ flex: 1, alignItems: "center", gap: 2 }}>
+                            <View style={{ width: "100%", height: h, borderRadius: 3, backgroundColor: C.primary + "88" }} />
+                            <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 9, color: C.textMuted }}>{day}</Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </View>
+                )}
+              </>
+            )}
           </Animated.View>
         )}
 
@@ -1110,7 +1302,42 @@ function makeSStyles(C: ColorScheme) { return StyleSheet.create({
     position: "absolute", top: 5, right: 5,
   },
 
-  sideBar: { position: "absolute", right: 12, top: 12, gap: 10 },
+  sideBar: { position: "absolute", right: 12, top: 12, gap: 10, alignItems: "flex-end" },
+
+  layerToggleGroup: {
+    backgroundColor: "rgba(0,0,0,0.6)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    overflow: "hidden",
+    flexDirection: "column",
+  },
+  layerBtn: {
+    width: 40,
+    height: 34,
+    alignItems: "center",
+    justifyContent: "center",
+    opacity: 0.45,
+  },
+  layerBtnOn: {
+    opacity: 1,
+    backgroundColor: "rgba(255,255,255,0.12)",
+  },
+
+  busynessBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginBottom: 10,
+  },
+  busynessDot: { width: 8, height: 8, borderRadius: 4 },
+  busynessTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 12 },
+
   sideBtn: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: C.surface, alignItems: "center", justifyContent: "center",
