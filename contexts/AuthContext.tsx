@@ -64,6 +64,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSuspendedUntil(until ?? null);
   }
 
+  function clearSuspendedState() {
+    setIsSuspended(false);
+    setSuspendedUntil(null);
+    AsyncStorage.removeItem(SUSPENDED_NOTICE_KEY).catch(() => {});
+  }
+
   useEffect(() => {
     fetchMe();
   }, []);
@@ -142,11 +148,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearTimeout(timer);
       if (res.status === 403) {
         const data = await res.json().catch(() => ({}));
-        const until = data.suspended_until ?? null;
+        if (data.error === "suspended") {
+          const until = data.suspended_until ?? null;
+          await clearToken();
+          await AsyncStorage.setItem(SUSPENDED_NOTICE_KEY, until ?? "1").catch(() => {});
+          markSuspended(until);
+          return "suspended";
+        }
+        // 403 but not a suspension — treat as definitive auth failure
         await clearToken();
-        await AsyncStorage.setItem(SUSPENDED_NOTICE_KEY, until ?? "1").catch(() => {});
-        markSuspended(until);
-        return "suspended";
+        return null;
       }
       if (res.status === 401 || res.status === 400) {
         // Server definitively rejected the token — credentials are invalid
@@ -195,6 +206,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (meTimer) clearTimeout(meTimer);
         if (res.ok) {
           const fresh = await res.json();
+          clearSuspendedState();
           setUser(fresh);
           await storeCachedUser(fresh);
           if (!cached) setIsLoading(false);
@@ -225,6 +237,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else if (restoreResult && restoreResult !== "network_error") {
         // Server accepted the token — session re-established, update user and cache
         const freshUser = restoreResult as User;
+        clearSuspendedState();
         setUser(freshUser);
         await storeCachedUser(freshUser);
       } else if (!cached) {
@@ -249,6 +262,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = await res.json();
     if (data.rememberToken) await storeToken(data.rememberToken);
     const { rememberToken: _t, ...userOnly } = data;
+    clearSuspendedState();
     await storeCachedUser(userOnly);
     setUser(userOnly);
   }
@@ -258,6 +272,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = await res.json();
     if (data.rememberToken) await storeToken(data.rememberToken);
     const { rememberToken: _t, ...userOnly } = data;
+    clearSuspendedState();
     await storeCachedUser(userOnly);
     setUser(userOnly);
   }
