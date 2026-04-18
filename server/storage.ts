@@ -640,6 +640,15 @@ export async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_ccp_user ON crew_chief_promotions(user_id, declined, created_at DESC);
   `);
 
+  // Allow crews.created_by to be NULL so a leaderless state can be represented safely
+  // (in practice last-resort assignment prevents this, but the schema should permit it)
+  await pool.query(`
+    ALTER TABLE crews ALTER COLUMN created_by DROP NOT NULL;
+    ALTER TABLE crew_chief_promotions ADD COLUMN IF NOT EXISTS cycle_id VARCHAR DEFAULT NULL;
+  `).catch(() => {
+    // DROP NOT NULL is idempotent on Postgres >= 14 — swallow if already nullable
+  });
+
   const dummyCheck = await pool.query(`SELECT COUNT(*) FROM users WHERE email LIKE 'dummy-%@paceup.dev'`);
   if (parseInt(dummyCheck.rows[0].count) > 0) {
     await pool.query(`DELETE FROM run_participants WHERE run_id IN (SELECT id FROM runs WHERE host_id IN (SELECT id FROM users WHERE email LIKE 'dummy-%@paceup.dev'))`);
@@ -4498,7 +4507,7 @@ export async function getCrewRankings(type: 'national' | 'state' | 'metro', valu
          1
        ) as crew_score
      FROM crews c
-     JOIN users u ON u.id = c.created_by
+     LEFT JOIN users u ON u.id = c.created_by
      JOIN crew_stats cs ON cs.crew_id = c.id
      WHERE 1=1 ${filterClause}
      ORDER BY crew_score DESC
@@ -4570,7 +4579,7 @@ export async function getCrewsByUser(userId: string) {
        END AS pending_request_count
      FROM crews c
      JOIN crew_members cm ON cm.crew_id = c.id AND cm.user_id = $1 AND cm.status = 'member'
-     JOIN users u ON u.id = c.created_by
+     LEFT JOIN users u ON u.id = c.created_by
      ORDER BY c.created_at DESC`,
     [userId]
   );
@@ -4706,8 +4715,10 @@ export async function leaveCrewById(crewId: string, userId: string) {
     newOwnerId = nextRes.rows[0]?.user_id ?? null;
     if (newOwnerId) {
       await pool.query(`UPDATE crews SET created_by = $1 WHERE id = $2`, [newOwnerId, crewId]);
+      // Generate a new cycle_id so subsequent declines in this cycle are scoped correctly
       await pool.query(
-        `INSERT INTO crew_chief_promotions (crew_id, user_id, crew_name) VALUES ($1, $2, $3)`,
+        `INSERT INTO crew_chief_promotions (crew_id, user_id, crew_name, cycle_id)
+         VALUES ($1, $2, $3, gen_random_uuid())`,
         [crewId, newOwnerId, crewName]
       );
     }
@@ -4721,79 +4732,112 @@ export async function declineCrewChiefPromotion(
   crewId: string,
   userId: string
 ): Promise<{ newOwnerId: string | null; disbanded: boolean; forced: boolean }> {
-  // Mark current promotion as declined (idempotent — no-op if already declined)
-  const updateRes = await pool.query(
-    `UPDATE crew_chief_promotions SET declined = true WHERE crew_id = $1 AND user_id = $2 AND declined = false`,
+  // Mark current promotion as declined and retrieve the cycle_id so we scope the
+  // decline cap and exclusion list to this promotion cycle only.
+  const updateRes = await pool.query<{ cycle_id: string | null }>(
+    `UPDATE crew_chief_promotions
+     SET declined = true
+     WHERE crew_id = $1 AND user_id = $2 AND declined = false
+     RETURNING cycle_id`,
     [crewId, userId]
   );
-  // If no row was updated, this user had no pending promotion (already declined or never offered).
-  // Return the current chief without re-running cascade logic.
+
+  // Idempotency: if no row was updated, this user had no pending promotion.
+  // Return the current chief state without re-running cascade logic.
   if (updateRes.rowCount === 0) {
-    const crewCurrent = await pool.query<{ created_by: string }>(
+    const crewCurrent = await pool.query<{ created_by: string | null }>(
       `SELECT created_by FROM crews WHERE id = $1`,
       [crewId]
     );
     if (!crewCurrent.rows[0]) return { newOwnerId: null, disbanded: true, forced: false };
-    return { newOwnerId: crewCurrent.rows[0].created_by, disbanded: false, forced: false };
+    return { newOwnerId: crewCurrent.rows[0].created_by ?? null, disbanded: false, forced: false };
   }
 
-  // Count total decline events for this crew (cap at 5)
-  const declineCountRes = await pool.query<{ cnt: string }>(
-    `SELECT COUNT(*) AS cnt FROM crew_chief_promotions WHERE crew_id = $1 AND declined = true`,
-    [crewId]
-  );
+  const cycleId: string | null = updateRes.rows[0]?.cycle_id ?? null;
+
+  // Count declines within this cycle (cap at 5). When cycleId is known, scope by it.
+  const declineCountRes = cycleId
+    ? await pool.query<{ cnt: string }>(
+        `SELECT COUNT(*) AS cnt FROM crew_chief_promotions
+         WHERE crew_id = $1 AND declined = true AND cycle_id = $2`,
+        [crewId, cycleId]
+      )
+    : await pool.query<{ cnt: string }>(
+        `SELECT COUNT(*) AS cnt FROM crew_chief_promotions
+         WHERE crew_id = $1 AND declined = true`,
+        [crewId]
+      );
   const declineCount = parseInt(declineCountRes.rows[0]?.cnt ?? "0") || 0;
 
-  // Collect all user_ids that have already declined in this promotion cycle
-  const declinedRes = await pool.query<{ user_id: string }>(
-    `SELECT user_id FROM crew_chief_promotions WHERE crew_id = $1 AND declined = true`,
-    [crewId]
-  );
+  // Collect all user_ids that have already declined in this cycle
+  const declinedRes = cycleId
+    ? await pool.query<{ user_id: string }>(
+        `SELECT user_id FROM crew_chief_promotions
+         WHERE crew_id = $1 AND declined = true AND cycle_id = $2`,
+        [crewId, cycleId]
+      )
+    : await pool.query<{ user_id: string }>(
+        `SELECT user_id FROM crew_chief_promotions
+         WHERE crew_id = $1 AND declined = true`,
+        [crewId]
+      );
   const declinedUserIds: string[] = declinedRes.rows.map((r) => r.user_id);
 
   // Get crew name
-  const crewRes = await pool.query<{ name: string; created_by: string }>(
+  const crewRes = await pool.query<{ name: string; created_by: string | null }>(
     `SELECT name, created_by FROM crews WHERE id = $1`,
     [crewId]
   );
-  if (!crewRes.rows[0]) {
-    // Crew already gone
-    return { newOwnerId: null, disbanded: true, forced: false };
-  }
+  if (!crewRes.rows[0]) return { newOwnerId: null, disbanded: true, forced: false };
   const crewName: string = crewRes.rows[0].name ?? "Crew";
 
-  // Count remaining members (excluding all who declined)
+  // All current members ordered by seniority (used for last-resort assignment)
   const membersRes = await pool.query<{ user_id: string }>(
-    `SELECT user_id FROM crew_members
-     WHERE crew_id = $1 AND status = 'member'
-     ORDER BY joined_at ASC`,
+    `SELECT user_id FROM crew_members WHERE crew_id = $1 AND status = 'member' ORDER BY joined_at ASC`,
     [crewId]
   );
   const allMembers: string[] = membersRes.rows.map((r) => r.user_id);
 
   if (allMembers.length === 0) {
-    // No members left at all — disband
     await pool.query(`DELETE FROM crews WHERE id = $1`, [crewId]);
     return { newOwnerId: null, disbanded: true, forced: false };
   }
 
-  // When decline count reaches 5 OR no willing candidates remain, assign unconditionally
-  const eligibleCandidates = allMembers.filter((id) => !declinedUserIds.includes(id));
-  const forceAssign = declineCount >= 5 || eligibleCandidates.length === 0;
+  // When decline cap (5) is reached OR no eligible candidates remain, force-assign
+  const eligibleMembers = allMembers.filter((id) => !declinedUserIds.includes(id));
+  const forceAssign = declineCount >= 5 || eligibleMembers.length === 0;
 
   if (forceAssign) {
-    // Assign the longest-standing member unconditionally (first by joined_at ASC)
+    // Assign the longest-standing member unconditionally (no promotion row = no accept/decline prompt)
     const assignee = allMembers[0];
     await pool.query(`UPDATE crews SET created_by = $1 WHERE id = $2`, [assignee, crewId]);
     return { newOwnerId: assignee, disbanded: false, forced: true };
   }
 
-  // Promote the next eligible candidate
-  const nextOwnerId = eligibleCandidates[0];
+  // Pick the best candidate by total miles_logged in crew-associated runs, then fall back to seniority
+  const candidateIdsParam = eligibleMembers.map((_, i) => `$${i + 2}`).join(", ");
+  const runCandidateRes = await pool.query<{ user_id: string }>(
+    `SELECT rp.user_id, COALESCE(SUM(rp.miles_logged), 0) AS total_miles
+     FROM run_participants rp
+     JOIN runs r ON r.id = rp.run_id
+     WHERE r.crew_id = $1
+       AND rp.user_id IN (${candidateIdsParam})
+       AND rp.status IS DISTINCT FROM 'cancelled'
+     GROUP BY rp.user_id
+     ORDER BY total_miles DESC
+     LIMIT 1`,
+    [crewId, ...eligibleMembers]
+  );
+
+  // Use run-distance winner if available; fall back to longest-standing member among eligible
+  const nextOwnerId: string =
+    runCandidateRes.rows[0]?.user_id ?? eligibleMembers[0];
+
   await pool.query(`UPDATE crews SET created_by = $1 WHERE id = $2`, [nextOwnerId, crewId]);
   await pool.query(
-    `INSERT INTO crew_chief_promotions (crew_id, user_id, crew_name) VALUES ($1, $2, $3)`,
-    [crewId, nextOwnerId, crewName]
+    `INSERT INTO crew_chief_promotions (crew_id, user_id, crew_name, cycle_id)
+     VALUES ($1, $2, $3, $4)`,
+    [crewId, nextOwnerId, crewName, cycleId]
   );
   return { newOwnerId: nextOwnerId, disbanded: false, forced: false };
 }
@@ -4979,7 +5023,7 @@ export async function searchCrews(userId: string, query: string, friendsOnly: bo
          (f.requester_id = $1 AND f.addressee_id = cm2.user_id) OR
          (f.addressee_id = $1 AND f.requester_id = cm2.user_id)
        )
-       JOIN users u ON u.id = c.created_by
+       LEFT JOIN users u ON u.id = c.created_by
        WHERE f.status = 'accepted'
          AND cm2.user_id != $1
          ${query ? "AND LOWER(c.name) LIKE $2" : ""}
@@ -4997,7 +5041,7 @@ export async function searchCrews(userId: string, query: string, friendsOnly: bo
        EXISTS(SELECT 1 FROM crew_members WHERE crew_id = c.id AND user_id = $1 AND status = 'member') AS is_member,
        EXISTS(SELECT 1 FROM crew_members WHERE crew_id = c.id AND user_id = $1 AND status = 'pending') AS has_requested
      FROM crews c
-     JOIN users u ON u.id = c.created_by
+     LEFT JOIN users u ON u.id = c.created_by
      WHERE LOWER(c.name) LIKE $2
      ORDER BY member_count DESC
      LIMIT 30`,
@@ -5095,7 +5139,7 @@ export async function getSuggestedCrews(userId: string, limit = 10): Promise<Sug
        CASE WHEN c.run_style = $4 AND $4 IS NOT NULL THEN 15 ELSE 0 END AS run_style_bonus,
        COALESCE(c.subscription_tier, 'none') AS sub_tier
      FROM crews c
-     JOIN users u ON u.id = c.created_by
+     LEFT JOIN users u ON u.id = c.created_by
      WHERE NOT EXISTS (
        SELECT 1 FROM crew_members cm WHERE cm.crew_id = c.id AND cm.user_id = $1
      )
