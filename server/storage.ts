@@ -620,6 +620,21 @@ export async function initDb() {
 
     -- Abandoned runs (stale with no real GPS distance — excluded from profile/leaderboard/totals)
     ALTER TABLE runs ADD COLUMN IF NOT EXISTS is_abandoned BOOLEAN DEFAULT false;
+
+    -- Email verification codes (6-digit, 30-min TTL; sent immediately after registration)
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_code TEXT DEFAULT NULL;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_expires TIMESTAMPTZ DEFAULT NULL;
+
+    -- Crew chief promotion tracking (so newly-promoted chiefs can Accept or Decline)
+    CREATE TABLE IF NOT EXISTS crew_chief_promotions (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      crew_id VARCHAR NOT NULL,
+      user_id VARCHAR NOT NULL,
+      crew_name TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      declined BOOLEAN DEFAULT FALSE
+    );
+    CREATE INDEX IF NOT EXISTS idx_ccp_user ON crew_chief_promotions(user_id, declined, created_at DESC);
   `);
 
   const dummyCheck = await pool.query(`SELECT COUNT(*) FROM users WHERE email LIKE 'dummy-%@paceup.dev'`);
@@ -704,6 +719,14 @@ export async function getBuddySuggestions(userId: string, gender: string) {
 }
 
 export async function getNotifications(userId: string) {
+  const crewChiefPromotions = await pool.query(
+    `SELECT ccp.id, ccp.crew_id, ccp.crew_name, ccp.created_at
+     FROM crew_chief_promotions ccp
+     WHERE ccp.user_id = $1 AND ccp.declined = false
+     ORDER BY ccp.created_at DESC LIMIT 5`,
+    [userId]
+  );
+
   const friendRequests = await pool.query(
     `SELECT fr.id, 'friend_request' as type, u.name as from_name, u.photo_url as from_photo, u.id as from_id, fr.created_at
      FROM friends fr
@@ -1015,6 +1038,17 @@ export async function getNotifications(userId: string) {
       path_name: r.path_name,
       path_distance_miles: r.path_distance_miles,
       cloned: r.cloned,
+      created_at: r.created_at,
+    })),
+    ...crewChiefPromotions.rows.map(r => ({
+      id: `ccp_${r.id}`,
+      type: 'crew_chief_promoted',
+      title: "You're now Crew Chief",
+      body: `You've been promoted to chief of ${r.crew_name}`,
+      crew_id: r.crew_id,
+      crew_name: r.crew_name,
+      promotion_id: r.id,
+      data: { crew_id: r.crew_id, crew_name: r.crew_name, promotion_id: r.id },
       created_at: r.created_at,
     })),
   ];
@@ -4639,25 +4673,93 @@ export async function leaveCrewById(crewId: string, userId: string) {
 
   if (remaining === 0) {
     await pool.query(`DELETE FROM crews WHERE id = $1`, [crewId]);
-    return { disbanded: true };
+    return { disbanded: true, newOwnerId: null, crewName: null };
   }
 
-  const crewRes = await pool.query(`SELECT created_by FROM crews WHERE id = $1`, [crewId]);
+  const crewRes = await pool.query(`SELECT created_by, name FROM crews WHERE id = $1`, [crewId]);
   const isCreator = crewRes.rows[0]?.created_by === userId;
+  const crewName: string = crewRes.rows[0]?.name ?? "Crew";
 
+  let newOwnerId: string | null = null;
   if (isCreator) {
     const nextRes = await pool.query(
       `SELECT user_id FROM crew_members WHERE crew_id = $1 AND user_id != $2 AND status = 'member' ORDER BY joined_at ASC LIMIT 1`,
       [crewId, userId]
     );
-    const newOwner = nextRes.rows[0]?.user_id;
-    if (newOwner) {
-      await pool.query(`UPDATE crews SET created_by = $1 WHERE id = $2`, [newOwner, crewId]);
+    newOwnerId = nextRes.rows[0]?.user_id ?? null;
+    if (newOwnerId) {
+      await pool.query(`UPDATE crews SET created_by = $1 WHERE id = $2`, [newOwnerId, crewId]);
+      await pool.query(
+        `INSERT INTO crew_chief_promotions (crew_id, user_id, crew_name) VALUES ($1, $2, $3)`,
+        [crewId, newOwnerId, crewName]
+      );
     }
   }
 
   await pool.query(`DELETE FROM crew_members WHERE crew_id = $1 AND user_id = $2`, [crewId, userId]);
-  return { disbanded: false };
+  return { disbanded: false, newOwnerId, crewName };
+}
+
+export async function declineCrewChiefPromotion(crewId: string, userId: string): Promise<{ newOwnerId: string | null; disbanded: boolean }> {
+  // Mark the promotion as declined
+  await pool.query(
+    `UPDATE crew_chief_promotions SET declined = true WHERE crew_id = $1 AND user_id = $2 AND declined = false`,
+    [crewId, userId]
+  );
+
+  // Find the next candidate (excluding the decliner)
+  const nextRes = await pool.query(
+    `SELECT user_id FROM crew_members WHERE crew_id = $1 AND user_id != $2 AND status = 'member' ORDER BY joined_at ASC LIMIT 1`,
+    [crewId, userId]
+  );
+  const nextOwnerId: string | null = nextRes.rows[0]?.user_id ?? null;
+
+  if (!nextOwnerId) {
+    // No other members — disband the crew
+    await pool.query(`DELETE FROM crews WHERE id = $1`, [crewId]);
+    return { newOwnerId: null, disbanded: true };
+  }
+
+  // Get crew name for the new promotion record
+  const crewRes = await pool.query(`SELECT name FROM crews WHERE id = $1`, [crewId]);
+  const crewName: string = crewRes.rows[0]?.name ?? "Crew";
+
+  await pool.query(`UPDATE crews SET created_by = $1 WHERE id = $2`, [nextOwnerId, crewId]);
+  await pool.query(
+    `INSERT INTO crew_chief_promotions (crew_id, user_id, crew_name) VALUES ($1, $2, $3)`,
+    [crewId, nextOwnerId, crewName]
+  );
+  return { newOwnerId: nextOwnerId, disbanded: false };
+}
+
+export async function storeEmailVerificationCode(userId: string, code: string) {
+  const expires = new Date(Date.now() + 30 * 60 * 1000); // 30 min
+  await pool.query(
+    `UPDATE users SET email_verification_code = $1, email_verification_expires = $2 WHERE id = $3`,
+    [code, expires, userId]
+  );
+}
+
+export async function verifyEmailCode(userId: string, code: string): Promise<boolean> {
+  const res = await pool.query(
+    `SELECT email_verification_code, email_verification_expires FROM users WHERE id = $1`,
+    [userId]
+  );
+  const row = res.rows[0];
+  if (!row) return false;
+  if (row.email_verification_code !== code) return false;
+  if (!row.email_verification_expires || new Date(row.email_verification_expires) < new Date()) return false;
+  await pool.query(
+    `UPDATE users SET email_verified = true, email_verification_code = NULL, email_verification_expires = NULL WHERE id = $1`,
+    [userId]
+  );
+  return true;
+}
+
+export async function updateUserEmailForVerification(userId: string, newEmail: string) {
+  const existing = await pool.query(`SELECT id FROM users WHERE email = $1 AND id != $2`, [newEmail, userId]);
+  if (existing.rows.length > 0) throw new Error("Email already in use");
+  await pool.query(`UPDATE users SET email = $1 WHERE id = $2`, [newEmail, userId]);
 }
 
 export async function disbandCrewById(crewId: string, userId: string) {

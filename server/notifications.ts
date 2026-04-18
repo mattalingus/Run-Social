@@ -1,12 +1,69 @@
+import { Pool } from "pg";
+
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
+const EXPO_RECEIPTS_URL = "https://exp.host/--/api/v2/push/getReceipts";
+const BATCH_SIZE = 100;
+const RECEIPT_DELAY_MS = 5000;
 
 export interface PushMessage {
-  to: string | string[];
+  to: string;
   title: string;
   body: string;
   data?: Record<string, any>;
   sound?: "default" | null;
   badge?: number;
+}
+
+interface PushTicket {
+  id?: string;
+  status: "ok" | "error";
+  message?: string;
+  details?: { error?: string };
+}
+
+interface PushReceipt {
+  status: "ok" | "error";
+  message?: string;
+  details?: { error?: string };
+}
+
+let _pool: Pool | null = null;
+export function setNotificationsPool(pool: Pool) {
+  _pool = pool;
+}
+
+async function removeStaleToken(token: string) {
+  if (!_pool) return;
+  try {
+    await _pool.query(`UPDATE users SET push_token = NULL WHERE push_token = $1`, [token]);
+  } catch (err) {
+    console.error("[push] Failed to remove stale token:", err);
+  }
+}
+
+async function fetchReceiptsAndCleanup(ticketIds: string[], tokensByTicket: Map<string, string>) {
+  if (!ticketIds.length) return;
+  await new Promise((r) => setTimeout(r, RECEIPT_DELAY_MS));
+  try {
+    const res = await fetch(EXPO_RECEIPTS_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ ids: ticketIds }),
+    });
+    if (!res.ok) return;
+    const json = await res.json() as { data: Record<string, PushReceipt> };
+    for (const [id, receipt] of Object.entries(json.data ?? {})) {
+      if (receipt.status === "error") {
+        const errCode = receipt.details?.error;
+        if (errCode === "DeviceNotRegistered" || errCode === "InvalidCredentials") {
+          const token = tokensByTicket.get(id);
+          if (token) await removeStaleToken(token);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[push] Failed to fetch receipts:", err);
+  }
 }
 
 export async function sendPushNotification(
@@ -19,25 +76,46 @@ export async function sendPushNotification(
   const valid = tokenList.filter((t) => t && t.startsWith("ExponentPushToken["));
   if (!valid.length) return;
 
-  const messages: PushMessage[] = valid.map((to) => ({
-    to,
-    title,
-    body,
-    sound: "default",
-    data: data ?? {},
-  }));
+  for (let i = 0; i < valid.length; i += BATCH_SIZE) {
+    const chunk = valid.slice(i, i + BATCH_SIZE);
+    const messages: PushMessage[] = chunk.map((to) => ({
+      to,
+      title,
+      body,
+      sound: "default",
+      data: data ?? {},
+    }));
 
-  try {
-    await fetch(EXPO_PUSH_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify(messages),
-    });
-  } catch (err) {
-    console.error("[push] Failed to send notification:", err);
+    try {
+      const res = await fetch(EXPO_PUSH_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(messages),
+      });
+
+      if (res.ok) {
+        const json = await res.json() as { data: PushTicket[] };
+        const tickets: PushTicket[] = json.data ?? [];
+        const ticketIds: string[] = [];
+        const tokensByTicket = new Map<string, string>();
+        tickets.forEach((ticket, idx) => {
+          if (ticket.status === "ok" && ticket.id) {
+            ticketIds.push(ticket.id);
+            tokensByTicket.set(ticket.id, chunk[idx]);
+          } else if (ticket.status === "error") {
+            const errCode = ticket.details?.error;
+            if (errCode === "DeviceNotRegistered" || errCode === "InvalidCredentials") {
+              removeStaleToken(chunk[idx]);
+            }
+          }
+        });
+        if (ticketIds.length > 0) {
+          fetchReceiptsAndCleanup(ticketIds, tokensByTicket).catch(() => {});
+        }
+      }
+    } catch (err) {
+      console.error("[push] Failed to send notification batch:", err);
+    }
   }
 }
 

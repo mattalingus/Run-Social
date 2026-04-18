@@ -783,6 +783,9 @@ export default function RunTrackingScreen() {
   const baroSubRef = useRef<{ remove: () => void } | null>(null);
   const moveTimeRef = useRef(0);
   const lastMoveTimestampRef = useRef<number | null>(null);
+  // Vehicle speed filter — sustained detection (R17)
+  const vehicleSpeedStartRef = useRef<number | null>(null); // timestamp when speed first exceeded threshold
+  const bearingBufferRef = useRef<number[]>([]); // rolling window of last 20 computed bearings
 
   // ─── Location permission nudge banner ────────────────────────────────────
   const [showPermNudge, setShowPermNudge] = useState(false);
@@ -922,14 +925,54 @@ export default function RunTrackingScreen() {
     // done-screen render.
     if (phaseRef.current === "done") return;
 
-    // Delegate accuracy + vehicle-speed checks to the shared helper so that
-    // solo and live-group paths stay in sync.  setIsDriving is still managed
-    // here because it is a solo-only UI state (no equivalent in group tracking).
-    const vehicleThreshold = activityFilter === "ride" ? 22 : activityFilter === "walk" ? 4 : 12;
-    const isVehicleSpeed = speed != null && speed > 0 && speed > vehicleThreshold;
-    if (!shouldAcceptCoord({ accuracy, speed }, activityFilter as "run" | "ride" | "walk")) {
-      if (isVehicleSpeed) setIsDriving(true);
-      return;
+    // Accuracy gate — reuse the shared helper's thresholds (native ≤ 40 m, web ≤ 100 m).
+    // We do NOT pass speed here because vehicle-speed handling is managed below with the
+    // R17 sustained-detection logic (20 s + straight geometry) rather than an instant reject.
+    const maxAccuracy = Platform.OS === "web" ? 100 : 40;
+    if (accuracy != null && accuracy > maxAccuracy) return;
+
+    // Vehicle detection (R17): walk > 5 m/s (~11 mph), run > 12 m/s (~27 mph), ride > 22 m/s (~50 mph)
+    // A single high-speed sample no longer triggers the filter — we require sustained high speed
+    // for ≥20 consecutive seconds AND near-straight geometry (bearing range < 20°) to avoid
+    // penalising fast walkers on downhill bursts or tight GPS noise spikes.
+    const vehicleThreshold = activityFilter === "ride" ? 22 : activityFilter === "walk" ? 5 : 12;
+    const now = Date.now();
+    if (speed != null && speed > 0 && speed > vehicleThreshold) {
+      // Accumulate bearing for geometry check (computed from last coord to this one)
+      if (lastCoordRef.current) {
+        const dLon = (longitude - lastCoordRef.current.longitude) * Math.PI / 180;
+        const lat1R = lastCoordRef.current.latitude * Math.PI / 180;
+        const lat2R = latitude * Math.PI / 180;
+        const yB = Math.sin(dLon) * Math.cos(lat2R);
+        const xB = Math.cos(lat1R) * Math.sin(lat2R) - Math.sin(lat1R) * Math.cos(lat2R) * Math.cos(dLon);
+        const bearing = (Math.atan2(yB, xB) * 180 / Math.PI + 360) % 360;
+        bearingBufferRef.current.push(bearing);
+        if (bearingBufferRef.current.length > 20) bearingBufferRef.current.shift();
+      }
+
+      if (vehicleSpeedStartRef.current == null) vehicleSpeedStartRef.current = now;
+      const sustainedMs = now - vehicleSpeedStartRef.current;
+
+      // Check bearing variance (circular range): is motion near-straight?
+      let bearingStraight = true;
+      if (bearingBufferRef.current.length >= 5) {
+        const sorted = [...bearingBufferRef.current].sort((a, b) => a - b);
+        const range = sorted[sorted.length - 1] - sorted[0];
+        // Unwrap: check if wrapping (e.g. 350°→10°) gives a smaller range
+        const wrappedRange = 360 - range;
+        const effectiveRange = Math.min(range, wrappedRange);
+        bearingStraight = effectiveRange < 20; // <20° spread = near-straight
+      }
+
+      if (sustainedMs >= 20000 && bearingStraight) {
+        setIsDriving(true);
+        return;
+      }
+      // Not yet classified as vehicular — allow this sample through (don't return early)
+    } else {
+      // Speed dropped below threshold — reset the sustained counter and bearing buffer
+      vehicleSpeedStartRef.current = null;
+      bearingBufferRef.current = [];
     }
     setIsDriving(false);
 

@@ -60,7 +60,8 @@ export default function RegisterScreen() {
     try {
       await register(email.trim(), password, firstName.trim(), lastName.trim(), username.trim(), gender);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.replace("/onboarding");
+      // Routing effect in _layout.tsx will redirect to /verify-email (if email_verified=false)
+      // or /onboarding (if email_verified=true, e.g. in future when SMTP is configured)
     } catch (e: any) {
       setError(e.message || "Registration failed");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);

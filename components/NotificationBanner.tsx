@@ -84,6 +84,13 @@ function navigateToNotification(n: BannerNotification) {
         });
       }
       break;
+    case "crew_chief_promoted":
+      if (n.data?.crew_id) {
+        router.push({ pathname: "/crew-chat/[id]", params: { id: n.data.crew_id } } as any);
+      } else {
+        router.push("/(tabs)/crew");
+      }
+      break;
     default:
       break;
   }

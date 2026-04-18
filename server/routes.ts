@@ -175,11 +175,103 @@ export async function registerRoutes(app: Express): Promise<Server> {
       req.session.userId = user.id;
       const rememberToken = await storage.createRememberToken(user.id);
       const { password: _, ...safeUser } = user;
-      res.json({ ...safeUser, rememberToken });
+
+      const smtpUser = process.env.SMTP_USER;
+      const smtpPass = process.env.SMTP_PASS;
+
+      if (!smtpUser || !smtpPass) {
+        // SMTP not configured — mark email as verified immediately (dev / unconfigured environments)
+        await pool.query(`UPDATE users SET email_verified = true WHERE id = $1`, [user.id]);
+        const { password: _p2, ...verifiedUser } = { ...user, email_verified: true };
+        res.json({ ...verifiedUser, rememberToken });
+      } else {
+        // Generate and send email verification code (non-blocking — don't fail registration if email fails)
+        const verifyCode = String(Math.floor(100000 + Math.random() * 900000));
+        storage.storeEmailVerificationCode(user.id, verifyCode).then(async () => {
+          try {
+            const transporter = nodemailer.createTransport({
+              host: "smtp.gmail.com", port: 587, secure: false,
+              auth: { user: smtpUser, pass: smtpPass },
+            });
+            await transporter.sendMail({
+              from: `"PaceUp" <${smtpUser}>`,
+              to: user.email,
+              subject: "Verify your PaceUp email",
+              html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px;">
+                <h2 style="color:#00D97E;">PaceUp</h2>
+                <p>Hi ${firstName},</p>
+                <p>Welcome! Enter this code to verify your email address:</p>
+                <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#00D97E;text-align:center;padding:20px 0;">${verifyCode}</div>
+                <p style="color:#666;font-size:13px;">This code expires in 30 minutes.</p>
+              </div>`,
+            });
+          } catch (err: any) {
+            console.error("[register-verify] Email send failed:", err?.message);
+          }
+        }).catch(() => {});
+        res.json({ ...safeUser, rememberToken, needsEmailVerification: true });
+      }
     } catch (e: any) {
       if (e?.code === "23505") {
         return res.status(400).json({ message: "Email or username already taken" });
       }
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/auth/verify-email", async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) return res.status(401).json({ message: "Not logged in" });
+      const { code } = req.body;
+      if (!code) return res.status(400).json({ message: "Verification code required" });
+      const ok = await storage.verifyEmailCode(userId, String(code).trim());
+      if (!ok) return res.status(400).json({ message: "Invalid or expired code. Please request a new one." });
+      const user = await storage.getUserById(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const { password: _, ...safeUser } = user;
+      res.json({ ...safeUser, ok: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/auth/resend-verification", signupLimiter, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) return res.status(401).json({ message: "Not logged in" });
+      const { email } = req.body;
+      // Optionally update email before resending (allows correcting a typo)
+      if (email) {
+        const trimmed = email.trim().toLowerCase();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return res.status(400).json({ message: "Invalid email address" });
+        await storage.updateUserEmailForVerification(userId, trimmed);
+      }
+      const user = await storage.getUserById(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const verifyCode = String(Math.floor(100000 + Math.random() * 900000));
+      await storage.storeEmailVerificationCode(userId, verifyCode);
+      const smtpUser = process.env.SMTP_USER;
+      const smtpPass = process.env.SMTP_PASS;
+      if (smtpUser && smtpPass) {
+        const transporter = nodemailer.createTransport({
+          host: "smtp.gmail.com", port: 587, secure: false,
+          auth: { user: smtpUser, pass: smtpPass },
+        });
+        await transporter.sendMail({
+          from: `"PaceUp" <${smtpUser}>`,
+          to: user.email,
+          subject: "Your new PaceUp verification code",
+          html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px;">
+            <h2 style="color:#00D97E;">PaceUp</h2>
+            <p>Here's your new verification code:</p>
+            <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#00D97E;text-align:center;padding:20px 0;">${verifyCode}</div>
+            <p style="color:#666;font-size:13px;">This code expires in 30 minutes.</p>
+          </div>`,
+        }).catch((err: any) => console.error("[resend-verify]", err?.message));
+      }
+      res.json({ ok: true, email: user.email });
+    } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
   });
@@ -255,6 +347,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!email) return res.status(400).json({ message: "Email is required" });
       const user = await storage.getUserByEmail(email.trim());
       if (!user) return res.json({ ok: true });
+      if (!user.email_verified) return res.status(403).json({ message: "Please verify your email address before resetting your password." });
       const token = await storage.createPasswordResetToken(user.id);
       const host = process.env.REPLIT_DEV_DOMAIN
         ? `https://${process.env.REPLIT_DEV_DOMAIN}:5000`
@@ -1438,7 +1531,7 @@ async function go(e){
           const tokens: string[] = tokensRes.rows.map((r: any) => r.push_token);
           if (tokens.length > 0) {
             const preview = gif_url ? "Sent a GIF 🎬" : (message.length > 60 ? message.slice(0, 57) + "…" : message);
-            sendPushNotification(tokens, `${user.name} · ${crewName}`, preview, { crewId });
+            sendPushNotification(tokens, `${user.name} · ${crewName}`, preview, { screen: "crew-chat", crewId });
           }
         } catch (err: any) {
           console.error("[crew-chat-notif]", err?.message ?? err);
@@ -3106,6 +3199,42 @@ async function go(e){
     try {
       const result = await storage.leaveCrewById(req.params.id as string, req.session.userId!);
       res.json({ ok: true, disbanded: result?.disbanded ?? false });
+      // Notify the newly promoted crew chief (non-blocking)
+      if (!result.disbanded && result.newOwnerId) {
+        storage.getUserById(result.newOwnerId).then((newChief) => {
+          if (newChief?.push_token && newChief.notifications_enabled !== false) {
+            sendPushNotification(
+              newChief.push_token,
+              "You're now Crew Chief!",
+              `You've been promoted to chief of ${result.crewName ?? "your crew"}`,
+              { screen: "crew-chat", crewId: req.params.id }
+            );
+          }
+        }).catch(() => {});
+      }
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/crews/:id/decline-chief", requireAuth, async (req, res) => {
+    try {
+      const result = await storage.declineCrewChiefPromotion(req.params.id as string, req.session.userId!);
+      res.json({ ok: true, ...result });
+      // Notify the next promoted chief (non-blocking)
+      if (!result.disbanded && result.newOwnerId) {
+        storage.getUserById(result.newOwnerId).then(async (newChief) => {
+          if (!newChief) return;
+          const crewRes = await storage.pool.query(`SELECT name FROM crews WHERE id = $1`, [req.params.id]);
+          const crewName = crewRes.rows[0]?.name ?? "your crew";
+          if (newChief.push_token && newChief.notifications_enabled !== false) {
+            sendPushNotification(
+              newChief.push_token,
+              "You're now Crew Chief!",
+              `You've been promoted to chief of ${crewName}`,
+              { screen: "crew-chat", crewId: req.params.id }
+            );
+          }
+        }).catch(() => {});
+      }
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 

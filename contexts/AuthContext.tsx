@@ -32,6 +32,7 @@ interface User {
   gender?: string | null;
   onboarding_complete?: boolean;
   default_activity?: string;
+  email_verified?: boolean;
 }
 
 interface AuthContextValue {

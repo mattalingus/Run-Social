@@ -87,6 +87,7 @@ const ICON_MAP: Record<string, { name: FeatherIconName; color: string; bg: strin
   friend_accepted: { name: "user-check", color: "#00A85E", bg: "#00A85E22" },
   crew_invite: { name: "users", color: "#A78BFA", bg: "#A78BFA22" },
   crew_join_request: { name: "users", color: "#F59E0B", bg: "#F59E0B22" },
+  crew_chief_promoted: { name: "star", color: "#00D97E", bg: "#00D97E22" },
   join_request: { name: "user-plus", color: "#F59E0B", bg: "#F59E0B22" },
   event_reminder: { name: "clock", color: "#3B82F6", bg: "#3B82F622" },
   host_arrived: { name: "map-pin", color: "#00A85E", bg: "#00A85E22" },
@@ -170,6 +171,17 @@ export default function NotificationsScreen() {
     },
   });
 
+  const declineChiefMut = useMutation({
+    mutationFn: async (crewId: string) => {
+      await apiRequest("POST", `/api/crews/${crewId}/decline-chief`, {});
+    },
+    onSuccess: () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      qc.invalidateQueries({ queryKey: ["/api/notifications"] });
+      qc.invalidateQueries({ queryKey: ["/api/crews"] });
+    },
+  });
+
   const sections = useMemo(() => {
     const groups: Record<string, NotifItem[]> = { Today: [], "This Week": [], Earlier: [] };
     items.forEach((item) => {
@@ -203,6 +215,7 @@ export default function NotificationsScreen() {
     const isFriendReq = item.type === "friend_request";
     const isCrewInvite = item.type === "crew_invite";
     const isCrewJoinReq = item.type === "crew_join_request";
+    const isChiefPromotion = item.type === "crew_chief_promoted";
 
     return (
       <Pressable
@@ -262,6 +275,16 @@ export default function NotificationsScreen() {
               <Pressable
                 style={[st.actionBtn, { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border }]}
                 onPress={() => { respondCrewJoinReqMut.mutate({ crewId: item.data!.crew_id!, requesterId: item.data!.requester_id!, accept: false }); }}
+              >
+                <Text style={[st.actionBtnTxt, { color: C.textSecondary }]}>Decline</Text>
+              </Pressable>
+            </View>
+          )}
+          {isChiefPromotion && (item.data?.crew_id || (item as any).crew_id) && (
+            <View style={st.actionRow}>
+              <Pressable
+                style={[st.actionBtn, { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border }]}
+                onPress={() => { declineChiefMut.mutate((item.data?.crew_id || (item as any).crew_id)!); }}
               >
                 <Text style={[st.actionBtnTxt, { color: C.textSecondary }]}>Decline</Text>
               </Pressable>

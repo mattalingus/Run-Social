@@ -4,8 +4,13 @@ import { registerRoutes } from "./routes";
 import { scheduleWeeklySummary, scheduleStreakAtRiskCheck } from "./weekly-summary";
 import { scheduleLateStartMonitor } from "./late-start-monitor";
 import { scheduleGhostRunCleanup } from "./ghost-run-cleanup";
+import { setNotificationsPool } from "./notifications";
+import { pool } from "./storage";
 import * as fs from "fs";
 import * as path from "path";
+
+// Wire the DB pool to the notifications module so it can clean up stale push tokens
+setNotificationsPool(pool);
 
 const app = express();
 const log = console.log;

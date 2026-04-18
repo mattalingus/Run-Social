@@ -97,6 +97,8 @@ function RootLayoutNav() {
       }
       if (!user) {
         router.replace("/(auth)/login");
+      } else if (user.email_verified === false) {
+        router.replace("/verify-email" as any);
       } else if (user.onboarding_complete === false) {
         router.replace("/onboarding");
       }
@@ -241,6 +243,22 @@ function RootLayoutNav() {
           }, 100);
           return;
         }
+        if (data?.screen === "dm" && data?.friendId) {
+          setTimeout(() => {
+            try {
+              router.push(`/dm/${data.friendId}` as any);
+            } catch (_) {}
+          }, 100);
+          return;
+        }
+        if (data?.screen === "crew-chat" && data?.crewId) {
+          setTimeout(() => {
+            try {
+              router.push(`/crew-chat/${data.crewId}` as any);
+            } catch (_) {}
+          }, 100);
+          return;
+        }
         const runId = data?.runId;
         if (!runId) return;
         if (data?.type === "run_started_present") {
@@ -267,6 +285,7 @@ function RootLayoutNav() {
           name="(auth)"
           options={{ presentation: "modal", headerShown: false }}
         />
+        <Stack.Screen name="verify-email" options={{ headerShown: false }} />
         <Stack.Screen
           name="run/[id]"
           options={{ presentation: "modal", headerShown: false }}
