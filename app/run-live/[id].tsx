@@ -508,8 +508,8 @@ export default function RunLiveScreen() {
         body: JSON.stringify({ force }),
       });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as { error?: string; message?: string };
-        if (body.error === "run_too_short") {
+        const body = await res.json().catch(() => ({})) as { error?: string; message?: string; allowForce?: boolean };
+        if (body.error === "run_too_short" && body.allowForce) {
           Alert.alert(
             "Very Short Run",
             "No distance was recorded. Are you sure you want to end it?",
