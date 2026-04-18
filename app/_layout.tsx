@@ -9,7 +9,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { queryClient, getApiUrl } from "@/lib/query-client";
+import { queryClient, getApiUrl, apiRequest, apiFetch } from "@/lib/query-client";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ActivityProvider } from "@/contexts/ActivityContext";
 import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
@@ -69,12 +69,7 @@ async function registerPushToken(userId: string) {
     if (status !== "granted") return;
     const tokenData = await Notifications.getExpoPushTokenAsync();
     const token = tokenData.data;
-    await fetch(new URL("/api/users/me/push-token", getApiUrl()).toString(), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ token }),
-    });
+    await apiRequest("POST", "/api/users/me/push-token", { token });
   } catch (_) {}
 }
 
@@ -153,7 +148,7 @@ function RootLayoutNav() {
             const formData = new FormData();
             formData.append("photo", { uri: item.uri, type: item.mimeType, name: "photo.jpg" } as any);
             const url = new URL(`/api/solo-runs/${item.runId}/photos`, getApiUrl()).toString();
-            const res = await fetch(url, { method: "POST", body: formData, credentials: "include" });
+            const res = await apiFetch(url, { method: "POST", body: formData });
             if (!res.ok) remaining.push(item);
           } catch {
             remaining.push(item);

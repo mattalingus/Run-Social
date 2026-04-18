@@ -44,6 +44,26 @@ export function setHandleSuspendedSession(handler: ((suspendedUntil?: string) =>
   _handleSuspendedSession = handler;
 }
 
+/**
+ * Wraps a raw fetch call with suspension detection.
+ * Use this for multipart/form-data requests that can't go through `apiRequest`.
+ * Throws with { code: "SUSPENDED" } if a 403 suspended response is received,
+ * and triggers the global suspended-session handler before throwing.
+ * For all other cases, returns the Response (check res.ok yourself).
+ */
+export async function apiFetch(url: string, options?: RequestInit): Promise<Response> {
+  const res = await fetch(url, { credentials: "include", ...options });
+  if (res.status === 403) {
+    let data: ApiErrorPayload | undefined;
+    try { data = (await res.clone().json()) as ApiErrorPayload; } catch {}
+    if (data?.error === "suspended") {
+      _handleSuspendedSession?.(data.suspended_until);
+      throw Object.assign(new Error("Account suspended"), { code: "SUSPENDED", suspendedUntil: data.suspended_until });
+    }
+  }
+  return res;
+}
+
 export async function apiRequest(
   method: string,
   route: string,

@@ -1,8 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "./AuthContext";
-import { getApiUrl } from "@/lib/query-client";
-import { fetch } from "expo/fetch";
+import { getApiUrl, apiRequest } from "@/lib/query-client";
 
 type NotifEventListener = () => void;
 const openNotifListeners = new Set<NotifEventListener>();
@@ -143,13 +142,7 @@ export function NotificationBannerProvider({ children }: { children: React.React
 
   const respondToFriend = useCallback(async (id: string, action: "accept" | "decline") => {
     try {
-      const baseUrl = getApiUrl();
-      const res = await fetch(new URL("/api/friends/respond", baseUrl).toString(), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ friendshipId: id, action }),
-      });
+      const res = await apiRequest("POST", "/api/friends/respond", { friendshipId: id, action });
       if (res.ok) {
         setBannerQueue(prev => prev.filter(n => n.id !== id));
       }
@@ -158,13 +151,7 @@ export function NotificationBannerProvider({ children }: { children: React.React
 
   const respondToCrew = useCallback(async (crewId: string, action: "accept" | "decline") => {
     try {
-      const baseUrl = getApiUrl();
-      const res = await fetch(new URL("/api/crews/invites/respond", baseUrl).toString(), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ crewId, action }),
-      });
+      const res = await apiRequest("POST", "/api/crews/invites/respond", { crewId, action });
       if (res.ok) {
         setBannerQueue(prev => prev.filter(n => n.crew_id !== crewId));
       }
