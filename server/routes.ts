@@ -56,13 +56,22 @@ declare module "express-session" {
 
 const PgStore = connectPgSimple(session);
 
-const ALLOWED_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp", "heic"]);
+const ALLOWED_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp", "heic", "heif"]);
 
 function validateUploadExtension(originalname: string): string | null {
   const ext = originalname.includes(".")
     ? originalname.split(".").pop()!.toLowerCase()
     : "";
   return ext && ALLOWED_IMAGE_EXTENSIONS.has(ext) ? ext : null;
+}
+
+/**
+ * Returns the storage extension to use for a given upload extension.
+ * HEIC/HEIF files are converted to JPEG by uploadPhotoBuffer, so their
+ * stored filename should use the .jpg extension.
+ */
+function storageExt(ext: string): string {
+  return ext === "heic" || ext === "heif" ? "jpg" : ext;
 }
 
 function requireAuth(req: Request, res: Response, next: Function) {
@@ -1813,17 +1822,20 @@ async function go(e){
 
   app.delete("/api/runs/:id", requireAuth, async (req, res) => {
     try {
+      // cancelRun captures participant push tokens BEFORE deleting rows so the
+      // broadcast fires reliably even after run_participants has been wiped.
       const result = await storage.cancelRun(req.params.id as string, req.session.userId!);
-      storage.getRunBroadcastTokens(req.params.id as string).then((broadcastTokens) => {
-        if (broadcastTokens.length) {
-          sendPushNotification(
-            broadcastTokens,
-            "Run cancelled ❌",
-            `"${result.title}" has been cancelled by the host`,
-            {}
-          );
-        }
-      }).catch((err: any) => console.error("[bg]", err?.message ?? err));
+      const cancelTokens = result.tokens
+        .map((t) => t.push_token)
+        .filter((pt): pt is string => typeof pt === "string" && pt.startsWith("ExponentPushToken["));
+      if (cancelTokens.length) {
+        sendPushNotification(
+          cancelTokens,
+          "Run cancelled",
+          `"${result.title}" has been cancelled by the host`,
+          {}
+        );
+      }
       res.json({ success: true });
     } catch (e: any) {
       res.status(e.message.includes("Only the host") ? 403 : 500).json({ message: e.message });
@@ -1860,6 +1872,20 @@ async function go(e){
       const miles = parseFloat(milesLogged);
       if (!isFinite(miles) || miles <= 0) {
         return res.status(400).json({ message: "Miles logged must be a positive number" });
+      }
+      if (miles < 0.1) {
+        return res.status(400).json({ message: "Activity is too short to save (minimum 0.1 mi).", code: "TOO_SHORT" });
+      }
+      // Enforce 60-second minimum: compute duration from run's started_at timestamp
+      const runForDuration = await pool.query<{ started_at: string | null }>(
+        `SELECT started_at FROM runs WHERE id = $1`,
+        [req.params.id]
+      );
+      if (runForDuration.rows.length > 0 && runForDuration.rows[0].started_at) {
+        const durationSeconds = (Date.now() - new Date(runForDuration.rows[0].started_at).getTime()) / 1000;
+        if (durationSeconds < 60) {
+          return res.status(400).json({ message: "Activity is too short to save (minimum 60 seconds).", code: "TOO_SHORT" });
+        }
       }
       const result = await storage.confirmRunCompletion(req.params.id as string, req.session.userId!, miles);
       res.json({ success: result.success });
@@ -2045,8 +2071,19 @@ async function go(e){
       if (completed && parsedDuration == null) {
         return res.status(400).json({ message: "durationSeconds is required for completed activities" });
       }
-      if (completed && parsedDuration != null && (parsedDuration < 30 || parsedDuration > 86400)) {
-        return res.status(400).json({ message: "durationSeconds must be between 30 and 86400 for completed activities" });
+      if (completed && parsedDuration != null && parsedDuration > 86400) {
+        return res.status(400).json({ message: "durationSeconds must be at most 86400 for completed activities" });
+      }
+      // Short-activity guard: completed solo activities must meet minimum thresholds.
+      // The client shows a "This activity is very short — save anyway?" dialog first,
+      // but the server enforces the floor unconditionally as a safety net.
+      if (completed) {
+        if (parsedDist < 0.1) {
+          return res.status(400).json({ message: "Activity is too short to save (minimum 0.1 mi).", code: "TOO_SHORT" });
+        }
+        if (parsedDuration != null && parsedDuration < 60) {
+          return res.status(400).json({ message: "Activity is too short to save (minimum 60 seconds).", code: "TOO_SHORT" });
+        }
       }
 
       let parsedPace = paceMinPerMile != null ? parseFloat(paceMinPerMile) : null;
@@ -2223,7 +2260,7 @@ async function go(e){
       if (!ext) {
         return res.status(400).json({ message: "Invalid file type. Only jpg, jpeg, png, gif, webp, and heic are allowed." });
       }
-      const filename = `${req.session.userId}-${Date.now()}.${ext}`;
+      const filename = `${req.session.userId}-${Date.now()}.${storageExt(ext)}`;
       const url = await uploadPhotoBuffer(req.file.buffer, filename, req.file.mimetype);
       res.json({ url });
     } catch (e: any) {
@@ -2311,6 +2348,77 @@ async function go(e){
     try {
       const points = await storage.getHostRoutePath(req.params.id as string);
       res.json({ path: points });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  // ─── Decline host promotion ───────────────────────────────────────────────
+  // Called when the newly-promoted host taps "Decline" on the in-app banner.
+  // Selects the next eligible participant by cumulative distance and promotes
+  // them instead. If no other candidates are available the run is ended gracefully.
+  app.post("/api/runs/:id/decline-host", requireAuth, async (req, res) => {
+    try {
+      const runId = req.params.id as string;
+      const userId = req.session.userId!;
+
+      // Confirm the caller is actually the current host
+      const runRes = await pool.query<{ host_id: string; title: string; is_active: boolean }>(
+        `SELECT host_id, title, is_active FROM runs WHERE id = $1`,
+        [runId]
+      );
+      if (!runRes.rows.length) return res.status(404).json({ message: "Run not found" });
+      const run = runRes.rows[0];
+      if (run.host_id !== userId) return res.status(403).json({ message: "Only the current host can decline" });
+      if (!run.is_active) return res.status(400).json({ message: "Run is not active" });
+
+      // Find the next-best participant (excluding the current host)
+      const nextRes = await pool.query<{ user_id: string; cumulative_distance: string }>(
+        `SELECT DISTINCT ON (tp.user_id) tp.user_id, tp.cumulative_distance
+         FROM run_tracking_points tp
+         JOIN run_participants rp ON rp.run_id = tp.run_id AND rp.user_id = tp.user_id
+         WHERE tp.run_id = $1
+           AND tp.user_id != $2
+           AND rp.is_present = true
+           AND rp.final_pace IS NULL
+           AND tp.recorded_at > NOW() - INTERVAL '10 minutes'
+         ORDER BY tp.user_id, tp.recorded_at DESC`,
+        [runId, userId]
+      );
+
+      if (nextRes.rows.length > 0) {
+        const sorted = nextRes.rows.sort(
+          (a, b) => parseFloat(b.cumulative_distance) - parseFloat(a.cumulative_distance)
+        );
+        const newHostId = sorted[0].user_id;
+        await pool.query(`UPDATE runs SET host_id = $1 WHERE id = $2`, [newHostId, runId]);
+        console.log(`[decline-host] User ${userId} declined; promoted ${newHostId} for run ${runId}`);
+
+        // Notify the new host
+        const newHostUserRes = await pool.query<{ push_token: string | null; notifications_enabled: boolean }>(
+          `SELECT push_token, notifications_enabled FROM users WHERE id = $1`,
+          [newHostId]
+        );
+        const newHostUser = newHostUserRes.rows[0];
+        if (newHostUser?.push_token && newHostUser.notifications_enabled !== false && newHostUser.push_token.startsWith("ExponentPushToken[")) {
+          sendPushNotification(
+            newHostUser.push_token,
+            "You're now the host!",
+            `You're now the host of "${run.title}" — tap to take over`,
+            { runId, type: "host_promotion" }
+          );
+        }
+
+        res.json({ success: true, newHostId });
+      } else {
+        // No other candidates — end the run gracefully
+        await pool.query(
+          `UPDATE runs SET is_active = false, is_completed = true WHERE id = $1`,
+          [runId]
+        );
+        console.log(`[decline-host] No candidates for run ${runId}; run ended gracefully`);
+        res.json({ success: true, ended: true });
+      }
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
@@ -2663,7 +2771,7 @@ async function go(e){
       if (!ext) {
         return res.status(400).json({ message: "Invalid file type. Only jpg, jpeg, png, gif, webp, and heic are allowed." });
       }
-      const filename = `run-${req.params.id as string}-${req.session.userId}-${Date.now()}.${ext}`;
+      const filename = `run-${req.params.id as string}-${req.session.userId}-${Date.now()}.${storageExt(ext)}`;
       const url = await uploadPhotoBuffer(req.file.buffer, filename, req.file.mimetype);
       const photo = await storage.addRunPhoto(req.params.id as string, req.session.userId!, url);
       res.status(201).json(photo);
@@ -2702,7 +2810,7 @@ async function go(e){
       if (!ext) {
         return res.status(400).json({ message: "Invalid file type. Only jpg, jpeg, png, gif, webp, and heic are allowed." });
       }
-      const filename = `solo-${req.params.id as string}-${Date.now()}.${ext}`;
+      const filename = `solo-${req.params.id as string}-${Date.now()}.${storageExt(ext)}`;
       const url = await uploadPhotoBuffer(req.file.buffer, filename, req.file.mimetype);
       const photo = await storage.addSoloRunPhoto(req.params.id as string, req.session.userId!, url);
       res.status(201).json(photo);

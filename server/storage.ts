@@ -249,6 +249,7 @@ export async function initDb() {
     ALTER TABLE run_participants ADD COLUMN IF NOT EXISTS final_distance REAL;
     ALTER TABLE run_participants ADD COLUMN IF NOT EXISTS final_pace REAL;
     ALTER TABLE run_participants ADD COLUMN IF NOT EXISTS final_rank INTEGER;
+    ALTER TABLE run_participants ADD COLUMN IF NOT EXISTS abandoned BOOLEAN DEFAULT false;
     CREATE UNIQUE INDEX IF NOT EXISTS run_participants_run_user_unique ON run_participants (run_id, user_id);
 
     CREATE TABLE IF NOT EXISTS run_tracking_points (
@@ -2188,6 +2189,14 @@ export async function cancelRun(runId: string, userId: string) {
   try {
     await client.query('BEGIN');
     await client.query(`DELETE FROM run_tracking_points WHERE run_id = $1`, [runId]);
+    await client.query(`DELETE FROM run_messages WHERE run_id = $1`, [runId]);
+    // scheduled_run_notifications — only delete if the table exists (may not be provisioned yet)
+    const hasScheduledTable = await client.query(
+      `SELECT 1 FROM information_schema.tables WHERE table_name = 'scheduled_run_notifications' LIMIT 1`
+    );
+    if (hasScheduledTable.rows.length > 0) {
+      await client.query(`DELETE FROM scheduled_run_notifications WHERE run_id = $1`, [runId]);
+    }
     await client.query(`DELETE FROM planned_runs WHERE run_id = $1`, [runId]);
     await client.query(`DELETE FROM run_participants WHERE run_id = $1`, [runId]);
     await client.query(`DELETE FROM run_invites WHERE run_id = $1`, [runId]);

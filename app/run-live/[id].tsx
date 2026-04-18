@@ -827,7 +827,21 @@ export default function RunLiveScreen() {
             {promotedToHost && (
               <View style={[s.toast, s.promotionToast]}>
                 <Feather name="star" size={14} color="#FFB800" />
-                <Text style={[s.toastText, { color: "#FFB800" }]}>You're now the host!</Text>
+                <Text style={[s.toastText, { color: "#FFB800", flex: 1 }]}>
+                  You're now the host — tap to take over
+                </Text>
+                <Pressable
+                  onPress={async () => {
+                    try {
+                      await apiRequest("POST", `/api/runs/${id}/decline-host`);
+                    } catch (_) {}
+                    setPromotedToHost(false);
+                    wasHostRef.current = false;
+                  }}
+                  style={{ marginLeft: 8, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, backgroundColor: "rgba(255,184,0,0.15)" }}
+                >
+                  <Text style={{ color: "#FFB800", fontSize: 12, fontFamily: "Outfit_600SemiBold" }}>Decline</Text>
+                </Pressable>
               </View>
             )}
           </View>

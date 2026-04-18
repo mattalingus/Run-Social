@@ -10,6 +10,7 @@ import {
   safeStopLocationUpdates,
 } from "@/lib/locationTasks";
 import { apiRequest } from "@/lib/query-client";
+import { shouldAcceptCoord } from "@/lib/gpsFilter";
 
 type Phase = "idle" | "active" | "paused" | "finishing";
 
@@ -129,7 +130,19 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
     } catch {}
   }, []);
 
-  function handleCoord(latitude: number, longitude: number) {
+  function handleCoord(
+    latitude: number,
+    longitude: number,
+    accuracy?: number | null,
+    speed?: number | null
+  ) {
+    // Apply the same GPS quality filters used by solo tracking so that
+    // poor-accuracy fixes and vehicle-speed spikes are discarded identically
+    // in both group and solo paths.
+    if (!shouldAcceptCoord({ accuracy, speed }, activeActivityTypeRef.current)) {
+      return;
+    }
+
     setUserLocation({ latitude, longitude });
 
     // GPS gap reconciliation: if the app was backgrounded with foreground-only
@@ -210,7 +223,13 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
     if (Platform.OS === "web") {
       if (typeof navigator !== "undefined" && navigator.geolocation) {
         webWatchIdRef.current = navigator.geolocation.watchPosition(
-          (pos) => handleCoord(pos.coords.latitude, pos.coords.longitude),
+          (pos) =>
+            handleCoord(
+              pos.coords.latitude,
+              pos.coords.longitude,
+              pos.coords.accuracy,
+              pos.coords.speed
+            ),
           () => {},
           { enableHighAccuracy: true, maximumAge: 3000 }
         );
@@ -228,8 +247,8 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
           notificationColor: "#00D97E",
         },
       });
-      const unsub = addGroupLocationListener((lat, lng) => {
-        handleCoord(lat, lng);
+      const unsub = addGroupLocationListener((lat, lng, speed, _altitude, accuracy) => {
+        handleCoord(lat, lng, accuracy, speed);
       });
       locationSubRef.current = { remove: unsub } as any;
     } catch (err: any) {
@@ -296,7 +315,7 @@ export function LiveTrackingProvider({ children }: { children: React.ReactNode }
         const loc = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.Balanced,
         });
-        handleCoord(loc.coords.latitude, loc.coords.longitude);
+        handleCoord(loc.coords.latitude, loc.coords.longitude, loc.coords.accuracy, loc.coords.speed);
         await pingServer(loc.coords.latitude, loc.coords.longitude);
       } catch {}
     }

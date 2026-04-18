@@ -32,6 +32,24 @@ async function stripExif(buffer: Buffer, contentType: string): Promise<{ buffer:
     if (!format || ["gif", "svg"].includes(format)) {
       return { buffer, contentType };
     }
+
+    // HEIC/HEIF images (from iPhone cameras) must be converted to JPEG so that
+    // Android devices and web browsers can render them.  The conversion also
+    // strips EXIF GPS metadata in the same pass.
+    const isHeic =
+      format === "heif" ||
+      contentType === "image/heic" ||
+      contentType === "image/heif";
+
+    if (isHeic) {
+      const converted = await image
+        .rotate()
+        .jpeg({ quality: 85 })
+        .withMetadata({ exif: {} })
+        .toBuffer();
+      return { buffer: converted, contentType: "image/jpeg" };
+    }
+
     const stripped = await image
       .rotate()
       .withMetadata({ exif: {} })

@@ -381,9 +381,9 @@ async function checkAndPromoteHost(): Promise<void> {
         if (newHost?.push_token && newHost.notifications_enabled !== false && newHost.push_token.startsWith("ExponentPushToken[")) {
           sendPushNotification(
             newHost.push_token,
-            "You're leading the run!",
-            `The original host went silent — you're now leading "${run.title}".`,
-            { runId: run.id }
+            "You're now the host!",
+            `You're now the host of "${run.title}" — tap to take over`,
+            { runId: run.id, type: "host_promotion" }
           );
         }
       }

@@ -51,6 +51,7 @@ import { formatDistance } from "@/lib/formatDistance";
 import { toDisplayDist, toDisplayPace, unitLabel, type DistanceUnit } from "@/lib/units";
 import { LiveActivity } from "@/lib/liveActivity";
 import { AndroidLiveNotification } from "@/lib/androidLiveNotification";
+import { shouldAcceptCoord } from "@/lib/gpsFilter";
 
 const IS_NATIVE = Platform.OS !== "web";
 
@@ -921,15 +922,13 @@ export default function RunTrackingScreen() {
     // done-screen render.
     if (phaseRef.current === "done") return;
 
-    // Skip poor-accuracy fixes that occur during GPS warm-up (first few seconds)
-    // Native threshold: 40m, web threshold: 100m (web GPS is inherently less accurate)
-    const maxAccuracy = Platform.OS === "web" ? 100 : 40;
-    if (accuracy != null && accuracy > maxAccuracy) return;
-
-    // Vehicle detection: walk > 4 m/s (~9 mph), run > 12 m/s (~27 mph), ride > 22 m/s (~50 mph)
+    // Delegate accuracy + vehicle-speed checks to the shared helper so that
+    // solo and live-group paths stay in sync.  setIsDriving is still managed
+    // here because it is a solo-only UI state (no equivalent in group tracking).
     const vehicleThreshold = activityFilter === "ride" ? 22 : activityFilter === "walk" ? 4 : 12;
-    if (speed != null && speed > 0 && speed > vehicleThreshold) {
-      setIsDriving(true);
+    const isVehicleSpeed = speed != null && speed > 0 && speed > vehicleThreshold;
+    if (!shouldAcceptCoord({ accuracy, speed }, activityFilter as "run" | "ride" | "walk")) {
+      if (isVehicleSpeed) setIsDriving(true);
       return;
     }
     setIsDriving(false);
@@ -1533,20 +1532,60 @@ export default function RunTrackingScreen() {
 
   const savingGuardRef = useRef(false);
 
-  async function saveRun() {
+  async function saveRun(skipShortGuard = false) {
     if (savingGuardRef.current) return;
     savingGuardRef.current = true;
     const distance = totalDistRef.current;
-    if (distance < 0.05 || elapsedRef.current < 30) {
-      Alert.alert("Too short to save", "Record at least ~50 m and 30 s before saving.");
-      setSaving(false);
+
+    // Short-activity guard: show a dialog before attempting so the user can choose.
+    // The server unconditionally rejects activities under 0.1 mi or 60 s, so the
+    // "Save" option will result in a clear server error being shown. Default is Discard.
+    const isTooShort = distance < 0.1 || elapsedRef.current < 60;
+    if (isTooShort && !skipShortGuard) {
       savingGuardRef.current = false;
+      Alert.alert(
+        "This activity is very short",
+        "Save anyway?",
+        [
+          {
+            text: "Discard",
+            style: "destructive",
+            isPreferred: true,
+            onPress: () => {
+              setSaving(false);
+            },
+          },
+          {
+            text: "Save",
+            onPress: () => saveRun(true),
+          },
+        ],
+        { cancelable: false }
+      );
       return;
     }
+
     const pace = distance > 0.01 ? (elapsedRef.current / 60) / distance : null;
     setSaving(true);
     const MAX_RETRIES = 3;
-    const payload = {
+    interface SaveRunPayload {
+      title: string;
+      date: string;
+      distanceMiles: number;
+      paceMinPerMile: number | null;
+      durationSeconds: number;
+      completed: boolean;
+      planned: boolean;
+      routePath: Array<{ latitude: number; longitude: number }> | null;
+      activityType: string;
+      savedPathId: string | null;
+      mileSplits: typeof mileSplits | null;
+      elevationGainFt: number | null;
+      stepCount: number | null;
+      moveTimeSeconds: number | null;
+      clientRunId: string;
+    }
+    const payload: SaveRunPayload = {
       title: `${toDisplayDist(distance, distUnit)} solo ${activityFilter === "ride" ? "ride" : activityFilter === "walk" ? "walk" : "run"}`,
       date: new Date().toISOString(),
       distanceMiles: Math.max(distance, 0.001),
