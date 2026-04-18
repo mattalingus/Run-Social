@@ -1,7 +1,8 @@
 import {
   pool,
   finishRunnerRun,
-  confirmRunCompletion,
+  creditGhostParticipant,
+  updateCrewStreakForRun,
   checkAndAwardRideAchievements,
   checkAndAwardCrewAchievements,
 } from "./storage";
@@ -198,14 +199,14 @@ async function reconcileGhostRunParticipants(runId: string): Promise<void> {
       // rank computation, run auto-completion) are handled identically to a normal finish.
       await finishRunnerRun(runId, user_id, finalDistance, finalPace, null, false);
 
-      // Credit user stats (total_miles, completed_runs, miles_this_year/month),
-      // award personal achievements, and update crew streak — same as the normal
-      // save-run route does via confirmRunCompletion.
+      // Credit per-participant stats (total_miles, completed_runs, miles_this_year/month)
+      // and personal achievements. Crew streak is intentionally excluded here and
+      // handled once per run after all participants are processed.
       try {
-        await confirmRunCompletion(runId, user_id, finalDistance);
+        await creditGhostParticipant(runId, user_id, finalDistance);
       } catch (creditErr: any) {
         console.error(
-          `[ghost-run-cleanup] confirmRunCompletion failed for user ${user_id} in run ${runId}:`,
+          `[ghost-run-cleanup] creditGhostParticipant failed for user ${user_id} in run ${runId}:`,
           creditErr?.message ?? creditErr
         );
       }
@@ -223,8 +224,16 @@ async function reconcileGhostRunParticipants(runId: string): Promise<void> {
       );
     }
 
-    // Award crew milestones once after all participants are reconciled.
+    // Update crew streak once per run (not per participant) and award crew milestones.
     if (crewId) {
+      try {
+        await updateCrewStreakForRun(crewId);
+      } catch (streakErr: any) {
+        console.error(
+          `[ghost-run-cleanup] updateCrewStreakForRun(${crewId}) failed:`,
+          streakErr?.message ?? streakErr
+        );
+      }
       checkAndAwardCrewAchievements(crewId).catch((err: any) =>
         console.error(`[ghost-run-cleanup] checkAndAwardCrewAchievements(${crewId}):`, err?.message ?? err)
       );

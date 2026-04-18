@@ -2363,6 +2363,113 @@ export async function confirmRunCompletion(runId: string, userId: string, milesL
   }
 }
 
+/**
+ * Credit stats and personal achievements for a single ghost-run participant.
+ * Mirrors confirmRunCompletion but intentionally omits the crew-streak update
+ * so that the caller can perform a single streak update per run after all
+ * participants have been processed.
+ */
+export async function creditGhostParticipant(
+  runId: string,
+  userId: string,
+  milesLogged: number
+): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      `UPDATE run_participants SET status = 'confirmed', miles_logged = $3
+       WHERE run_id = $1 AND user_id = $2`,
+      [runId, userId, milesLogged]
+    );
+    const userResult = await client.query(
+      `UPDATE users SET
+         completed_runs = completed_runs + 1,
+         total_miles    = total_miles    + $2,
+         miles_this_year  = miles_this_year  + $2,
+         miles_this_month = miles_this_month + $2
+       WHERE id = $1 RETURNING total_miles`,
+      [userId, milesLogged]
+    );
+    const totalMiles = userResult.rows[0]?.total_miles;
+
+    const runRes = await client.query(`SELECT host_id FROM runs WHERE id = $1`, [runId]);
+    const hostId = runRes.rows[0]?.host_id;
+    if (hostId && userId !== hostId) {
+      const confirmedNonHost = await client.query(
+        `SELECT COUNT(*) as cnt FROM run_participants
+         WHERE run_id = $1 AND status = 'confirmed' AND user_id != $2`,
+        [runId, hostId]
+      );
+      if (parseInt(confirmedNonHost.rows[0]?.cnt) === 1) {
+        await client.query(`UPDATE users SET hosted_runs = hosted_runs + 1 WHERE id = $1`, [hostId]);
+      }
+    }
+
+    if (totalMiles !== undefined) {
+      await checkAndAwardAchievements(userId, totalMiles, client);
+    }
+    await checkHostUnlock(userId, client);
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Advance the crew streak for a given crew — called once per run after all
+ * ghost participants have been credited so the streak ticks exactly once.
+ */
+export async function updateCrewStreakForRun(crewId: string): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const crewRes = await client.query(
+      `SELECT id, current_streak_weeks, last_run_week FROM crews WHERE id = $1 FOR UPDATE`,
+      [crewId]
+    );
+    if (!crewRes.rows[0]) {
+      await client.query("ROLLBACK");
+      return;
+    }
+    const crew = crewRes.rows[0];
+    const now = new Date();
+    const lastRun = crew.last_run_week ? new Date(crew.last_run_week) : null;
+    const getWeekNumber = (d: Date) => {
+      const onejan = new Date(d.getFullYear(), 0, 1);
+      return Math.ceil((((d.getTime() - onejan.getTime()) / 86400000) + onejan.getDay() + 1) / 7);
+    };
+    const currentWeek = getWeekNumber(now);
+    const currentYear = now.getFullYear();
+    const lastWeek = lastRun ? getWeekNumber(lastRun) : -1;
+    const lastYear = lastRun ? lastRun.getFullYear() : -1;
+    let newStreak = crew.current_streak_weeks || 0;
+    if (lastYear === currentYear && lastWeek === currentWeek) {
+      // Same week — no change
+    } else if (
+      (lastYear === currentYear && lastWeek === currentWeek - 1) ||
+      (lastYear === currentYear - 1 && lastWeek >= 52 && currentWeek === 1)
+    ) {
+      newStreak++;
+    } else {
+      newStreak = 1;
+    }
+    await client.query(
+      `UPDATE crews SET current_streak_weeks = $2, last_run_week = $3 WHERE id = $1`,
+      [crewId, newStreak, now]
+    );
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
 // ─── Live Group Run ───────────────────────────────────────────────────────────
 
 export async function startGroupRun(runId: string, hostId: string) {
