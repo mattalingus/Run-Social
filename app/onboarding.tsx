@@ -38,8 +38,8 @@ const ACTIVITIES: ActivityOption[] = [
 
 const NOTIF_BENEFITS = [
   { icon: "timer-outline" as const, text: "Run starting soon reminders" },
-  { icon: "people-outline" as const, text: "Friend requests & crew invites" },
-  { icon: "flash-outline" as const, text: "Live alerts from your crew" },
+  { icon: "people-outline" as const, text: "Friend join requests & crew invites" },
+  { icon: "flash-outline" as const, text: "Live run alerts from your crew" },
   { icon: "trophy-outline" as const, text: "Personal milestone celebrations" },
 ];
 
