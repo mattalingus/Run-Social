@@ -3290,8 +3290,8 @@ async function go(e){
     try {
       const result = await storage.declineCrewChiefPromotion(req.params.id as string, req.session.userId!);
       res.json({ ok: true, ...result });
-      // Notify the next promoted chief (non-blocking)
-      if (!result.disbanded && result.newOwnerId) {
+      // Notify the next promoted chief (non-blocking). Skip on idempotent no-op declines.
+      if (!result.disbanded && !result.noOp && result.newOwnerId) {
         storage.getUserById(result.newOwnerId).then(async (newChief) => {
           if (!newChief?.push_token || newChief.notifications_enabled === false) return;
           const crewRes = await storage.pool.query(`SELECT name FROM crews WHERE id = $1`, [req.params.id]);

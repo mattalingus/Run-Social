@@ -4731,7 +4731,7 @@ export async function leaveCrewById(crewId: string, userId: string) {
 export async function declineCrewChiefPromotion(
   crewId: string,
   userId: string
-): Promise<{ newOwnerId: string | null; disbanded: boolean; forced: boolean }> {
+): Promise<{ newOwnerId: string | null; disbanded: boolean; forced: boolean; noOp: boolean }> {
   // Mark current promotion as declined and retrieve the cycle_id so we scope the
   // decline cap and exclusion list to this promotion cycle only.
   const updateRes = await pool.query<{ cycle_id: string | null }>(
@@ -4743,14 +4743,14 @@ export async function declineCrewChiefPromotion(
   );
 
   // Idempotency: if no row was updated, this user had no pending promotion.
-  // Return the current chief state without re-running cascade logic.
+  // Return noOp=true so the route skips notification side-effects.
   if (updateRes.rowCount === 0) {
     const crewCurrent = await pool.query<{ created_by: string | null }>(
       `SELECT created_by FROM crews WHERE id = $1`,
       [crewId]
     );
-    if (!crewCurrent.rows[0]) return { newOwnerId: null, disbanded: true, forced: false };
-    return { newOwnerId: crewCurrent.rows[0].created_by ?? null, disbanded: false, forced: false };
+    if (!crewCurrent.rows[0]) return { newOwnerId: null, disbanded: true, forced: false, noOp: true };
+    return { newOwnerId: crewCurrent.rows[0].created_by ?? null, disbanded: false, forced: false, noOp: true };
   }
 
   const cycleId: string | null = updateRes.rows[0]?.cycle_id ?? null;
@@ -4788,7 +4788,7 @@ export async function declineCrewChiefPromotion(
     `SELECT name, created_by FROM crews WHERE id = $1`,
     [crewId]
   );
-  if (!crewRes.rows[0]) return { newOwnerId: null, disbanded: true, forced: false };
+  if (!crewRes.rows[0]) return { newOwnerId: null, disbanded: true, forced: false, noOp: false };
   const crewName: string = crewRes.rows[0].name ?? "Crew";
 
   // All current members ordered by seniority (used for last-resort assignment)
@@ -4800,7 +4800,7 @@ export async function declineCrewChiefPromotion(
 
   if (allMembers.length === 0) {
     await pool.query(`DELETE FROM crews WHERE id = $1`, [crewId]);
-    return { newOwnerId: null, disbanded: true, forced: false };
+    return { newOwnerId: null, disbanded: true, forced: false, noOp: false };
   }
 
   // When decline cap (5) is reached OR no eligible candidates remain, force-assign
@@ -4811,7 +4811,7 @@ export async function declineCrewChiefPromotion(
     // Assign the longest-standing member unconditionally (no promotion row = no accept/decline prompt)
     const assignee = allMembers[0];
     await pool.query(`UPDATE crews SET created_by = $1 WHERE id = $2`, [assignee, crewId]);
-    return { newOwnerId: assignee, disbanded: false, forced: true };
+    return { newOwnerId: assignee, disbanded: false, forced: true, noOp: false };
   }
 
   // Pick the best candidate by total miles_logged in crew-associated runs, then fall back to seniority
@@ -4839,7 +4839,7 @@ export async function declineCrewChiefPromotion(
      VALUES ($1, $2, $3, $4)`,
     [crewId, nextOwnerId, crewName, cycleId]
   );
-  return { newOwnerId: nextOwnerId, disbanded: false, forced: false };
+  return { newOwnerId: nextOwnerId, disbanded: false, forced: false, noOp: false };
 }
 
 export async function storeEmailVerificationCode(userId: string, code: string) {
