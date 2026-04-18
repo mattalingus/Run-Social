@@ -296,6 +296,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await storage.getUserByEmailOrUsername(identifier.trim());
       if (!user) return res.status(401).json({ message: "Invalid credentials" });
 
+      // Check account suspension before any further validation
+      if (user.suspended_until && new Date(user.suspended_until) > new Date()) {
+        return res.status(403).json({
+          error: "suspended",
+          suspended_until: user.suspended_until,
+          reason: "Your account has been temporarily suspended due to community reports.",
+          message: "Your account has been temporarily suspended due to community reports.",
+        });
+      }
+
       // Check per-account login lockout
       if (user.locked_until && new Date(user.locked_until) > new Date()) {
         const minutesLeft = Math.ceil((new Date(user.locked_until).getTime() - Date.now()) / 60000);
@@ -312,16 +322,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         await storage.updateUser(user.id, { failedLoginAttempts: attempts });
         return res.status(401).json({ message: "Invalid credentials" });
-      }
-
-      // Check account suspension
-      if (user.suspended_until && new Date(user.suspended_until) > new Date()) {
-        return res.status(403).json({
-          error: "suspended",
-          suspended_until: user.suspended_until,
-          reason: "Your account has been temporarily suspended due to community reports.",
-          message: "Your account has been temporarily suspended due to community reports.",
-        });
       }
 
       // Successful login — clear lockout state

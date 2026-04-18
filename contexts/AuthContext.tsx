@@ -40,6 +40,9 @@ interface User {
 interface AuthContextValue {
   user: User | null;
   isLoading: boolean;
+  /** True whenever suspension is detected, regardless of whether a lift-date timestamp is available. */
+  isSuspended: boolean;
+  /** ISO timestamp of suspension lift, or null if not provided by the server. */
   suspendedUntil: string | null;
   login: (identifier: string, password: string) => Promise<void>;
   register: (email: string, password: string, firstName: string, lastName: string, username: string, gender: string | null) => Promise<void>;
@@ -53,7 +56,13 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSuspended, setIsSuspended] = useState(false);
   const [suspendedUntil, setSuspendedUntil] = useState<string | null>(null);
+
+  function markSuspended(until: string | null | undefined) {
+    setIsSuspended(true);
+    setSuspendedUntil(until ?? null);
+  }
 
   useEffect(() => {
     fetchMe();
@@ -65,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await clearCachedUser();
       const notice = suspendedUntilDate ?? "1";
       await AsyncStorage.setItem(SUSPENDED_NOTICE_KEY, notice).catch(() => {});
-      setSuspendedUntil(suspendedUntilDate ?? null);
+      markSuspended(suspendedUntilDate);
       setUser(null);
     });
     return () => setHandleSuspendedSession(null);
@@ -136,7 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const until = data.suspended_until ?? null;
         await clearToken();
         await AsyncStorage.setItem(SUSPENDED_NOTICE_KEY, until ?? "1").catch(() => {});
-        setSuspendedUntil(until);
+        markSuspended(until);
         return "suspended";
       }
       if (res.status === 401 || res.status === 400) {
@@ -199,7 +208,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             await clearToken();
             await clearCachedUser();
             await AsyncStorage.setItem(SUSPENDED_NOTICE_KEY, until ?? "1").catch(() => {});
-            setSuspendedUntil(until);
+            markSuspended(until);
             setUser(null);
             return;
           }
@@ -265,6 +274,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const paceupKeys = allKeys.filter((k) => k.startsWith("@paceup_"));
       if (paceupKeys.length > 0) await AsyncStorage.multiRemove(paceupKeys);
     } catch {}
+    setIsSuspended(false);
     setSuspendedUntil(null);
     setUser(null);
   }
@@ -282,7 +292,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }
 
-  const value = useMemo(() => ({ user, isLoading, suspendedUntil, login, register, logout, refreshUser, updateUser }), [user, isLoading, suspendedUntil]);
+  const value = useMemo(() => ({ user, isLoading, isSuspended, suspendedUntil, login, register, logout, refreshUser, updateUser }), [user, isLoading, isSuspended, suspendedUntil]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -22,7 +22,7 @@ import C from "@/constants/colors";
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const { resetSuccess, suspended } = useLocalSearchParams<{ resetSuccess?: string; suspended?: string }>();
-  const { login, suspendedUntil: contextSuspendedUntil } = useAuth();
+  const { login, isSuspended: contextIsSuspended, suspendedUntil: contextSuspendedUntil } = useAuth();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
@@ -33,10 +33,10 @@ export default function LoginScreen() {
   const [storedSuspendedUntil, setStoredSuspendedUntil] = useState<string | null>(null);
   const [suspendedNoticeVisible, setSuspendedNoticeVisible] = useState(false);
 
-  // Primary source: context (set live by AuthContext during this session).
-  // Fallback: ?suspended=1 param + AsyncStorage (survives app restart).
+  // Primary source: isSuspended flag from context (set live by AuthContext during this session).
+  // Fallback: ?suspended=1 param + AsyncStorage SUSPENDED_NOTICE_KEY (survives app restart).
   useEffect(() => {
-    if (contextSuspendedUntil !== null) {
+    if (contextIsSuspended) {
       setStoredSuspendedUntil(contextSuspendedUntil);
       setSuspendedNoticeVisible(true);
       return;
@@ -53,7 +53,7 @@ export default function LoginScreen() {
         setSuspendedNoticeVisible(true);
         setStoredSuspendedUntil(null);
       });
-  }, [contextSuspendedUntil, suspended]);
+  }, [contextIsSuspended, contextSuspendedUntil, suspended]);
 
   function formatSuspendedDate(isoStr: string): string {
     try {

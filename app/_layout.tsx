@@ -79,7 +79,7 @@ async function registerPushToken(userId: string) {
 }
 
 function RootLayoutNav() {
-  const { user, isLoading, suspendedUntil } = useAuth();
+  const { user, isLoading, isSuspended } = useAuth();
   const { C, theme } = useTheme();
   useFonts({ Outfit_400Regular, Outfit_600SemiBold, Outfit_700Bold, PlayfairDisplay_700Bold, DancingScript_700Bold, Nunito_800ExtraBold });
   const splashHidden = useRef(false);
@@ -98,7 +98,9 @@ function RootLayoutNav() {
       if (!user) {
         // When suspended, include the query param so login.tsx can read it
         // and the notice survives link-sharing or manual refresh.
-        if (suspendedUntil) {
+        // isSuspended is used (not suspendedUntil) so the param is always
+        // set even when no lift-date timestamp is returned by the server.
+        if (isSuspended) {
           router.replace({ pathname: "/(auth)/login", params: { suspended: "1" } } as Parameters<typeof router.replace>[0]);
         } else {
           router.replace("/(auth)/login");
@@ -109,7 +111,7 @@ function RootLayoutNav() {
         router.replace("/onboarding");
       }
     }
-  }, [isLoading, user, suspendedUntil]);
+  }, [isLoading, user, isSuspended]);
 
   // Register push token once when user logs in
   useEffect(() => {
