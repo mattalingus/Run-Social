@@ -638,6 +638,53 @@ export async function initDb() {
       declined BOOLEAN DEFAULT FALSE
     );
     CREATE INDEX IF NOT EXISTS idx_ccp_user ON crew_chief_promotions(user_id, declined, created_at DESC);
+
+    -- Migration tracking table (append-only; each row records a named migration)
+    CREATE TABLE IF NOT EXISTS db_migrations (
+      name TEXT PRIMARY KEY,
+      applied_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    -- One-time backfill: recalculate completed_runs and total_miles for all users
+    -- to strip out abandoned ghost runs counted before Task #203's query filters.
+    -- Uses the same logic as getPublicUserProfile so the cached counters on the
+    -- users table match what profile and achievement screens display.
+    -- Guarded by db_migrations so it only executes once per environment.
+    DO $backfill_ghost_runs$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM db_migrations WHERE name = 'backfill_ghost_run_totals_v1') THEN
+        UPDATE users u
+        SET
+          completed_runs = (
+            COALESCE(
+              (SELECT COUNT(*) FROM solo_runs sr
+               WHERE sr.user_id = u.id AND sr.completed = true AND sr.is_deleted IS NOT TRUE),
+              0
+            ) + COALESCE(
+              (SELECT COUNT(*) FROM run_participants rp
+               WHERE rp.user_id = u.id
+                 AND rp.final_distance IS NOT NULL AND rp.final_distance > 0
+                 AND (rp.abandoned IS NULL OR rp.abandoned = false)),
+              0
+            )
+          ),
+          total_miles = (
+            COALESCE(
+              (SELECT SUM(sr.distance_miles) FROM solo_runs sr
+               WHERE sr.user_id = u.id AND sr.completed = true AND sr.is_deleted IS NOT TRUE),
+              0
+            ) + COALESCE(
+              (SELECT SUM(rp.final_distance) FROM run_participants rp
+               WHERE rp.user_id = u.id
+                 AND rp.final_distance IS NOT NULL AND rp.final_distance > 0
+                 AND (rp.abandoned IS NULL OR rp.abandoned = false)),
+              0
+            )
+          );
+        INSERT INTO db_migrations (name) VALUES ('backfill_ghost_run_totals_v1');
+        RAISE NOTICE 'backfill_ghost_run_totals_v1: recalculated run totals for all users';
+      END IF;
+    END $backfill_ghost_runs$;
   `);
 
   // Allow crews.created_by to be NULL so a leaderless state can be represented safely
