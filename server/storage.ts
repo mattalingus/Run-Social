@@ -658,6 +658,62 @@ export async function initDb() {
     await pool.query(`DELETE FROM users WHERE email LIKE 'dummy-%@paceup.dev'`);
     console.log("[cleanup] Removed dummy seed accounts and their runs");
   }
+
+  // ── Idempotent one-time migrations ──────────────────────────────────────────
+  // migration_flags table acts as a changelog — each migration inserts a row
+  // with its unique name so it is never re-executed after the first run.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS migration_flags (
+      name TEXT PRIMARY KEY,
+      applied_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  // ghost_run_stat_recalc_v1
+  // Recalculates users.total_miles and users.completed_runs from the
+  // authoritative source (solo_runs + run_participants) so that abandoned ghost
+  // runs — which were marked is_abandoned = true by Task #203 — no longer inflate
+  // user totals. Safe to run even on a fresh DB (values will already be correct).
+  const recalcFlag = await pool.query(
+    `SELECT 1 FROM migration_flags WHERE name = 'ghost_run_stat_recalc_v1'`
+  );
+  if (recalcFlag.rows.length === 0) {
+    await pool.query(`
+      UPDATE users u SET
+        total_miles = GREATEST(0, COALESCE((
+          SELECT SUM(distance_miles) FROM solo_runs
+          WHERE user_id = u.id
+            AND completed = true
+            AND (is_deleted IS NULL OR is_deleted = false)
+        ), 0) + COALESCE((
+          SELECT SUM(rp.final_distance) FROM run_participants rp
+          JOIN runs r ON r.id = rp.run_id
+          WHERE rp.user_id = u.id
+            AND r.is_completed = true
+            AND (r.is_abandoned IS NULL OR r.is_abandoned = false)
+            AND (rp.abandoned IS NULL OR rp.abandoned = false)
+            AND rp.final_distance > 0
+        ), 0)),
+        completed_runs = GREATEST(0, COALESCE((
+          SELECT COUNT(*) FROM solo_runs
+          WHERE user_id = u.id
+            AND completed = true
+            AND (is_deleted IS NULL OR is_deleted = false)
+        ), 0) + COALESCE((
+          SELECT COUNT(*) FROM run_participants rp
+          JOIN runs r ON r.id = rp.run_id
+          WHERE rp.user_id = u.id
+            AND r.is_completed = true
+            AND (r.is_abandoned IS NULL OR r.is_abandoned = false)
+            AND (rp.abandoned IS NULL OR rp.abandoned = false)
+            AND rp.final_distance > 0
+        ), 0))
+    `);
+    await pool.query(
+      `INSERT INTO migration_flags (name) VALUES ('ghost_run_stat_recalc_v1')`
+    );
+    console.log("[migration] ghost_run_stat_recalc_v1 applied — user stats recalculated from authoritative sources");
+  }
 }
 
 export async function cleanupStalePlannedRuns() {
