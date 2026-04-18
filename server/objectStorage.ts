@@ -1,4 +1,5 @@
 import { Storage } from "@google-cloud/storage";
+import sharp from "sharp";
 
 const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
 const BUCKET_ID = process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID!;
@@ -23,16 +24,37 @@ const objectStorageClient = new Storage({
 
 const bucket = objectStorageClient.bucket(BUCKET_ID);
 
+async function stripExif(buffer: Buffer, contentType: string): Promise<{ buffer: Buffer; contentType: string }> {
+  try {
+    const image = sharp(buffer);
+    const metadata = await image.metadata();
+    const format = metadata.format;
+    if (!format || ["gif", "svg"].includes(format)) {
+      return { buffer, contentType };
+    }
+    const stripped = await image
+      .rotate()
+      .withMetadata({ exif: {} })
+      .toBuffer();
+    const outContentType = format === "jpeg" ? "image/jpeg" : format === "png" ? "image/png" : format === "webp" ? "image/webp" : contentType;
+    return { buffer: stripped, contentType: outContentType };
+  } catch {
+    return { buffer, contentType };
+  }
+}
+
 export async function uploadPhotoBuffer(
   buffer: Buffer,
   filename: string,
   contentType: string
 ): Promise<string> {
+  const { buffer: cleanBuffer, contentType: cleanContentType } = await stripExif(buffer, contentType);
+
   const objectPath = `public/photos/${filename}`;
   const file = bucket.file(objectPath);
 
-  await file.save(buffer, {
-    metadata: { contentType },
+  await file.save(cleanBuffer, {
+    metadata: { contentType: cleanContentType },
     resumable: false,
   });
 

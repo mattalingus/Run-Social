@@ -134,15 +134,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     })
   );
 
-  const authLimiter = rateLimit({
+  const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 10,
+    max: 5,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { message: "Too many requests, please try again later" },
+    message: { message: "Too many login attempts. Please try again later." },
   });
 
-  app.post("/api/auth/register", authLimiter, async (req, res) => {
+  const signupLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 3,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: "Too many accounts created from this IP. Please try again later." },
+  });
+
+  app.post("/api/auth/register", signupLimiter, async (req, res) => {
     try {
       const { email, password, firstName, lastName, username, gender } = req.body;
       if (!email || !password || !firstName || !lastName || !username) return res.status(400).json({ message: "All fields required" });
@@ -167,7 +175,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/auth/login", authLimiter, async (req, res) => {
+  app.post("/api/auth/login", loginLimiter, async (req, res) => {
     try {
       const { identifier, password } = req.body;
       if (!identifier || !password) return res.status(400).json({ message: "Username/email and password required" });
@@ -210,7 +218,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/auth/forgot-password", authLimiter, async (req, res) => {
+  app.post("/api/auth/forgot-password", loginLimiter, async (req, res) => {
     try {
       const { email } = req.body;
       if (!email) return res.status(400).json({ message: "Email is required" });
@@ -263,6 +271,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!userId) return res.status(400).json({ message: "Invalid or expired reset link" });
       await storage.updateUserPassword(userId, password);
       res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.put("/api/auth/change-password", requireAuth, loginLimiter, async (req, res) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+      if (!currentPassword || !newPassword) return res.status(400).json({ message: "Current and new password are required" });
+      if (newPassword.length < 6) return res.status(400).json({ message: "New password must be at least 6 characters" });
+      const user = await storage.getUserById(req.session.userId!);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const valid = await storage.verifyPassword(currentPassword, user.password);
+      if (!valid) return res.status(401).json({ message: "Current password is incorrect" });
+      const currentToken = req.body.rememberToken as string | undefined;
+      await storage.updateUserPasswordAndInvalidateTokens(req.session.userId!, newPassword, currentToken);
+      res.json({ ok: true, message: "Signed out of other devices" });
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }

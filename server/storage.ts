@@ -542,6 +542,7 @@ export async function initDb() {
 
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS is_route_public BOOLEAN DEFAULT false;
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS public_route_id VARCHAR REFERENCES public_routes(id) ON DELETE SET NULL;
+    ALTER TABLE runs ADD COLUMN IF NOT EXISTS timezone TEXT DEFAULT NULL;
   `);
 
   const dummyCheck = await pool.query(`SELECT COUNT(*) FROM users WHERE email LIKE 'dummy-%@paceup.dev'`);
@@ -1067,6 +1068,27 @@ export async function updateUserPassword(userId: string, newPassword: string) {
   await pool.query(`UPDATE users SET password = $1 WHERE id = $2`, [hashed, userId]);
 }
 
+export async function updateUserPasswordAndInvalidateTokens(userId: string, newPassword: string, currentTokenRaw?: string) {
+  const hashed = await bcrypt.hash(newPassword, 10);
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(`UPDATE users SET password = $1 WHERE id = $2`, [hashed, userId]);
+    if (currentTokenRaw) {
+      const currentHash = createHash("sha256").update(currentTokenRaw).digest("hex");
+      await client.query(`DELETE FROM remember_tokens WHERE user_id = $1 AND token_hash != $2`, [userId, currentHash]);
+    } else {
+      await client.query(`DELETE FROM remember_tokens WHERE user_id = $1`, [userId]);
+    }
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
 export async function updateUser(id: string, updates: Record<string, any>) {
   const entries = Object.entries(updates).filter(([, v]) => v !== undefined);
   if (!entries.length) return null;
@@ -1119,16 +1141,18 @@ export async function createRun(data: {
   crewId?: string;
   savedPathId?: string | null;
   paceGroups?: { label: string; minPace: number; maxPace: number }[] | null;
+  timezone?: string;
 }) {
   const inviteToken = data.privacy === "private"
     ? Math.random().toString(36).substring(2, 10).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase()
     : null;
   const activityType = data.activityType === "ride" ? "ride" : data.activityType === "walk" ? "walk" : "run";
   const paceGroupsJson = data.paceGroups && data.paceGroups.length > 0 ? JSON.stringify(data.paceGroups) : null;
+  const timezone = typeof data.timezone === "string" && data.timezone.length > 0 ? data.timezone : null;
   const result = await pool.query(
-    `INSERT INTO runs (host_id, title, description, privacy, date, location_lat, location_lng, location_name, min_distance, max_distance, min_pace, max_pace, tags, max_participants, invite_token, invite_password, is_strict, run_style, activity_type, crew_id, saved_path_id, pace_groups)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) RETURNING *`,
-    [data.hostId, data.title, data.description || null, data.privacy, data.date, data.locationLat, data.locationLng, data.locationName, data.minDistance, data.maxDistance, data.minPace, data.maxPace, data.tags, data.maxParticipants, inviteToken, data.invitePassword || null, data.isStrict ?? false, data.runStyle || null, activityType, data.crewId || null, data.savedPathId || null, paceGroupsJson]
+    `INSERT INTO runs (host_id, title, description, privacy, date, location_lat, location_lng, location_name, min_distance, max_distance, min_pace, max_pace, tags, max_participants, invite_token, invite_password, is_strict, run_style, activity_type, crew_id, saved_path_id, pace_groups, timezone)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23) RETURNING *`,
+    [data.hostId, data.title, data.description || null, data.privacy, data.date, data.locationLat, data.locationLng, data.locationName, data.minDistance, data.maxDistance, data.minPace, data.maxPace, data.tags, data.maxParticipants, inviteToken, data.invitePassword || null, data.isStrict ?? false, data.runStyle || null, activityType, data.crewId || null, data.savedPathId || null, paceGroupsJson, timezone]
   );
   return result.rows[0];
 }
@@ -1645,15 +1669,39 @@ export async function updateSoloRun(id: string, userId: string, updates: Record<
 }
 
 export async function deleteSoloRun(id: string, userId: string) {
-  await pool.query(
-    `UPDATE solo_runs SET is_deleted = true WHERE id = $1 AND user_id = $2`,
-    [id, userId]
-  );
-  // Suppress any notifications linked to this run so they are hidden immediately
-  await pool.query(
-    `INSERT INTO run_notification_hidden (user_id, run_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-    [userId, id]
-  );
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const runRes = await client.query(
+      `SELECT distance_miles, completed FROM solo_runs WHERE id = $1 AND user_id = $2 AND is_deleted = false`,
+      [id, userId]
+    );
+    await client.query(
+      `UPDATE solo_runs SET is_deleted = true WHERE id = $1 AND user_id = $2`,
+      [id, userId]
+    );
+    if (runRes.rows.length > 0 && runRes.rows[0].completed) {
+      const distanceMiles = parseFloat(runRes.rows[0].distance_miles ?? "0") || 0;
+      await client.query(
+        `UPDATE users SET
+           total_miles = GREATEST(total_miles - $2, 0),
+           completed_runs = GREATEST(completed_runs - 1, 0)
+         WHERE id = $1`,
+        [userId, distanceMiles]
+      );
+    }
+    // Suppress any notifications linked to this run so they are hidden immediately
+    await client.query(
+      `INSERT INTO run_notification_hidden (user_id, run_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [userId, id]
+    );
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
 }
 
 export async function recomputeUserAvgPace(userId: string): Promise<void> {
@@ -4959,7 +5007,31 @@ export async function getRunBroadcastTokens(runId: string): Promise<string[]> {
 }
 
 export async function deleteUser(userId: string): Promise<void> {
-  await pool.query(`DELETE FROM users WHERE id = $1`, [userId]);
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    // Nullify nullable FK references
+    await client.query(`UPDATE crew_members SET invited_by = NULL WHERE invited_by = $1`, [userId]);
+    // Remove records without cascade that reference this user
+    await client.query(`DELETE FROM run_participants WHERE run_id IN (SELECT id FROM runs WHERE host_id = $1)`, [userId]);
+    await client.query(`DELETE FROM host_ratings WHERE run_id IN (SELECT id FROM runs WHERE host_id = $1)`, [userId]);
+    await client.query(`DELETE FROM host_ratings WHERE host_id = $1 OR rater_id = $1`, [userId]);
+    await client.query(`DELETE FROM run_participants WHERE user_id = $1`, [userId]);
+    await client.query(`DELETE FROM achievements WHERE user_id = $1`, [userId]);
+    // Delete hosted runs (cascades run_invites, run_messages, run_photos, run_tracking_points, tag_along_requests)
+    await client.query(`DELETE FROM runs WHERE host_id = $1`, [userId]);
+    // Delete the user (cascades: solo_runs, friends, remember_tokens, password_reset_tokens,
+    //   saved_paths, bookmarked_runs, planned_runs, crew_members, crew_messages, direct_messages,
+    //   run_messages, path_contributions, path_shares, facebook_friends, user_blocks,
+    //   tag_along_requests, crews)
+    await client.query(`DELETE FROM users WHERE id = $1`, [userId]);
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
 }
 
 export async function getUsersForWeeklySummary(): Promise<{ id: string; name: string; push_token: string }[]> {

@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   Share,
   Image,
+  TextInput,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons, FontAwesome5 } from "@expo/vector-icons";
@@ -148,6 +149,14 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
   const [updatingField, setUpdatingField] = useState<string | null>(null);
   const [showTerms, setShowTerms] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
   const [garminSyncing, setGarminSyncing] = useState(false);
   const [garminSyncMsg, setGarminSyncMsg] = useState<string | null>(null);
   const [showMapPinPicker, setShowMapPinPicker] = useState(false);
@@ -597,45 +606,56 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
 
   function handleDeleteAccount() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    Alert.alert(
-      "Delete Account",
-      "This will permanently delete your account, all your activities, crews, and data. This cannot be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete Account",
-          style: "destructive",
-          onPress: () =>
-            Alert.alert("Final confirmation", "All your data will be permanently deleted. Are you absolutely sure?", [
-              { text: "Cancel", style: "cancel" },
-              {
-                text: "Yes, Delete Everything",
-                style: "destructive",
-                onPress: async () => {
-                  try {
-                    await apiRequest("DELETE", "/api/users/me", undefined);
-                    onClose();
-                    onSignOut();
-                  } catch (e: any) {
-                    Alert.alert("Error", e.message || "Could not delete account. Please try again.");
-                  }
-                },
-              },
-            ]),
-        },
-      ]
-    );
+    setDeleteConfirmText("");
+    setShowDeleteConfirm(true);
+  }
+
+  async function confirmDeleteAccount() {
+    if (deleteConfirmText !== "DELETE") return;
+    setDeletingAccount(true);
+    try {
+      await apiRequest("DELETE", "/api/users/me", undefined);
+      setShowDeleteConfirm(false);
+      onClose();
+      onSignOut();
+    } catch (e: any) {
+      Alert.alert("Error", e.message || "Could not delete account. Please try again.");
+    } finally {
+      setDeletingAccount(false);
+    }
   }
 
   function handleChangePassword() {
-    Alert.alert(
-      "Change Password",
-      "To reset your password, email us at support@paceupapp.com with your account username and we'll send you a reset link.",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Email Support", onPress: () => Linking.openURL("mailto:support@paceupapp.com?subject=Password%20Reset%20Request").catch(() => {}) },
-      ]
-    );
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmNewPassword("");
+    setShowChangePassword(true);
+  }
+
+  async function submitChangePassword() {
+    if (!currentPassword || !newPassword || !confirmNewPassword) {
+      Alert.alert("Missing fields", "Please fill in all fields.");
+      return;
+    }
+    if (newPassword.length < 6) {
+      Alert.alert("Too short", "New password must be at least 6 characters.");
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      Alert.alert("Mismatch", "New passwords do not match.");
+      return;
+    }
+    setChangingPassword(true);
+    try {
+      const res = await apiRequest("PUT", "/api/auth/change-password", { currentPassword, newPassword });
+      const data = await res.json();
+      setShowChangePassword(false);
+      Alert.alert("Password updated", data.message ?? "Your password has been changed.");
+    } catch (e: any) {
+      Alert.alert("Error", e.message || "Could not change password. Please check your current password.");
+    } finally {
+      setChangingPassword(false);
+    }
   }
 
   async function handleRestorePurchases() {
@@ -1356,6 +1376,94 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
               <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 15, color: C.bg }}>Done</Text>
             </Pressable>
           </ScrollView>
+        </View>
+      </Modal>
+
+      {/* ── Delete Account Confirmation Modal ────────────────────────────── */}
+      <Modal visible={showDeleteConfirm} transparent animationType="fade" onRequestClose={() => setShowDeleteConfirm(false)}>
+        <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.65)", justifyContent: "center", paddingHorizontal: 24 }} onPress={() => setShowDeleteConfirm(false)}>
+          <Pressable onPress={() => {}} style={{ backgroundColor: C.surface, borderRadius: 20, padding: 24 }}>
+            <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 20, color: "#FF4D4D", marginBottom: 8 }}>Delete Account</Text>
+            <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textMuted, marginBottom: 20, lineHeight: 21 }}>
+              This will permanently delete your account, all your activities, crews, and data. This cannot be undone.
+            </Text>
+            <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.text, marginBottom: 8 }}>
+              Type DELETE to confirm:
+            </Text>
+            <TextInput
+              value={deleteConfirmText}
+              onChangeText={setDeleteConfirmText}
+              placeholder="DELETE"
+              placeholderTextColor={C.textMuted}
+              autoCapitalize="characters"
+              style={{ backgroundColor: C.card, borderRadius: 10, borderWidth: 1, borderColor: deleteConfirmText === "DELETE" ? "#FF4D4D" : C.border, color: C.text, fontFamily: "Outfit_400Regular", fontSize: 15, padding: 12, marginBottom: 20 }}
+            />
+            <View style={{ flexDirection: "row", gap: 12 }}>
+              <Pressable
+                style={{ flex: 1, borderRadius: 12, borderWidth: 1, borderColor: C.border, paddingVertical: 13, alignItems: "center" }}
+                onPress={() => setShowDeleteConfirm(false)}
+              >
+                <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.text }}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={{ flex: 1, borderRadius: 12, backgroundColor: deleteConfirmText === "DELETE" ? "#FF4D4D" : C.border, paddingVertical: 13, alignItems: "center", opacity: deletingAccount ? 0.6 : 1 }}
+                onPress={confirmDeleteAccount}
+                disabled={deleteConfirmText !== "DELETE" || deletingAccount}
+              >
+                {deletingAccount ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 15, color: deleteConfirmText === "DELETE" ? "#fff" : C.textMuted }}>Delete</Text>
+                )}
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* ── Change Password Modal ─────────────────────────────────────────── */}
+      <Modal visible={showChangePassword} transparent animationType="slide" onRequestClose={() => setShowChangePassword(false)}>
+        <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.55)" }} onPress={() => setShowChangePassword(false)} />
+        <View style={{ backgroundColor: C.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 24, paddingBottom: insets.bottom + 24 }}>
+          <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 20, color: C.text, marginBottom: 20 }}>Change Password</Text>
+          <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textMuted, marginBottom: 6 }}>Current Password</Text>
+          <TextInput
+            value={currentPassword}
+            onChangeText={setCurrentPassword}
+            placeholder="Enter current password"
+            placeholderTextColor={C.textMuted}
+            secureTextEntry
+            style={{ backgroundColor: C.card, borderRadius: 10, borderWidth: 1, borderColor: C.border, color: C.text, fontFamily: "Outfit_400Regular", fontSize: 15, padding: 12, marginBottom: 14 }}
+          />
+          <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textMuted, marginBottom: 6 }}>New Password</Text>
+          <TextInput
+            value={newPassword}
+            onChangeText={setNewPassword}
+            placeholder="At least 6 characters"
+            placeholderTextColor={C.textMuted}
+            secureTextEntry
+            style={{ backgroundColor: C.card, borderRadius: 10, borderWidth: 1, borderColor: C.border, color: C.text, fontFamily: "Outfit_400Regular", fontSize: 15, padding: 12, marginBottom: 14 }}
+          />
+          <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textMuted, marginBottom: 6 }}>Confirm New Password</Text>
+          <TextInput
+            value={confirmNewPassword}
+            onChangeText={setConfirmNewPassword}
+            placeholder="Re-enter new password"
+            placeholderTextColor={C.textMuted}
+            secureTextEntry
+            style={{ backgroundColor: C.card, borderRadius: 10, borderWidth: 1, borderColor: C.border, color: C.text, fontFamily: "Outfit_400Regular", fontSize: 15, padding: 12, marginBottom: 24 }}
+          />
+          <Pressable
+            style={{ backgroundColor: C.primary, borderRadius: 14, paddingVertical: 14, alignItems: "center", opacity: changingPassword ? 0.6 : 1 }}
+            onPress={submitChangePassword}
+            disabled={changingPassword}
+          >
+            {changingPassword ? (
+              <ActivityIndicator color={C.bg} size="small" />
+            ) : (
+              <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 16, color: C.bg }}>Update Password</Text>
+            )}
+          </Pressable>
         </View>
       </Modal>
     </Modal>

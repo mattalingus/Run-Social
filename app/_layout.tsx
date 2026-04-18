@@ -125,6 +125,39 @@ function RootLayoutNav() {
     return () => sub.remove();
   }, [user]);
 
+  // Retry pending photo uploads from previous sessions
+  const pendingUploadsRetried = useRef(false);
+  useEffect(() => {
+    if (!user || pendingUploadsRetried.current) return;
+    pendingUploadsRetried.current = true;
+    (async () => {
+      try {
+        const PENDING_KEY = "@paceup_pending_uploads";
+        const raw = await AsyncStorage.getItem(PENDING_KEY);
+        if (!raw) return;
+        const list: Array<{ uri: string; mimeType: string; runId: string }> = JSON.parse(raw);
+        if (!list.length) return;
+        const remaining: typeof list = [];
+        for (const item of list) {
+          try {
+            const formData = new FormData();
+            formData.append("photo", { uri: item.uri, type: item.mimeType, name: "photo.jpg" } as any);
+            const url = new URL(`/api/solo-runs/${item.runId}/photos`, getApiUrl()).toString();
+            const res = await fetch(url, { method: "POST", body: formData, credentials: "include" });
+            if (!res.ok) remaining.push(item);
+          } catch {
+            remaining.push(item);
+          }
+        }
+        if (remaining.length > 0) {
+          await AsyncStorage.setItem(PENDING_KEY, JSON.stringify(remaining));
+        } else {
+          await AsyncStorage.removeItem(PENDING_KEY);
+        }
+      } catch {}
+    })();
+  }, [user]);
+
   // Check for interrupted active run (crash recovery)
   const recoveryCheckedForUser = useRef<string | null>(null);
   useEffect(() => {

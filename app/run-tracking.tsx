@@ -1023,17 +1023,25 @@ export default function RunTrackingScreen() {
       return;
     }
 
-    routePathRef.current.push(coord);
-    setRouteState((prev) => [...prev, coord]);
+    // Minimum-speed gate: if GPS reports speed < 0.5 m/s, this is likely
+    // GPS jitter while standing still — skip distance accumulation.
+    // Max step-distance gate: > 60 m at ~1 Hz = GPS jump, discard.
+    // (60m = 0.03728 miles; 0.5 m/s gate only when speed is known)
+    const MAX_STEP_MILES = 60 / 1609.344;
+    const isSpeedTooSlow = speed != null && speed >= 0 && speed < 0.5;
+    if (!isSpeedTooSlow) {
+      routePathRef.current.push(coord);
+      setRouteState((prev) => [...prev, coord]);
+    }
 
-    if (lastCoordRef.current) {
+    if (!isSpeedTooSlow && lastCoordRef.current) {
       const d = haversine(
         lastCoordRef.current.latitude,
         lastCoordRef.current.longitude,
         latitude,
         longitude
       );
-      if (d >= 0 && d < 0.3) {
+      if (d >= 0 && d < MAX_STEP_MILES) {
         totalDistRef.current += d;
         setDisplayDist(totalDistRef.current);
 
@@ -1647,6 +1655,32 @@ export default function RunTrackingScreen() {
     }, 0);
   }
 
+  const PENDING_UPLOADS_KEY = "@paceup_pending_uploads";
+
+  async function uploadSoloPhotoWithRetry(uri: string, mimeType: string, runId: string, attempt = 0): Promise<any> {
+    const formData = new FormData();
+    formData.append("photo", { uri, type: mimeType, name: "photo.jpg" } as any);
+    const url = new URL(`/api/solo-runs/${runId}/photos`, getApiUrl()).toString();
+    const response = await fetch(url, { method: "POST", body: formData, credentials: "include" });
+    if (!response.ok) {
+      if (attempt < 2) {
+        await new Promise((r) => setTimeout(r, (attempt + 1) * 1500));
+        return uploadSoloPhotoWithRetry(uri, mimeType, runId, attempt + 1);
+      }
+      throw new Error("Upload failed after 3 attempts");
+    }
+    return response.json();
+  }
+
+  async function persistPendingUpload(uri: string, mimeType: string, runId: string) {
+    try {
+      const raw = await AsyncStorage.getItem(PENDING_UPLOADS_KEY);
+      const list: any[] = raw ? JSON.parse(raw) : [];
+      list.push({ uri, mimeType, runId, addedAt: Date.now() });
+      await AsyncStorage.setItem(PENDING_UPLOADS_KEY, JSON.stringify(list));
+    } catch {}
+  }
+
   async function pickAndUploadSoloPhoto() {
     if (!savedRunId) return;
     if (Platform.OS !== "web") {
@@ -1663,18 +1697,15 @@ export default function RunTrackingScreen() {
     });
     if (result.canceled || !result.assets?.[0]) return;
     const asset = result.assets[0];
-    const formData = new FormData();
-    formData.append("photo", { uri: asset.uri, type: asset.mimeType || "image/jpeg", name: "photo.jpg" } as any);
+    const mimeType = asset.mimeType || "image/jpeg";
     setUploadingPhoto(true);
     try {
-      const url = new URL(`/api/solo-runs/${savedRunId}/photos`, getApiUrl()).toString();
-      const response = await fetch(url, { method: "POST", body: formData, credentials: "include" });
-      if (!response.ok) throw new Error("Upload failed");
-      const photo = await response.json();
+      const photo = await uploadSoloPhotoWithRetry(asset.uri, mimeType, savedRunId);
       setRunPhotos((prev) => [...prev, photo]);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e: any) {
-      Alert.alert("Upload failed", e.message);
+    } catch {
+      await persistPendingUpload(asset.uri, mimeType, savedRunId);
+      Alert.alert("Photo pending", "Could not upload right now. It will be retried automatically when you open the app again.");
     } finally {
       setUploadingPhoto(false);
     }
@@ -1842,7 +1873,7 @@ export default function RunTrackingScreen() {
           <View style={t.statsRow}>
             <View style={t.statBlock}>
               <Text style={t.statBig}>{toDisplayDist(distance, distUnit)}</Text>
-              <Text style={t.statUnit}>{distUnit === "km" ? "km" : "miles"}</Text>
+              <Text style={t.statUnit}>{unitLabel(distUnit)}</Text>
             </View>
             <View style={t.statDivider} />
             <View style={t.statBlock}>
@@ -2315,7 +2346,7 @@ export default function RunTrackingScreen() {
         <View style={t.liveRow}>
           <View style={t.liveStat}>
             <Text style={t.liveVal}>{toDisplayDist(displayDist, distUnit)}</Text>
-            <Text style={t.liveUnit}>{distUnit === "km" ? "km" : "miles"}</Text>
+            <Text style={t.liveUnit}>{unitLabel(distUnit)}</Text>
           </View>
           <View style={t.liveDivider} />
           <View style={t.liveStat}>

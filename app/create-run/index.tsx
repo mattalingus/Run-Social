@@ -269,6 +269,7 @@ export default function CreateRunScreen() {
         description: description.trim() || undefined,
         privacy: isCrew ? "private" : (privacy === "public" ? "public" : "private"),
         date: dateTime.toISOString(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         locationLat: parseFloat(locationLat),
         locationLng: parseFloat(locationLng),
         locationName: locationName.trim(),
