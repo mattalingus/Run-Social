@@ -130,11 +130,13 @@ export default function UserProfileScreen() {
         Alert.alert("Blocked", `You've blocked this user. They can no longer view your profile or interact with you.`);
       }
     },
-    onError: (_err, blocking, context: any) => {
+    onError: (_err, blocking, context: { previous: any[] | undefined } | undefined) => {
       // Roll back the optimistic removal if the block request failed.
       if (blocking && context?.previous !== undefined) {
         qc.setQueryData(["/api/friends"], context.previous);
       }
+      // Re-fetch from server to guarantee truth even after snapshot restore.
+      qc.invalidateQueries({ queryKey: ["/api/friends"] });
       Alert.alert("Error", "Could not update block status");
     },
   });
