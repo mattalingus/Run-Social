@@ -384,9 +384,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!user) return res.json({ ok: true });
       if (!user.email_verified) return res.status(403).json({ message: "Please verify your email address before resetting your password." });
       const token = await storage.createPasswordResetToken(user.id);
-      const host = process.env.REPLIT_DEV_DOMAIN
-        ? `https://${process.env.REPLIT_DEV_DOMAIN}:5000`
-        : "https://PaceUp.replit.app";
+      const host = process.env.APP_URL || "https://paceupapp.com";
       const resetUrl = `${host}/auth/reset?token=${token}`;
       const smtpHost = process.env.SMTP_HOST || "smtp.gmail.com";
       const smtpPort = parseInt(process.env.SMTP_PORT || "587", 10);
@@ -3935,9 +3933,7 @@ async function go(e){
       const smtpUser = process.env.SMTP_USER;
       const smtpPass = process.env.SMTP_PASS;
       if (smtpUser && smtpPass) {
-        const host = process.env.REPLIT_DEV_DOMAIN
-          ? `https://${process.env.REPLIT_DEV_DOMAIN}:5000`
-          : "https://PaceUp.replit.app";
+        const host = process.env.APP_URL || "https://paceupapp.com";
         const verifyUrl = `${host}/api/users/me/email/confirm?token=${token}`;
         const transporter = nodemailer.createTransport({
           host: "smtp.gmail.com",

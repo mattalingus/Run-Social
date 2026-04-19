@@ -6,7 +6,7 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
  * @returns {string} The API base URL
  */
 export function getApiUrl(): string {
-  const host = process.env.EXPO_PUBLIC_DOMAIN || "PaceUp.replit.app";
+  const host = process.env.EXPO_PUBLIC_DOMAIN || "paceupapp.com";
   return new URL(`https://${host}`).href;
 }
 

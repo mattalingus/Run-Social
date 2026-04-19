@@ -1,53 +1,16 @@
-import { createClient } from "replit-revenuecat-v2/client";
-
-let connectionSettings: any;
-
-async function getApiKey() {
-  if (
-    connectionSettings &&
-    connectionSettings.settings.expires_at &&
-    new Date(connectionSettings.settings.expires_at).getTime() > Date.now()
-  ) {
-    return connectionSettings.settings.access_token;
-  }
-
-  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
-  const xReplitToken = process.env.REPL_IDENTITY
-    ? "repl " + process.env.REPL_IDENTITY
-    : process.env.WEB_REPL_RENEWAL
-    ? "depl " + process.env.WEB_REPL_RENEWAL
-    : null;
-
-  if (!xReplitToken) {
-    throw new Error("X-Replit-Token not found for repl/depl");
-  }
-
-  connectionSettings = await fetch(
-    "https://" + hostname + "/api/v2/connection?include_secrets=true&connector_names=revenuecat",
-    {
-      headers: {
-        Accept: "application/json",
-        "X-Replit-Token": xReplitToken,
-      },
-    }
-  )
-    .then((res) => res.json())
-    .then((data) => data.items?.[0]);
-
-  const accessToken =
-    connectionSettings?.settings?.access_token ||
-    connectionSettings?.settings?.oauth?.credentials?.access_token;
-
-  if (!connectionSettings || !accessToken) {
-    throw new Error("RevenueCat not connected");
-  }
-  return accessToken;
-}
+// Direct RevenueCat v2 API key auth (replaces Replit Connectors OAuth flow).
+// NOTE: scripts/seedRevenueCat.ts still imports helpers from `replit-revenuecat-v2`
+// and will break if run. It was a one-time seeding script — products are already
+// configured in RevenueCat, so it should not need to run again.
+// If ever needed, replace those imports with direct calls to https://api.revenuecat.com/v2.
 
 export async function getUncachableRevenueCatClient() {
-  const apiKey = await getApiKey();
-  return createClient({
+  const apiKey = process.env.REVENUECAT_API_KEY;
+  if (!apiKey) {
+    throw new Error("REVENUECAT_API_KEY not set");
+  }
+  return {
     baseUrl: "https://api.revenuecat.com/v2",
-    headers: { Authorization: "Bearer " + apiKey },
-  });
+    headers: { Authorization: `Bearer ${apiKey}` },
+  };
 }

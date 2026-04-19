@@ -1,28 +1,21 @@
-import { Storage } from "@google-cloud/storage";
+import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import sharp from "sharp";
+import { Readable } from "stream";
 
-const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
-const BUCKET_ID = process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID!;
+const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID!;
+const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID!;
+const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY!;
+const R2_BUCKET = process.env.R2_BUCKET!;
+const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL!;
 
-const objectStorageClient = new Storage({
+const s3 = new S3Client({
+  region: "auto",
+  endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
   credentials: {
-    audience: "replit",
-    subject_token_type: "access_token",
-    token_url: `${REPLIT_SIDECAR_ENDPOINT}/token`,
-    type: "external_account",
-    credential_source: {
-      url: `${REPLIT_SIDECAR_ENDPOINT}/credential`,
-      format: {
-        type: "json",
-        subject_token_field_name: "access_token",
-      },
-    },
-    universe_domain: "googleapis.com",
-  } as any,
-  projectId: "",
+    accessKeyId: R2_ACCESS_KEY_ID,
+    secretAccessKey: R2_SECRET_ACCESS_KEY,
+  },
 });
-
-const bucket = objectStorageClient.bucket(BUCKET_ID);
 
 async function stripExif(buffer: Buffer, contentType: string): Promise<{ buffer: Buffer; contentType: string }> {
   try {
@@ -33,9 +26,6 @@ async function stripExif(buffer: Buffer, contentType: string): Promise<{ buffer:
       return { buffer, contentType };
     }
 
-    // HEIC/HEIF images (from iPhone cameras) must be converted to JPEG so that
-    // Android devices and web browsers can render them.  The conversion also
-    // strips EXIF GPS metadata in the same pass.
     const isHeic =
       format === "heif" ||
       contentType === "image/heic" ||
@@ -69,25 +59,28 @@ export async function uploadPhotoBuffer(
   const { buffer: cleanBuffer, contentType: cleanContentType } = await stripExif(buffer, contentType);
 
   const objectPath = `public/photos/${filename}`;
-  const file = bucket.file(objectPath);
 
-  await file.save(cleanBuffer, {
-    metadata: { contentType: cleanContentType },
-    resumable: false,
-  });
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: R2_BUCKET,
+      Key: objectPath,
+      Body: cleanBuffer,
+      ContentType: cleanContentType,
+    }),
+  );
 
-  try {
-    await file.makePublic();
-    return `https://storage.googleapis.com/${BUCKET_ID}/${objectPath}`;
-  } catch {
-    return `/api/objects/${objectPath}`;
-  }
+  return `${R2_PUBLIC_URL}/${objectPath}`;
 }
 
 export async function streamObject(objectPath: string) {
-  const file = bucket.file(objectPath);
-  const [metadata] = await file.getMetadata();
-  const contentType = (metadata.contentType as string) || "application/octet-stream";
-  const stream = file.createReadStream();
+  const result = await s3.send(
+    new GetObjectCommand({
+      Bucket: R2_BUCKET,
+      Key: objectPath,
+    }),
+  );
+
+  const contentType = result.ContentType || "application/octet-stream";
+  const stream = result.Body as Readable;
   return { stream, contentType };
 }
