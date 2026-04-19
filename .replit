@@ -96,7 +96,7 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "CI=1 EXPO_TOKEN=$EXPO_TOKEN npx eas update --channel production --message \"v1.3.1 - Android bug fixes\""
+args = "CI=1 EXPO_TOKEN=$EXPO_TOKEN npx eas update --channel production --message \"v1.3.0\""
 
 [postMerge]
 path = "scripts/post-merge.sh"
