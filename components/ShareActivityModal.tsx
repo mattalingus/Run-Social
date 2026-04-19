@@ -460,7 +460,7 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
               style={({ pressed }) => [
                 st.photoBtn,
                 { backgroundColor: themeSurface, borderColor: themeBorder },
-                transparentMode && st.photoBtnActive,
+                transparentMode && { borderColor: PRIMARY, backgroundColor: PRIMARY + "18" },
                 { opacity: pressed ? 0.7 : (backgroundPhoto || collageMode ? 0.4 : 1) },
               ]}
               onPress={() => {
@@ -483,7 +483,7 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
 
             {/* Background Photo — second option */}
             <Pressable
-              style={({ pressed }) => [st.photoBtn, { backgroundColor: themeSurface, borderColor: themeBorder }, backgroundPhoto && st.photoBtnActive, { opacity: pressed ? 0.7 : (collageMode ? 0.4 : 1) }]}
+              style={({ pressed }) => [st.photoBtn, { backgroundColor: themeSurface, borderColor: themeBorder }, backgroundPhoto && { borderColor: PRIMARY, backgroundColor: PRIMARY + "18" }, { opacity: pressed ? 0.7 : (collageMode ? 0.4 : 1) }]}
               onPress={() => {
                 if (collageMode) return;
                 if (transparentMode) {
@@ -514,7 +514,7 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
                 style={({ pressed }) => [
                   st.photoBtn,
                   { backgroundColor: themeSurface, borderColor: themeBorder },
-                  collageMode && st.photoBtnActive,
+                  collageMode && { borderColor: PRIMARY, backgroundColor: PRIMARY + "18" },
                   { opacity: pressed ? 0.7 : (backgroundPhoto || transparentMode ? 0.4 : 1) },
                 ]}
                 onPress={() => {
