@@ -37,10 +37,13 @@ eas submit --platform android
 ```
 
 ## Backend hosting
-- Currently: `PaceUp.replit.app` (Replit) — **needs migration to Railway/Render/Fly**
-- `EXPO_PUBLIC_DOMAIN` in eas.json production build points to the live backend URL
-- When backend moves, update `EXPO_PUBLIC_DOMAIN` in `eas.json` and redeploy
+- **Railway** (project: considerate-imagination, service: paceup-backend)
+- URL: `https://paceup-backend-production.up.railway.app`
+- Deploy: `railway up` from repo root (Dockerfile-based build)
+- Env vars managed via `railway variables --set KEY=VALUE`
+- `EXPO_PUBLIC_DOMAIN` in eas.json production build points to the live backend
 
-## Object storage migration (TODO)
-`server/objectStorage.ts` currently uses Replit's GCS sidecar for auth.
-When migrating off Replit: replace the `credentials` block with a real GCS service account key JSON.
+## Object storage
+- **Cloudflare R2** bucket `paceup-photos` (public URL: `https://pub-4f021c1a952342f0a5e04581014bfe2e.r2.dev`)
+- Server uploads/reads via S3 client in [server/objectStorage.ts](server/objectStorage.ts)
+- Keys are stored as `public/photos/<filename>`; photo URLs in DB are absolute R2 URLs

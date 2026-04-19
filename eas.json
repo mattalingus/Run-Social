@@ -24,7 +24,7 @@
       "autoIncrement": true,
       "channel": "production",
       "env": {
-        "EXPO_PUBLIC_DOMAIN": "PaceUp.replit.app"
+        "EXPO_PUBLIC_DOMAIN": "paceup-backend-production.up.railway.app"
       },
       "ios": {
         "resourceClass": "m-medium",
