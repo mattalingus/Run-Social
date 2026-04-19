@@ -61,14 +61,6 @@ type ActiveAction = "share" | "save" | "copy" | null;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const PRIMARY = "#00A85E";
-const BG = "#050C09";
-const SURFACE = "#0D1510";
-const CARD_BG = "#0A1410";
-const TEXT = "#F0FFF4";
-const TEXT_SEC = "#8FAF97";
-const TEXT_MUTED = "#4A6957";
-const BORDER = "#182B1F";
 const GOLD = "#FFB800";
 
 const CheckerboardBg = React.memo(function CheckerboardBg() {
@@ -102,11 +94,18 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
   const [layoutIndex, setLayoutIndex] = useState(0);
   const [isCapturing, setIsCapturing] = useState(false);
 
-  const themeBg = C.bg;
-  const themeSurface = C.surface;
-  const themeText = C.text;
-  const themeTextSec = C.textSecondary;
-  const themeBorder = C.border;
+  const PRIMARY = C.primary;
+  const BG = C.bg;
+  const SURFACE = C.surface;
+  const TEXT = C.text;
+  const TEXT_SEC = C.textSecondary;
+  const BORDER = C.border;
+
+  const themeBg = BG;
+  const themeSurface = SURFACE;
+  const themeText = TEXT;
+  const themeTextSec = TEXT_SEC;
+  const themeBorder = BORDER;
 
   const isGroupRun = (runData.participantCount ?? 1) > 1;
   const hasGroupPhotos = isGroupRun && eventPhotos.length >= 2;
@@ -617,7 +616,7 @@ export default function ShareActivityModal({ visible, onClose, runData, eventPho
 const st = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: BG,
+    backgroundColor: "#050C09",
   },
 
   // Header
@@ -628,20 +627,20 @@ const st = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: BORDER,
+    borderBottomColor: "#182B1F",
   },
   headerTitle: {
     fontFamily: "Outfit_700Bold",
     fontSize: 17,
-    color: TEXT,
+    color: "#F0FFF4",
   },
   closeBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: SURFACE,
+    backgroundColor: "#0D1510",
     borderWidth: 1,
-    borderColor: BORDER,
+    borderColor: "#182B1F",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -656,7 +655,7 @@ const st = StyleSheet.create({
   cardWrapper: {
     position: "relative",
     borderRadius: 20,
-    shadowColor: PRIMARY,
+    shadowColor: "#00A85E",
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.10,
     shadowRadius: 12,
@@ -669,7 +668,7 @@ const st = StyleSheet.create({
   cardGlow: {
     ...StyleSheet.absoluteFillObject,
     borderRadius: 20,
-    backgroundColor: PRIMARY + "18",
+    backgroundColor: "#00A85E18",
     transform: [{ scale: 1.02 }],
   },
 
@@ -683,21 +682,21 @@ const st = StyleSheet.create({
   photoBtn: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: SURFACE,
+    backgroundColor: "#0D1510",
     borderWidth: 1,
-    borderColor: BORDER,
+    borderColor: "#182B1F",
     borderRadius: 20,
     paddingHorizontal: 14,
     paddingVertical: 9,
   },
   photoBtnActive: {
-    borderColor: PRIMARY,
-    backgroundColor: PRIMARY + "18",
+    borderColor: "#00A85E",
+    backgroundColor: "#00A85E18",
   },
   photoBtnTxt: {
     fontFamily: "Outfit_600SemiBold",
     fontSize: 13,
-    color: TEXT_SEC,
+    color: "#8FAF97",
   },
 
   // Actions
@@ -716,7 +715,7 @@ const st = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 16,
-    backgroundColor: SURFACE,
+    backgroundColor: "#0D1510",
     borderWidth: 1.5,
     alignItems: "center",
     justifyContent: "center",
@@ -724,7 +723,7 @@ const st = StyleSheet.create({
   actionLabel: {
     fontFamily: "Outfit_600SemiBold",
     fontSize: 12,
-    color: TEXT_SEC,
+    color: "#8FAF97",
   },
 
   // Social platform row
@@ -736,7 +735,7 @@ const st = StyleSheet.create({
   socialLabel: {
     fontFamily: "Outfit_600SemiBold",
     fontSize: 13,
-    color: TEXT_SEC,
+    color: "#8FAF97",
     letterSpacing: 0.5,
   },
   socialIcons: {
@@ -758,6 +757,6 @@ const st = StyleSheet.create({
   socialBtnLabel: {
     fontFamily: "Outfit_400Regular",
     fontSize: 10,
-    color: TEXT_SEC,
+    color: "#8FAF97",
   },
 });

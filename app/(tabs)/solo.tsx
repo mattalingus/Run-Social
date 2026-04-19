@@ -98,6 +98,8 @@ function parseRoutePath(raw: RoutePoint[] | string | null | undefined): RoutePoi
 }
 
 function MiniRouteMap({ path, height = 200 }: { path: RoutePoint[]; height?: number }) {
+  const { C } = useTheme();
+
   if (!path || path.length < 2) return null;
   const lats = path.map((p) => p.latitude);
   const lngs = path.map((p) => p.longitude);
@@ -129,9 +131,7 @@ function MiniRouteMap({ path, height = 200 }: { path: RoutePoint[]; height?: num
       showsTraffic={false}
       showsBuildings={false}
       showsPointsOfInterest={false}
-      userInterfaceStyle="dark"
       toolbarEnabled={false}
-      pointerEvents="none"
     >
       <Polyline coordinates={path} strokeColor={C.primary} strokeWidth={3} lineCap="round" lineJoin="round" />
     </MapView>
@@ -1085,8 +1085,8 @@ export default function SoloScreen() {
             )}
           </View>
         </View>
-        {run.route_path && run.route_path.length > 1 && Platform.OS !== "web" && (
-          <View style={{ marginTop: 12 }}>
+        {isExpanded && run.route_path && run.route_path.length > 1 && Platform.OS !== "web" && (
+          <View pointerEvents="none" style={{ marginTop: 12 }}>
             <MiniRouteMap path={run.route_path} />
           </View>
         )}

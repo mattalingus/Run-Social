@@ -191,6 +191,8 @@ export default function NotificationBanner() {
     }
   }, [bannerQueue.length, show, hide]);
 
+  const [actionPending, setActionPending] = useState(false);
+
   useEffect(() => {
     return () => clearTimer();
   }, [clearTimer]);
@@ -215,8 +217,6 @@ export default function NotificationBanner() {
     }
     queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
   };
-
-  const [actionPending, setActionPending] = useState(false);
 
   const handleAccept = async () => {
     clearTimer();
