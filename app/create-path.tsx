@@ -9,6 +9,7 @@ import {
   Modal,
   TextInput,
   Platform,
+  KeyboardAvoidingView,
 } from "react-native";
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from "react-native-maps";
 import * as Location from "expo-location";
@@ -57,7 +58,18 @@ export default function CreatePathScreen() {
   const [saving, setSaving] = useState(false);
   const [showSave, setShowSave] = useState(false);
   const [pathName, setPathName] = useState("");
-  const [activity, setActivity] = useState<Activity>("run");
+  const [activities, setActivities] = useState<Activity[]>(["run"]);
+
+  function toggleActivity(a: Activity) {
+    setActivities((cur) => {
+      if (cur.includes(a)) {
+        // Must keep at least one selected
+        if (cur.length === 1) return cur;
+        return cur.filter((x) => x !== a);
+      }
+      return [...cur, a];
+    });
+  }
 
   useEffect(() => {
     (async () => {
@@ -86,12 +98,22 @@ export default function CreatePathScreen() {
 
   async function handleMapPress(e: { nativeEvent: { coordinate: LatLng } }) {
     if (snapping) return;
-    const coord = e.nativeEvent.coordinate;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    let coord = e.nativeEvent.coordinate;
     const prev = waypoints[waypoints.length - 1];
     if (!prev) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setWaypoints([coord]);
       return;
+    }
+    // Loop closure: if tapping within ~25m of the first waypoint AND we have
+    // at least 2 segments already, snap exactly to the start to close cleanly.
+    const first = waypoints[0];
+    const closingLoop = waypoints.length >= 3 && haversineMiles(coord, first) * 5280 < 82; // ~25m
+    if (closingLoop) {
+      coord = first;
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } else {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     setSnapping(true);
     const seg = await snapSegment(prev, coord);
@@ -139,7 +161,8 @@ export default function CreatePathScreen() {
         name,
         routePath: fullPts,
         distanceMiles: miles,
-        activityType: activity,
+        activityType: activities[0],
+        activityTypes: activities,
       });
       const saved = await res.json();
       if (!saved?.id) throw new Error("Failed to create path");
@@ -180,6 +203,16 @@ export default function CreatePathScreen() {
         initialRegion={initialRegion}
         onPress={handleMapPress}
       >
+        {/* Straight-line preview from raw waypoints — renders instantly so the
+            line appears between points 1 & 2 before the snap request returns.
+            A dummy 2-point coords array keeps the Polyline mounted from first
+            render, which avoids react-native-maps' conditional-mount draw bug. */}
+        <Polyline
+          coordinates={waypoints.length >= 2 ? waypoints : [{ latitude: 0, longitude: 0 }, { latitude: 0, longitude: 0 }]}
+          strokeColor={C.primary}
+          strokeWidth={waypoints.length >= 2 ? 3 : 0}
+          lineDashPattern={[6, 6]}
+        />
         {fullPolyline.length >= 2 && (
           <Polyline coordinates={fullPolyline} strokeColor={C.primary} strokeWidth={5} />
         )}
@@ -224,8 +257,12 @@ export default function CreatePathScreen() {
       </View>
 
       <Modal visible={showSave} transparent animationType="slide" onRequestClose={() => setShowSave(false)}>
-        <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.55)" }} onPress={() => setShowSave(false)} />
-        <View style={{ backgroundColor: C.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 24, paddingBottom: insets.bottom + 24 }}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1, justifyContent: "flex-end" }}
+        >
+          <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.55)" }} onPress={() => setShowSave(false)} />
+          <View style={{ backgroundColor: C.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 24, paddingBottom: insets.bottom + 24 }}>
           <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 20, color: C.text, marginBottom: 8 }}>Save Path</Text>
           <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textMuted, marginBottom: 20 }}>
             {miles.toFixed(2)} miles · {waypoints.length} waypoints. This will be published publicly.
@@ -239,27 +276,32 @@ export default function CreatePathScreen() {
             autoFocus
             style={{ backgroundColor: C.card, borderRadius: 10, borderWidth: 1, borderColor: C.border, color: C.text, fontFamily: "Outfit_400Regular", fontSize: 15, padding: 12, marginBottom: 16 }}
           />
-          <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textMuted, marginBottom: 6 }}>Activity</Text>
+          <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textMuted, marginBottom: 6 }}>
+            Activity <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12 }}>(select all that apply)</Text>
+          </Text>
           <View style={{ flexDirection: "row", gap: 8, marginBottom: 24 }}>
-            {(["run", "walk", "ride"] as Activity[]).map((a) => (
-              <Pressable
-                key={a}
-                onPress={() => setActivity(a)}
-                style={{
-                  flex: 1,
-                  paddingVertical: 12,
-                  borderRadius: 10,
-                  borderWidth: 1,
-                  borderColor: activity === a ? C.primary : C.border,
-                  backgroundColor: activity === a ? C.primary : C.card,
-                  alignItems: "center",
-                }}
-              >
-                <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 14, color: activity === a ? C.bg : C.text, textTransform: "capitalize" }}>
-                  {a}
-                </Text>
-              </Pressable>
-            ))}
+            {(["run", "walk", "ride"] as Activity[]).map((a) => {
+              const selected = activities.includes(a);
+              return (
+                <Pressable
+                  key={a}
+                  onPress={() => toggleActivity(a)}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 12,
+                    borderRadius: 10,
+                    borderWidth: 1,
+                    borderColor: selected ? C.primary : C.border,
+                    backgroundColor: selected ? C.primary : C.card,
+                    alignItems: "center",
+                  }}
+                >
+                  <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 14, color: selected ? C.bg : C.text, textTransform: "capitalize" }}>
+                    {a}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
           <Pressable
             style={{ backgroundColor: C.primary, borderRadius: 14, paddingVertical: 14, alignItems: "center", opacity: saving ? 0.6 : 1 }}
@@ -272,7 +314,8 @@ export default function CreatePathScreen() {
               <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 16, color: C.bg }}>Publish Path</Text>
             )}
           </Pressable>
-        </View>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

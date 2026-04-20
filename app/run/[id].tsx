@@ -108,6 +108,14 @@ export default function RunDetailScreen() {
   const [editDate, setEditDate] = useState("");
   const [editTime, setEditTime] = useState("");
   const [editAmPm, setEditAmPm] = useState<"AM" | "PM">("AM");
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editLocationName, setEditLocationName] = useState("");
+  const [editMinDistance, setEditMinDistance] = useState("");
+  const [editMaxDistance, setEditMaxDistance] = useState("");
+  const [editMinPace, setEditMinPace] = useState("");
+  const [editMaxPace, setEditMaxPace] = useState("");
+  const [editMaxParticipants, setEditMaxParticipants] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [cancelling, setCancelling] = useState(false);
 
@@ -432,6 +440,14 @@ export default function RunDetailScreen() {
     const h12 = raw24h % 12 === 0 ? 12 : raw24h % 12;
     setEditTime(`${h12}:${mins}`);
     setEditAmPm(ap);
+    setEditTitle(String(run.title ?? ""));
+    setEditDescription(String(run.description ?? ""));
+    setEditLocationName(String(run.location_name ?? ""));
+    setEditMinDistance(String(run.min_distance ?? ""));
+    setEditMaxDistance(String(run.max_distance ?? ""));
+    setEditMinPace(String(run.min_pace ?? ""));
+    setEditMaxPace(String(run.max_pace ?? ""));
+    setEditMaxParticipants(String(run.max_participants ?? ""));
     setShowEditSheet(true);
   }
 
@@ -484,9 +500,36 @@ export default function RunDetailScreen() {
       Alert.alert("Invalid date", "Event date cannot be in the past.");
       return;
     }
+    const title = editTitle.trim();
+    if (!title) { Alert.alert("Title required", "Enter a title for the event."); return; }
+    const location = editLocationName.trim();
+    if (!location) { Alert.alert("Location required", "Enter a location name."); return; }
+
+    const minDistNum = parseFloat(editMinDistance);
+    const maxDistNum = parseFloat(editMaxDistance);
+    const minPaceNum = parseFloat(editMinPace);
+    const maxPaceNum = parseFloat(editMaxPace);
+    const maxPartNum = parseInt(editMaxParticipants, 10);
+    if (isFinite(minDistNum) && isFinite(maxDistNum) && minDistNum > maxDistNum) {
+      Alert.alert("Invalid distance", "Min distance must be ≤ max."); return;
+    }
+    if (isFinite(minPaceNum) && isFinite(maxPaceNum) && minPaceNum > maxPaceNum) {
+      Alert.alert("Invalid pace", "Faster pace must be ≤ slower pace."); return;
+    }
+
     setEditSaving(true);
     try {
-      await apiRequest("PATCH", `/api/runs/${id}`, { date: parsed.toISOString() });
+      await apiRequest("PATCH", `/api/runs/${id}`, {
+        date: parsed.toISOString(),
+        title,
+        description: editDescription.trim() || null,
+        locationName: location,
+        minDistance: isFinite(minDistNum) ? minDistNum : undefined,
+        maxDistance: isFinite(maxDistNum) ? maxDistNum : undefined,
+        minPace: isFinite(minPaceNum) ? minPaceNum : undefined,
+        maxPace: isFinite(maxPaceNum) ? maxPaceNum : undefined,
+        maxParticipants: Number.isInteger(maxPartNum) ? maxPartNum : undefined,
+      });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       qc.invalidateQueries({ queryKey: ["/api/runs", id] });
       qc.invalidateQueries({ queryKey: ["/api/runs"] });
@@ -1643,82 +1686,176 @@ export default function RunDetailScreen() {
           <View style={styles.frModalWrap}>
             <Pressable style={styles.frOverlay} onPress={() => setShowEditSheet(false)} />
             <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.editSheetOuter}>
-              <View style={[styles.editSheet, { paddingBottom: insets.bottom + 24 }]}>
+              <View style={[styles.editSheet, { paddingBottom: insets.bottom + 24, maxHeight: "90%" }]}>
                 <View style={styles.frHandle} />
                 <View style={styles.editSheetHeader}>
-                  <Text style={styles.editSheetTitle}>Edit Date & Time</Text>
+                  <Text style={styles.editSheetTitle}>Edit Event</Text>
                   <Pressable onPress={() => setShowEditSheet(false)} hitSlop={12}>
                     <Feather name="x" size={18} color={C.textSecondary} />
                   </Pressable>
                 </View>
                 <Text style={styles.editSheetSub}>
-                  All participants will be notified of the new time.
+                  All planned participants will be notified of any changes.
                 </Text>
-                <View style={styles.editFieldGroup}>
-                  <Text style={styles.editFieldLabel}>Date & Time</Text>
-                  <View style={{ flexDirection: "row", gap: 10 }}>
+                <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                  <View style={styles.editFieldGroup}>
+                    <Text style={styles.editFieldLabel}>Title</Text>
                     <TextInput
-                      style={[styles.editInput, { flex: 1 }]}
-                      value={editDate}
-                      onChangeText={(text) => {
-                        const digits = text.replace(/\D/g, "").slice(0, 6);
-                        let fmt = digits;
-                        if (digits.length > 2) fmt = digits.slice(0, 2) + "/" + digits.slice(2);
-                        if (digits.length > 4) fmt = digits.slice(0, 2) + "/" + digits.slice(2, 4) + "/" + digits.slice(4);
-                        setEditDate(fmt);
-                      }}
-                      placeholder="MM/DD/YY"
+                      style={styles.editInput}
+                      value={editTitle}
+                      onChangeText={setEditTitle}
+                      placeholder="Event title"
                       placeholderTextColor={C.textMuted}
-                      keyboardType="number-pad"
-                      maxLength={8}
-                      autoCorrect={false}
+                      maxLength={120}
                     />
-                    <View style={{ flex: 1, flexDirection: "row", gap: 6 }}>
+                  </View>
+                  <View style={styles.editFieldGroup}>
+                    <Text style={styles.editFieldLabel}>Description</Text>
+                    <TextInput
+                      style={[styles.editInput, { minHeight: 72, textAlignVertical: "top" }]}
+                      value={editDescription}
+                      onChangeText={setEditDescription}
+                      placeholder="Optional details"
+                      placeholderTextColor={C.textMuted}
+                      multiline
+                      maxLength={1000}
+                    />
+                  </View>
+                  <View style={styles.editFieldGroup}>
+                    <Text style={styles.editFieldLabel}>Location</Text>
+                    <TextInput
+                      style={styles.editInput}
+                      value={editLocationName}
+                      onChangeText={setEditLocationName}
+                      placeholder="e.g. Memorial Park"
+                      placeholderTextColor={C.textMuted}
+                    />
+                  </View>
+                  <View style={styles.editFieldGroup}>
+                    <Text style={styles.editFieldLabel}>Date & Time</Text>
+                    <View style={{ flexDirection: "row", gap: 10 }}>
                       <TextInput
                         style={[styles.editInput, { flex: 1 }]}
-                        value={editTime}
+                        value={editDate}
                         onChangeText={(text) => {
-                          const digits = text.replace(/\D/g, "").slice(0, 4);
-                          setEditTime(autoFormatEditTime(digits));
+                          const digits = text.replace(/\D/g, "").slice(0, 6);
+                          let fmt = digits;
+                          if (digits.length > 2) fmt = digits.slice(0, 2) + "/" + digits.slice(2);
+                          if (digits.length > 4) fmt = digits.slice(0, 2) + "/" + digits.slice(2, 4) + "/" + digits.slice(4);
+                          setEditDate(fmt);
                         }}
-                        placeholder="7:30"
+                        placeholder="MM/DD/YY"
                         placeholderTextColor={C.textMuted}
                         keyboardType="number-pad"
-                        maxLength={5}
+                        maxLength={8}
                         autoCorrect={false}
                       />
-                      <View style={{ flexDirection: "column", gap: 4 }}>
-                        {(["AM", "PM"] as const).map((period) => (
-                          <Pressable
-                            key={period}
-                            onPress={() => { setEditAmPm(period); Haptics.selectionAsync(); }}
-                            style={{
-                              flex: 1, paddingHorizontal: 10, borderRadius: 9, borderWidth: 1,
-                              alignItems: "center", justifyContent: "center",
-                              backgroundColor: editAmPm === period ? C.primary + "33" : C.surface,
-                              borderColor: editAmPm === period ? C.primary : C.border,
-                            }}
-                          >
-                            <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: editAmPm === period ? C.primary : C.textMuted }}>{period}</Text>
-                          </Pressable>
-                        ))}
+                      <View style={{ flex: 1, flexDirection: "row", gap: 6 }}>
+                        <TextInput
+                          style={[styles.editInput, { flex: 1 }]}
+                          value={editTime}
+                          onChangeText={(text) => {
+                            const digits = text.replace(/\D/g, "").slice(0, 4);
+                            setEditTime(autoFormatEditTime(digits));
+                          }}
+                          placeholder="7:30"
+                          placeholderTextColor={C.textMuted}
+                          keyboardType="number-pad"
+                          maxLength={5}
+                          autoCorrect={false}
+                        />
+                        <View style={{ flexDirection: "column", gap: 4 }}>
+                          {(["AM", "PM"] as const).map((period) => (
+                            <Pressable
+                              key={period}
+                              onPress={() => { setEditAmPm(period); Haptics.selectionAsync(); }}
+                              style={{
+                                flex: 1, paddingHorizontal: 10, borderRadius: 9, borderWidth: 1,
+                                alignItems: "center", justifyContent: "center",
+                                backgroundColor: editAmPm === period ? C.primary + "33" : C.surface,
+                                borderColor: editAmPm === period ? C.primary : C.border,
+                              }}
+                            >
+                              <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: editAmPm === period ? C.primary : C.textMuted }}>{period}</Text>
+                            </Pressable>
+                          ))}
+                        </View>
                       </View>
                     </View>
                   </View>
-                </View>
-                <Pressable
-                  style={({ pressed }) => [styles.primaryBtn, { opacity: pressed || editSaving ? 0.85 : 1, marginTop: 8 }]}
-                  onPress={handleSaveEdit}
-                  disabled={editSaving}
-                  testID="save-edit-btn"
-                >
-                  {editSaving ? <ActivityIndicator color={C.text} /> : (
-                    <>
-                      <Feather name="check" size={16} color={C.text} />
-                      <Text style={styles.primaryBtnText}>Save Changes</Text>
-                    </>
-                  )}
-                </Pressable>
+                  <View style={{ flexDirection: "row", gap: 10 }}>
+                    <View style={[styles.editFieldGroup, { flex: 1 }]}>
+                      <Text style={styles.editFieldLabel}>Min distance (mi)</Text>
+                      <TextInput
+                        style={styles.editInput}
+                        value={editMinDistance}
+                        onChangeText={setEditMinDistance}
+                        placeholder="0"
+                        placeholderTextColor={C.textMuted}
+                        keyboardType="decimal-pad"
+                      />
+                    </View>
+                    <View style={[styles.editFieldGroup, { flex: 1 }]}>
+                      <Text style={styles.editFieldLabel}>Max distance (mi)</Text>
+                      <TextInput
+                        style={styles.editInput}
+                        value={editMaxDistance}
+                        onChangeText={setEditMaxDistance}
+                        placeholder="3"
+                        placeholderTextColor={C.textMuted}
+                        keyboardType="decimal-pad"
+                      />
+                    </View>
+                  </View>
+                  <View style={{ flexDirection: "row", gap: 10 }}>
+                    <View style={[styles.editFieldGroup, { flex: 1 }]}>
+                      <Text style={styles.editFieldLabel}>Faster pace (min/mi)</Text>
+                      <TextInput
+                        style={styles.editInput}
+                        value={editMinPace}
+                        onChangeText={setEditMinPace}
+                        placeholder="7"
+                        placeholderTextColor={C.textMuted}
+                        keyboardType="decimal-pad"
+                      />
+                    </View>
+                    <View style={[styles.editFieldGroup, { flex: 1 }]}>
+                      <Text style={styles.editFieldLabel}>Slower pace (min/mi)</Text>
+                      <TextInput
+                        style={styles.editInput}
+                        value={editMaxPace}
+                        onChangeText={setEditMaxPace}
+                        placeholder="10"
+                        placeholderTextColor={C.textMuted}
+                        keyboardType="decimal-pad"
+                      />
+                    </View>
+                  </View>
+                  <View style={styles.editFieldGroup}>
+                    <Text style={styles.editFieldLabel}>Max participants</Text>
+                    <TextInput
+                      style={styles.editInput}
+                      value={editMaxParticipants}
+                      onChangeText={setEditMaxParticipants}
+                      placeholder="20"
+                      placeholderTextColor={C.textMuted}
+                      keyboardType="number-pad"
+                    />
+                  </View>
+                  <Pressable
+                    style={({ pressed }) => [styles.primaryBtn, { opacity: pressed || editSaving ? 0.85 : 1, marginTop: 8 }]}
+                    onPress={handleSaveEdit}
+                    disabled={editSaving}
+                    testID="save-edit-btn"
+                  >
+                    {editSaving ? <ActivityIndicator color={C.text} /> : (
+                      <>
+                        <Feather name="check" size={16} color={C.text} />
+                        <Text style={styles.primaryBtnText}>Save Changes</Text>
+                      </>
+                    )}
+                  </Pressable>
+                </ScrollView>
               </View>
             </KeyboardAvoidingView>
           </View>

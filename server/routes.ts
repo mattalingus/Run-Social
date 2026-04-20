@@ -1969,24 +1969,103 @@ async function go(e){
 
   app.patch("/api/runs/:id", requireAuth, async (req, res) => {
     try {
-      const { date } = req.body;
-      if (!date) return res.status(400).json({ message: "date is required" });
-      const parsedPatchDate = new Date(date);
-      if (isNaN(parsedPatchDate.getTime())) return res.status(400).json({ message: "Invalid date" });
-      if (parsedPatchDate.getTime() < Date.now()) return res.status(400).json({ message: "Event date cannot be in the past" });
-      const updated = await storage.updateRunDateTime(req.params.id as string, req.session.userId!, date);
-      const tokens = await storage.getRunBroadcastTokens(req.params.id as string);
-      if (tokens.length) {
-        const newDate = new Date(updated.date);
-        const label = `${newDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} at ${newDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
-        sendPushNotification(
-          tokens,
-          "Run time updated ⏰",
-          `"${updated.title}" has been rescheduled to ${label}`,
-          { runId: req.params.id as string }
-        );
+      const body = req.body ?? {};
+      const patch: storage.RunEditableFields = {};
+
+      // Date
+      if (body.date !== undefined) {
+        const parsedPatchDate = new Date(body.date);
+        if (isNaN(parsedPatchDate.getTime())) return res.status(400).json({ message: "Invalid date" });
+        if (parsedPatchDate.getTime() < Date.now() - 60_000) return res.status(400).json({ message: "Event date cannot be in the past" });
+        patch.date = parsedPatchDate.toISOString();
       }
-      res.json(updated);
+      // Strings
+      if (body.title !== undefined) {
+        const t = String(body.title).trim();
+        if (!t) return res.status(400).json({ message: "Title cannot be empty" });
+        if (t.length > 120) return res.status(400).json({ message: "Title too long (max 120)" });
+        patch.title = t;
+      }
+      if (body.description !== undefined) {
+        const d = body.description == null ? null : String(body.description).trim();
+        if (d && d.length > 1000) return res.status(400).json({ message: "Description too long (max 1000)" });
+        patch.description = d || null;
+      }
+      if (body.locationName !== undefined) {
+        const l = String(body.locationName).trim();
+        if (!l) return res.status(400).json({ message: "Location cannot be empty" });
+        patch.locationName = l;
+      }
+      if (body.locationLat !== undefined) {
+        const n = parseFloat(body.locationLat);
+        if (!isFinite(n) || n < -90 || n > 90) return res.status(400).json({ message: "Invalid location latitude" });
+        patch.locationLat = n;
+      }
+      if (body.locationLng !== undefined) {
+        const n = parseFloat(body.locationLng);
+        if (!isFinite(n) || n < -180 || n > 180) return res.status(400).json({ message: "Invalid location longitude" });
+        patch.locationLng = n;
+      }
+      // Numbers — distance & pace
+      const numField = (key: keyof storage.RunEditableFields, label: string) => {
+        if (body[key] === undefined) return null;
+        const n = parseFloat(body[key]);
+        if (!isFinite(n) || n < 0) return `Invalid ${label}`;
+        (patch as any)[key] = n;
+        return null;
+      };
+      const errs = [
+        numField("minDistance", "min distance"),
+        numField("maxDistance", "max distance"),
+        numField("minPace", "min pace"),
+        numField("maxPace", "max pace"),
+      ].filter(Boolean) as string[];
+      if (errs.length) return res.status(400).json({ message: errs[0] });
+      if (patch.minDistance !== undefined && patch.maxDistance !== undefined && patch.minDistance > patch.maxDistance) {
+        return res.status(400).json({ message: "Min distance must be ≤ max distance" });
+      }
+      if (patch.minPace !== undefined && patch.maxPace !== undefined && patch.minPace > patch.maxPace) {
+        return res.status(400).json({ message: "Min pace must be ≤ max pace" });
+      }
+      if (body.maxParticipants !== undefined) {
+        const n = parseInt(body.maxParticipants, 10);
+        if (!Number.isInteger(n) || n < 1 || n > 9999) return res.status(400).json({ message: "Max participants 1–9999" });
+        patch.maxParticipants = n;
+      }
+
+      const { after, changedFields } = await storage.updateRun(req.params.id as string, req.session.userId!, patch);
+
+      // Build a human-readable change summary for the push notification.
+      if (changedFields.length > 0) {
+        const tokens = await storage.getRunBroadcastTokens(req.params.id as string);
+        if (tokens.length) {
+          const parts: string[] = [];
+          if (changedFields.includes("date")) {
+            const nd = new Date(after.date);
+            parts.push(`new time ${nd.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} at ${nd.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`);
+          }
+          if (changedFields.includes("locationName")) parts.push(`new location: ${after.location_name}`);
+          if (changedFields.includes("title")) parts.push(`new title: "${after.title}"`);
+          if (changedFields.includes("description")) parts.push("description updated");
+          const distChanged = changedFields.includes("minDistance") || changedFields.includes("maxDistance");
+          if (distChanged) {
+            const range = after.min_distance === after.max_distance
+              ? `${after.max_distance} mi`
+              : `${after.min_distance}–${after.max_distance} mi`;
+            parts.push(`distance: ${range}`);
+          }
+          const paceChanged = changedFields.includes("minPace") || changedFields.includes("maxPace");
+          if (paceChanged) parts.push("pace updated");
+          if (changedFields.includes("maxParticipants")) parts.push(`cap: ${after.max_participants}`);
+
+          const headline = changedFields.length === 1 && changedFields[0] === "date"
+            ? "Event rescheduled ⏰"
+            : "Event updated ✏️";
+          const body_msg = `"${after.title}" — ${parts.join(" · ")}`;
+          sendPushNotification(tokens, headline, body_msg, { runId: req.params.id as string });
+        }
+      }
+      res.json(after);
     } catch (e: any) {
       res.status(e.message.includes("Only the host") ? 403 : 500).json({ message: e.message });
     }
@@ -2845,11 +2924,11 @@ async function go(e){
 
   app.post("/api/saved-paths", requireAuth, async (req, res) => {
     try {
-      const { name, routePath, distanceMiles, activityType, soloRunId } = req.body;
+      const { name, routePath, distanceMiles, activityType, activityTypes, soloRunId } = req.body;
       if (!name || !routePath || !Array.isArray(routePath)) {
         return res.status(400).json({ message: "name and routePath are required" });
       }
-      const path = await storage.createSavedPath(req.session.userId!, { name, routePath, distanceMiles, activityType, soloRunId: soloRunId || null });
+      const path = await storage.createSavedPath(req.session.userId!, { name, routePath, distanceMiles, activityType, activityTypes, soloRunId: soloRunId || null });
       storage.matchCommunityPath(req.session.userId!, path.id, routePath, distanceMiles ?? null).catch(console.error);
       res.json(path);
     } catch (e: any) {

@@ -968,7 +968,7 @@ function RunCard({
               if (badge) return <Text style={[s.hostColumnBadge, { color: badge.color }]}>{badge.label}</Text>;
               return null;
             })()}
-            <Text style={s.hostColumnDist}>{toDisplayDist(run.min_distance, distUnit)}</Text>
+            <Text style={s.hostColumnDist}>{toDisplayDist(run.crew_id ? run.max_distance : run.min_distance, distUnit)}</Text>
             {weather && (
               <View style={s.hostColumnWeatherPill}>
                 <Text style={s.hostColumnWeather}>{weather.emoji} {weather.tempF}°</Text>
@@ -1062,8 +1062,8 @@ function RunCard({
                 <View style={s.statDiv} />
                 <View style={s.statPill}>
                   <Text numberOfLines={1} style={[s.statPillValue, { color: C.blue }]}>
-                    {run.min_distance === run.max_distance
-                      ? toDisplayDist(run.min_distance, distUnit)
+                    {run.crew_id || run.min_distance === run.max_distance
+                      ? toDisplayDist(run.crew_id ? run.max_distance : run.min_distance, distUnit)
                       : `${toDisplayDist(run.min_distance, distUnit)}–${toDisplayDist(run.max_distance, distUnit)}`}
                   </Text>
                   <Text numberOfLines={1} style={s.statPillLabel}>Dist</Text>

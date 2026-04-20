@@ -213,6 +213,10 @@ function LockedRunMarker({ run, isSelected, onPress }: { run: Run; isSelected: b
   const { C } = useTheme();
   const mk = useMemo(() => makeMkStyles(C), [C]);
   const scale = useRef(new Animated.Value(1)).current;
+  const coord = useMemo(
+    () => ({ latitude: run.location_lat, longitude: run.location_lng }),
+    [run.location_lat, run.location_lng]
+  );
 
   function handlePress() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -225,7 +229,7 @@ function LockedRunMarker({ run, isSelected, onPress }: { run: Run; isSelected: b
 
   return (
     <Marker
-      coordinate={{ latitude: run.location_lat, longitude: run.location_lng }}
+      coordinate={coord}
       onPress={handlePress}
       anchor={{ x: 0.5, y: 0.5 }}
       tracksViewChanges={false}
@@ -247,6 +251,14 @@ function RunMarker({ run, isSelected, isFriend, onPress }: { run: Run; isSelecte
   const pulseAnim = useRef(new Animated.Value(0.3)).current;
   // contentReady: true once image/emoji has rendered and we can freeze the snapshot
   const [contentReady, setContentReady] = useState(false);
+  // Stable coordinate reference — critical on iOS. Without memoization a new
+  // object is created on every render; combined with a tracksViewChanges flip
+  // (true→false when contentReady fires) the native marker briefly unregisters
+  // and snaps to (0,0) = top-left before re-syncing.
+  const coord = useMemo(
+    () => ({ latitude: run.location_lat, longitude: run.location_lng }),
+    [run.location_lat, run.location_lng]
+  );
   const soon = isWithin24h(run.date);
   const isLiveNow = !!run.is_active && (run.participant_count ?? 0) > 0;
   const icon = run.host_marker_icon;
@@ -305,7 +317,7 @@ function RunMarker({ run, isSelected, isFriend, onPress }: { run: Run; isSelecte
 
   return (
     <Marker
-      coordinate={{ latitude: run.location_lat, longitude: run.location_lng }}
+      coordinate={coord}
       onPress={handlePress}
       anchor={{ x: 0.5, y: 0.5 }}
       tracksViewChanges={tracksViewChanges}
@@ -670,6 +682,49 @@ export default function MapScreen() {
       Animated.timing(pubRouteSheetOpacity, { toValue: 0, duration: 140, useNativeDriver: true }),
     ]).start(() => setSelectedPublicRouteId(null));
   }
+
+  const nearbyPaths = useMemo(() => {
+    if (!selectedCommunityPath) return [] as CommunityPath[];
+    const sp = selectedCommunityPath;
+    const sLat = sp.start_lat ?? sp.route_path?.[0]?.latitude;
+    const sLng = sp.start_lng ?? sp.route_path?.[0]?.longitude;
+    if (sLat == null || sLng == null) return [];
+    return communityPaths.filter((p) => {
+      if (p.id === sp.id) return false;
+      const pLat = p.start_lat ?? p.route_path?.[0]?.latitude;
+      const pLng = p.start_lng ?? p.route_path?.[0]?.longitude;
+      if (pLat == null || pLng == null) return false;
+      return Math.abs(pLat - sLat) < 0.004 && Math.abs(pLng - sLng) < 0.004;
+    }).slice(0, 8);
+  }, [selectedCommunityPath, communityPaths]);
+
+  const [savingPathId, setSavingPathId] = useState<string | null>(null);
+  const saveCommunityPathToMyRoutes = useCallback(async (path: CommunityPath) => {
+    if (!user) {
+      Alert.alert("Sign in required", "Sign in to save routes.");
+      return;
+    }
+    try {
+      setSavingPathId(path.id);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const activityTypes = (path.activity_types && path.activity_types.length > 0)
+        ? path.activity_types
+        : [path.activity_type ?? "run"];
+      await apiRequest("POST", "/api/saved-paths", {
+        name: path.name,
+        routePath: path.route_path,
+        distanceMiles: path.distance_miles ?? null,
+        activityType: activityTypes[0],
+        activityTypes,
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert("Saved", `"${path.name}" added to your routes.`);
+    } catch (e: any) {
+      Alert.alert("Could not save", e?.message ?? "Try again.");
+    } finally {
+      setSavingPathId(null);
+    }
+  }, [user]);
 
   function openPathCard(path: CommunityPath) {
     if (selectedRun) closeCard();
@@ -1126,6 +1181,27 @@ export default function MapScreen() {
               </View>
             </View>
 
+            {nearbyPaths.length > 0 && (
+              <View style={{ marginBottom: 14 }}>
+                <Text style={[s.pathMutedTxt, { marginBottom: 8, fontWeight: "700", color: C.text }]}>
+                  {nearbyPaths.length === 1 ? "Another route here" : "Other routes here"}
+                </Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingRight: 16 }}>
+                  {nearbyPaths.map((np) => (
+                    <Pressable
+                      key={np.id}
+                      onPress={() => { Haptics.selectionAsync(); openPathCard(np); }}
+                      style={s.variantCard}
+                    >
+                      <VariantMiniMap pts={np.route_path} active={false} C={C} />
+                      <Text style={s.variantCardName} numberOfLines={1}>{np.name}</Text>
+                      <Text style={s.variantCardDist}>{toDisplayDist(np.distance_miles ?? 0, distUnit)}</Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
             {(selectedCommunityPath.variants?.length ?? 0) > 0 && (
               <View style={{ marginBottom: 14 }}>
                 <Text style={[s.pathMutedTxt, { marginBottom: 8, fontWeight: "700", color: C.text }]}>Route options</Text>
@@ -1151,16 +1227,32 @@ export default function MapScreen() {
               </View>
             )}
 
-            <Pressable
-              style={s.pathStartBtn}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                router.push("/run-tracking");
-              }}
-            >
-              <Text style={s.pathStartBtnTxt}>Start Run Here</Text>
-              <Feather name="play" size={18} color="#FFF" />
-            </Pressable>
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <Pressable
+                style={[s.pathStartBtn, { flex: 1 }]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  router.push("/run-tracking");
+                }}
+              >
+                <Text style={s.pathStartBtnTxt}>Start Here</Text>
+                <Feather name="play" size={18} color="#FFF" />
+              </Pressable>
+              <Pressable
+                style={[s.pathStartBtn, { backgroundColor: C.card, borderWidth: 1, borderColor: C.border, paddingHorizontal: 14 }]}
+                disabled={savingPathId === selectedCommunityPath.id}
+                onPress={() => saveCommunityPathToMyRoutes(selectedCommunityPath)}
+              >
+                {savingPathId === selectedCommunityPath.id ? (
+                  <ActivityIndicator size="small" color={C.primary} />
+                ) : (
+                  <>
+                    <Feather name="bookmark" size={16} color={C.primary} />
+                    <Text style={[s.pathStartBtnTxt, { color: C.primary }]}>Save</Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
           </View>
         )}
 

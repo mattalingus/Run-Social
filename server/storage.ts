@@ -281,6 +281,7 @@ export async function initDb() {
 
     ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS saved_path_id VARCHAR REFERENCES saved_paths(id) ON DELETE SET NULL;
     ALTER TABLE saved_paths ADD COLUMN IF NOT EXISTS activity_type TEXT DEFAULT 'run';
+    ALTER TABLE saved_paths ADD COLUMN IF NOT EXISTS activity_types TEXT[];
 
     CREATE TABLE IF NOT EXISTS bookmarked_runs (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -2354,6 +2355,72 @@ export async function updateRunDateTime(runId: string, userId: string, newDate: 
   return updated.rows[0];
 }
 
+// Generalized host-edit for a scheduled event. Accepts any subset of editable
+// fields, validates ownership, builds an UPDATE dynamically, and returns
+// { before, after, changedFields } so the route layer can notify participants
+// with a readable diff.
+export type RunEditableFields = Partial<{
+  date: string;            // ISO string
+  title: string;
+  description: string | null;
+  locationName: string;
+  locationLat: number;
+  locationLng: number;
+  minDistance: number;
+  maxDistance: number;
+  minPace: number;
+  maxPace: number;
+  maxParticipants: number;
+}>;
+
+export async function updateRun(runId: string, userId: string, patch: RunEditableFields) {
+  const prev = await pool.query(`SELECT * FROM runs WHERE id = $1`, [runId]);
+  if (!prev.rows.length) throw new Error("Run not found");
+  const before = prev.rows[0];
+  if (before.host_id !== userId) throw new Error("Only the host can edit this run");
+
+  // Whitelist → db-column mapping. Keys in patch that aren't here are ignored.
+  const map: Record<keyof RunEditableFields, string> = {
+    date: "date",
+    title: "title",
+    description: "description",
+    locationName: "location_name",
+    locationLat: "location_lat",
+    locationLng: "location_lng",
+    minDistance: "min_distance",
+    maxDistance: "max_distance",
+    minPace: "min_pace",
+    maxPace: "max_pace",
+    maxParticipants: "max_participants",
+  };
+  const sets: string[] = [];
+  const values: any[] = [runId];
+  const changedFields: string[] = [];
+  for (const [k, col] of Object.entries(map) as [keyof RunEditableFields, string][]) {
+    if (patch[k] === undefined) continue;
+    const v = patch[k];
+    const cur = before[col];
+    // Coerce dates to comparable ISO
+    const norm = (x: any) => (x instanceof Date ? x.toISOString() : (col === "date" && typeof x === "string") ? new Date(x).toISOString() : x);
+    if (norm(cur) === norm(v)) continue;
+    values.push(v);
+    sets.push(`${col} = $${values.length}`);
+    changedFields.push(k);
+  }
+  if (sets.length === 0) {
+    return { before, after: before, changedFields: [] };
+  }
+  // Reset late-start / pre-run notifications when the date changes so they refire
+  if (changedFields.includes("date")) {
+    sets.push(`notif_late_start_sent = false`, `notif_pre_run_sent = false`);
+  }
+  const res = await pool.query(
+    `UPDATE runs SET ${sets.join(", ")} WHERE id = $1 RETURNING *`,
+    values
+  );
+  return { before, after: res.rows[0], changedFields };
+}
+
 export async function cancelRun(runId: string, userId: string) {
   const run = await pool.query(`SELECT * FROM runs WHERE id = $1`, [runId]);
   if (!run.rows.length) throw new Error("Run not found");
@@ -3960,7 +4027,7 @@ export async function getSavedPaths(userId: string) {
 
 export async function createSavedPath(
   userId: string,
-  data: { name: string; routePath: Array<{ latitude: number; longitude: number }>; distanceMiles?: number; activityType?: string; soloRunId?: string | null }
+  data: { name: string; routePath: Array<{ latitude: number; longitude: number }>; distanceMiles?: number; activityType?: string; activityTypes?: string[]; soloRunId?: string | null }
 ) {
   const { path: dedupedPath, distanceMiles: computedDist, loopDetected } = deduplicateRoutePath(data.routePath);
   // When a loop closure was detected, use the trimmed GPS distance.
@@ -3969,10 +4036,18 @@ export async function createSavedPath(
     ? computedDist
     : (data.distanceMiles != null && data.distanceMiles > 0 ? data.distanceMiles : (computedDist > 0 ? computedDist : null));
 
+  // Sanitize activityTypes: only allow run/walk/ride, dedupe, keep null if empty
+  const validTypes = ["run", "walk", "ride"];
+  const types = Array.isArray(data.activityTypes)
+    ? Array.from(new Set(data.activityTypes.filter((t) => validTypes.includes(t))))
+    : [];
+  const primary = types[0] ?? data.activityType ?? "run";
+  const typesOrNull = types.length > 0 ? types : null;
+
   const res = await pool.query(
-    `INSERT INTO saved_paths (user_id, name, route_path, distance_miles, activity_type)
-     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [userId, data.name, JSON.stringify(dedupedPath), finalDist, data.activityType ?? "run"]
+    `INSERT INTO saved_paths (user_id, name, route_path, distance_miles, activity_type, activity_types)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+    [userId, data.name, JSON.stringify(dedupedPath), finalDist, primary, typesOrNull]
   );
   const newPath = res.rows[0];
 
@@ -4033,7 +4108,7 @@ export async function cloneSharedPath(shareId: string, toUserId: string) {
   const newRes = await pool.query(
     `INSERT INTO saved_paths (user_id, name, route_path, distance_miles, activity_type)
      VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [toUserId, path.name, path.route_path, path.distance_miles, path.activity_type ?? "run"]
+    [toUserId, path.name, JSON.stringify(typeof path.route_path === "string" ? JSON.parse(path.route_path) : path.route_path), path.distance_miles, path.activity_type ?? "run"]
   );
   await pool.query(`UPDATE path_shares SET cloned = true WHERE id = $1`, [shareId]);
   return newRes.rows[0];
@@ -4141,7 +4216,7 @@ export async function clonePathDirect(pathId: string, toUserId: string) {
   const newRes = await pool.query(
     `INSERT INTO saved_paths (user_id, name, route_path, distance_miles, activity_type)
      VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [toUserId, path.name, path.route_path, path.distance_miles, path.activity_type ?? "run"]
+    [toUserId, path.name, JSON.stringify(typeof path.route_path === "string" ? JSON.parse(path.route_path) : path.route_path), path.distance_miles, path.activity_type ?? "run"]
   );
   return newRes.rows[0];
 }
@@ -4187,9 +4262,9 @@ export async function publishSavedPath(pathId: string, userId: string) {
   const endLng = routePath[routePath.length - 1].longitude;
 
   const cpRes = await pool.query(
-    `INSERT INTO community_paths (name, route_path, distance_miles, is_public, created_by_user_id, created_by_name, start_lat, start_lng, end_lat, end_lng, activity_type, run_count)
-     VALUES ($1, $2, $3, true, $4, $5, $6, $7, $8, $9, $10, 0) RETURNING *`,
-    [path.name, path.route_path, path.distance_miles, userId, user.name, startLat, startLng, endLat, endLng, path.activity_type ?? "run"]
+    `INSERT INTO community_paths (name, route_path, distance_miles, is_public, created_by_user_id, created_by_name, start_lat, start_lng, end_lat, end_lng, activity_type, activity_types, run_count)
+     VALUES ($1, $2, $3, true, $4, $5, $6, $7, $8, $9, $10, $11, 0) RETURNING *`,
+    [path.name, JSON.stringify(routePath), path.distance_miles, userId, user.name, startLat, startLng, endLat, endLng, path.activity_type ?? "run", path.activity_types ?? null]
   );
   const communityPath = cpRes.rows[0];
 
