@@ -193,6 +193,7 @@ interface Run {
   title: string;
   host_id: string;
   host_name: string;
+  host_username?: string | null;
   host_rating: number;
   host_rating_count?: number;
   date: string;
@@ -955,7 +956,7 @@ function RunCard({
                 </View>
               );
             })()}
-            <Text style={s.hostColumnName} numberOfLines={2}>{run.host_name}</Text>
+            <Text style={s.hostColumnName} numberOfLines={2}>@{run.host_username ?? run.host_name}</Text>
             {run.crew_id && run.crew_name && (
               <View style={s.crewBadge}>
                 <Text style={s.crewBadgeEmoji}>{run.crew_emoji || "🏃"}</Text>
@@ -969,11 +970,6 @@ function RunCard({
               return null;
             })()}
             <Text style={s.hostColumnDist}>{toDisplayDist(run.crew_id ? run.max_distance : run.min_distance, distUnit)}</Text>
-            {weather && (
-              <View style={s.hostColumnWeatherPill}>
-                <Text style={s.hostColumnWeather}>{weather.emoji} {weather.tempF}°</Text>
-              </View>
-            )}
           </Pressable>
 
           {/* Vertical divider — stretches to full row height (left col vs right col+tags) */}
@@ -1038,52 +1034,6 @@ function RunCard({
                 )}
               </View>
 
-              <View style={s.cardStats}>
-                <View style={s.statPillPace}>
-                  {(() => {
-                    const pg = run.pace_groups ?? [];
-                    const multiGroup = run.crew_id && pg.length > 1;
-                    const singleGroup = run.crew_id && pg.length === 1;
-                    const widestRange = !run.crew_id && run.min_pace <= PACE_SLIDER_MIN + 0.25 && run.max_pace >= PACE_SLIDER_MAX - 0.25;
-                    if (multiGroup) return <Text numberOfLines={1} style={[s.statPillValue, { color: C.primary }]}>Groups</Text>;
-                    if (widestRange) return <Text numberOfLines={1} style={[s.statPillValue, { color: C.primary }]}>ANY</Text>;
-                    const shownMin = singleGroup ? pg[0].minPace : run.min_pace;
-                    const shownMax = singleGroup ? pg[0].maxPace : run.max_pace;
-                    return (
-                      <Text numberOfLines={1} style={[s.statPillValue, { color: getPaceColor(shownMin, shownMax, C) }]}>
-                        {shownMin === shownMax
-                          ? toDisplayPace(shownMin, distUnit).replace(/ \/(mi|km)$/, "")
-                          : `${toDisplayPace(shownMin, distUnit).replace(/ \/(mi|km)$/, "")}–${toDisplayPace(shownMax, distUnit).replace(/ \/(mi|km)$/, "")}`}
-                      </Text>
-                    );
-                  })()}
-                  <Text numberOfLines={1} style={s.statPillLabel}>{run.activity_type === "ride" ? "Speed mph" : `Pace ${distUnit === "km" ? "min/km" : "min/mi"}`}</Text>
-                </View>
-                <View style={s.statDiv} />
-                <View style={s.statPill}>
-                  <Text numberOfLines={1} style={[s.statPillValue, { color: C.blue }]}>
-                    {run.crew_id || run.min_distance === run.max_distance
-                      ? toDisplayDist(run.crew_id ? run.max_distance : run.min_distance, distUnit)
-                      : `${toDisplayDist(run.min_distance, distUnit)}–${toDisplayDist(run.max_distance, distUnit)}`}
-                  </Text>
-                  <Text numberOfLines={1} style={s.statPillLabel}>Dist</Text>
-                </View>
-                <View style={s.statDiv} />
-                <View style={s.statPill}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
-                    <Ionicons name="people" size={13} color={run.is_active ? C.primary : C.textMuted} />
-                    <Text numberOfLines={1} style={[s.statPillValue, run.is_active && { color: C.primary }]}>
-                      {run.is_active
-                        ? (liveParticipantCount !== undefined ? liveParticipantCount : run.participant_count)
-                        : run.crew_id
-                          ? run.participant_count
-                          : `${run.participant_count}/${run.max_participants}`}
-                    </Text>
-                  </View>
-                  <Text numberOfLines={1} style={s.statPillLabel}>{run.is_active ? "Running" : "Going"}</Text>
-                </View>
-              </View>
-
               {run.crew_id && run.user_is_crew_member === false && (
                 <Pressable
                   style={s.joinCrewCta}
@@ -1113,6 +1063,51 @@ function RunCard({
             )}
           </View>
 
+        </View>
+
+        {/* ── Full-width stat pills ── */}
+        <View style={s.cardStats}>
+          <View style={s.statPillPace}>
+            {(() => {
+              const pg = run.pace_groups ?? [];
+              const multiGroup = run.crew_id && pg.length > 1;
+              const singleGroup = run.crew_id && pg.length === 1;
+              const widestRange = !run.crew_id && run.min_pace <= PACE_SLIDER_MIN + 0.25 && run.max_pace >= PACE_SLIDER_MAX - 0.25;
+              if (multiGroup) return <Text numberOfLines={1} style={[s.statPillValue, { color: C.primary }]}>Groups</Text>;
+              if (widestRange) return <Text numberOfLines={1} style={[s.statPillValue, { color: C.primary }]}>ANY</Text>;
+              const shownMin = singleGroup ? pg[0].minPace : run.min_pace;
+              const shownMax = singleGroup ? pg[0].maxPace : run.max_pace;
+              return (
+                <Text numberOfLines={1} style={[s.statPillValue, { color: getPaceColor(shownMin, shownMax, C) }]}>
+                  {shownMin === shownMax
+                    ? toDisplayPace(shownMin, distUnit).replace(/ \/(mi|km)$/, "")
+                    : `${toDisplayPace(shownMin, distUnit).replace(/ \/(mi|km)$/, "")}–${toDisplayPace(shownMax, distUnit).replace(/ \/(mi|km)$/, "")}`}
+                </Text>
+              );
+            })()}
+            <Text numberOfLines={1} style={s.statPillLabel}>{run.activity_type === "ride" ? "Speed mph" : `Pace ${distUnit === "km" ? "min/km" : "min/mi"}`}</Text>
+          </View>
+          <View style={s.statDiv} />
+          <View style={s.statPill}>
+            <Text numberOfLines={1} style={[s.statPillValue, { color: C.blue }]}>
+              {weather ? `${weather.tempF}°` : "—"}
+            </Text>
+            <Text numberOfLines={1} style={s.statPillLabel}>{weather ? `${weather.emoji} Temp` : "Temp"}</Text>
+          </View>
+          <View style={s.statDiv} />
+          <View style={s.statPill}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+              <Ionicons name="people" size={13} color={run.is_active ? C.primary : C.textMuted} />
+              <Text numberOfLines={1} style={[s.statPillValue, run.is_active && { color: C.primary }]}>
+                {run.is_active
+                  ? (liveParticipantCount !== undefined ? liveParticipantCount : run.participant_count)
+                  : run.crew_id
+                    ? run.participant_count
+                    : `${run.participant_count}/${run.max_participants}`}
+              </Text>
+            </View>
+            <Text numberOfLines={1} style={s.statPillLabel}>{run.is_active ? "Running" : "Going"}</Text>
+          </View>
         </View>
 
         {walkthroughActive && (
@@ -3781,7 +3776,7 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   joinCrewCta: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: `${C.primary}18`, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 10 },
   joinCrewCtaTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.primary, flex: 1 },
 
-  cardStats: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 },
+  cardStats: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10, paddingTop: 10, paddingHorizontal: 14, paddingBottom: 12, borderTopWidth: 1, borderTopColor: C.border + "55" },
   stat: { flexDirection: "row", alignItems: "center", gap: 3, flex: 1, minWidth: 0 },
   statLg: { flexDirection: "row", alignItems: "center", gap: 3, flex: 4, minWidth: 0 },
   statSm: { flexDirection: "row", alignItems: "center", gap: 3, flex: 2, minWidth: 0 },
