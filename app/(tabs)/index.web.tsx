@@ -16,7 +16,7 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/query-client";
 import { useAuth } from "@/contexts/AuthContext";
-import { darkColors as C, type ColorScheme } from "@/constants/colors";
+import { type ColorScheme } from "@/constants/colors";
 import { useTheme } from "@/contexts/ThemeContext";
 import RangeSlider from "@/components/RangeSlider";
 import { formatDistance } from "@/lib/formatDistance";
@@ -407,7 +407,7 @@ export default function DiscoverScreen() {
                 low={draft.paceMin} high={draft.paceMax}
                 onLowChange={(v) => setDraft((p) => ({ ...p, paceMin: v }))}
                 onHighChange={(v) => setDraft((p) => ({ ...p, paceMax: v }))}
-                color={C.primary} trackColor={C.border}
+                color={C.primary} trackColor={C.border} thumbColor={C.surface}
               />
               <View style={fm.edgeRow}>
                 <Text style={fm.edgeLabel}>6:00</Text>
@@ -429,7 +429,7 @@ export default function DiscoverScreen() {
                 low={draft.distMin} high={draft.distMax}
                 onLowChange={(v) => setDraft((p) => ({ ...p, distMin: v }))}
                 onHighChange={(v) => setDraft((p) => ({ ...p, distMax: v }))}
-                color={C.primary} trackColor={C.border}
+                color={C.primary} trackColor={C.border} thumbColor={C.surface}
               />
               <View style={fm.edgeRow}>
                 <Text style={fm.edgeLabel}>1 mi</Text>

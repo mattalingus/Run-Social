@@ -280,6 +280,19 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
   },
   ref
 ) {
+  const routePathSafe: { latitude: number; longitude: number }[] = (() => {
+    const raw: any = routePath;
+    if (!raw) return [];
+    if (typeof raw === "string") {
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch { return []; }
+    }
+    if (!Array.isArray(raw)) return [];
+    return raw.filter((p) => p && typeof p.latitude === "number" && typeof p.longitude === "number");
+  })();
+  routePath = routePathSafe;
   const hasRoute = routePath.length >= 2;
   const isGroup = participantCount != null && participantCount > 1;
   const isRide = activityType === "ride";

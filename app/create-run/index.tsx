@@ -13,6 +13,7 @@ import {
   Modal,
   Share,
   KeyboardAvoidingView,
+  Switch,
 } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import Svg, { Polyline as SvgPolyline } from "react-native-svg";
@@ -22,12 +23,14 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Clipboard from "expo-clipboard";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/query-client";
-import { darkColors as C, type ColorScheme } from "@/constants/colors";
+import { type ColorScheme } from "@/constants/colors";
 import { useTheme } from "@/contexts/ThemeContext";
+import ScreenHeader from "@/components/ScreenHeader";
 import MiniCalendarPicker from "@/components/MiniCalendarPicker";
 
 const TAG_GROUPS = [
@@ -114,12 +117,12 @@ export default function CreateRunScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const qc = useQueryClient();
-  const params = useLocalSearchParams<{ pathLat?: string; pathLng?: string; pathName?: string; pathDistance?: string; activityType?: string; crewId?: string; crewName?: string }>();
+  const params = useLocalSearchParams<{ pathLat?: string; pathLng?: string; pathName?: string; pathDistance?: string; activityType?: string; crewId?: string; crewName?: string; visibility?: string }>();
 
   const [activityType, setActivityType] = useState<"run" | "ride" | "walk">(params.activityType === "ride" ? "ride" : params.activityType === "walk" ? "walk" : "run");
   const [title, setTitle] = useState(params.pathName ? `${params.activityType === "ride" ? "Ride on" : params.activityType === "walk" ? "Walk on" : "Run on"} ${params.pathName}` : "");
   const [description, setDescription] = useState("");
-  const [privacy, setPrivacy] = useState("public");
+  const [privacy, setPrivacy] = useState(params.visibility === "crew" || params.visibility === "friends" || params.visibility === "public" ? params.visibility : "public");
   const [date, setDate] = useState<Date>(() => new Date());
   const [time, setTime] = useState("7:30");
   const [locationName, setLocationName] = useState(params.pathName ?? "");
@@ -127,8 +130,8 @@ export default function CreateRunScreen() {
   const [locationLng, setLocationLng] = useState(params.pathLng ?? "");
   const [minDistance, setMinDistance] = useState("3");
   const [maxDistance, setMaxDistance] = useState("6");
-  const [minPace, setMinPace] = useState("8");
-  const [maxPace, setMaxPace] = useState("12");
+  const [minPace, setMinPace] = useState("4");
+  const [maxPace, setMaxPace] = useState("20");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [hostTags, setHostTags] = useState<string[]>([]);
   const [maxParticipants, setMaxParticipants] = useState("20");
@@ -144,17 +147,109 @@ export default function CreateRunScreen() {
 
   const [plannedDistance, setPlannedDistance] = useState(params.pathDistance ?? "3");
   const [plannedPace, setPlannedPace] = useState("9");
-  const [paceGroups, setPaceGroups] = useState<{ label: string; minPace: string; maxPace: string }[]>([
-    { label: "Group A", minPace: "7", maxPace: "9" },
-    { label: "Group B", minPace: "9", maxPace: "11" },
-  ]);
+  const paceGroupDefaults = (act: "run" | "ride" | "walk") =>
+    act === "ride"
+      ? [{ label: "Group A", minPace: "18", maxPace: "22" }]
+      : act === "walk"
+      ? [{ label: "Group A", minPace: "13", maxPace: "15" }]
+      : [{ label: "Group A", minPace: "7", maxPace: "9" }];
+  const [paceGroups, setPaceGroups] = useState<{ label: string; minPace: string; maxPace: string }[]>(
+    paceGroupDefaults(params.activityType === "ride" ? "ride" : params.activityType === "walk" ? "walk" : "run")
+  );
+  const paceGroupsCustomized = useRef(false);
+  useEffect(() => {
+    if (!paceGroupsCustomized.current) setPaceGroups(paceGroupDefaults(activityType));
+  }, [activityType]);
   const [paceGroupErrors, setPaceGroupErrors] = useState<string[]>([]);
+  const [usePaceGroups, setUsePaceGroups] = useState(false);
   const [locationPickerOpen, setLocationPickerOpen] = useState(false);
   const [pickerLat, setPickerLat] = useState(parseFloat(locationLat) || 0);
   const [pickerLng, setPickerLng] = useState(parseFloat(locationLng) || 0);
   const [pickerName, setPickerName] = useState(locationName);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [selectedCrewId, setSelectedCrewId] = useState<string | null>(params.crewId ?? null);
+
+  type HostTemplate = {
+    id: string;
+    name: string;
+    activityType: "run" | "ride" | "walk";
+    title: string;
+    plannedDistance: string;
+    minPace: string;
+    maxPace: string;
+    maxParticipants: string;
+    usePaceGroups: boolean;
+    paceGroups: { label: string; minPace: string; maxPace: string }[];
+    hostTags: string[];
+    privacy: "public" | "friends" | "crew";
+  };
+  const [hostTemplates, setHostTemplates] = useState<HostTemplate[]>([]);
+  const templatesKey = user?.id ? `paceup_host_templates_${user.id}` : null;
+  useEffect(() => {
+    if (!templatesKey) return;
+    AsyncStorage.getItem(templatesKey).then((v) => {
+      if (v) try { setHostTemplates(JSON.parse(v)); } catch {}
+    });
+  }, [templatesKey]);
+  function saveTemplate(name: string) {
+    if (!templatesKey) return;
+    const tpl: HostTemplate = {
+      id: `tpl-${Date.now()}`,
+      name,
+      activityType,
+      title,
+      plannedDistance,
+      minPace,
+      maxPace,
+      maxParticipants,
+      usePaceGroups,
+      paceGroups,
+      hostTags,
+      privacy: privacy as any,
+    };
+    const next = [tpl, ...hostTemplates].slice(0, 12);
+    setHostTemplates(next);
+    AsyncStorage.setItem(templatesKey, JSON.stringify(next)).catch(() => {});
+  }
+  function applyTemplate(tpl: HostTemplate) {
+    setActivityType(tpl.activityType);
+    setTitle(tpl.title);
+    setPlannedDistance(tpl.plannedDistance);
+    setMinPace(tpl.minPace);
+    setMaxPace(tpl.maxPace);
+    setMaxParticipants(tpl.maxParticipants);
+    setUsePaceGroups(tpl.usePaceGroups);
+    setPaceGroups(tpl.paceGroups);
+    paceGroupsCustomized.current = true;
+    setHostTags(tpl.hostTags);
+    setPrivacy(tpl.privacy);
+    Haptics.selectionAsync();
+  }
+  function deleteTemplate(id: string) {
+    if (!templatesKey) return;
+    const next = hostTemplates.filter((t) => t.id !== id);
+    setHostTemplates(next);
+    AsyncStorage.setItem(templatesKey, JSON.stringify(next)).catch(() => {});
+  }
+  function promptSaveTemplate() {
+    if (Platform.OS !== "ios") {
+      Alert.alert("Save Template", "Save this setup for next time?", [
+        { text: "Not now", style: "cancel" },
+        { text: "Save", onPress: () => saveTemplate(title || `${activityType} template`) },
+      ]);
+      return;
+    }
+    Alert.prompt(
+      "Save as Template?",
+      "Reuse this setup next time you host.",
+      [
+        { text: "Not now", style: "cancel" },
+        { text: "Save", onPress: (v?: string) => saveTemplate((v || title || `${activityType} template`).trim()) },
+      ],
+      "plain-text",
+      title || ""
+    );
+  }
 
   const [selectedSavedPathId, setSelectedSavedPathId] = useState<string | null>(null);
   const [showPathPicker, setShowPathPicker] = useState(false);
@@ -172,6 +267,17 @@ export default function CreateRunScreen() {
     staleTime: 60_000,
     enabled: !!user,
   });
+
+  const hasMatchingPath = useMemo(() => {
+    const lat = parseFloat(locationLat);
+    const lng = parseFloat(locationLng);
+    if (!lat || !lng) return true;
+    return mySavedPaths.some(p =>
+      (p.activity_type ?? "run") === activityType &&
+      p.route_path && p.route_path.length > 0 &&
+      haversineKm(lat, lng, p.route_path[0].latitude, p.route_path[0].longitude) < 0.3
+    );
+  }, [mySavedPaths, locationLat, locationLng, activityType]);
 
   const submittingRef = useRef(false);
 
@@ -253,7 +359,8 @@ export default function CreateRunScreen() {
       const distMax = isCrew ? parseFloat(plannedDistance) || 3 : parseFloat(maxDistance);
       // For crew runs with pace groups, spread across all groups; default min to 0.
       let pace: number, paceMax: number;
-      if (isCrew && paceGroups.length > 0) {
+      const groupsOn = isCrew || usePaceGroups;
+      if (groupsOn && paceGroups.length > 0) {
         const allMin = paceGroups.map((g) => parseFloat(g.minPace)).filter((n) => !isNaN(n));
         const allMax = paceGroups.map((g) => parseFloat(g.maxPace)).filter((n) => !isNaN(n));
         pace = allMin.length > 0 ? Math.min(...allMin) : 0;
@@ -283,7 +390,7 @@ export default function CreateRunScreen() {
         crewId: effectiveCrewId || undefined,
         isStrict: false,
         savedPathId: selectedSavedPathId || undefined,
-        paceGroups: isCrew && paceGroups.length > 0
+        paceGroups: (isCrew || usePaceGroups) && paceGroups.length > 0
           ? paceGroups.map((g) => ({
               label: g.label.trim() || `Group ${paceGroups.indexOf(g) + 1}`,
               minPace: parseFloat(g.minPace) || 0,
@@ -313,7 +420,10 @@ export default function CreateRunScreen() {
         Alert.alert(
           activityType === "ride" ? "Ride Created!" : activityType === "walk" ? "Walk Created!" : "Run Created!",
           activityType === "ride" ? "Your ride is now live on the map." : activityType === "walk" ? "Your walk is now live on the map." : "Your run is now live on the map.",
-          [{ text: "Great!", onPress: () => router.back() }]
+          [
+            { text: "Save as template", onPress: () => { promptSaveTemplate(); setTimeout(() => router.back(), 400); } },
+            { text: "Great!", onPress: () => router.back() },
+          ]
         );
       }
     },
@@ -334,7 +444,7 @@ export default function CreateRunScreen() {
   function validateAndSubmit() {
     if (submittingRef.current || createMutation.isPending) return;
     submittingRef.current = true;
-    if (isCrew && paceGroups.length > 0) {
+    if ((isCrew || usePaceGroups) && paceGroups.length > 0) {
       const errors = paceGroups.map((g) => {
         const min = parseFloat(g.minPace);
         const max = parseFloat(g.maxPace);
@@ -354,23 +464,24 @@ export default function CreateRunScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: C.bg }]}>
-      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-        <Pressable onPress={() => router.back()} style={styles.cancelBtn}>
-          <Feather name="x" size={20} color={C.textSecondary} />
-        </Pressable>
-        <Text style={styles.headerTitle}>{activityType === "ride" ? "Host a Ride" : activityType === "walk" ? "Host a Walk" : "Host a Run"}</Text>
-        <Pressable
-          style={({ pressed }) => [styles.createBtn, { opacity: (pressed || createMutation.isPending || (privacy === "crew" && !selectedCrewId && !params.crewId)) ? 0.5 : 1 }]}
-          onPress={validateAndSubmit}
-          disabled={createMutation.isPending || (privacy === "crew" && !selectedCrewId && !params.crewId)}
-        >
-          {createMutation.isPending ? (
-            <ActivityIndicator size="small" color={C.bg} />
-          ) : (
-            <Text style={styles.createBtnText}>Post</Text>
-          )}
-        </Pressable>
-      </View>
+      <ScreenHeader
+        variant="close"
+        topPaddingExtra={16}
+        title={activityType === "ride" ? "Host a Ride" : activityType === "walk" ? "Host a Walk" : "Host a Run"}
+        right={
+          <Pressable
+            style={({ pressed }) => [styles.createBtn, { opacity: (pressed || createMutation.isPending || (privacy === "crew" && !selectedCrewId && !params.crewId)) ? 0.5 : 1 }]}
+            onPress={validateAndSubmit}
+            disabled={createMutation.isPending || (privacy === "crew" && !selectedCrewId && !params.crewId)}
+          >
+            {createMutation.isPending ? (
+              <ActivityIndicator size="small" color={C.bg} />
+            ) : (
+              <Text style={styles.createBtnText}>Post</Text>
+            )}
+          </Pressable>
+        }
+      />
 
       <KeyboardAwareScrollViewCompat
         contentContainerStyle={[styles.form, { paddingBottom: insets.bottom + 40 }]}
@@ -413,59 +524,7 @@ export default function CreateRunScreen() {
           </View>
         </View>
 
-        {/* 2. View (privacy) */}
-        {!params.crewId && (
-          <View style={styles.field}>
-            <Text style={styles.label}>View</Text>
-            <View style={styles.privacyRow}>
-              {PRIVACY_OPTIONS.map((opt) => (
-                <Pressable
-                  key={opt.value}
-                  style={[styles.privacyOption, privacy === opt.value && styles.privacyOptionActive]}
-                  onPress={() => {
-                    setPrivacy(opt.value);
-                    if (opt.value !== "crew") setSelectedCrewId(null);
-                    Haptics.selectionAsync();
-                  }}
-                >
-                  <Feather name={opt.icon as any} size={16} color={privacy === opt.value ? C.primary : C.textSecondary} />
-                  <Text style={[styles.privacyLabel, privacy === opt.value && styles.privacyLabelActive]}>{opt.label}</Text>
-                  <Text style={styles.privacyDesc}>{opt.desc}</Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {!params.crewId && privacy === "crew" && (
-          <View style={styles.field}>
-            <Text style={styles.label}>Select Crew</Text>
-            {myCrews.length === 0 ? (
-              <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textMuted }}>
-                You're not in any crews yet. Join or create one from the Crew tab.
-              </Text>
-            ) : (
-              <View style={{ gap: 8 }}>
-                {myCrews.map((crew) => {
-                  const active = selectedCrewId === crew.id;
-                  return (
-                    <Pressable
-                      key={crew.id}
-                      style={[styles.crewPickRow, active && styles.crewPickRowActive]}
-                      onPress={() => { setSelectedCrewId(crew.id); Haptics.selectionAsync(); }}
-                    >
-                      <Text style={{ fontSize: 18 }}>{crew.emoji ?? "🏃"}</Text>
-                      <Text style={[styles.crewPickName, active && { color: C.primary }]}>{crew.name}</Text>
-                      {active && <Feather name="check-circle" size={16} color={C.primary} />}
-                    </Pressable>
-                  );
-                })}
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* 3. Title */}
+        {/* 2. Title */}
         <View style={styles.field}>
           <Text style={styles.label}>{activityType === "ride" ? "Ride Title *" : activityType === "walk" ? "Walk Title *" : "Run Title *"}</Text>
           <TextInput
@@ -481,34 +540,62 @@ export default function CreateRunScreen() {
         {/* 4. Date & Time */}
         <View style={styles.field}>
           <Text style={styles.label}>Date & Time *</Text>
-          <View style={{ flexDirection: "row", gap: 10 }}>
-            <View style={{ flex: 1 }}>
-              <MiniCalendarPicker value={date} onChange={setDate} />
-            </View>
-            <View style={{ flex: 1, flexDirection: "row", gap: 6, alignSelf: "flex-start" }}>
-              <TextInput
-                style={[styles.input, { flex: 1 }]}
-                value={time}
-                onChangeText={handleTimeChange}
-                placeholder="7:30"
-                placeholderTextColor={C.textMuted}
-                keyboardType="number-pad"
-                maxLength={5}
-              />
-              <View style={{ flexDirection: "column", gap: 4 }}>
-                {(["AM", "PM"] as const).map((period) => (
-                  <Pressable
-                    key={period}
-                    style={{ flex: 1, paddingHorizontal: 10, borderRadius: 9, borderWidth: 1, alignItems: "center", justifyContent: "center", backgroundColor: amPm === period ? C.primaryMuted : C.surface, borderColor: amPm === period ? C.primary : C.border }}
-                    onPress={() => { setAmPm(period); Haptics.selectionAsync(); }}
-                  >
-                    <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: amPm === period ? C.primary : C.textMuted }}>{period}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
+          <MiniCalendarPicker value={date} onChange={setDate} />
+          <View style={{ flexDirection: "row", gap: 6, marginTop: 8 }}>
+            <TextInput
+              style={[styles.input, { flex: 1, marginBottom: 0 }]}
+              value={time}
+              onChangeText={handleTimeChange}
+              placeholder="7:30"
+              placeholderTextColor={C.textMuted}
+              keyboardType="number-pad"
+              maxLength={5}
+            />
+            {(["AM", "PM"] as const).map((period) => (
+              <Pressable
+                key={period}
+                style={{ paddingHorizontal: 18, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center", backgroundColor: amPm === period ? C.primaryMuted : C.surface, borderColor: amPm === period ? C.primary : C.border }}
+                onPress={() => { setAmPm(period); Haptics.selectionAsync(); }}
+              >
+                <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: amPm === period ? C.primary : C.textMuted }}>{period}</Text>
+              </Pressable>
+            ))}
           </View>
         </View>
+
+        {/* Saved Templates — horizontally scrollable */}
+        {hostTemplates.length > 0 && (
+          <View style={[styles.field, { marginBottom: 12 }]}>
+            <Text style={styles.label}>Saved Templates</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 2 }}>
+              {hostTemplates.map((tpl) => {
+                const icon = tpl.activityType === "ride" ? "bicycle" : tpl.activityType === "walk" ? "footsteps" : "body";
+                return (
+                  <Pressable
+                    key={tpl.id}
+                    style={{ width: 160, backgroundColor: C.surface, borderRadius: 12, borderWidth: 1, borderColor: C.border, padding: 10 }}
+                    onPress={() => applyTemplate(tpl)}
+                    onLongPress={() => {
+                      Alert.alert("Delete Template", `Remove "${tpl.name}"?`, [
+                        { text: "Cancel", style: "cancel" },
+                        { text: "Delete", style: "destructive", onPress: () => deleteTemplate(tpl.id) },
+                      ]);
+                    }}
+                  >
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                      <Ionicons name={icon as any} size={12} color={C.primary} />
+                      <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.primary, textTransform: "uppercase", letterSpacing: 0.5 }}>{tpl.activityType}</Text>
+                    </View>
+                    <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.text }} numberOfLines={1}>{tpl.name}</Text>
+                    <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted, marginTop: 2 }} numberOfLines={1}>
+                      {tpl.plannedDistance} mi · {tpl.minPace}–{tpl.maxPace}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
 
         {/* 5. Start Location */}
         <View style={styles.field}>
@@ -552,11 +639,14 @@ export default function CreateRunScreen() {
               </Pressable>
             ) : (
               <Pressable
-                style={{ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: C.surface, borderRadius: 12, borderWidth: 1, borderColor: C.border, paddingHorizontal: 12, paddingVertical: 11 }}
+                disabled={!hasMatchingPath}
+                style={{ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: C.surface, borderRadius: 12, borderWidth: 1, borderColor: C.border, paddingHorizontal: 12, paddingVertical: 11, opacity: hasMatchingPath ? 1 : 0.5 }}
                 onPress={() => { setShowPathPicker(true); Haptics.selectionAsync(); }}
               >
                 <Feather name="map" size={13} color={C.textMuted} />
-                <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textMuted }}>Saved Paths</Text>
+                <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textMuted }} numberOfLines={1}>
+                  {hasMatchingPath ? "Saved Paths" : "No paths near location"}
+                </Text>
               </Pressable>
             )}
           </View>
@@ -589,12 +679,25 @@ export default function CreateRunScreen() {
         )}
 
         {/* 8. Pace Range */}
-        {isCrew ? (
+        {!isCrew && (
+          <View style={[styles.field, { flexDirection: "row", alignItems: "center", justifyContent: "space-between" }]}>
+            <View style={{ flex: 1, paddingRight: 12 }}>
+              <Text style={styles.label}>{activityType === "ride" ? "Use Speed Groups" : "Use Pace Groups"}</Text>
+              <Text style={styles.fieldHint}>
+                {activityType === "ride"
+                  ? "Good for larger rides — let joiners pick an A / B / C group."
+                  : "Good for larger runs — let joiners pick their pace group."}
+              </Text>
+            </View>
+            <Switch value={usePaceGroups} onValueChange={setUsePaceGroups} />
+          </View>
+        )}
+        {(isCrew || usePaceGroups) ? (
           <View style={styles.field}>
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
               <View>
-                <Text style={styles.label}>Pace Groups</Text>
-                <Text style={styles.fieldHint}>Members will pick their group when they join</Text>
+                <Text style={styles.label}>{activityType === "ride" ? "Speed Groups" : "Pace Groups"}</Text>
+                <Text style={styles.fieldHint}>{activityType === "ride" ? "Riders will pick their group when they join" : "Members will pick their group when they join"}</Text>
               </View>
               {paceGroups.length < 8 && (
                 <Pressable
@@ -618,6 +721,7 @@ export default function CreateRunScreen() {
                     style={[styles.input, { flex: 1, marginRight: 8, marginBottom: 0 }]}
                     value={group.label}
                     onChangeText={(t) => {
+                      paceGroupsCustomized.current = true;
                       const updated = [...paceGroups];
                       updated[idx] = { ...updated[idx], label: t };
                       setPaceGroups(updated);
@@ -642,6 +746,7 @@ export default function CreateRunScreen() {
                       style={[styles.input, paceGroupErrors[idx] ? { borderColor: C.danger } : {}]}
                       value={group.minPace}
                       onChangeText={(t) => {
+                        paceGroupsCustomized.current = true;
                         const updated = [...paceGroups];
                         updated[idx] = { ...updated[idx], minPace: t };
                         setPaceGroups(updated);
@@ -662,6 +767,7 @@ export default function CreateRunScreen() {
                       style={[styles.input, paceGroupErrors[idx] ? { borderColor: C.danger } : {}]}
                       value={group.maxPace}
                       onChangeText={(t) => {
+                        paceGroupsCustomized.current = true;
                         const updated = [...paceGroups];
                         updated[idx] = { ...updated[idx], maxPace: t };
                         setPaceGroups(updated);
@@ -715,7 +821,59 @@ export default function CreateRunScreen() {
           </View>
         )}
 
-        {/* 9. Host Style */}
+        {/* View (privacy) */}
+        {!params.crewId && (
+          <View style={styles.field}>
+            <Text style={styles.label}>View</Text>
+            <View style={styles.privacyRow}>
+              {PRIVACY_OPTIONS.map((opt) => (
+                <Pressable
+                  key={opt.value}
+                  style={[styles.privacyOption, privacy === opt.value && styles.privacyOptionActive]}
+                  onPress={() => {
+                    setPrivacy(opt.value);
+                    if (opt.value !== "crew") setSelectedCrewId(null);
+                    Haptics.selectionAsync();
+                  }}
+                >
+                  <Feather name={opt.icon as any} size={16} color={privacy === opt.value ? C.primary : C.textSecondary} />
+                  <Text style={[styles.privacyLabel, privacy === opt.value && styles.privacyLabelActive]}>{opt.label}</Text>
+                  <Text style={styles.privacyDesc}>{opt.desc}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {!params.crewId && privacy === "crew" && (
+          <View style={styles.field}>
+            <Text style={styles.label}>Select Crew</Text>
+            {myCrews.length === 0 ? (
+              <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textMuted }}>
+                You're not in any crews yet. Join or create one from the Crew tab.
+              </Text>
+            ) : (
+              <View style={{ gap: 8 }}>
+                {myCrews.map((crew) => {
+                  const active = selectedCrewId === crew.id;
+                  return (
+                    <Pressable
+                      key={crew.id}
+                      style={[styles.crewPickRow, active && styles.crewPickRowActive]}
+                      onPress={() => { setSelectedCrewId(crew.id); Haptics.selectionAsync(); }}
+                    >
+                      <Text style={{ fontSize: 18 }}>{crew.emoji ?? "🏃"}</Text>
+                      <Text style={[styles.crewPickName, active && { color: C.primary }]}>{crew.name}</Text>
+                      {active && <Feather name="check-circle" size={16} color={C.primary} />}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Host Style */}
         {!isCrew && (
           <View style={styles.field}>
             <Text style={styles.label}>Host Style</Text>
@@ -911,8 +1069,8 @@ export default function CreateRunScreen() {
               <View style={styles.inviteIconWrap}>
                 <Feather name="lock" size={28} color={C.primary} />
               </View>
-              <Text style={styles.inviteTitle}>Private Run Created!</Text>
-              <Text style={styles.inviteSub}>Share this invite code with runners you want to join:</Text>
+              <Text style={styles.inviteTitle}>Private {activityType === "ride" ? "Ride" : activityType === "walk" ? "Walk" : "Run"} Created!</Text>
+              <Text style={styles.inviteSub}>Share this invite code with {activityType === "ride" ? "riders" : activityType === "walk" ? "walkers" : "runners"} you want to join:</Text>
 
               <View style={styles.tokenBox}>
                 <Text style={styles.tokenText} selectable>{inviteModal.token}</Text>
@@ -1056,9 +1214,6 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   lockedSub: { fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textSecondary, textAlign: "center" },
   closeBtn: { marginTop: 8, backgroundColor: C.surface, borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12, borderWidth: 1, borderColor: C.border },
   closeBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.text },
-  header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: C.border },
-  cancelBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
-  headerTitle: { flex: 1, fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text, textAlign: "center" },
   createBtn: { backgroundColor: C.primary, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 8, minWidth: 52, alignItems: "center" },
   createBtnText: { fontFamily: "Outfit_700Bold", fontSize: 14, color: C.bg },
   form: { padding: 20, gap: 16 },

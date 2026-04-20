@@ -28,7 +28,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLiveTracking } from "@/contexts/LiveTrackingContext";
 import { apiRequest, getApiUrl, apiFetch } from "@/lib/query-client";
-import { darkColors as C, type ColorScheme } from "@/constants/colors";
+import { type ColorScheme } from "@/constants/colors";
 import { useTheme } from "@/contexts/ThemeContext";
 import { formatDistance } from "@/lib/formatDistance";
 import { toDisplayDist, toDisplayPace, unitLabel, type DistanceUnit } from "@/lib/units";
@@ -550,8 +550,8 @@ export default function RunDetailScreen() {
   }
 
   async function doJoin(paceGroupLabel?: string) {
-    // If this is a crew run with pace groups and no group selected yet, show the picker first
-    if (!paceGroupLabel && run?.crew_id && run?.pace_groups && (run.pace_groups as any[]).length > 0) {
+    // If this event has pace groups and no group selected yet, show the picker first
+    if (!paceGroupLabel && run?.pace_groups && (run.pace_groups as any[]).length > 0) {
       setShowPaceGroupSheet(true);
       return;
     }

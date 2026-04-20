@@ -12,6 +12,7 @@ import {
   Platform,
   TextInput,
   Dimensions,
+  Alert,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -27,12 +28,14 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActivity } from "@/contexts/ActivityContext";
+import { useWalkthrough } from "@/contexts/WalkthroughContext";
 import { useTheme } from "@/contexts/ThemeContext";
-import { darkColors as C, type ColorScheme } from "@/constants/colors";
+import { type ColorScheme } from "@/constants/colors";
 import RangeSlider from "@/components/RangeSlider";
 import { formatDistance } from "@/lib/formatDistance";
 import { toDisplayDist, toDisplayPace, unitLabel, type DistanceUnit } from "@/lib/units";
 import HostProfileSheet from "@/components/HostProfileSheet";
+import PathBadge from "@/components/PathBadge";
 import { getApiUrl, apiRequest } from "@/lib/query-client";
 
 function resolveImgUrl(url?: string | null): string | null {
@@ -106,6 +109,14 @@ interface Run {
   crew_id?: string | null;
 }
 
+interface PathVariant {
+  id: string;
+  name: string;
+  route_path: Array<{ latitude: number; longitude: number }>;
+  distance_miles: number;
+  activity_types?: string[] | null;
+}
+
 interface CommunityPath {
   id: string;
   name: string;
@@ -114,10 +125,14 @@ interface CommunityPath {
   created_by_name?: string | null;
   run_count?: number;
   activity_type?: string;
+  activity_types?: string[] | null;
+  source?: "osm" | "user";
+  is_osm?: boolean;
   start_lat: number;
   start_lng: number;
   end_lat: number;
   end_lng: number;
+  variants?: PathVariant[];
 }
 
 interface Bounds {
@@ -158,6 +173,41 @@ function getPaceColor(minPace: number, maxPace: number, C: { orange: string; gol
 }
 
 // ─── Custom Marker ─────────────────────────────────────────────────────────
+
+function VariantMiniMap({ pts, active, C }: { pts: Array<{ latitude: number; longitude: number }>; active: boolean; C: any }) {
+  const { lats, lngs, region } = useMemo(() => {
+    const lats = pts.map((p) => p.latitude);
+    const lngs = pts.map((p) => p.longitude);
+    const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+    const pad = 0.2;
+    return {
+      lats, lngs,
+      region: {
+        latitude: (minLat + maxLat) / 2,
+        longitude: (minLng + maxLng) / 2,
+        latitudeDelta: Math.max(0.003, (maxLat - minLat) * (1 + pad)),
+        longitudeDelta: Math.max(0.003, (maxLng - minLng) * (1 + pad)),
+      },
+    };
+  }, [pts]);
+  return (
+    <View pointerEvents="none" style={{ width: 120, height: 80, borderRadius: 10, overflow: "hidden", backgroundColor: C.card }}>
+      <MapView
+        style={{ flex: 1 }}
+        initialRegion={region}
+        scrollEnabled={false}
+        zoomEnabled={false}
+        rotateEnabled={false}
+        pitchEnabled={false}
+        toolbarEnabled={false}
+        liteMode
+      >
+        <Polyline coordinates={pts} strokeColor={active ? "#FFD166" : C.primary} strokeWidth={3} />
+      </MapView>
+    </View>
+  );
+}
 
 function LockedRunMarker({ run, isSelected, onPress }: { run: Run; isSelected: boolean; onPress: () => void }) {
   const { C } = useTheme();
@@ -339,6 +389,7 @@ export default function MapScreen() {
   const { user } = useAuth();
   const distUnit: DistanceUnit = ((user as any)?.distance_unit ?? "miles") as DistanceUnit;
   const { activityFilter } = useActivity();
+  const { isActive: walkthroughActive, nextStep: walkthroughNext } = useWalkthrough();
   const { C } = useTheme();
   const mk = useMemo(() => makeMkStyles(C), [C]);
   const s = useMemo(() => makeSStyles(C), [C]);
@@ -349,6 +400,7 @@ export default function MapScreen() {
   const [locatedOnce, setLocatedOnce] = useState(false);
   const [selectedRun, setSelectedRun] = useState<Run | null>(null);
   const [selectedCommunityPath, setSelectedCommunityPath] = useState<CommunityPath | null>(null);
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
   const [hostProfileId, setHostProfileId] = useState<string | null>(null);
   const [bounds, setBounds] = useState<Bounds | null>(regionToBounds(HOUSTON));
   const boundsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -465,13 +517,20 @@ export default function MapScreen() {
 
   const visiblePaths = useMemo(() => {
     if (!bounds) return communityPaths;
-    return communityPaths.filter((path) => {
+    const centerLat = (bounds.swLat + bounds.neLat) / 2;
+    const centerLng = (bounds.swLng + bounds.neLng) / 2;
+    const filtered = communityPaths.filter((path) => {
       const pts: Array<{ latitude: number; longitude: number }> = path.route_path;
       if (!pts || pts.length === 0) return false;
       return pts.some(
         (pt) => pt.latitude >= bounds.swLat && pt.latitude <= bounds.neLat &&
                  pt.longitude >= bounds.swLng && pt.longitude <= bounds.neLng
       );
+    });
+    return filtered.sort((a, b) => {
+      const da = Math.hypot((a.start_lat + a.end_lat) / 2 - centerLat, (a.start_lng + a.end_lng) / 2 - centerLng);
+      const db = Math.hypot((b.start_lat + b.end_lat) / 2 - centerLat, (b.start_lng + b.end_lng) / 2 - centerLng);
+      return da - db;
     });
   }, [communityPaths, bounds]);
 
@@ -480,7 +539,13 @@ export default function MapScreen() {
   // from zooming out to span the globe.
   const visibleRuns = useMemo(() => {
     if (!bounds) return [];
-    return runs.filter((r) => {
+    const base = walkthroughActive
+      ? (() => { try {
+          const { getDemoEventCard } = require("@/lib/walkthroughDemo") as typeof import("@/lib/walkthroughDemo");
+          return [getDemoEventCard(activityFilter, bounds ? (bounds.swLat + bounds.neLat) / 2 : undefined, bounds ? (bounds.swLng + bounds.neLng) / 2 : undefined) as any, ...runs];
+        } catch { return runs; } })()
+      : runs;
+    return base.filter((r: any) => {
       if (!Number.isFinite(r.location_lat) || !Number.isFinite(r.location_lng)) return false;
       if (r.location_lat === 0 && r.location_lng === 0) return false;
       if ((r.activity_type ?? "run") !== activityFilter) return false;
@@ -491,7 +556,7 @@ export default function MapScreen() {
       if (applied.visibility === "friends" && (!!r.crew_id || r.privacy === "public")) return false;
       return true;
     });
-  }, [runs, bounds, activityFilter, applied.visibility]);
+  }, [runs, bounds, activityFilter, applied.visibility, walkthroughActive]);
 
   const insights = useMemo(() => {
     if (visibleRuns.length === 0) return [];
@@ -569,6 +634,7 @@ export default function MapScreen() {
   }
 
   function openCard(run: Run) {
+    if ((run as any).__demo) { walkthroughNext?.(); return; }
     if (selectedCommunityPath) closePathCard();
     setSelectedRun(run);
     cardOpacity.setValue(0);
@@ -609,6 +675,7 @@ export default function MapScreen() {
     if (selectedRun) closeCard();
     if (selectedPublicRouteId) closePublicRouteSheet();
     setSelectedCommunityPath(path);
+    setSelectedVariantId(null);
     pathCardOpacity.setValue(0);
     pathSlideAnim.setValue(400);
     Animated.parallel([
@@ -660,7 +727,7 @@ export default function MapScreen() {
       </View>
 
       {/* ─── Map card ────────────────────────────────────────────────────── */}
-      <View style={[s.mapCard, { height: WIN_H - topPad - insets.bottom - 174 }]}>
+      <View style={[s.mapCard, { height: WIN_H - topPad - insets.bottom - 244 }]}>
 
         {/* Map */}
         <MapView
@@ -727,6 +794,45 @@ export default function MapScreen() {
               }}
             />
           ))}
+          {selectedCommunityPath && selectedVariantId && (() => {
+            const v = selectedCommunityPath.variants?.find((x) => x.id === selectedVariantId);
+            if (!v) return null;
+            return (
+              <Polyline
+                key={`variant-${v.id}`}
+                coordinates={v.route_path}
+                strokeColor="#FFD166"
+                strokeWidth={6}
+              />
+            );
+          })()}
+          {currentZoom >= 12 && visiblePaths.map((path) => {
+            const pts = path.route_path;
+            if (!pts || pts.length === 0) return null;
+            const mid = pts[Math.floor(pts.length / 2)];
+            const typesArr = (path.activity_types && path.activity_types.length > 0)
+              ? (path.activity_types as ("run" | "walk" | "ride")[])
+              : ([(path.activity_type ?? "run")] as ("run" | "walk" | "ride")[]);
+            return (
+              <Marker
+                key={`badge-${path.id}`}
+                coordinate={mid}
+                anchor={{ x: 0.5, y: 0.5 }}
+                tracksViewChanges={false}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  openPathCard(path);
+                }}
+              >
+                <PathBadge
+                  distanceMiles={path.distance_miles ?? null}
+                  types={typesArr}
+                  compact={currentZoom < 14}
+                  unit={distUnit === "km" ? "km" : "mi"}
+                />
+              </Marker>
+            );
+          })}
           {layers.events && visibleRuns.map((run) => (
             <RunMarker
               key={run.id}
@@ -741,30 +847,14 @@ export default function MapScreen() {
         {/* Dim overlay */}
         <View style={s.mapDim} pointerEvents="none" />
 
+        {/* OSM attribution (required by ODbL for OSM-sourced routes) */}
+        <View style={s.osmAttr} pointerEvents="none">
+          <Text style={s.osmAttrTxt}>© OpenStreetMap contributors</Text>
+        </View>
+
 
         {/* ─── Sidebar (inside map card) ────────────────────────────────── */}
         <View style={s.sideBar}>
-          {/* Layer toggles */}
-          <View style={s.layerToggleGroup}>
-            {(["foot", "ride", "events"] as const).map((key) => {
-              const on = layers[key];
-              const label = key === "foot" ? "🏃" : key === "ride" ? "🚴" : "📍";
-              return (
-                <Pressable
-                  key={key}
-                  style={[s.layerBtn, on && s.layerBtnOn]}
-                  onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); toggleLayer(key); }}
-                >
-                  <Text style={{ fontSize: 13 }}>{label}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          {visiblePaths.length > 0 && (
-            <View style={s.routeCountChip}>
-              <Text style={s.routeCountTxt}>{visiblePaths.length} route{visiblePaths.length !== 1 ? "s" : ""}</Text>
-            </View>
-          )}
           {userLoc && (
             <Pressable
               style={s.sideBtn}
@@ -784,7 +874,11 @@ export default function MapScreen() {
               style={[s.sideBtn, s.sideBtnGreen]}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                router.push({ pathname: "/create-run", params: { activityType: activityFilter } });
+                Alert.alert("Create", undefined, [
+                  { text: "Cancel", style: "cancel" },
+                  { text: "Event", onPress: () => router.push({ pathname: "/create-run", params: { activityType: activityFilter } }) },
+                  { text: "Path", onPress: () => router.push("/create-path") },
+                ]);
               }}
             >
               <Feather name="plus" size={20} color={C.bg} />
@@ -920,49 +1014,6 @@ export default function MapScreen() {
           </Animated.View>
         )}
 
-        {/* ─── Community Path Card ──────────────────────────────────────── */}
-        {selectedCommunityPath && (
-          <Animated.View
-            style={[
-              s.pathSheet,
-              { bottom: 0, opacity: pathCardOpacity, transform: [{ translateY: pathSlideAnim }] },
-            ]}
-          >
-            <Pressable style={s.closeSheetBtn} onPress={closePathCard}>
-              <Feather name="x" size={20} color={C.textMuted} />
-            </Pressable>
-            
-            <Text style={s.pathSheetTitle}>{selectedCommunityPath.name}</Text>
-            
-            <View style={s.pathStatRow}>
-              <View style={s.pathChip}>
-                <Feather name="move" size={14} color={C.primary} />
-                <Text style={s.pathChipTxt}>{toDisplayDist(selectedCommunityPath.distance_miles ?? 0, distUnit)}</Text>
-              </View>
-              <View style={[s.pathChip, { backgroundColor: C.primaryMuted + "55" }]}>
-                <Text style={[s.pathChipTxt, { color: C.primary, textTransform: "capitalize" }]}>
-                  {selectedCommunityPath.activity_type ?? "run"}
-                </Text>
-              </View>
-            </View>
-
-            <View style={{ marginBottom: 20 }}>
-              <Text style={s.pathMutedTxt}>Created by {selectedCommunityPath.created_by_name || "Community Member"}</Text>
-              <Text style={s.pathMutedTxt}>Run count: {selectedCommunityPath.run_count ?? 1}</Text>
-            </View>
-
-            <Pressable
-              style={s.pathStartBtn}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                router.push("/run-tracking");
-              }}
-            >
-              <Text style={s.pathStartBtnTxt}>Start Run Here</Text>
-              <Feather name="play" size={18} color="#FFF" />
-            </Pressable>
-          </Animated.View>
-        )}
 
         {/* ─── Public Route Info Sheet ──────────────────────────────────── */}
         {selectedPublicRouteId && (
@@ -1046,58 +1097,132 @@ export default function MapScreen() {
 
       </View>{/* ── end mapCard ──────────────────────────────────────────────── */}
 
-      {/* ─── Split bottom strip: Events (left) + Paths (right) + Insights — fixed height */}
-      <View style={[s.splitStrip, { paddingBottom: insets.bottom + 4, minHeight: 116 + insets.bottom }]}>
+      {/* ─── Bottom strip: Events row → Paths row → Insights pills — stacked full-width */}
+      <View style={[s.splitStrip, { paddingBottom: insets.bottom + 18 }]}>
 
-        {/* Cards row */}
-        {!selectedRun && !selectedCommunityPath && (visibleRuns.length > 0 || visiblePaths.length > 0) && (
-          <View style={s.splitRow}>
-            {/* Events column — always on the left */}
-            <View style={[s.splitCol, visiblePaths.length > 0 && s.splitColBorder]}>
-              {visibleRuns.length > 0 && <>
-                <Text style={s.splitLabel}>Events</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 4 }}>
-                  {visibleRuns.map((run) => (
-                    <Pressable key={run.id} style={({ pressed }) => [s.miniCard, { opacity: pressed ? 0.8 : 1 }]} onPress={() => openCard(run)}>
-                      {run.host_marker_icon ? (
-                        <View style={s.miniAvatar}><Text style={{ fontSize: 18 }}>{run.host_marker_icon}</Text></View>
-                      ) : resolveImgUrl(run.crew_photo_url) || run.host_photo ? (
-                        <Image source={{ uri: resolveImgUrl(run.crew_photo_url) || run.host_photo! }} style={s.miniAvatarImg} />
-                      ) : (
-                        <View style={s.miniAvatar}><Text style={s.miniAvatarTxt}>{run.host_name?.charAt(0).toUpperCase()}</Text></View>
-                      )}
-                      <View style={{ flex: 1, gap: 3 }}>
-                        <View style={s.miniStatRow}><Feather name="map" size={10} color={C.primary} /><Text style={s.miniStatTxt}>{toDisplayDist(run.min_distance, distUnit)}</Text></View>
-                        <View style={s.miniStatRow}><Feather name="zap" size={10} color="#F4C542" /><Text style={[s.miniStatTxt, { color: "#F4C542" }]}>{toDisplayPace(run.min_pace, distUnit)}</Text></View>
-                        <View style={s.miniStatRow}><Feather name="users" size={10} color={C.textSecondary} /><Text style={[s.miniStatTxt, { color: C.textSecondary }]}>{run.crew_id ? `${run.participant_count} going` : `${run.participant_count}/${run.max_participants}`}</Text></View>
-                      </View>
-                    </Pressable>
-                  ))}
-                </ScrollView>
-              </>}
+        {/* Inline path detail — fills the strip when a path is selected */}
+        {selectedCommunityPath && (
+          <View style={[s.inlinePathSheet, { padding: 16 }]}>
+            <View style={s.inlinePathHeader}>
+              <Text style={s.pathSheetTitle} numberOfLines={2}>{selectedCommunityPath.name}</Text>
+              <Pressable onPress={closePathCard} hitSlop={12}>
+                <Feather name="x" size={22} color={C.textMuted} />
+              </Pressable>
             </View>
 
-            {/* Paths column — always on the right */}
-            <View style={s.splitCol}>
-              {visiblePaths.length > 0 && <>
-                <Text style={s.splitLabel}>Paths</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 4 }}>
-                  {visiblePaths.map((path) => (
-                    <Pressable key={path.id} style={({ pressed }) => [s.pathMiniCard, { opacity: pressed ? 0.8 : 1 }]} onPress={() => openPathCard(path)}>
-                      <View style={s.pathMiniIcon}><Feather name="map" size={14} color={C.primary} /></View>
-                      <Text style={s.pathMiniName} numberOfLines={2}>{path.name}</Text>
-                      <Text style={s.pathMiniDist}>{toDisplayDist(path.distance_miles ?? 0, distUnit)}</Text>
-                    </Pressable>
-                  ))}
-                </ScrollView>
-              </>}
+            <View style={s.pathStatRow}>
+              <View style={s.pathChip}>
+                <Feather name="move" size={14} color={C.primary} />
+                <Text style={s.pathChipTxt}>{toDisplayDist(selectedCommunityPath.distance_miles ?? 0, distUnit)}</Text>
+              </View>
+              <View style={[s.pathChip, { backgroundColor: C.primaryMuted + "55" }]}>
+                <Text style={[s.pathChipTxt, { color: C.primary, textTransform: "capitalize" }]}>
+                  {selectedCommunityPath.activity_type ?? "run"}
+                </Text>
+              </View>
+              <View style={s.pathChip}>
+                <Feather name="users" size={13} color={C.textMuted} />
+                <Text style={s.pathChipTxt}>{selectedCommunityPath.run_count ?? 1}</Text>
+              </View>
             </View>
+
+            {(selectedCommunityPath.variants?.length ?? 0) > 0 && (
+              <View style={{ marginBottom: 14 }}>
+                <Text style={[s.pathMutedTxt, { marginBottom: 8, fontWeight: "700", color: C.text }]}>Route options</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingRight: 16 }}>
+                  {selectedCommunityPath.variants!.map((v) => {
+                    const active = selectedVariantId === v.id;
+                    return (
+                      <Pressable
+                        key={v.id}
+                        onPress={() => {
+                          Haptics.selectionAsync();
+                          setSelectedVariantId(active ? null : v.id);
+                        }}
+                        style={[s.variantCard, active && { borderColor: C.primary, borderWidth: 2 }]}
+                      >
+                        <VariantMiniMap pts={v.route_path} active={active} C={C} />
+                        <Text style={s.variantCardName} numberOfLines={1}>{v.name}</Text>
+                        <Text style={s.variantCardDist}>{toDisplayDist(v.distance_miles, distUnit)}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            )}
+
+            <Pressable
+              style={s.pathStartBtn}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                router.push("/run-tracking");
+              }}
+            >
+              <Text style={s.pathStartBtnTxt}>Start Run Here</Text>
+              <Feather name="play" size={18} color="#FFF" />
+            </Pressable>
           </View>
         )}
 
-        {/* Insights row */}
+        {/* Events row — full width, horizontally scrollable; ghost card when empty */}
+        {!selectedRun && !selectedCommunityPath && (
+          <View style={s.stackRow}>
+            {visibleRuns.length === 0 ? (
+              <View style={s.ghostCard}><Text style={s.ghostTxt}>No events in view</Text></View>
+            ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.stackScroll}>
+              {visibleRuns.map((run) => (
+                <Pressable key={run.id} style={({ pressed }) => [s.miniCard, { opacity: pressed ? 0.8 : 1 }]} onPress={() => openCard(run)}>
+                  {run.host_marker_icon ? (
+                    <View style={s.miniAvatar}><Text style={{ fontSize: 18 }}>{run.host_marker_icon}</Text></View>
+                  ) : resolveImgUrl(run.crew_photo_url) || run.host_photo ? (
+                    <Image source={{ uri: resolveImgUrl(run.crew_photo_url) || run.host_photo! }} style={s.miniAvatarImg} />
+                  ) : (
+                    <View style={s.miniAvatar}><Text style={s.miniAvatarTxt}>{run.host_name?.charAt(0).toUpperCase()}</Text></View>
+                  )}
+                  <View style={{ flex: 1, gap: 3 }}>
+                    <View style={s.miniStatRow}><Feather name="map" size={10} color={C.primary} /><Text style={s.miniStatTxt}>{toDisplayDist(run.min_distance, distUnit)}</Text></View>
+                    <View style={s.miniStatRow}><Feather name="zap" size={10} color="#F4C542" /><Text style={[s.miniStatTxt, { color: "#F4C542" }]}>{toDisplayPace(run.min_pace, distUnit)}</Text></View>
+                    <View style={s.miniStatRow}><Feather name="users" size={10} color={C.textSecondary} /><Text style={[s.miniStatTxt, { color: C.textSecondary }]}>{run.crew_id ? `${run.participant_count} going` : `${run.participant_count}/${run.max_participants}`}</Text></View>
+                  </View>
+                </Pressable>
+              ))}
+            </ScrollView>
+            )}
+          </View>
+        )}
+
+        {/* Paths row — full width, horizontally scrollable; ghost card when empty */}
+        {!selectedRun && !selectedCommunityPath && (
+          <View style={s.stackRow}>
+            {visiblePaths.length === 0 ? (
+              <View style={s.ghostCard}><Text style={s.ghostTxt}>No paths in view</Text></View>
+            ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.stackScroll}>
+              {visiblePaths.map((path) => {
+                const d = path.distance_miles ?? 0;
+                const dispMi = distUnit === "km" ? d * 1.60934 : d;
+                const distLabel = dispMi > 0 && dispMi < 1
+                  ? `.${Math.round(dispMi * 100).toString().padStart(2, "0")}${distUnit === "km" ? "km" : "mi"}`
+                  : `${dispMi.toFixed(dispMi < 10 ? 1 : 0)}${distUnit === "km" ? "km" : "mi"}`;
+                return (
+                  <Pressable key={path.id} style={({ pressed }) => [s.pathMiniCard, { opacity: pressed ? 0.8 : 1 }]} onPress={() => openPathCard(path)}>
+                    <View style={s.pathMiniTopRow}>
+                      <View style={s.pathMiniIcon}><Feather name="map" size={12} color={C.primary} /></View>
+                      <Text style={s.pathMiniDist}>{distLabel}</Text>
+                    </View>
+                    <Text style={s.pathMiniName} numberOfLines={2}>{path.name}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+            )}
+          </View>
+        )}
+
+        {/* Insights pills */}
         <View style={s.insightArea}>
-          {insights.length > 0 && (
+          {!selectedCommunityPath && insights.length > 0 && (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.insightScroll}>
               {insights.map((item, i) => (
                 <View key={i} style={s.insightPill}>
@@ -1158,6 +1283,9 @@ export default function MapScreen() {
                 low={draft.paceMin} high={draft.paceMax}
                 onLowChange={(v) => setDraft((p) => ({ ...p, paceMin: v }))}
                 onHighChange={(v) => setDraft((p) => ({ ...p, paceMax: v }))}
+                color={C.primary}
+                trackColor={C.border}
+                thumbColor={C.surface}
               />
               <View style={s.edgeRow}>
                 <Text style={s.edgeLabel}>6:00</Text>
@@ -1271,6 +1399,16 @@ function makeSStyles(C: ColorScheme) { return StyleSheet.create({
   },
 
   mapDim: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.13)" },
+  osmAttr: {
+    position: "absolute",
+    left: 8,
+    bottom: 8,
+    backgroundColor: "rgba(255,255,255,0.75)",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  osmAttrTxt: { fontSize: 9, color: "#333" },
 
   backBtn: {
     flexDirection: "row",
@@ -1448,6 +1586,14 @@ function makeSStyles(C: ColorScheme) { return StyleSheet.create({
     height: 106,
     paddingTop: 10,
   },
+  stackRow: {
+    paddingTop: 6,
+    paddingHorizontal: 10,
+  },
+  stackScroll: {
+    gap: 8,
+    paddingRight: 10,
+  },
   splitCol: {
     flex: 1,
     paddingHorizontal: 10,
@@ -1465,8 +1611,24 @@ function makeSStyles(C: ColorScheme) { return StyleSheet.create({
     letterSpacing: 0.5,
     textTransform: "uppercase",
   },
+  ghostCard: {
+    height: 66,
+    marginHorizontal: 0,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderStyle: "dashed",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
+  },
+  ghostTxt: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 12,
+    color: C.textMuted,
+  },
   pathMiniCard: {
-    width: 120,
+    width: 130,
     backgroundColor: C.surface,
     borderRadius: 12,
     borderWidth: 1,
@@ -1474,17 +1636,21 @@ function makeSStyles(C: ColorScheme) { return StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     gap: 4,
-    height: 70,
+    height: 66,
     justifyContent: "center",
   },
+  pathMiniTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
   pathMiniIcon: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: C.primary + "22",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 2,
   },
   pathMiniName: {
     fontFamily: "Outfit_600SemiBold",
@@ -1591,6 +1757,35 @@ function makeSStyles(C: ColorScheme) { return StyleSheet.create({
     fontFamily: "Outfit_600SemiBold",
     fontSize: 10,
     color: "#FFF",
+  },
+  inlinePathSheet: {
+    width: "100%",
+  },
+  inlinePathHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    marginBottom: 10,
+    gap: 10,
+  },
+  variantCard: {
+    width: 120,
+    backgroundColor: C.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+    padding: 6,
+    gap: 4,
+  },
+  variantCardName: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 12,
+    color: C.text,
+  },
+  variantCardDist: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 11,
+    color: C.primary,
   },
   pathSheet: {
     position: "absolute",

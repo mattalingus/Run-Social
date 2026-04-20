@@ -13,6 +13,7 @@ interface Props {
   onHighChange: (v: number) => void;
   color?: string;
   trackColor?: string;
+  thumbColor?: string;
 }
 
 export default function RangeSlider({
@@ -20,6 +21,7 @@ export default function RangeSlider({
   onLowChange, onHighChange,
   color = "#00D97E",
   trackColor = "#1E3328",
+  thumbColor = "#F0FFF4",
 }: Props) {
   const trackWidth = useRef(0);
   const lowRef = useRef(low);
@@ -46,6 +48,11 @@ export default function RangeSlider({
   const lowPan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponderCapture: () => true,
+      onPanResponderTerminationRequest: () => false,
+      onShouldBlockNativeResponder: () => true,
       onPanResponderGrant: () => {
         lowStartPx.current = toPixel(lowRef.current);
       },
@@ -61,6 +68,11 @@ export default function RangeSlider({
   const highPan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponderCapture: () => true,
+      onPanResponderTerminationRequest: () => false,
+      onShouldBlockNativeResponder: () => true,
       onPanResponderGrant: () => {
         highStartPx.current = toPixel(highRef.current);
       },
@@ -90,8 +102,8 @@ export default function RangeSlider({
       {ready && (
         <>
           <View style={[rs.selected, { left: selLeft, width: selWidth, backgroundColor: color }]} />
-          <View style={[rs.thumb, { left: lowLeft, borderColor: color }]} {...lowPan.panHandlers} />
-          <View style={[rs.thumb, { left: highLeft, borderColor: color }]} {...highPan.panHandlers} />
+          <View style={[rs.thumb, { left: lowLeft, borderColor: color, backgroundColor: thumbColor }]} {...lowPan.panHandlers} />
+          <View style={[rs.thumb, { left: highLeft, borderColor: color, backgroundColor: thumbColor }]} {...highPan.panHandlers} />
         </>
       )}
     </View>
@@ -121,7 +133,6 @@ const rs = StyleSheet.create({
     width: THUMB,
     height: THUMB,
     borderRadius: THUMB / 2,
-    backgroundColor: "#F0FFF4",
     borderWidth: 3,
   },
 });

@@ -27,7 +27,7 @@ import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest, getApiUrl, apiFetch } from "@/lib/query-client";
 import AICoachCard from "@/components/AICoachCard";
 import { resolvePhotoUrl } from "@/lib/photoUrl";
-import { darkColors as C, type ColorScheme } from "@/constants/colors";
+import { type ColorScheme } from "@/constants/colors";
 import { useTheme } from "@/contexts/ThemeContext";
 import MiniCalendarPicker from "@/components/MiniCalendarPicker";
 import { formatDistance } from "@/lib/formatDistance";
@@ -40,6 +40,7 @@ import MileSplitsChart from "@/components/MileSplitsChart";
 import ShareActivityModal, { ShareRunData } from "@/components/ShareActivityModal";
 import SharePathSheet from "@/components/SharePathSheet";
 import WalkthroughPulse from "@/components/WalkthroughPulse";
+import { useWalkthrough } from "@/contexts/WalkthroughContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -224,15 +225,51 @@ function PathRoutePreview({ path, primary }: { path: RoutePoint[]; primary: stri
   );
 }
 
-// ─── Medal Badge ──────────────────────────────────────────────────────────────
+// ─── Rank Ribbon (corner banner on card) ──────────────────────────────────────
 
-interface RunAchievement { label: string; rank: 1 | 2 | 3 }
+interface RankRibbonProps { rank: 1 | 2 | 3 }
 
-function MedalBadge({ label, rank }: RunAchievement) {
+function RankRibbon({ rank }: RankRibbonProps) {
   const { C } = useTheme();
-  const CIRCLE = 14;
-  const ribbonW = 4;
-  const ribbonH = 6;
+  const opacity = rank === 1 ? 1 : rank === 2 ? 0.7 : 0.48;
+  const rankLabel = rank === 1 ? "PR" : rank === 2 ? "2nd" : "3rd";
+  const W = 34;
+  const TAIL = 5;
+  return (
+    <View pointerEvents="none" style={{ position: "absolute", top: -2, left: 10, opacity, zIndex: 1 }}>
+      <View style={{
+        width: W,
+        backgroundColor: C.primary,
+        paddingTop: 4,
+        paddingBottom: 3,
+        alignItems: "center",
+        borderTopLeftRadius: 2,
+        borderTopRightRadius: 2,
+      }}>
+        <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 9, color: "#fff", letterSpacing: 0.3, includeFontPadding: false }}>
+          {rankLabel}
+        </Text>
+      </View>
+      <View style={{ flexDirection: "row" }}>
+        <View style={{ width: 0, height: 0, borderStyle: "solid", borderLeftWidth: W / 2, borderRightWidth: 0, borderBottomWidth: TAIL, borderLeftColor: C.primary, borderBottomColor: "transparent" }} />
+        <View style={{ width: 0, height: 0, borderStyle: "solid", borderLeftWidth: 0, borderRightWidth: W / 2, borderBottomWidth: TAIL, borderRightColor: C.primary, borderBottomColor: "transparent" }} />
+      </View>
+    </View>
+  );
+}
+
+// ─── Medal Badge (inline, for rankings list) ──────────────────────────────────
+
+interface RunAchievement { label?: string; rank: 1 | 2 | 3; size?: "sm" | "md" }
+
+function MedalBadge({ label, rank, size = "md" }: RunAchievement) {
+  const { C } = useTheme();
+  const isSm = size === "sm";
+  const CIRCLE = isSm ? 18 : 14;
+  const ribbonW = isSm ? 5 : 4;
+  const ribbonH = isSm ? 7 : 6;
+  const circleFont = isSm ? 8 : 6;
+  const circleLine = isSm ? 11 : 9;
   const opacity = rank === 1 ? 1 : rank === 2 ? 0.72 : 0.46;
   const rankLabel = rank === 1 ? "PR" : String(rank);
   return (
@@ -244,10 +281,10 @@ function MedalBadge({ label, rank }: RunAchievement) {
       }}>
         <Text style={{
           fontFamily: "Outfit_700Bold",
-          fontSize: 6,
+          fontSize: circleFont,
           color: "#fff",
           includeFontPadding: false,
-          lineHeight: 9,
+          lineHeight: circleLine,
         }}>{rankLabel}</Text>
       </View>
       <View style={{ flexDirection: "row", marginTop: 1 }}>
@@ -255,13 +292,15 @@ function MedalBadge({ label, rank }: RunAchievement) {
         <View style={{ width: 1 }} />
         <View style={{ width: ribbonW, height: ribbonH, backgroundColor: C.primary, borderBottomRightRadius: 2 }} />
       </View>
-      <Text style={{
-        fontFamily: "Outfit_600SemiBold",
-        fontSize: 7,
-        color: C.textMuted,
-        marginTop: 1,
-        includeFontPadding: false,
-      }}>{label}</Text>
+      {label ? (
+        <Text style={{
+          fontFamily: "Outfit_600SemiBold",
+          fontSize: 7,
+          color: C.textMuted,
+          marginTop: 1,
+          includeFontPadding: false,
+        }}>{label}</Text>
+      ) : null}
     </View>
   );
 }
@@ -397,8 +436,6 @@ const RIDE_DISTANCE_CATEGORIES = [
   { label: "100 Miles", miles: 100.0, tolerance: 4.0 },
 ];
 
-const RANK_EMOJI = ["🥇", "🥈", "🥉"];
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatPace(p: number) {
@@ -529,7 +566,22 @@ export default function SoloScreen() {
   const { C } = useTheme();
   const s = useMemo(() => makeStyles(C), [C]);
   const qc = useQueryClient();
+  const { isActive: walkthroughActive, currentStepConfig } = useWalkthrough();
+  const sectionListRef = useRef<any>(null);
   const [ghostSoloDone, setGhostSoloDone] = useState(true);
+  const [ghostPathDone, setGhostPathDone] = useState(true);
+
+  useEffect(() => {
+    if (!walkthroughActive || !currentStepConfig) return;
+    const id = currentStepConfig.id;
+    if (id === "solo-intro") {
+      sectionListRef.current?.getScrollResponder()?.scrollTo?.({ y: 0, animated: true });
+    } else if (id === "saved-paths") {
+      sectionListRef.current?.getScrollResponder()?.scrollTo?.({ y: 420, animated: true });
+    } else if (id === "solo-history") {
+      sectionListRef.current?.getScrollResponder()?.scrollTo?.({ y: 900, animated: true });
+    }
+  }, [walkthroughActive, currentStepConfig?.id]);
   const [showNotifBanner, setShowNotifBanner] = useState(false);
 
   useEffect(() => {
@@ -537,7 +589,13 @@ export default function SoloScreen() {
     const key = `paceup_draft_run_${user.id}`;
     AsyncStorage.getItem(key).then(async (raw) => {
       if (!raw) return null;
-      const parsed = JSON.parse(raw);
+      let parsed: any;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        await AsyncStorage.removeItem(key).catch(() => {});
+        return null;
+      }
       const savedToken = await AsyncStorage.getItem(`paceup_saved_draft_${user.id}`);
       if (savedToken && parsed.draftId && savedToken === parsed.draftId) {
         await AsyncStorage.removeItem(key).catch(() => {});
@@ -545,7 +603,7 @@ export default function SoloScreen() {
         return null;
       }
       return raw;
-    }).then((raw) => {
+    }).catch(() => null).then((raw) => {
       if (!raw) return;
       try {
         const draft = JSON.parse(raw);
@@ -662,8 +720,17 @@ export default function SoloScreen() {
   });
 
   const filteredSavedPaths = useMemo(
-    () => savedPaths.filter((p) => (p.activity_type ?? "run") === activityFilter),
-    [savedPaths, activityFilter]
+    () => {
+      const base = savedPaths.filter((p) => (p.activity_type ?? "run") === activityFilter);
+      if (walkthroughActive) {
+        try {
+          const { getDemoSavedPath } = require("@/lib/walkthroughDemo");
+          return [getDemoSavedPath(activityFilter), ...base];
+        } catch {}
+      }
+      return base;
+    },
+    [savedPaths, activityFilter, walkthroughActive]
   );
 
   const { data: pathRuns = [], isLoading: pathRunsLoading } = useQuery<SoloRun[]>({
@@ -811,6 +878,9 @@ export default function SoloScreen() {
     AsyncStorage.getItem(`paceup_ghost_solo_done_${user.id}`).then((v) => {
       setGhostSoloDone(v === "true");
     });
+    AsyncStorage.getItem(`paceup_ghost_path_done_${user.id}`).then((v) => {
+      setGhostPathDone(v === "true");
+    });
   }, [user?.id]);
 
   useEffect(() => {
@@ -820,6 +890,14 @@ export default function SoloScreen() {
       AsyncStorage.setItem(`paceup_ghost_solo_done_${user.id}`, "true");
     }
   }, [historyRuns.length, user?.id, ghostSoloDone]);
+
+  useEffect(() => {
+    if (!user?.id || ghostPathDone) return;
+    if (savedPaths.length > 0) {
+      setGhostPathDone(true);
+      AsyncStorage.setItem(`paceup_ghost_path_done_${user.id}`, "true");
+    }
+  }, [savedPaths.length, user?.id, ghostPathDone]);
 
   // Show a one-time soft banner to users who deferred push notifications during onboarding,
   // once they've completed their first activity (solo or group, any type) and permission
@@ -987,7 +1065,8 @@ export default function SoloScreen() {
     const parsedRoutePath = parseRoutePath(run.route_path);
     const hasRoutePath = parsedRoutePath.length > 1;
     return (
-      <View style={s.historyCard}>
+      <View style={[s.historyCard, badge ? s.historyCardWithRibbon : null]}>
+        {badge && <RankRibbon rank={badge.rank as 1 | 2 | 3} />}
         <View style={s.historyRow}>
           <Pressable
             style={({ pressed }) => [s.historyLeft, { opacity: pressed ? 0.85 : 1 }]}
@@ -1016,9 +1095,6 @@ export default function SoloScreen() {
                   <View style={[s.sourceBadge, { backgroundColor: "#FF3B3022" }]}>
                     <Ionicons name="heart" size={9} color="#FF3B30" />
                   </View>
-                )}
-                {badge && (
-                  <Text style={s.historyBadge}>{RANK_EMOJI[badge.rank - 1]}</Text>
                 )}
               </View>
               <Text style={s.historyMeta}>
@@ -1063,11 +1139,10 @@ export default function SoloScreen() {
                 color={run.is_starred ? C.gold : C.textMuted}
               />
             </Pressable>
-            {run.completed && achievementsMap[run.id]?.length > 0 && (
-              <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "flex-end", gap: 4, marginRight: 2 }}>
-                {achievementsMap[run.id].map((a, i) => (
-                  <MedalBadge key={`${a.label}-${a.rank}-${i}`} label={a.label} rank={a.rank} />
-                ))}
+            {run.completed && achievementsMap[run.id]?.length > 0 && !isExpanded && (
+              <View style={s.bestsChip}>
+                <Ionicons name="medal" size={11} color={C.gold} />
+                <Text style={s.bestsChipTxt}>{achievementsMap[run.id].length} bests</Text>
               </View>
             )}
             <Text style={s.historyDist}>
@@ -1124,6 +1199,13 @@ export default function SoloScreen() {
                 </View>
               )}
             </View>
+            {achievementsMap[run.id]?.length > 0 && (
+              <View style={s.bestsRow}>
+                {achievementsMap[run.id].map((a, i) => (
+                  <MedalBadge key={`${a.label}-${a.rank}-${i}`} label={a.label} rank={a.rank} />
+                ))}
+              </View>
+            )}
           </View>
         )}
         {isExpanded && run.mile_splits && run.mile_splits.length > 0 && (
@@ -1450,16 +1532,38 @@ export default function SoloScreen() {
           </View>
         )}
 
+        {/* ─── Ghost Saved Path (first-run) ─────────────────────────────── */}
+        {filteredSavedPaths.length === 0 && !ghostPathDone && (
+          <View style={[s.section, { marginTop: 5 }]}>
+            <Text style={s.sectionTitle}>Saved Paths</Text>
+            <View style={s.ghostPathCard}>
+              <View style={s.ghostPathIconWrap}>
+                <Feather name="map" size={16} color={C.textMuted} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.ghostPathName}>Your first route will save here</Text>
+                <Text style={s.ghostPathMeta}>Finish a solo {activityFilter === "ride" ? "ride" : activityFilter === "walk" ? "walk" : "run"} and reuse the route any time</Text>
+              </View>
+              <Feather name="chevron-right" size={18} color={C.textMuted} />
+            </View>
+          </View>
+        )}
+
         {/* ─── Saved Paths ──────────────────────────────────────────────── */}
         {filteredSavedPaths.length > 0 && (
+          <WalkthroughPulse stepId="saved-paths" style={{ borderRadius: 14 }}>
           <View style={[s.section, { marginTop: 5 }]}>
             <Text style={s.sectionTitle}>Saved Paths</Text>
             {filteredSavedPaths.map((path) => (
               <Pressable
                 key={path.id}
                 style={({ pressed }) => [s.savedPathCard, { opacity: pressed ? 0.85 : 1 }]}
-                onPress={() => { Haptics.selectionAsync(); setSelectedSavedPath(path); setPathRunMode((path.activity_type ?? "run") as "run" | "ride" | "walk"); }}
+                onPress={() => {
+                  if ((path as any).__demo) return;
+                  Haptics.selectionAsync(); setSelectedSavedPath(path); setPathRunMode((path.activity_type ?? "run") as "run" | "ride" | "walk");
+                }}
                 onLongPress={() => {
+                  if ((path as any).__demo) return;
                   Alert.alert(
                     "Delete Path",
                     `Delete "${path.name}"? This won't delete your activity history.`,
@@ -1483,6 +1587,7 @@ export default function SoloScreen() {
               </Pressable>
             ))}
           </View>
+          </WalkthroughPulse>
         )}
 
         {/* ─── Rankings ────────────────────────────────────────────────── */}
@@ -1503,7 +1608,9 @@ export default function SoloScreen() {
                 </View>
                 {cat.runs.slice(0, 3).map((run, i) => (
                   <View key={run.id} style={s.rankRow}>
-                    <Text style={s.rankEmoji}>{RANK_EMOJI[i]}</Text>
+                    <View style={s.rankEmoji}>
+                      <MedalBadge rank={(i + 1) as 1 | 2 | 3} size="sm" />
+                    </View>
                     <Text style={s.rankDate}>{formatDisplayDate(run.date)}</Text>
                     <Text style={s.rankDist}>{toDisplayDist(run.distance_miles, distUnit)}</Text>
                     <Text style={s.rankPace}>
@@ -1520,10 +1627,11 @@ export default function SoloScreen() {
           </View>
         )}
 
-      <View style={[s.section, { marginTop: 5 }]}>
+      <View style={[s.section, { marginTop: 5, marginBottom: 16 }]}>
+        <View style={s.historyContainer}>
         <WalkthroughPulse stepId="solo-history" style={{ borderRadius: 14 }}>
         <Pressable
-          style={s.historyHeaderRow}
+          style={[s.historyHeaderRow, { marginBottom: showHistory ? 10 : 0 }]}
           onPress={() => { setShowHistory((v) => !v); Haptics.selectionAsync(); }}
         >
           <Text style={[s.sectionTitle, { marginBottom: 0 }]}>{activityFilter === "ride" ? "Ride History" : activityFilter === "walk" ? "Walk History" : "Run History"}</Text>
@@ -1583,7 +1691,7 @@ export default function SoloScreen() {
                 </Svg>
                 <View style={s.ghostTipRow}>
                   <Feather name="info" size={10} color={C.textMuted} />
-                  <Text style={s.ghostHistoryTip}>Your runs save here — every route, pace, and split</Text>
+                  <Text style={s.ghostHistoryTip}>Your {activityFilter === "ride" ? "rides" : activityFilter === "walk" ? "walks" : "runs"} save here — every route, pace, and split</Text>
                 </View>
               </View>
             ) : (
@@ -1604,7 +1712,7 @@ export default function SoloScreen() {
         )}
         {showHistory && !isLoading && historyRuns.length > 0 && (
           <>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4, paddingHorizontal: 2 }} style={{ marginBottom: 10 }}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 2, paddingHorizontal: 2 }} style={{ marginBottom: 0 }}>
               {(["all", "favorites", "longest", "fastest"] as const).map((f) => {
                 const labels = { all: "All", favorites: "Favorites", longest: "Longest", fastest: "Fastest" };
                 const active = historyFilter === f;
@@ -1628,13 +1736,15 @@ export default function SoloScreen() {
             )}
           </>
         )}
+        </View>
       </View>
     </>
-  ), [activityFilter, C, s, buddyEligible, buddies, goalPct, distGoal, currentMiles, currentPace, paceGoal, period, distUnit, scheduledRuns, filteredSavedPaths, rankings, historyRuns, showHistory, isLoading, ghostSoloDone, historyFilter, displayedRuns, showNotifBanner, handleNotifBannerEnable, handleNotifBannerDismiss]);
+  ), [activityFilter, C, s, buddyEligible, buddies, goalPct, distGoal, currentMiles, currentPace, paceGoal, period, distUnit, scheduledRuns, filteredSavedPaths, rankings, historyRuns, showHistory, isLoading, ghostSoloDone, ghostPathDone, historyFilter, displayedRuns, showNotifBanner, handleNotifBannerEnable, handleNotifBannerDismiss]);
 
   return (
     <View style={[s.container, { backgroundColor: C.bg }]}>
       <SectionList
+        ref={sectionListRef}
         sections={historySections}
         keyExtractor={(item) => item.id}
         renderItem={renderHistoryItem}
@@ -1650,9 +1760,11 @@ export default function SoloScreen() {
         ]}
         showsVerticalScrollIndicator={false}
         stickySectionHeadersEnabled={false}
-        initialNumToRender={10}
-        maxToRenderPerBatch={10}
-        windowSize={7}
+        initialNumToRender={6}
+        maxToRenderPerBatch={6}
+        updateCellsBatchingPeriod={80}
+        windowSize={5}
+        removeClippedSubviews={Platform.OS !== "web"}
       />
 
       {/* ─── Share Activity Modal ─────────────────────────────────────── */}
@@ -2229,8 +2341,18 @@ export default function SoloScreen() {
                 <Pressable
                   style={[s.runDestBtn, { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border }]}
                   onPress={() => {
+                    const path = selectedSavedPath;
+                    const start = path.route_path?.[0];
+                    const params = new URLSearchParams();
+                    if (start) {
+                      params.set("pathLat", String(start.latitude));
+                      params.set("pathLng", String(start.longitude));
+                    }
+                    params.set("pathName", path.name);
+                    if (path.distance_miles != null) params.set("pathDistance", String(path.distance_miles));
+                    params.set("activityType", pathRunMode);
                     setSelectedSavedPath(null);
-                    setTimeout(() => router.push("/"), 200);
+                    setTimeout(() => router.push(`/create-run?${params.toString()}` as any), 200);
                   }}
                 >
                   <Ionicons name="compass" size={16} color={C.primary} />
@@ -2239,8 +2361,19 @@ export default function SoloScreen() {
                 <Pressable
                   style={[s.runDestBtn, { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border }]}
                   onPress={() => {
+                    const path = selectedSavedPath;
+                    const start = path.route_path?.[0];
+                    const params = new URLSearchParams();
+                    if (start) {
+                      params.set("pathLat", String(start.latitude));
+                      params.set("pathLng", String(start.longitude));
+                    }
+                    params.set("pathName", path.name);
+                    if (path.distance_miles != null) params.set("pathDistance", String(path.distance_miles));
+                    params.set("activityType", pathRunMode);
+                    params.set("visibility", "crew");
                     setSelectedSavedPath(null);
-                    setTimeout(() => router.push("/(tabs)/crew"), 200);
+                    setTimeout(() => router.push(`/create-run?${params.toString()}` as any), 200);
                   }}
                 >
                   <Ionicons name="people" size={16} color={C.primary} />
@@ -2268,7 +2401,7 @@ export default function SoloScreen() {
 function makeStyles(C: ColorScheme) { return StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   scroll: { paddingHorizontal: 16 },
-  monthHeader: { paddingTop: 14, paddingBottom: 6, paddingHorizontal: 2 },
+  monthHeader: { paddingTop: 6, paddingBottom: 6, paddingHorizontal: 2 },
   monthHeaderTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, textTransform: "uppercase", letterSpacing: 0.5 },
   shareActivityBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
@@ -2368,6 +2501,13 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   section: { marginBottom: 24 },
   sectionTitle: { fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text, marginBottom: 12 },
   historyHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
+  historyContainer: {
+    backgroundColor: C.surface,
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
   historyCountBadge: { backgroundColor: C.primaryMuted, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
   historyCountTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.primary },
   historyFilterChip: {
@@ -2388,7 +2528,7 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   rankCategory: { fontFamily: "Outfit_700Bold", fontSize: 15, color: C.text },
   rankBest: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.primary },
   rankRow: { flexDirection: "row", alignItems: "center", paddingVertical: 6, gap: 8, borderTopWidth: 1, borderTopColor: C.border + "88" },
-  rankEmoji: { fontSize: 16, width: 22 },
+  rankEmoji: { width: 22, alignItems: "center" as const },
   rankDate: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary, flex: 1 },
   rankDist: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.text },
   rankPace: { fontFamily: "Outfit_700Bold", fontSize: 12, color: C.primary, minWidth: 70, textAlign: "right" },
@@ -2402,6 +2542,34 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     borderWidth: 1,
     borderColor: C.border,
     flexDirection: "column",
+    overflow: "visible",
+  },
+  historyCardWithRibbon: {
+    paddingTop: 22,
+    marginTop: 6,
+  },
+  bestsChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: C.gold + "1F",
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  bestsChipTxt: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 11,
+    color: C.gold,
+  },
+  bestsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: C.border,
   },
   historyRow: {
     flexDirection: "row",
@@ -2436,9 +2604,8 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   ghostTipRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 4 },
   ghostHistoryTip: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted, flex: 1 },
   historyTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  historyTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text, flex: 1 },
-  historyBadge: { fontSize: 14 },
-  sourceBadge: { width: 18, height: 18, borderRadius: 9, alignItems: "center" as const, justifyContent: "center" as const, marginLeft: 4 },
+  historyTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text, flex: 1, flexShrink: 1, minWidth: 0 },
+  sourceBadge: { width: 18, height: 18, borderRadius: 9, alignItems: "center" as const, justifyContent: "center" as const, marginLeft: 4, flexShrink: 0 },
   historyMeta: { fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary, marginTop: 3 },
   historyRight: { flexDirection: "row", alignItems: "center", gap: 4 },
   historyDist: { fontFamily: "Outfit_700Bold", fontSize: 16, color: C.primary },
@@ -2721,6 +2888,30 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   },
   savedPathName: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.text },
   savedPathMeta: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, marginTop: 2 },
+  ghostPathCard: {
+    backgroundColor: C.surface,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderStyle: "dashed",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  ghostPathIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: C.border + "55",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  ghostPathName: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.textMuted },
+  ghostPathMeta: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, marginTop: 2 },
 
   pathStatsGrid: {
     flexDirection: "row",

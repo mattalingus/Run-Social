@@ -18,8 +18,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { darkColors as C } from "@/constants/colors";
 import { apiRequest } from "@/lib/query-client";
+import { useTheme } from "@/contexts/ThemeContext";
 
 type SharePath = {
   id: string;
@@ -44,6 +44,7 @@ export default function SharePathSheet({
   path: SharePath | null;
   onClose: () => void;
 }) {
+  const { C } = useTheme();
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
   const [search, setSearch] = useState("");

@@ -276,7 +276,7 @@ export default function NotificationBanner() {
                   {firstNotif.title}
                 </Text>
                 {isStacked && (
-                  <View style={styles.countBadge}>
+                  <View style={[styles.countBadge, { backgroundColor: C.danger }]}>
                     <Text style={styles.countText}>{bannerQueue.length}</Text>
                   </View>
                 )}
@@ -384,7 +384,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   countBadge: {
-    backgroundColor: "#FF3B30",
     borderRadius: 10,
     paddingHorizontal: 7,
     paddingVertical: 2,

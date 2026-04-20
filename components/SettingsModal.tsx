@@ -26,6 +26,7 @@ import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { getAppStoreUrl, getAppShareUrl, buildAppInviteMessage } from "@/lib/shareLinks";
 import { router } from "expo-router";
 import { usePurchases } from "@/contexts/PurchasesContext";
+import { useWalkthrough } from "@/contexts/WalkthroughContext";
 import { MARKER_ICONS } from "@/constants/markerIcons";
 import { pickAndUploadImage } from "@/lib/uploadImage";
 
@@ -124,6 +125,7 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
   const { user, refreshUser } = useAuth();
   const qc = useQueryClient();
   const { restorePurchases, isReady: purchasesReady } = usePurchases();
+  const { startWalkthrough } = useWalkthrough();
   const [restoringPurchases, setRestoringPurchases] = useState(false);
 
   const distanceUnit: Unit = (user as any)?.distance_unit ?? "miles";
@@ -159,6 +161,8 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
   const [changingPassword, setChangingPassword] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
   const [changeEmailLoading, setChangeEmailLoading] = useState(false);
+  const [showChangeEmail, setShowChangeEmail] = useState(false);
+  const [newEmailInput, setNewEmailInput] = useState("");
   const [garminSyncing, setGarminSyncing] = useState(false);
   const [garminSyncMsg, setGarminSyncMsg] = useState<string | null>(null);
   const [showMapPinPicker, setShowMapPinPicker] = useState(false);
@@ -288,10 +292,12 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
       Alert.alert("Connected!", "Apple Health is now connected. Tap Sync to import your workouts.");
     } catch (e: any) {
       const msg = e?.message ?? "";
-      if (msg.toLowerCase().includes("permission") || msg.toLowerCase().includes("denied") || msg.toLowerCase().includes("authoriz")) {
+      if (msg.startsWith("HEALTHKIT_UNAVAILABLE:")) {
+        Alert.alert("Update Needed", msg.replace("HEALTHKIT_UNAVAILABLE: ", ""));
+      } else if (msg.startsWith("PERMISSION_DENIED:") || msg.toLowerCase().includes("permission") || msg.toLowerCase().includes("denied") || msg.toLowerCase().includes("authoriz")) {
         Alert.alert(
           "Permission Denied",
-          "PaceUp needs access to Apple Health.\n\nGo to Settings → Privacy & Security → Health → PaceUp and allow access.",
+          msg.replace("PERMISSION_DENIED: ", "") || "PaceUp needs access to Apple Health.\n\nGo to Settings → Privacy & Security → Health → PaceUp and allow access.",
           [
             { text: "Cancel", style: "cancel" },
             { text: "Open Settings", onPress: () => Linking.openURL("app-settings:").catch(() => {}) },
@@ -301,6 +307,22 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
         Alert.alert("Apple Health", msg || "Could not connect to Apple Health. Please try again.");
       }
     }
+  }
+
+  function handleDiagnoseAppleHealth() {
+    const { healthKitDiagnostics, isHealthKitAvailable } = require("@/lib/healthKit");
+    const d = healthKitDiagnostics();
+    const lines = [
+      `Platform: ${d.platform}`,
+      `Module loaded: ${d.moduleLoaded ? "Yes" : "No"}`,
+      `HealthKit available: ${d.available ? "Yes" : "No"}`,
+      `Initialized this session: ${d.initialized ? "Yes" : "No"}`,
+      `Connected (server): ${appleHealthConnected ? "Yes" : "No"}`,
+    ];
+    if (!d.moduleLoaded && !d.available) {
+      lines.push("", "The native HealthKit module isn't in this build. Update from the App Store to get Apple Health support.");
+    }
+    Alert.alert("Apple Health — Diagnostics", lines.join("\n"));
   }
 
   async function handleHealthSync() {
@@ -662,47 +684,30 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
 
   function handleChangeEmail() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const submit = async (newEmail: string) => {
-      if (!newEmail || !newEmail.includes("@")) {
-        Alert.alert("Invalid Email", "Please enter a valid email address.");
-        return;
+    setNewEmailInput("");
+    setShowChangeEmail(true);
+  }
+
+  async function submitChangeEmail() {
+    const newEmail = newEmailInput.trim();
+    if (!newEmail || !newEmail.includes("@")) {
+      Alert.alert("Invalid Email", "Please enter a valid email address.");
+      return;
+    }
+    setChangeEmailLoading(true);
+    try {
+      const res = await apiRequest("POST", "/api/users/me/email/request-change", { newEmail });
+      const data = await res.json();
+      if (!res.ok) {
+        Alert.alert("Error", data.message ?? "Could not request email change");
+      } else {
+        setShowChangeEmail(false);
+        Alert.alert("Check your inbox", "A verification link has been sent to your new email address. Click it to confirm the change.");
       }
-      setChangeEmailLoading(true);
-      try {
-        const res = await apiRequest("POST", "/api/users/me/email/request-change", { newEmail: newEmail.trim() });
-        const data = await res.json();
-        if (!res.ok) {
-          Alert.alert("Error", data.message ?? "Could not request email change");
-        } else {
-          Alert.alert("Check your inbox", "A verification link has been sent to your new email address. Click it to confirm the change.");
-        }
-      } catch {
-        Alert.alert("Error", "Could not request email change. Please try again.");
-      } finally {
-        setChangeEmailLoading(false);
-      }
-    };
-    if (Platform.OS === "ios") {
-      Alert.prompt(
-        "Change Email",
-        "Enter your new email address. We'll send a verification link to confirm.",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Send Link", onPress: (v) => submit(v ?? "") },
-        ],
-        "plain-text",
-        "",
-        "email-address"
-      );
-    } else {
-      Alert.alert(
-        "Change Email",
-        `To change your email, contact support at support@paceupapp.com with subject "Email Change Request".`,
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Email Support", onPress: () => Linking.openURL("mailto:support@paceupapp.com?subject=Email%20Change%20Request").catch(() => {}) },
-        ]
-      );
+    } catch {
+      Alert.alert("Error", "Could not request email change. Please try again.");
+    } finally {
+      setChangeEmailLoading(false);
     }
   }
 
@@ -1032,6 +1037,7 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
                       </Pressable>
                     </View>
                   }
+                  onPress={handleDiagnoseAppleHealth}
                 />
                 <Divider C={C} />
               </>
@@ -1285,6 +1291,18 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
           {/* ── ABOUT ────────────────────────────────────────────────────── */}
           <SectionHeader label="About" C={C} />
           <SectionCard C={C}>
+            <SettingRow
+              C={C}
+              iconBg={C.primary + "22"}
+              icon={<Feather name="compass" size={17} color={C.primary} />}
+              label="Replay app tour"
+              sublabel="60-second walkthrough of the big features"
+              onPress={() => {
+                onClose?.();
+                setTimeout(() => startWalkthrough(), 350);
+              }}
+            />
+            <Divider C={C} />
             <SettingRow
               C={C}
               iconBg={C.primary + "22"}
@@ -1564,6 +1582,38 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
               <ActivityIndicator color={C.bg} size="small" />
             ) : (
               <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 16, color: C.bg }}>Update Password</Text>
+            )}
+          </Pressable>
+        </View>
+      </Modal>
+
+      <Modal visible={showChangeEmail} transparent animationType="slide" onRequestClose={() => setShowChangeEmail(false)}>
+        <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.55)" }} onPress={() => setShowChangeEmail(false)} />
+        <View style={{ backgroundColor: C.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 24, paddingBottom: insets.bottom + 24 }}>
+          <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 20, color: C.text, marginBottom: 8 }}>Change Email</Text>
+          <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textMuted, marginBottom: 20 }}>
+            Enter your new email address. We'll send a verification link to confirm.
+          </Text>
+          <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textMuted, marginBottom: 6 }}>New Email</Text>
+          <TextInput
+            value={newEmailInput}
+            onChangeText={setNewEmailInput}
+            placeholder="you@example.com"
+            placeholderTextColor={C.textMuted}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={{ backgroundColor: C.card, borderRadius: 10, borderWidth: 1, borderColor: C.border, color: C.text, fontFamily: "Outfit_400Regular", fontSize: 15, padding: 12, marginBottom: 24 }}
+          />
+          <Pressable
+            style={{ backgroundColor: C.primary, borderRadius: 14, paddingVertical: 14, alignItems: "center", opacity: changeEmailLoading ? 0.6 : 1 }}
+            onPress={submitChangeEmail}
+            disabled={changeEmailLoading}
+          >
+            {changeEmailLoading ? (
+              <ActivityIndicator color={C.bg} size="small" />
+            ) : (
+              <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 16, color: C.bg }}>Send Verification Link</Text>
             )}
           </Pressable>
         </View>

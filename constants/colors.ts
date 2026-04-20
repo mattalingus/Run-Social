@@ -41,7 +41,7 @@ export const lightColors = {
   border: "#C8E4D4",
   borderLight: "#B0D4C0",
   overlay: "rgba(255, 255, 255, 0.88)",
-  white: "#0A1F12",
+  white: "#FFFFFF",
   tabBar: "#FFFFFF",
   tint: "#00A85E",
   tabIconDefault: "#8AAD99",

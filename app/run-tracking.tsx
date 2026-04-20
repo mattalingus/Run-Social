@@ -127,6 +127,7 @@ function pickCoachPhrase(
   activityType: "run" | "ride" | "walk" = "run"
 ): string {
   const isRide = activityType === "ride";
+  const isWalk = activityType === "walk";
   const pS = spokenPace(paceMinTotal);
   const tS = spokenTime(totalSeconds);
   let pM = Math.floor(paceMinTotal);
@@ -221,8 +222,9 @@ function pickCoachPhrase(
     ];
     paceLine = pick(rideSpeedLines);
   } else {
+    const verb = isWalk ? "Walking" : "Running";
     const paceLines = [
-      `Running at ${pS} per mile.`,
+      `${verb} at ${pS} per mile.`,
       `Current pace, ${pS} a mile.`,
       `${pM} minute${secPart} miles.`,
       `Averaging ${pS} per mile.`,
@@ -287,20 +289,20 @@ function pickCoachPhrase(
     `${tS} elapsed.`,
     `Time: ${tS}.`,
     `${totalM} minute${totalM !== 1 ? "s" : ""} in.`,
-    `${isRide ? "Riding" : "Running"} for ${tS}.`,
+    `${isRide ? "Riding" : isWalk ? "Walking" : "Running"} for ${tS}.`,
     `${tS} so far.`,
     `That's ${tS} of work.`,
     `${tS} logged.`,
     `Timer reads ${tS}.`,
-    `You're ${tS} into this ${isRide ? "ride" : "run"}.`,
+    `You're ${tS} into this ${isRide ? "ride" : isWalk ? "walk" : "run"}.`,
     `${totalM} minute${totalM !== 1 ? "s" : ""} on the watch.`,
     `Time at ${tS}.`,
     `${tS} underway.`,
     `Clock says ${tS}.`,
     `${tS} into it.`,
     `Elapsed: ${tS}.`,
-    `You've ${isRide ? "ridden" : "run"} for ${tS}.`,
-    `${tS} on the ${isRide ? "ride" : "run"}.`,
+    `You've ${isRide ? "ridden" : isWalk ? "walked" : "run"} for ${tS}.`,
+    `${tS} on the ${isRide ? "ride" : isWalk ? "walk" : "run"}.`,
   ];
   const timeLine = pick(timeLines);
 

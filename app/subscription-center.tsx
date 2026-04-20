@@ -17,6 +17,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { usePurchases } from "@/contexts/PurchasesContext";
 import { useQueryClient } from "@tanstack/react-query";
 import PaywallSheet, { PaywallPlan } from "@/components/PaywallSheet";
+import ScreenHeader from "@/components/ScreenHeader";
 
 const PLANS: PaywallPlan[] = [
   {
@@ -112,18 +113,17 @@ export default function SubscriptionCenterScreen() {
 
   return (
     <View style={[st.container, { backgroundColor: C.bg }]}>
-      <View style={[st.header, { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 8) }]}>
-        <Pressable onPress={() => router.back()} style={st.backBtn} hitSlop={12}>
-          <Feather name="arrow-left" size={22} color={C.text} />
-        </Pressable>
-        <Text style={[st.headerTitle, { color: C.text }]}>Subscription Center</Text>
-        <Pressable onPress={handleRefresh} style={st.refreshBtn} hitSlop={12} disabled={refreshing}>
-          {refreshing
-            ? <ActivityIndicator size="small" color={C.primary} />
-            : <Feather name="refresh-cw" size={18} color={C.textMuted} />
-          }
-        </Pressable>
-      </View>
+      <ScreenHeader
+        title="Subscription Center"
+        right={
+          <Pressable onPress={handleRefresh} hitSlop={12} disabled={refreshing}>
+            {refreshing
+              ? <ActivityIndicator size="small" color={C.primary} />
+              : <Feather name="refresh-cw" size={18} color={C.textMuted} />
+            }
+          </Pressable>
+        }
+      />
 
       <ScrollView
         style={{ flex: 1 }}
@@ -300,19 +300,6 @@ const itemSt = StyleSheet.create({
 function makeStyles(C: any, insets: { top: number; bottom: number }) {
   return StyleSheet.create({
     container: { flex: 1 },
-    header: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      paddingHorizontal: 16,
-      paddingBottom: 12,
-    },
-    backBtn: { width: 40, height: 40, justifyContent: "center" },
-    refreshBtn: { width: 40, height: 40, justifyContent: "center", alignItems: "flex-end" },
-    headerTitle: {
-      fontFamily: "Outfit_700Bold",
-      fontSize: 20,
-    },
     content: {
       paddingHorizontal: 16,
       gap: 8,

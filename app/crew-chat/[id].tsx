@@ -18,6 +18,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { useQuery } from "@tanstack/react-query";
+import ScreenHeader from "@/components/ScreenHeader";
 
 interface Message {
   id: string;
@@ -198,17 +199,11 @@ export default function CrewChatScreen() {
   return (
     <View style={s.container}>
       {/* Header */}
-      <View style={[s.header, { paddingTop: insets.top + (Platform.OS === 'web' ? 67 : 0) }]}>
-        <TouchableOpacity onPress={() => router.back()} style={s.headerBtn}>
-          <Feather name="chevron-left" size={24} color={C.text} />
-        </TouchableOpacity>
-        <View style={s.headerCenter}>
-          <Text style={s.headerTitle} numberOfLines={1}>{crew?.name || "Crew Chat"}</Text>
-        </View>
-        <View style={s.headerRight}>
-          <Text style={s.memberCount}>{crew?.member_count || 0} members</Text>
-        </View>
-      </View>
+      <ScreenHeader
+        title={crew?.name || "Crew Chat"}
+        topPaddingExtra={Platform.OS === "web" ? 67 : 0}
+        right={<Text style={s.memberCount}>{crew?.member_count || 0} members</Text>}
+      />
 
       <FlatList
         data={messages}
@@ -259,35 +254,6 @@ const makeStyles = (C: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: C.bg,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: C.border,
-    backgroundColor: C.bg,
-  },
-  headerBtn: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "flex-start",
-  },
-  headerCenter: {
-    flex: 1,
-    alignItems: "center",
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: "600",
-    color: C.text,
-    fontFamily: "Outfit_600SemiBold",
-  },
-  headerRight: {
-    minWidth: 40,
-    alignItems: "flex-end",
   },
   memberCount: {
     fontSize: 12,

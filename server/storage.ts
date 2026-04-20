@@ -44,17 +44,17 @@ function deduplicateRoutePath(coords: Array<{ latitude: number; longitude: numbe
     );
   }
 
-  const THRESHOLD_KM = 0.04; // 40 m proximity to call it a "return"
-  const MIN_GAP_KM = 0.3;    // must have traveled ≥300m since the anchor point
+  const THRESHOLD_KM = 0.012; // 12 m proximity (consumer GPS jitter) to call it a "return"
+  const MIN_GAP_KM = 0.3;     // must have traveled ≥300m since the anchor point
+  const START_WINDOW = Math.min(10, coords.length); // only treat closure against the actual start
 
-  // For each point i, scan earlier anchor points j where gap(j→i) ≥ MIN_GAP_KM
-  // Find the earliest i where point i returns within THRESHOLD_KM of some j < i
+  // Find the earliest i where point i returns within THRESHOLD_KM of one of the first START_WINDOW points.
   let closureAt = -1; // index i where closure first occurs
   let closureAnchor = -1; // index j of the anchor point
 
   outer:
   for (let i = 3; i < coords.length; i++) {
-    for (let j = 0; j < i; j++) {
+    for (let j = 0; j < Math.min(START_WINDOW, i); j++) {
       const gap = cumDist[i] - cumDist[j];
       if (gap < MIN_GAP_KM) continue;
       const d = haversineKm(
@@ -78,6 +78,12 @@ function deduplicateRoutePath(coords: Array<{ latitude: number; longitude: numbe
   const trimmed = coords.slice(0, closureAt + 1);
   trimmed.push({ latitude: coords[closureAnchor].latitude, longitude: coords[closureAnchor].longitude });
   const trimmedMiles = computePathDistanceKm(trimmed) / 1.60934;
+
+  // Safety floor: if we trimmed more than 5% of the route, likely GPS noise, not a real loop.
+  if (trimmedMiles < distanceMiles * 0.95) {
+    return { path: coords, distanceMiles, loopDetected: false };
+  }
+
   return { path: trimmed, distanceMiles: trimmedMiles, loopDetected: true };
 }
 
@@ -389,6 +395,20 @@ export async function initDb() {
     ALTER TABLE community_paths ADD COLUMN IF NOT EXISTS created_by_name TEXT;
     ALTER TABLE community_paths ADD COLUMN IF NOT EXISTS run_count INTEGER DEFAULT 1;
     ALTER TABLE community_paths ADD COLUMN IF NOT EXISTS activity_type TEXT DEFAULT 'run';
+    ALTER TABLE community_paths ADD COLUMN IF NOT EXISTS osm_way_id BIGINT;
+    ALTER TABLE community_paths ADD COLUMN IF NOT EXISTS activity_types TEXT[];
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_community_paths_osm_way_id ON community_paths(osm_way_id) WHERE osm_way_id IS NOT NULL;
+
+    CREATE TABLE IF NOT EXISTS path_variants (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      parent_path_id VARCHAR NOT NULL REFERENCES community_paths(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      route_path JSONB NOT NULL,
+      distance_miles REAL NOT NULL,
+      activity_types TEXT[],
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_path_variants_parent ON path_variants(parent_path_id);
 
     ALTER TABLE crew_messages ADD COLUMN IF NOT EXISTS message_type TEXT DEFAULT 'text';
     ALTER TABLE crew_messages ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT NULL;
@@ -1182,6 +1202,9 @@ export async function respondToFriendRequest(friendshipId: string, userId: strin
 
 export async function respondToCrewInvite(crewId: string, userId: string, action: 'accept' | 'decline') {
   if (action === 'accept') {
+    if (await hasCrewBlockConflict(crewId, userId)) {
+      throw Object.assign(new Error("Can't join this crew due to a block between you and a member."), { code: "BLOCK_CONFLICT" });
+    }
     const memberCount = await getCrewMemberCount(crewId);
     const cap = await getCrewMemberCap(crewId);
     if (memberCount >= cap) {
@@ -4182,15 +4205,45 @@ export async function publishSavedPath(pathId: string, userId: string) {
 // ─── Community Paths ───────────────────────────────────────────────────────────
 
 export async function getCommunityPaths(bounds?: { swLat: number; neLat: number; swLng: number; neLng: number }) {
-  let query = `SELECT *, (SELECT COUNT(*) FROM path_contributions WHERE community_path_id = cp.id) as contribution_count FROM community_paths cp WHERE is_public = true`;
+  let query = `SELECT *,
+    (SELECT COUNT(*) FROM path_contributions WHERE community_path_id = cp.id) as contribution_count,
+    (osm_way_id IS NOT NULL) as is_osm,
+    CASE WHEN osm_way_id IS NOT NULL THEN 'osm' ELSE 'user' END as source
+    FROM community_paths cp WHERE is_public = true`;
   const params: any[] = [];
   if (bounds) {
     params.push(bounds.swLat, bounds.neLat, bounds.swLng, bounds.neLng);
     query += ` AND start_lat >= $1 AND start_lat <= $2 AND start_lng >= $3 AND start_lng <= $4`;
   }
-  query += ` ORDER BY run_count DESC, updated_at DESC LIMIT 50`;
+  query += ` ORDER BY run_count DESC, updated_at DESC LIMIT 200`;
   const res = await pool.query(query, params);
-  return res.rows;
+  const rows = res.rows;
+  if (rows.length === 0) return rows;
+  const ids = rows.map((r) => r.id);
+  const variants = await pool.query(
+    `SELECT id, parent_path_id, name, route_path, distance_miles, activity_types
+       FROM path_variants WHERE parent_path_id = ANY($1::varchar[])`,
+    [ids]
+  );
+  const byParent = new Map<string, any[]>();
+  for (const v of variants.rows) {
+    const arr = byParent.get(v.parent_path_id) ?? [];
+    arr.push(v);
+    byParent.set(v.parent_path_id, arr);
+  }
+  for (const r of rows) r.variants = byParent.get(r.id) ?? [];
+  return rows;
+}
+
+export async function replacePathVariants(parentId: string, variants: Array<{ name: string; route_path: any; distance_miles: number; activity_types: string[] }>) {
+  await pool.query(`DELETE FROM path_variants WHERE parent_path_id = $1`, [parentId]);
+  for (const v of variants) {
+    await pool.query(
+      `INSERT INTO path_variants (parent_path_id, name, route_path, distance_miles, activity_types)
+         VALUES ($1, $2, $3, $4, $5)`,
+      [parentId, v.name, JSON.stringify(v.route_path), v.distance_miles, v.activity_types]
+    );
+  }
 }
 
 export async function publishSoloRunRoute(soloRunId: string, userId: string, routeName: string) {
@@ -4811,6 +4864,9 @@ export async function getCrewJoinRequests(crewId: string) {
 
 export async function respondToCrewJoinRequest(crewId: string, requesterId: string, accept: boolean) {
   if (accept) {
+    if (await hasCrewBlockConflict(crewId, requesterId)) {
+      throw Object.assign(new Error("Can't approve — requester has a block with an existing crew member."), { code: "BLOCK_CONFLICT" });
+    }
     const memberCount = await getCrewMemberCount(crewId);
     const cap = await getCrewMemberCap(crewId);
     if (memberCount >= cap) {
@@ -4882,6 +4938,9 @@ export async function getCrewInvites(userId: string) {
 }
 
 export async function inviteUserToCrew(crewId: string, userId: string, invitedBy: string) {
+  if (await hasCrewBlockConflict(crewId, userId)) {
+    throw Object.assign(new Error("Can't invite this user — a block exists between them and an existing crew member."), { code: "BLOCK_CONFLICT" });
+  }
   await pool.query(
     `INSERT INTO crew_members (crew_id, user_id, status, invited_by)
      VALUES ($1, $2, 'pending', $3)
@@ -5430,6 +5489,9 @@ export async function requestToJoinCrew(crewId: string, userId: string) {
   if (existing.rows.length > 0) {
     return { error: existing.rows[0].status === "member" ? "already_member" : "already_requested" };
   }
+  if (await hasCrewBlockConflict(crewId, userId)) {
+    return { error: "block_conflict" };
+  }
   const memberCount = await getCrewMemberCount(crewId);
   const cap = await getCrewMemberCap(crewId);
   if (memberCount >= cap) {
@@ -5695,27 +5757,48 @@ export async function getDmUnreadCount(userId: string): Promise<number> {
 }
 
 export async function getRecentCommunityActivity() {
-  const res = await pool.query(`
-    SELECT r.id, r.title, r.location_name, r.activity_type,
-           COALESCE(r.started_at, r.date) AS completed_at,
-           u.name AS host_name,
-           COALESCE(r.max_distance, 0) AS max_distance,
-           COUNT(DISTINCT rp.user_id) AS participant_count
-    FROM runs r
-    JOIN users u ON u.id = r.host_id
-    LEFT JOIN run_participants rp
-      ON rp.run_id = r.id AND rp.status IN ('confirmed', 'joined')
-    WHERE r.is_completed = true
-      AND COALESCE(r.started_at, r.date) >= NOW() - INTERVAL '7 days'
-    GROUP BY r.id, u.name
-    ORDER BY (COUNT(DISTINCT rp.user_id) * 2 + COALESCE(r.max_distance, 0)) DESC,
-             COALESCE(r.started_at, r.date) DESC
-    LIMIT 12
-  `);
-  return res.rows.map((row) => ({
-    ...row,
-    participant_count: parseInt(row.participant_count, 10),
-  }));
+  // Ladder the lookback window so the section isn't empty in quiet areas:
+  // 7d → 14d → 30d → 90d → all-time. First tier with ≥6 rows wins.
+  const windows: Array<{ interval: string | null; tier: string }> = [
+    { interval: "7 days", tier: "recent" },
+    { interval: "14 days", tier: "recent" },
+    { interval: "30 days", tier: "recent" },
+    { interval: "90 days", tier: "recent" },
+    { interval: null, tier: "popular" },
+  ];
+
+  for (const { interval, tier } of windows) {
+    const whereClause = interval
+      ? `WHERE r.is_completed = true AND COALESCE(r.started_at, r.date) >= NOW() - INTERVAL '${interval}'`
+      : `WHERE r.is_completed = true`;
+    const res = await pool.query(`
+      SELECT r.id, r.title, r.location_name, r.activity_type,
+             COALESCE(r.started_at, r.date) AS completed_at,
+             u.name AS host_name,
+             COALESCE(r.max_distance, 0) AS max_distance,
+             COUNT(DISTINCT rp.user_id) AS participant_count
+      FROM runs r
+      JOIN users u ON u.id = r.host_id
+      LEFT JOIN run_participants rp
+        ON rp.run_id = r.id AND rp.status IN ('confirmed', 'joined')
+      ${whereClause}
+      GROUP BY r.id, u.name
+      ORDER BY (COUNT(DISTINCT rp.user_id) * 2 + COALESCE(r.max_distance, 0)) DESC,
+               COALESCE(r.started_at, r.date) DESC
+      LIMIT 12
+    `);
+    if (res.rows.length >= 6 || interval === null) {
+      return {
+        tier,
+        window: interval ?? "all-time",
+        rows: res.rows.map((row) => ({
+          ...row,
+          participant_count: parseInt(row.participant_count, 10),
+        })),
+      };
+    }
+  }
+  return { tier: "popular", window: "all-time", rows: [] };
 }
 
 // ─── User Blocks ──────────────────────────────────────────────────────────────
@@ -5746,6 +5829,21 @@ export async function isBlocking(requesterId: string, targetId: string): Promise
   const res = await pool.query(
     `SELECT 1 FROM user_blocks WHERE blocker_id = $1 AND blocked_id = $2`,
     [requesterId, targetId]
+  );
+  return res.rows.length > 0;
+}
+
+// Returns true if any existing crew member has blocked `userId`, or `userId` has blocked any existing crew member.
+// Used to prevent blocked users from becoming co-members of a crew via invite or join request.
+export async function hasCrewBlockConflict(crewId: string, userId: string): Promise<boolean> {
+  const res = await pool.query(
+    `SELECT 1 FROM user_blocks ub
+     JOIN crew_members cm ON (cm.user_id = ub.blocker_id OR cm.user_id = ub.blocked_id)
+     WHERE cm.crew_id = $1
+       AND cm.status = 'member'
+       AND (ub.blocker_id = $2 OR ub.blocked_id = $2)
+     LIMIT 1`,
+    [crewId, userId]
   );
   return res.rows.length > 0;
 }

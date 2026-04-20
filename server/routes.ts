@@ -9,7 +9,6 @@ import * as storage from "./storage";
 import { pool } from "./storage";
 import * as ai from "./ai";
 import { generateDummyRuns, clearAndReseedRuns, getRunCount } from "./seed";
-import { seedCommunityPaths } from "./seed-paths";
 import { uploadPhotoBuffer, streamObject } from "./objectStorage";
 import { sendPushNotification, userWantsNotif } from "./notifications";
 import crypto from "crypto";
@@ -23,6 +22,22 @@ const GARMIN_ACTIVITIES_URL = "https://apis.garmin.com/wellness-api/rest/activit
 // Server-side map: oauth_token (request token) → { userId, requestSecret }
 // Bypasses session cookie loss when the in-app browser redirects back for the callback.
 const garminPendingTokens = new Map<string, { userId: string; requestSecret: string }>();
+
+// Decode Google's encoded-polyline format to [{lat,lng}].
+function decodePolyline(encoded: string): Array<{ lat: number; lng: number }> {
+  const points: Array<{ lat: number; lng: number }> = [];
+  let index = 0, lat = 0, lng = 0;
+  while (index < encoded.length) {
+    let b: number, shift = 0, result = 0;
+    do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+    lat += (result & 1) ? ~(result >> 1) : (result >> 1);
+    shift = 0; result = 0;
+    do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+    lng += (result & 1) ? ~(result >> 1) : (result >> 1);
+    points.push({ lat: lat / 1e5, lng: lng / 1e5 });
+  }
+  return points;
+}
 
 function makeGarminOAuth() {
   const key = process.env.GARMIN_CONSUMER_KEY;
@@ -1456,6 +1471,31 @@ async function go(e){
     }
   });
 
+  // Snap a walking route between two points using Google Directions API.
+  // Returns decoded polyline as [{lat,lng}]. Falls back to straight line on failure.
+  app.post("/api/routing/walk", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { from, to } = req.body as { from?: { lat: number; lng: number }; to?: { lat: number; lng: number } };
+      if (!from || !to || typeof from.lat !== "number" || typeof to.lat !== "number") {
+        return res.status(400).json({ message: "from and to {lat,lng} required" });
+      }
+      const key = process.env.GOOGLE_DIRECTIONS_API_KEY;
+      if (!key) {
+        return res.json({ points: [from, to], source: "straight", reason: "no_key" });
+      }
+      const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${from.lat},${from.lng}&destination=${to.lat},${to.lng}&mode=walking&key=${key}`;
+      const r = await fetch(url);
+      const data = await r.json() as any;
+      if (data.status !== "OK" || !data.routes?.[0]?.overview_polyline?.points) {
+        return res.json({ points: [from, to], source: "straight", reason: data.status || "no_route" });
+      }
+      const points = decodePolyline(data.routes[0].overview_polyline.points);
+      res.json({ points, source: "google" });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.get("/api/community-paths", async (req, res) => {
     try {
       const bounds = (req.query.swLat as string && req.query.neLat as string && req.query.swLng as string && req.query.neLng as string)
@@ -1754,8 +1794,8 @@ async function go(e){
 
   app.get("/api/runs/community-activity", async (_req, res) => {
     try {
-      const runs = await storage.getRecentCommunityActivity();
-      res.json({ runs });
+      const result = await storage.getRecentCommunityActivity();
+      res.json({ runs: result.rows, tier: result.tier, window: result.window });
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
@@ -1813,16 +1853,22 @@ async function go(e){
       if (run.is_strict) {
         const paceOk = user.avg_pace >= run.min_pace && user.avg_pace <= run.max_pace;
         const recentDistances = await storage.getUserRecentDistances(req.session.userId!);
+        const isRide = run.activity_type === "ride";
+        const actLabel = isRide ? "ride" : run.activity_type === "walk" ? "walk" : "run";
+        const fmt = (p: number) => isRide ? `${(60 / p).toFixed(1)} mph` : `${p} min/mi`;
+        const unit = isRide ? "mph" : "min/mi";
         if (recentDistances.length > 0) {
           const distOk = recentDistances.some((d) => d >= run.min_distance * 0.7);
           if (!paceOk && !distOk) {
-            return res.status(400).json({ message: `Strict run: your pace (${user.avg_pace} min/mi) doesn't match and no recent run covers 70%+ of the ${run.min_distance} mi distance` });
+            return res.status(400).json({ message: `Strict ${actLabel}: your ${isRide ? "speed" : "pace"} (${fmt(user.avg_pace)}) doesn't match and no recent ${actLabel} covers 70%+ of the ${run.min_distance} mi distance` });
           }
           if (!paceOk) {
-            return res.status(400).json({ message: `Strict run: your pace (${user.avg_pace} min/mi) must be between ${run.min_pace}–${run.max_pace} min/mi` });
+            const lo = isRide ? fmt(run.max_pace) : fmt(run.min_pace);
+            const hi = isRide ? fmt(run.min_pace) : fmt(run.max_pace);
+            return res.status(400).json({ message: `Strict ${actLabel}: your ${isRide ? "speed" : "pace"} (${fmt(user.avg_pace)}) must be between ${lo}–${hi}` });
           }
           if (!distOk) {
-            return res.status(400).json({ message: `Strict run: you need at least one recent run covering 70%+ of the planned ${run.min_distance} mi distance` });
+            return res.status(400).json({ message: `Strict ${actLabel}: you need at least one recent ${actLabel} covering 70%+ of the planned ${run.min_distance} mi distance` });
           }
         }
       }

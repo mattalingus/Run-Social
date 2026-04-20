@@ -19,10 +19,8 @@ function PillBackground({ bg, border }: { bg: string; border: string }) {
   return <View style={[styles.pill, { backgroundColor: bg, borderColor: border }]} />;
 }
 
-function GreenDot() {
-  return (
-    <View style={styles.dot} />
-  );
+function GreenDot({ color }: { color: string }) {
+  return <View style={[styles.dot, { backgroundColor: color }]} />;
 }
 
 export default function TabLayout() {
@@ -126,7 +124,7 @@ export default function TabLayout() {
         tabBarBackground: () => Platform.OS === "android" ? <></> : <PillBackground bg={C.tabBar} border={C.borderLight} />,
         tabBarShowLabel: true,
         tabBarLabelStyle: {
-          ...(Platform.OS !== "android" && { fontFamily: "Outfit_600SemiBold" }),
+          fontFamily: "Outfit_600SemiBold",
           fontSize:     11,
           marginBottom: Platform.OS === "android" ? 2 : 4,
         },
@@ -159,7 +157,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <View>
               <Ionicons name={focused ? "people" : "people-outline"} size={22} color={color} />
-              {hasCrewUnread && <GreenDot />}
+              {hasCrewUnread && <GreenDot color={C.primary} />}
             </View>
           ),
         }}
@@ -171,7 +169,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <View>
               <Ionicons name={focused ? "person" : "person-outline"} size={22} color={color} />
-              {unreadNotifCount > 0 && <View style={styles.redDot} />}
+              {unreadNotifCount > 0 && <View style={[styles.redDot, { backgroundColor: C.danger }]} />}
             </View>
           ),
         }}
@@ -194,21 +192,19 @@ const styles = StyleSheet.create({
     borderWidth:  1,
   },
   dot: {
-    position:        "absolute",
-    top:             -2,
-    right:           -4,
-    width:           8,
-    height:          8,
-    borderRadius:    4,
-    backgroundColor: "#00A85E",
+    position:     "absolute",
+    top:          -2,
+    right:        -4,
+    width:        8,
+    height:       8,
+    borderRadius: 4,
   },
   redDot: {
-    position:        "absolute",
-    top:             -2,
-    right:           -4,
-    width:           8,
-    height:          8,
-    borderRadius:    4,
-    backgroundColor: "#FF3B30",
+    position:     "absolute",
+    top:          -2,
+    right:        -4,
+    width:        8,
+    height:       8,
+    borderRadius: 4,
   },
 });

@@ -101,6 +101,19 @@ export default function RunResultsScreen() {
     staleTime: 0,
   });
 
+  const { data: myRating } = useQuery<any>({
+    queryKey: ["/api/runs", id, "my-rating"],
+    queryFn: async () => {
+      try {
+        const res = await apiRequest("GET", `/api/runs/${id}/my-rating`);
+        return await res.json();
+      } catch {
+        return null;
+      }
+    },
+    enabled: !!id,
+  });
+
   async function pickAndUploadPhoto() {
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -141,6 +154,10 @@ export default function RunResultsScreen() {
   const stillRunning = results.filter((r) => r.is_present && r.final_rank == null);
   const finished = results.filter((r) => r.final_rank != null).sort((a, b) => a.final_rank - b.final_rank);
   const isParticipant = results.some((r: any) => r.user_id === user?.id);
+  const isHost = !!run?.host_id && run.host_id === user?.id;
+  const myResult = results.find((r: any) => r.user_id === user?.id);
+  const iFinished = !!myResult?.final_rank;
+  const canRateHost = !isHost && isParticipant && iFinished && !myRating;
   const hasPaceGroups = run?.pace_groups && (run.pace_groups as any[]).length > 0;
   const hasAnyGroupLabel = finished.some((r: any) => r.pace_group_label);
 
@@ -224,6 +241,32 @@ export default function RunResultsScreen() {
               <Text style={s.summaryLabel}>Still {actIngLabel}</Text>
             </View>
           </View>
+
+          {/* Rate Host Card */}
+          {canRateHost && (
+            <Pressable
+              style={({ pressed }) => [s.rateHostCard, { opacity: pressed ? 0.85 : 1 }]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push(`/rate/${id}`);
+              }}
+            >
+              <View style={s.rateHostIconWrap}>
+                <Ionicons name="star-outline" size={20} color={C.gold} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.rateHostTitle}>How was the host?</Text>
+                <Text style={s.rateHostSub}>Leave a quick rating — it only takes a second.</Text>
+              </View>
+              <Feather name="chevron-right" size={20} color={C.textMuted} />
+            </Pressable>
+          )}
+          {myRating && !isHost && isParticipant && (
+            <View style={s.ratedBannerCard}>
+              <Ionicons name="star" size={14} color={C.gold} />
+              <Text style={s.ratedBannerText}>You rated this host {myRating.stars}/5</Text>
+            </View>
+          )}
 
           {/* AI Coach Summary Card */}
           {aiSummary?.summary && (
@@ -577,6 +620,54 @@ function makeStyles(C: ColorScheme) {
       fontSize: 14,
       color: C.text,
       lineHeight: 20,
+    },
+    rateHostCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      backgroundColor: C.gold + "14",
+      borderRadius: 16,
+      padding: 14,
+      borderWidth: 1,
+      borderColor: C.gold + "55",
+      marginBottom: 16,
+    },
+    rateHostIconWrap: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: C.gold + "22",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    rateHostTitle: {
+      fontFamily: "Outfit_700Bold",
+      fontSize: 15,
+      color: C.text,
+    },
+    rateHostSub: {
+      fontFamily: "Outfit_400Regular",
+      fontSize: 12,
+      color: C.textMuted,
+      marginTop: 2,
+    },
+    ratedBannerCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      backgroundColor: C.gold + "14",
+      borderRadius: 12,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderWidth: 1,
+      borderColor: C.gold + "33",
+      marginBottom: 16,
+      alignSelf: "flex-start",
+    },
+    ratedBannerText: {
+      fontFamily: "Outfit_600SemiBold",
+      fontSize: 12,
+      color: C.gold,
     },
   });
 }

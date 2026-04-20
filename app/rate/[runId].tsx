@@ -15,6 +15,7 @@ import * as Haptics from "expo-haptics";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/query-client";
 import C from "@/constants/colors";
+import ScreenHeader from "@/components/ScreenHeader";
 
 const FEEDBACK_TAGS = [
   "Kept advertised pace",
@@ -68,13 +69,7 @@ export default function RateHostScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-        <Pressable onPress={() => router.back()} style={styles.closeBtn}>
-          <Feather name="x" size={20} color={C.textSecondary} />
-        </Pressable>
-        <Text style={styles.headerTitle}>Rate Host</Text>
-        <View style={{ width: 40 }} />
-      </View>
+      <ScreenHeader title="Rate Host" variant="close" topPaddingExtra={16} />
 
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
@@ -158,9 +153,6 @@ export default function RateHostScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
-  header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: C.border },
-  closeBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
-  headerTitle: { flex: 1, fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text, textAlign: "center" },
   content: { padding: 24, gap: 28 },
   runInfo: { backgroundColor: C.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: C.border, gap: 10 },
   runTitle: { fontFamily: "Outfit_700Bold", fontSize: 17, color: C.text },

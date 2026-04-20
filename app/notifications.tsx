@@ -19,6 +19,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/query-client";
 import { useTheme } from "@/contexts/ThemeContext";
 import { formatEventDateTime } from "@/lib/formatDate";
+import ScreenHeader from "@/components/ScreenHeader";
 
 type FeatherIconName = ComponentProps<typeof Feather>["name"];
 
@@ -305,13 +306,7 @@ export default function NotificationsScreen() {
 
   return (
     <View style={[st.container, { backgroundColor: C.bg }]}>
-      <View style={[st.header, { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 8) }]}>
-        <Pressable onPress={() => router.back()} style={st.backBtn}>
-          <Feather name="arrow-left" size={22} color={C.text} />
-        </Pressable>
-        <Text style={[st.headerTitle, { color: C.text }]}>Notifications</Text>
-        <View style={{ width: 40 }} />
-      </View>
+      <ScreenHeader title="Notifications" />
 
       {isLoading ? (
         <View style={st.center}>
@@ -344,15 +339,6 @@ export default function NotificationsScreen() {
 
 const st = StyleSheet.create({
   container: { flex: 1 },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-  },
-  backBtn: { width: 40, height: 40, justifyContent: "center" },
-  headerTitle: { fontFamily: "Outfit_700Bold", fontSize: 20 },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8 },
   emptyText: { fontFamily: "Outfit_600SemiBold", fontSize: 16, marginTop: 8 },
   emptySubtext: { fontFamily: "Outfit_400Regular", fontSize: 14 },

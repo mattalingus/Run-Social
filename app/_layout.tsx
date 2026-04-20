@@ -18,6 +18,7 @@ import { NotificationBannerProvider } from "@/contexts/NotificationBannerContext
 import { PurchasesProvider } from "@/contexts/PurchasesContext";
 import { WalkthroughProvider } from "@/contexts/WalkthroughContext";
 import NotificationBanner from "@/components/NotificationBanner";
+import WalkthroughOverlay from "@/components/WalkthroughOverlay";
 import { useWidgetSync } from "@/lib/useWidgetSync";
 import { StatusBar } from "expo-status-bar";
 import {
@@ -33,23 +34,30 @@ import C from "@/constants/colors";
 
 SplashScreen.preventAutoHideAsync();
 
-// Global error handler — catches crashes not caught by ErrorBoundary (e.g. useEffect errors)
-// Shows the error so we can diagnose iOS-specific crashes
+// Global error handler — catches errors not caught by ErrorBoundary (e.g. async errors in useEffect).
+// In production: silently swallow non-fatal errors so users never see raw JS stack dialogs.
+// Fatal errors fall through to the ErrorBoundary's "Something went wrong" screen.
+// In dev: surface the error in an Alert so we can diagnose crashes during development.
 if (Platform.OS !== "web") {
   try {
     const prevHandler = (ErrorUtils as any).getGlobalHandler?.();
     (ErrorUtils as any).setGlobalHandler?.((error: Error, isFatal: boolean) => {
-      const msg = error?.message || String(error);
-      const stack = error?.stack?.split("\n").slice(0, 5).join("\n") || "";
-      Alert.alert(
-        isFatal ? "Fatal Error (Please screenshot & send)" : "Error Caught",
-        `${msg}\n\n${stack}`,
-        [{ text: "OK" }]
-      );
+      if (__DEV__) {
+        const msg = error?.message || String(error);
+        const stack = error?.stack?.split("\n").slice(0, 5).join("\n") || "";
+        Alert.alert(
+          isFatal ? "Fatal Error (dev only)" : "Error Caught (dev only)",
+          `${msg}\n\n${stack}`,
+          [{ text: "OK" }]
+        );
+      } else {
+        console.warn("[global handler]", error?.message ?? error);
+      }
       if (!isFatal && typeof prevHandler === "function") prevHandler(error, isFatal);
     });
   } catch (_) {}
 }
+
 
 try {
   Notifications.setNotificationHandler({
@@ -331,6 +339,7 @@ function RootLayoutNav() {
         />
       </Stack>
       {user && <NotificationBanner />}
+      {user && <WalkthroughOverlay />}
     </>
   );
 }

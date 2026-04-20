@@ -1,304 +1,254 @@
-import React, { useEffect, useRef } from "react";
-import {
-  View,
-  Text,
-  Pressable,
-  StyleSheet,
-  Animated,
-  Dimensions,
-  Platform,
-} from "react-native";
+import React, { useEffect, useMemo } from "react";
+import { View, Text, Pressable, StyleSheet, Dimensions, Platform } from "react-native";
+import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
-import { router, type Href } from "expo-router";
+import { Feather, Ionicons } from "@expo/vector-icons";
 import { useWalkthrough } from "@/contexts/WalkthroughContext";
 import { useTheme } from "@/contexts/ThemeContext";
-import { WALKTHROUGH_STEPS } from "@/lib/walkthroughConfig";
 
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
+const { height: SCREEN_H, width: SCREEN_W } = Dimensions.get("window");
+const TOOLTIP_EST_HEIGHT = 210;
+const TOOLTIP_GAP = 14;
+const SIDE_PAD = 16;
 
-const TAB_ROUTES: Record<string, Href> = {
-  discover: "/(tabs)" as Href,
-  solo: "/(tabs)/solo" as Href,
-  crew: "/(tabs)/crew" as Href,
-  profile: "/(tabs)/profile" as Href,
+const TAB_ROUTES: Record<string, string> = {
+  discover: "/(tabs)/",
+  solo: "/(tabs)/solo",
+  crew: "/(tabs)/crew",
+  profile: "/(tabs)/profile",
 };
 
 export default function WalkthroughOverlay() {
-  const { isActive, currentStep, totalSteps, nextStep, skipWalkthrough, currentStepConfig } = useWalkthrough();
-  const { C } = useTheme();
+  const {
+    isActive, currentStep, totalSteps, currentStepConfig,
+    nextStep, prevStep, skipWalkthrough, targetRect,
+  } = useWalkthrough();
+  const { C, theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
-  const prevTabRef = useRef<string | null>(null);
 
+  // Auto-navigate to the step's home tab (or map for map-view).
   useEffect(() => {
-    if (isActive && currentStepConfig) {
-      const targetTab = currentStepConfig.tab;
-      const route = TAB_ROUTES[targetTab];
-      if (route && prevTabRef.current !== targetTab) {
-        prevTabRef.current = targetTab;
-        router.replace(route);
-      }
-
-      fadeAnim.setValue(0);
-      slideAnim.setValue(30);
-      Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
-        Animated.timing(slideAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
-      ]).start();
+    if (!isActive || !currentStepConfig) return;
+    if (currentStepConfig.id === "map-view") {
+      router.push("/map");
+      return;
     }
-  }, [isActive, currentStep, currentStepConfig]);
+    const route = TAB_ROUTES[currentStepConfig.tab];
+    if (route) router.push(route as any);
+  }, [isActive, currentStepConfig?.id, currentStepConfig?.tab]);
 
-  useEffect(() => {
-    if (!isActive) {
-      prevTabRef.current = null;
+  const placement = useMemo(() => {
+    if (!currentStepConfig) return null;
+    if (currentStepConfig.isFullScreen) {
+      return { kind: "center" as const };
     }
-  }, [isActive]);
 
-  if (!isActive || !currentStepConfig) return null;
+    const tabBarH = 90 + insets.bottom;
+    const headerH = insets.top + 60;
+    const visibleTop = headerH;
+    const visibleBottom = SCREEN_H - tabBarH;
+
+    if (!targetRect) {
+      // No rect reported (yet). Fall back to configured position.
+      const pos = currentStepConfig.tooltipPosition;
+      if (pos === "top") return { kind: "top" as const, top: insets.top + 60 };
+      if (pos === "bottom") return { kind: "bottom" as const, bottom: insets.bottom + 100 };
+      return { kind: "bottom" as const, bottom: insets.bottom + 100 };
+    }
+
+    const tY = targetRect.y;
+    const tBottom = targetRect.y + targetRect.height;
+    const tCenter = targetRect.y + targetRect.height / 2;
+
+    const offscreenAbove = tBottom < visibleTop + 10;
+    const offscreenBelow = tY > visibleBottom - 10;
+
+    if (offscreenAbove || offscreenBelow) {
+      // Pin at bottom with a scroll hint.
+      return {
+        kind: "bottom" as const,
+        bottom: insets.bottom + 100,
+        hint: offscreenAbove ? "up" : ("down" as "up" | "down"),
+      };
+    }
+
+    // Target on-screen. Place tooltip in whichever half is roomier.
+    const spaceAbove = tY - visibleTop;
+    const spaceBelow = visibleBottom - tBottom;
+
+    if (spaceBelow >= TOOLTIP_EST_HEIGHT + TOOLTIP_GAP) {
+      return {
+        kind: "anchor-below" as const,
+        top: tBottom + TOOLTIP_GAP,
+        pointerX: Math.max(24, Math.min(SCREEN_W - 24, targetRect.x + targetRect.width / 2)),
+      };
+    }
+    if (spaceAbove >= TOOLTIP_EST_HEIGHT + TOOLTIP_GAP) {
+      return {
+        kind: "anchor-above" as const,
+        bottom: SCREEN_H - tY + TOOLTIP_GAP,
+        pointerX: Math.max(24, Math.min(SCREEN_W - 24, targetRect.x + targetRect.width / 2)),
+      };
+    }
+
+    // Not enough room either side — pick the bigger half and overlap slightly.
+    if (spaceBelow >= spaceAbove) {
+      return { kind: "bottom" as const, bottom: insets.bottom + 100 };
+    }
+    return { kind: "top" as const, top: insets.top + 60 };
+  }, [currentStepConfig, targetRect, insets.top, insets.bottom]);
+
+  if (!isActive || !currentStepConfig || !placement) return null;
 
   const isFirst = currentStep === 0;
-  const isLast = currentStep === totalSteps - 1;
-  const isFullScreen = currentStepConfig.isFullScreen;
+  const isLast = currentStep >= totalSteps - 1;
+  const isFullScreen = !!currentStepConfig.isFullScreen;
 
-  if (isFullScreen) {
-    return (
-      <View style={[styles.fullOverlay, { backgroundColor: "rgba(0,0,0,0.92)" }]}>
-        <Animated.View style={[styles.welcomeCard, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-          <View style={styles.welcomeIconWrap}>
-            <Ionicons name="fitness" size={48} color="#00D97E" />
-          </View>
-          <Text style={styles.welcomeLogo}>Pace Up</Text>
-          <Text style={styles.welcomeTagline}>Move Together</Text>
-          <Text style={styles.welcomeDesc}>{currentStepConfig.description}</Text>
-          <Pressable style={styles.welcomeBtn} onPress={nextStep} testID="walkthrough-start">
-            <Text style={styles.welcomeBtnTxt}>Let's take a tour</Text>
-            <Ionicons name="arrow-forward" size={18} color="#050C09" />
-          </Pressable>
-          <Pressable onPress={skipWalkthrough} style={styles.skipLink} testID="walkthrough-skip">
-            <Text style={styles.skipLinkTxt}>Skip tour</Text>
-          </Pressable>
-        </Animated.View>
-      </View>
-    );
+  const cardStyle: any = { backgroundColor: C.card, borderColor: C.border };
+  const positionStyle: any = {};
+  if (placement.kind === "center") {
+    Object.assign(positionStyle, {
+      top: SCREEN_H * 0.28, left: SIDE_PAD, right: SIDE_PAD,
+    });
+  } else if (placement.kind === "top") {
+    Object.assign(positionStyle, { top: (placement as any).top, left: SIDE_PAD, right: SIDE_PAD });
+  } else if (placement.kind === "bottom") {
+    Object.assign(positionStyle, { bottom: (placement as any).bottom, left: SIDE_PAD, right: SIDE_PAD });
+  } else if (placement.kind === "anchor-below") {
+    Object.assign(positionStyle, { top: (placement as any).top, left: SIDE_PAD, right: SIDE_PAD });
+  } else if (placement.kind === "anchor-above") {
+    Object.assign(positionStyle, { bottom: (placement as any).bottom, left: SIDE_PAD, right: SIDE_PAD });
   }
 
-  const positionStyle = getTooltipPosition(currentStepConfig.tooltipPosition, insets);
+  const hint = (placement as any).hint as "up" | "down" | undefined;
+  const pointerX = (placement as any).pointerX as number | undefined;
+  const pointerDir: "up" | "down" | null =
+    placement.kind === "anchor-below" ? "up" : placement.kind === "anchor-above" ? "down" : null;
 
   return (
-    <View style={styles.fullOverlay} pointerEvents="box-none">
-      <Pressable style={styles.dimBg} onPress={nextStep} />
-      <Animated.View
-        style={[
-          styles.tooltipCard,
-          positionStyle,
-          { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
-        ]}
-      >
-        <View style={styles.tooltipHeader}>
-          <Text style={styles.tooltipTitle}>{currentStepConfig.title}</Text>
-          <Text style={styles.stepIndicator}>{currentStep + 1} of {totalSteps}</Text>
-        </View>
-        <Text style={styles.tooltipDesc}>{currentStepConfig.description}</Text>
+    <View style={[StyleSheet.absoluteFill, { zIndex: 9999 }]} pointerEvents="box-none">
+      {isFullScreen && (
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            { backgroundColor: theme === "dark" ? "rgba(0,0,0,0.85)" : "rgba(255,255,255,0.92)" },
+          ]}
+          pointerEvents="auto"
+        />
+      )}
 
-        <View style={styles.dotRow}>
-          {WALKTHROUGH_STEPS.map((_, i) => (
+      {pointerDir && pointerX !== undefined && (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.pointer,
+            pointerDir === "up"
+              ? { top: (placement as any).top - 10, left: pointerX - 10, borderBottomColor: C.card }
+              : { bottom: (placement as any).bottom - 10, left: pointerX - 10, borderTopColor: C.card },
+            pointerDir === "up" ? styles.pointerUp : styles.pointerDown,
+          ]}
+        />
+      )}
+
+      <View
+        style={[styles.card, positionStyle, cardStyle]}
+        pointerEvents="auto"
+      >
+        <View style={styles.dotsRow}>
+          {Array.from({ length: totalSteps }).map((_, i) => (
             <View
               key={i}
               style={[
                 styles.dot,
-                i === currentStep && styles.dotActive,
-                i < currentStep && styles.dotDone,
+                { backgroundColor: i === currentStep ? C.primary : C.border, width: i === currentStep ? 18 : 6 },
               ]}
             />
           ))}
         </View>
 
-        <View style={styles.btnRow}>
-          <Pressable onPress={skipWalkthrough} style={styles.skipBtn} testID="walkthrough-skip">
-            <Text style={styles.skipBtnTxt}>Skip</Text>
-          </Pressable>
-          <Pressable onPress={nextStep} style={styles.nextBtn} testID="walkthrough-next">
-            <Text style={styles.nextBtnTxt}>{isLast ? "Done" : "Next"}</Text>
-            <Ionicons name={isLast ? "checkmark" : "arrow-forward"} size={16} color="#050C09" />
+        <Pressable hitSlop={12} onPress={skipWalkthrough} style={styles.skipX}>
+          <Feather name="x" size={20} color={C.textSecondary} />
+        </Pressable>
+
+        <Text style={[styles.title, { color: C.text }]}>{currentStepConfig.title}</Text>
+        <Text style={[styles.desc, { color: C.textSecondary }]}>{currentStepConfig.description}</Text>
+
+        {hint && (
+          <View style={[styles.hintRow, { backgroundColor: C.primary + "15", borderColor: C.primary + "40" }]}>
+            <Ionicons
+              name={hint === "down" ? "chevron-down" : "chevron-up"}
+              size={14}
+              color={C.primary}
+            />
+            <Text style={[styles.hintTxt, { color: C.primary }]}>
+              Scroll {hint === "down" ? "down" : "up"} to see it
+            </Text>
+          </View>
+        )}
+
+        <View style={styles.actions}>
+          {!isFirst ? (
+            <Pressable onPress={prevStep} style={styles.backBtn} hitSlop={8}>
+              <Feather name="chevron-left" size={18} color={C.textSecondary} />
+              <Text style={[styles.backTxt, { color: C.textSecondary }]}>Back</Text>
+            </Pressable>
+          ) : (
+            <Pressable onPress={skipWalkthrough} style={styles.backBtn} hitSlop={8}>
+              <Text style={[styles.backTxt, { color: C.textSecondary }]}>Skip tour</Text>
+            </Pressable>
+          )}
+
+          <Pressable onPress={nextStep} style={[styles.nextBtn, { backgroundColor: C.primary }]}>
+            <Text style={styles.nextTxt}>{isLast ? "Let's go" : "Next"}</Text>
+            {!isLast && <Feather name="chevron-right" size={18} color="#fff" />}
           </Pressable>
         </View>
-      </Animated.View>
+      </View>
     </View>
   );
 }
 
-function getTooltipPosition(position: string, insets: { top: number; bottom: number }) {
-  const webTop = Platform.OS === "web" ? 67 : 0;
-  switch (position) {
-    case "top":
-      return { top: insets.top + webTop + 80 };
-    case "bottom":
-      return { bottom: insets.bottom + 120 };
-    case "center":
-    default:
-      return { top: SCREEN_H * 0.3 };
-  }
-}
-
 const styles = StyleSheet.create({
-  fullOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 9999,
-    elevation: 9999,
-  },
-  dimBg: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.65)",
-  },
-  welcomeCard: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 40,
-  },
-  welcomeIconWrap: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: "#00D97E18",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 24,
-    borderWidth: 2,
-    borderColor: "#00D97E44",
-  },
-  welcomeLogo: {
-    fontFamily: "Outfit_700Bold",
-    fontSize: 36,
-    color: "#F0FFF4",
-    marginBottom: 4,
-  },
-  welcomeTagline: {
-    fontFamily: "Outfit_400Regular",
-    fontSize: 16,
-    color: "#00D97E",
-    marginBottom: 24,
-    letterSpacing: 1,
-  },
-  welcomeDesc: {
-    fontFamily: "Outfit_400Regular",
-    fontSize: 15,
-    color: "#8FAF97",
-    textAlign: "center",
-    lineHeight: 22,
-    marginBottom: 40,
-  },
-  welcomeBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "#00D97E",
-    paddingHorizontal: 32,
-    paddingVertical: 16,
-    borderRadius: 16,
-    marginBottom: 16,
-  },
-  welcomeBtnTxt: {
-    fontFamily: "Outfit_700Bold",
-    fontSize: 16,
-    color: "#050C09",
-  },
-  skipLink: {
-    padding: 8,
-  },
-  skipLinkTxt: {
-    fontFamily: "Outfit_400Regular",
-    fontSize: 14,
-    color: "#4A6957",
-  },
-  tooltipCard: {
+  card: {
     position: "absolute",
-    left: 20,
-    right: 20,
-    backgroundColor: "#132019",
-    borderRadius: 20,
-    padding: 20,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#00D97E33",
-    shadowColor: "#00D97E",
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 20,
+    padding: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.25,
+        shadowRadius: 20,
+      },
+      android: { elevation: 12 },
+    }),
   },
-  tooltipHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
+  dotsRow: { flexDirection: "row", gap: 5, marginBottom: 10, paddingRight: 24 },
+  dot: { height: 6, borderRadius: 3 },
+  skipX: { position: "absolute", top: 12, right: 12, padding: 4 },
+  title: { fontSize: 18, fontFamily: "Outfit_700Bold", marginBottom: 4 },
+  desc: { fontSize: 13.5, fontFamily: "Outfit_400Regular", lineHeight: 19, marginBottom: 12 },
+  hintRow: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    paddingVertical: 6, paddingHorizontal: 10,
+    borderRadius: 8, borderWidth: 1, alignSelf: "flex-start", marginBottom: 12,
   },
-  tooltipTitle: {
-    fontFamily: "Outfit_700Bold",
-    fontSize: 18,
-    color: "#F0FFF4",
-    flex: 1,
-  },
-  stepIndicator: {
-    fontFamily: "Outfit_600SemiBold",
-    fontSize: 12,
-    color: "#4A6957",
-    marginLeft: 8,
-  },
-  tooltipDesc: {
-    fontFamily: "Outfit_400Regular",
-    fontSize: 14,
-    color: "#8FAF97",
-    lineHeight: 20,
-    marginBottom: 16,
-  },
-  dotRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 4,
-    marginBottom: 16,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#182B1F",
-  },
-  dotActive: {
-    width: 18,
-    backgroundColor: "#00D97E",
-    borderRadius: 3,
-  },
-  dotDone: {
-    backgroundColor: "#00D97E55",
-  },
-  btnRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  skipBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-  },
-  skipBtnTxt: {
-    fontFamily: "Outfit_600SemiBold",
-    fontSize: 14,
-    color: "#4A6957",
-  },
+  hintTxt: { fontSize: 12, fontFamily: "Outfit_600SemiBold" },
+  actions: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  backBtn: { flexDirection: "row", alignItems: "center", gap: 2, paddingVertical: 8, paddingHorizontal: 4 },
+  backTxt: { fontSize: 14, fontFamily: "Outfit_600SemiBold" },
   nextBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "#00D97E",
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
+    flexDirection: "row", alignItems: "center", gap: 4,
+    paddingVertical: 10, paddingHorizontal: 20, borderRadius: 22,
   },
-  nextBtnTxt: {
-    fontFamily: "Outfit_700Bold",
-    fontSize: 14,
-    color: "#050C09",
+  nextTxt: { color: "#fff", fontSize: 14, fontFamily: "Outfit_700Bold" },
+  pointer: {
+    position: "absolute",
+    width: 0, height: 0,
+    borderLeftWidth: 10, borderRightWidth: 10,
+    borderLeftColor: "transparent", borderRightColor: "transparent",
   },
+  pointerUp: { borderBottomWidth: 10 },
+  pointerDown: { borderTopWidth: 10 },
 });

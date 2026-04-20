@@ -345,6 +345,7 @@ export default function RunLiveScreen() {
   // navigatedAwayRef prevents double runner-finish POST if this effect re-fires.
   useEffect(() => {
     if (!liveState?.isCompleted) return;
+    if (!id) return;
     // Host navigates themselves via handleEndForEveryone or when run auto-completes
     if (isHost && !hostFinished) return;
     if (navigatedAwayRef.current) return;
@@ -356,7 +357,9 @@ export default function RunLiveScreen() {
         finalDistance: totalDistRef.current,
         finalPace,
         mileSplits: autoSplits.length > 0 ? autoSplits : null,
-      }).catch(() => {}).finally(() => {
+      }).catch((err) => {
+        console.warn("runner-finish POST failed:", err?.message ?? err);
+      }).finally(() => {
         resetTracking();
         setTimeout(() => { router.replace(`/run-results/${id}?autoShare=1`); }, 0);
       });
@@ -481,6 +484,12 @@ export default function RunLiveScreen() {
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
               resetTracking();
               qc.invalidateQueries({ queryKey: ["/api/runs"] });
+              qc.invalidateQueries({ queryKey: ["/api/runs", id, "results"] });
+              qc.invalidateQueries({ queryKey: ["/api/runs", id, "live"] });
+              qc.invalidateQueries({ queryKey: ["/api/runs", id] });
+              qc.invalidateQueries({ queryKey: ["/api/runs/mine"] });
+              qc.invalidateQueries({ queryKey: ["/api/solo-runs"] });
+              qc.invalidateQueries({ queryKey: ["/api/users/me"] });
               if (isHost) {
                 setHostFinished(true);
               } else {
@@ -528,6 +537,11 @@ export default function RunLiveScreen() {
         return;
       }
       qc.invalidateQueries({ queryKey: ["/api/runs"] });
+      qc.invalidateQueries({ queryKey: ["/api/runs", id, "results"] });
+      qc.invalidateQueries({ queryKey: ["/api/runs", id, "live"] });
+      qc.invalidateQueries({ queryKey: ["/api/runs", id] });
+      qc.invalidateQueries({ queryKey: ["/api/runs/mine"] });
+      qc.invalidateQueries({ queryKey: ["/api/solo-runs"] });
       setTimeout(() => { router.replace(`/run-results/${id}?autoShare=1`); }, 0);
     } catch (e: any) {
       Alert.alert("Error", e.message || "Could not end run for everyone");

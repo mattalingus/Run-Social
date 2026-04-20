@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import {
   View,
@@ -28,7 +28,6 @@ import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest } from "@/lib/query-client";
 import { useTheme } from "@/contexts/ThemeContext";
 import ShareActivityModal, { ShareRunData } from "@/components/ShareActivityModal";
-import { darkColors as C } from "@/constants/colors";
 import { ACHIEVEMENTS, type AchievementDef } from "@/constants/achievements";
 import { formatDistance } from "@/lib/formatDistance";
 import { toDisplayDist, toDisplayPace, toDisplaySpeed, unitLabel, type DistanceUnit } from "@/lib/units";
@@ -41,6 +40,7 @@ import * as WebBrowser from "expo-web-browser";
 import { Linking } from "react-native";
 import { requestContactsPermission, scanContacts, type ContactMatch, type NonMemberContact, type ContactScanResult } from "@/lib/contactsDiscovery";
 import WalkthroughPulse from "@/components/WalkthroughPulse";
+import { useWalkthrough } from "@/contexts/WalkthroughContext";
 import { getAppShareUrl, buildAppInviteSmsUrl, buildAppInviteMessage } from "@/lib/shareLinks";
 import SharePathSheet from "@/components/SharePathSheet";
 
@@ -75,6 +75,7 @@ function ProgressBar({ value, total, color }: { value: number; total: number; co
 }
 
 function ProfilePathStatsStrip({ pathId, distUnit }: { pathId: string; distUnit: DistanceUnit }) {
+  const { C } = useTheme();
   const { data, isLoading, isError } = useQuery<{ timesUsed: number; avgDistanceMiles: number | null; avgPaceMinPerMile: number | null }>({
     queryKey: ["/api/saved-paths", pathId, "stats"],
     staleTime: 60_000,
@@ -198,6 +199,7 @@ function parseRoutePath(raw: RoutePoint[] | string | null | undefined): RoutePoi
 }
 
 function ProfileMiniRouteMap({ path }: { path: RoutePoint[] | null | undefined }) {
+  const { C } = useTheme();
   if (Platform.OS === "web") return null;
   if (!path || path.length < 2) return null;
   const lats = path.map((p) => p.latitude);
@@ -256,7 +258,7 @@ function fmtDate(d: string) {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-const RANK_COLORS = ["#FFD700", "#C0C0C0", "#CD7F32", C.textMuted, C.textMuted] as const;
+const rankColors = (mutedColor: string) => ["#FFD700", "#C0C0C0", "#CD7F32", mutedColor, mutedColor] as const;
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
@@ -317,6 +319,7 @@ function ProfileScreenInner() {
   const [showAddFriend, setShowAddFriend] = useState(false);
   const [viewProfileId, setViewProfileId] = useState<string | null>(null);
   const [showFriendList, setShowFriendList] = useState(false);
+  const [friendListSearch, setFriendListSearch] = useState("");
   const [showAchievements, setShowAchievements] = useState(false);
   const [selectedAchievement, setSelectedAchievement] = useState<AchievementDef | null>(null);
   const [achFilter, setAchFilter] = useState("All");
@@ -456,6 +459,22 @@ function ProfileScreenInner() {
     queryKey: ["/api/solo-runs"],
     enabled: !!user,
   });
+  const { isActive: walkthroughActive, nextStep: walkthroughNext, currentStepConfig: walkthroughStep } = useWalkthrough();
+  const profileScrollRef = useRef<ScrollView>(null);
+  const goalsAnchorY = useRef(0);
+  const achievementsAnchorY = useRef(0);
+
+  useEffect(() => {
+    if (!walkthroughActive || !walkthroughStep) return;
+    const id = walkthroughStep.id;
+    if (id === "profile-intro" || id === "friends") {
+      profileScrollRef.current?.scrollTo({ y: 0, animated: true });
+    } else if (id === "goals") {
+      profileScrollRef.current?.scrollTo({ y: Math.max(0, goalsAnchorY.current - 100), animated: true });
+    } else if (id === "achievements") {
+      profileScrollRef.current?.scrollTo({ y: Math.max(0, achievementsAnchorY.current - 100), animated: true });
+    }
+  }, [walkthroughActive, walkthroughStep?.id]);
 
   const { data: starredRuns = [] } = useQuery<SoloRunItem[]>({
     queryKey: ["/api/solo-runs/starred"],
@@ -609,8 +628,15 @@ function ProfileScreenInner() {
         };
       });
 
-    return [...soloPart, ...groupPart].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [soloRuns, runs, historyActivityFilter]);
+    const merged = [...soloPart, ...groupPart].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    if (walkthroughActive) {
+      try {
+        const { getDemoHistoryRun } = require("@/lib/walkthroughDemo") as typeof import("@/lib/walkthroughDemo");
+        return [getDemoHistoryRun(historyActivityFilter as any), ...merged];
+      } catch {}
+    }
+    return merged;
+  }, [soloRuns, runs, historyActivityFilter, walkthroughActive]);
 
   const nameMutation = useMutation({
     mutationFn: async (name: string) => {
@@ -650,6 +676,7 @@ function ProfileScreenInner() {
       await apiRequest("PUT", `/api/friends/${friendshipId}/accept`, {});
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/friends"] }); qc.invalidateQueries({ queryKey: ["/api/friends/requests"] }); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); },
+    onError: (e: any) => Alert.alert("Error", e?.message || "Could not accept request"),
   });
 
   const removeFriendMutation = useMutation({
@@ -657,6 +684,7 @@ function ProfileScreenInner() {
       await apiRequest("DELETE", `/api/friends/${friendshipId}`, {});
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/friends"] }); qc.invalidateQueries({ queryKey: ["/api/friends/requests"] }); },
+    onError: (e: any) => Alert.alert("Error", e?.message || "Could not remove friend"),
   });
 
   const incomingRequests = friendRequests?.incoming || [];
@@ -682,6 +710,7 @@ function ProfileScreenInner() {
 
   return (
     <ScrollView
+      ref={profileScrollRef}
       style={styles.container}
       contentContainerStyle={[
         styles.content,
@@ -771,53 +800,58 @@ function ProfileScreenInner() {
       </View>
       </WalkthroughPulse>
 
-      {/* ── Friends Quick-Access Row ───────────────────────────────────────── */}
-      <WalkthroughPulse stepId="friends" style={{ borderRadius: 16 }}>
-      <View style={styles.statsGrid}>
-        <Pressable
-          style={({ pressed }) => [styles.statCard, { opacity: pressed ? 0.8 : 1 }]}
-          onPress={() => { setShowFriendList(true); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
-        >
-          <Feather name="users" size={18} color={C.primary} />
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+      {/* ── Friends / Achievements Quick-Access Row ────────────────────────── */}
+      <View
+        style={styles.statsGrid}
+        onLayout={(e) => { achievementsAnchorY.current = e.nativeEvent.layout.y; }}
+      >
+        <WalkthroughPulse stepId="friends" style={{ flex: 1, borderRadius: 16 }}>
+          <Pressable
+            style={({ pressed }) => [styles.statCard, { opacity: pressed ? 0.8 : 1 }]}
+            onPress={() => { setShowFriendList(true); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+          >
+            <Feather name="users" size={18} color={C.primary} />
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+              <Text style={styles.goalLabel}>
+                {"Friends: "}
+                <Text style={styles.editBtnText}>{friendsList.length}</Text>
+              </Text>
+              {incomingRequests.length > 0 && (
+                <View style={styles.friendsQuickDot}>
+                  <Text style={styles.friendsQuickDotTxt}>{incomingRequests.length}</Text>
+                </View>
+              )}
+            </View>
+          </Pressable>
+        </WalkthroughPulse>
+        <WalkthroughPulse stepId="achievements" style={{ flex: 1, borderRadius: 16 }}>
+          <Pressable
+            style={({ pressed }) => [styles.statCard, { opacity: pressed ? 0.8 : 1 }]}
+            onPress={() => { setShowAchievements((prev) => !prev); setSelectedAchievement(null); setAchFilter("All"); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+          >
+            <Feather name="award" size={18} color={C.primary} />
             <Text style={styles.goalLabel}>
-              {"Friends: "}
-              <Text style={styles.editBtnText}>{friendsList.length}</Text>
+              {"Achievements: "}
+              <Text style={styles.editBtnText}>{earnedCount}/{ACHIEVEMENTS.length}</Text>
             </Text>
-            {incomingRequests.length > 0 && (
-              <View style={styles.friendsQuickDot}>
-                <Text style={styles.friendsQuickDotTxt}>{incomingRequests.length}</Text>
-              </View>
-            )}
-          </View>
-        </Pressable>
-        <Pressable
-          style={({ pressed }) => [styles.statCard, { opacity: pressed ? 0.8 : 1 }]}
-          onPress={() => { setShowAddFriend(true); setFriendSearch(""); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
-        >
-          <Feather name="user-plus" size={18} color={C.primary} />
-          <Text style={styles.goalLabel}>{"Find Friends"}</Text>
-        </Pressable>
+          </Pressable>
+        </WalkthroughPulse>
       </View>
-      </WalkthroughPulse>
 
-      {/* ── Achievements Card ─────────────────────────────────────────────── */}
-      <WalkthroughPulse stepId="achievements" style={{ borderRadius: 16 }}>
-      <View style={styles.achOuterCard}>
-        <Pressable
-          style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
-          onPress={() => { setShowAchievements((v) => !v); setSelectedAchievement(null); setAchFilter("All"); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
-        >
-          <Text style={[styles.goalLabel, { fontSize: 17 }]}>🏆 Achievements</Text>
-          <Text style={styles.statName}>{earnedCount}/{ACHIEVEMENTS.length} earned</Text>
-          <View style={{ flex: 1 }} />
-          <Feather name={showAchievements ? "chevron-up" : "chevron-down"} size={16} color={C.textMuted} />
-        </Pressable>
-
+      {/* ── Achievements (expanded by compact button above) ────────────────── */}
+      <View>
         {showAchievements && (
-          <View style={styles.achExpandedInCard}>
-            {/* Divider */}
-            <View style={styles.achDivider} />
+          <View style={styles.achOuterCard}>
+            <View style={[styles.achExpandedInCard, { marginTop: 0 }]}>
+              {/* Header with close */}
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <Text style={[styles.goalLabel, { fontSize: 17 }]}>🏆 Achievements</Text>
+                <Text style={styles.statName}>{earnedCount}/{ACHIEVEMENTS.length} earned</Text>
+                <View style={{ flex: 1 }} />
+                <Pressable hitSlop={10} onPress={() => { setShowAchievements(false); setSelectedAchievement(null); }}>
+                  <Feather name="chevron-up" size={16} color={C.textMuted} />
+                </Pressable>
+              </View>
 
             {/* Category filter */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
@@ -855,7 +889,7 @@ function ProfileScreenInner() {
                             <View style={[
                               styles.achBadge,
                               earned
-                                ? { backgroundColor: ach.iconBg, borderColor: ach.iconColor + "55" }
+                                ? { backgroundColor: ach.iconColor + "1F", borderColor: ach.iconColor + "55" }
                                 : { backgroundColor: C.surface, borderColor: C.border },
                             ]}>
                               <Ionicons
@@ -884,7 +918,7 @@ function ProfileScreenInner() {
                             <View style={[
                               styles.achBadgeLarge,
                               earned
-                                ? { backgroundColor: ach.iconBg, borderColor: ach.iconColor + "66" }
+                                ? { backgroundColor: ach.iconColor + "1F", borderColor: ach.iconColor + "66" }
                                 : { backgroundColor: C.surface, borderColor: C.border },
                             ]}>
                               <Ionicons name={ach.icon as any} size={26} color={earned ? ach.iconColor : C.textMuted} />
@@ -920,9 +954,9 @@ function ProfileScreenInner() {
                 );
               })}
             </View>
+            </View>
           </View>
         )}
-      </View>
 
       {/* ── Saved Routes shortcut ─────────────────────────────────────────── */}
       {(() => {
@@ -1096,11 +1130,14 @@ function ProfileScreenInner() {
         </View>
       </View>
 
-      </WalkthroughPulse>
+      </View>
 
       {/* ── Mileage Goals ─────────────────────────────────────────────────── */}
       <WalkthroughPulse stepId="goals" style={{ borderRadius: 16 }}>
-      <View style={styles.section}>
+      <View
+        style={styles.section}
+        onLayout={(e) => { goalsAnchorY.current = e.nativeEvent.layout.y; }}
+      >
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Mileage Goals</Text>
           <Pressable onPress={() => setShowGoals(true)} style={styles.editBtn}>
@@ -1383,16 +1420,43 @@ function ProfileScreenInner() {
       </Modal>
 
       {/* ── Friend List Modal ──────────────────────────────────────────────── */}
-      <Modal visible={showFriendList} transparent animationType="slide" onRequestClose={() => setShowFriendList(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setShowFriendList(false)} />
+      <Modal visible={showFriendList} transparent animationType="slide" onRequestClose={() => { setShowFriendList(false); setFriendListSearch(""); }}>
+        <Pressable style={styles.modalOverlay} onPress={() => { setShowFriendList(false); setFriendListSearch(""); }} />
         <View style={[styles.modalSheet, styles.friendModalSheet, { paddingBottom: insets.bottom + 24 }]}>
           <View style={styles.modalTitleRow}>
             <Text style={styles.modalTitle}>Friends</Text>
-            <Pressable onPress={() => setShowFriendList(false)} hitSlop={12}>
+            <Pressable onPress={() => { setShowFriendList(false); setFriendListSearch(""); }} hitSlop={12}>
               <Feather name="x" size={20} color={C.textMuted} />
             </Pressable>
           </View>
 
+          <View style={{ flexDirection: "row", gap: 8, alignItems: "stretch" }}>
+            <View style={[styles.searchBox, { flex: 1 }]}>
+              <Feather name="search" size={16} color={C.textMuted} />
+              <TextInput
+                style={[styles.searchInput, { color: C.text }]}
+                placeholder="Search your friends"
+                placeholderTextColor={C.textMuted}
+                value={friendListSearch}
+                onChangeText={setFriendListSearch}
+                autoCorrect={false}
+                autoCapitalize="none"
+              />
+              {friendListSearch.length > 0 && (
+                <Pressable onPress={() => setFriendListSearch("")} hitSlop={8}>
+                  <Feather name="x" size={14} color={C.textMuted} />
+                </Pressable>
+              )}
+            </View>
+            <Pressable
+              style={({ pressed }) => [styles.friendAcceptBtn, { opacity: pressed ? 0.85 : 1, paddingHorizontal: 14, paddingVertical: 0, justifyContent: "center", alignItems: "center" }]}
+              onPress={() => { setShowFriendList(false); setShowAddFriend(true); setFriendSearch(""); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+            >
+              <Text style={styles.friendAcceptTxt}>+ Add Friends</Text>
+            </Pressable>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 16, paddingBottom: 8 }} keyboardShouldPersistTaps="handled">
           {incomingRequests.length > 0 && (
             <View style={styles.friendsSection}>
               <Text style={styles.friendsSectionTitle}>Pending Requests</Text>
@@ -1418,36 +1482,48 @@ function ProfileScreenInner() {
             </View>
           )}
 
-          {friendsList.length > 0 && (
-            <View style={styles.friendsSection}>
-              <Text style={styles.friendsSectionTitle}>Your Friends ({friendsList.length})</Text>
-              {friendsList.map((f: any) => (
-                <View key={f.friendship_id} style={styles.friendCard}>
-                  <Pressable
-                    style={styles.friendCardInfo}
-                    onPress={() => { setViewProfileId(f.id); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
-                  >
-                    <View style={styles.friendAvatar}>
-                      {f.photo_url ? <Image source={{ uri: f.photo_url }} style={styles.friendAvatarImg} /> : <Text style={styles.friendAvatarTxt}>{f.name?.charAt(0)?.toUpperCase() ?? "?"}</Text>}
-                    </View>
-                    <View style={styles.friendInfo}>
-                      <Text style={styles.friendName}>{f.name}</Text>
-                      <Text style={styles.friendStat}>{f.completed_runs} runs · {toDisplayDist(f.total_miles, distUnit)}</Text>
-                    </View>
-                  </Pressable>
-                  <Pressable
-                    style={styles.friendRemoveBtn}
-                    onPress={() => Alert.alert("Remove Friend", `Remove ${f.name} from your friends?`, [
-                      { text: "Cancel", style: "cancel" },
-                      { text: "Remove", style: "destructive", onPress: () => removeFriendMutation.mutate(f.friendship_id) },
-                    ])}
-                  >
-                    <Feather name="user-x" size={16} color={C.textMuted} />
-                  </Pressable>
-                </View>
-              ))}
-            </View>
-          )}
+          {(() => {
+            const q = friendListSearch.trim().toLowerCase();
+            const filtered = q
+              ? friendsList.filter((f: any) =>
+                  (f.name ?? "").toLowerCase().includes(q) ||
+                  (f.username ?? "").toLowerCase().includes(q))
+              : friendsList;
+            if (friendsList.length === 0) return null;
+            return (
+              <View style={styles.friendsSection}>
+                <Text style={styles.friendsSectionTitle}>Your Friends ({filtered.length}{q ? ` of ${friendsList.length}` : ""})</Text>
+                {filtered.length === 0 && (
+                  <Text style={[styles.friendStat, { textAlign: "center", paddingVertical: 12 }]}>No matches for "{friendListSearch}"</Text>
+                )}
+                {filtered.map((f: any) => (
+                  <View key={f.friendship_id} style={styles.friendCard}>
+                    <Pressable
+                      style={styles.friendCardInfo}
+                      onPress={() => { setViewProfileId(f.id); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+                    >
+                      <View style={styles.friendAvatar}>
+                        {f.photo_url ? <Image source={{ uri: f.photo_url }} style={styles.friendAvatarImg} /> : <Text style={styles.friendAvatarTxt}>{f.name?.charAt(0)?.toUpperCase() ?? "?"}</Text>}
+                      </View>
+                      <View style={styles.friendInfo}>
+                        <Text style={styles.friendName}>{f.name}</Text>
+                        <Text style={styles.friendStat}>{f.completed_runs} runs · {toDisplayDist(f.total_miles, distUnit)}</Text>
+                      </View>
+                    </Pressable>
+                    <Pressable
+                      style={styles.friendRemoveBtn}
+                      onPress={() => Alert.alert("Remove Friend", `Remove ${f.name} from your friends?`, [
+                        { text: "Cancel", style: "cancel" },
+                        { text: "Remove", style: "destructive", onPress: () => removeFriendMutation.mutate(f.friendship_id) },
+                      ])}
+                    >
+                      <Feather name="user-x" size={16} color={C.textMuted} />
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+            );
+          })()}
 
           {friendsList.length === 0 && incomingRequests.length === 0 && (
             <View style={styles.emptyState}>
@@ -1456,6 +1532,7 @@ function ProfileScreenInner() {
               <Text style={styles.emptyStateTxt}>Tap "+ Add Friends" to find other runners.</Text>
             </View>
           )}
+          </ScrollView>
         </View>
         <HostProfileSheet hostId={viewProfileId} onClose={() => setViewProfileId(null)} />
       </Modal>
@@ -2363,8 +2440,8 @@ function ProfileScreenInner() {
 
               return list.map((run, i) => (
                 <View key={i} style={styles.topRunRow}>
-                  <View style={[styles.topRunRank, { borderColor: RANK_COLORS[i] + "66" }]}>
-                    <Text style={[styles.topRunRankNum, { color: RANK_COLORS[i] }]}>#{i + 1}</Text>
+                  <View style={[styles.topRunRank, { borderColor: rankColors(C.textMuted)[i] + "66" }]}>
+                    <Text style={[styles.topRunRankNum, { color: rankColors(C.textMuted)[i] }]}>#{i + 1}</Text>
                   </View>
                   <View style={styles.topRunInfo}>
                     <Text style={styles.topRunTitle} numberOfLines={1}>
@@ -2675,9 +2752,9 @@ function makeStyles(C: ReturnType<typeof import("@/contexts/ThemeContext").useTh
   content: { paddingHorizontal: 20, gap: 24 },
   profileHeader: { flexDirection: "row", alignItems: "center", gap: 14 },
 
-  actToggleRow: { flexDirection: "row", backgroundColor: C.surface, borderRadius: 10, padding: 3, gap: 3 },
-  actToggleBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 8, borderRadius: 8 },
-  actToggleBtnActive: { backgroundColor: C.card },
+  actToggleRow: { flexDirection: "row", backgroundColor: C.surface, borderRadius: 10, padding: 3, gap: 3, borderWidth: 1, borderColor: C.border },
+  actToggleBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: "transparent" },
+  actToggleBtnActive: { backgroundColor: C.card, borderColor: C.primary + "55" },
   actToggleTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textMuted },
   actToggleTxtActive: { color: C.primary },
 

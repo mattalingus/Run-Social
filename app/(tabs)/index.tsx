@@ -28,10 +28,10 @@ import MapView, { Marker, Polyline } from "react-native-maps";
 import MAP_STYLE from "@/lib/mapStyle";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "@/contexts/ThemeContext";
-import { darkColors as C, type ColorScheme } from "@/constants/colors";
+import { type ColorScheme } from "@/constants/colors";
 import RangeSlider from "@/components/RangeSlider";
 import { formatDistance } from "@/lib/formatDistance";
-import { toDisplayDist, toDisplayPace, unitLabel, type DistanceUnit } from "@/lib/units";
+import { toDisplayDist, toDisplayPace, toDisplaySpeed, unitLabel, type DistanceUnit } from "@/lib/units";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
@@ -420,33 +420,87 @@ function FilterModal({ visible, onClose, draft, setDraft, onApply, onReset, user
 
           <View style={fm.divider} />
 
-          {/* ── B. Pace ─────────────────────────────────────────────────── */}
+          {/* ── B. Pace / Speed ─────────────────────────────────────────── */}
           <View style={fm.section}>
-            <View style={fm.sectionHead}>
-              <Text style={fm.sectionTitle}>Pace</Text>
-              <Text style={fm.sectionValue}>
-                {toDisplayPace(draft.paceMin, distUnit)} – {toDisplayPace(draft.paceMax, distUnit)}
-              </Text>
-            </View>
+            <Text style={fm.sectionTitle}>{activityFilter === "ride" ? "Speed (mph)" : activityFilter === "walk" ? "Pace (min/mi)" : "Pace (min/mi)"}</Text>
             {(() => {
-              const MI_TO_KM = 1 / 1.60934;
-              const toSlider = (mi: number) => distUnit === "km" ? mi * MI_TO_KM : mi;
-              const fromSlider = (v: number) => distUnit === "km" ? v / MI_TO_KM : v;
+              // Per-activity defaults & placeholders (in min/mi internal)
+              const defaults = activityFilter === "ride"
+                ? { min: 2.0, max: 15.0, phMin: "5", phMax: "30" }   // 30mph → 2.0; 4mph → 15.0
+                : activityFilter === "walk"
+                  ? { min: 10.0, max: 25.0, phMin: "10:00", phMax: "25:00" }
+                  : { min: 4.0, max: 20.0, phMin: "4:00", phMax: "20:00" };
+              const isRide = activityFilter === "ride";
+              const paceToStr = (p: number) => {
+                const mm = Math.floor(p);
+                const ss = Math.round((p - mm) * 60);
+                return `${mm}:${ss.toString().padStart(2, "0")}`;
+              };
+              const strToPace = (s: string): number | null => {
+                const t = s.trim();
+                if (!t) return null;
+                const m = t.match(/^(\d+):(\d{1,2})$/);
+                if (m) {
+                  const mm = parseInt(m[1], 10);
+                  const ss = parseInt(m[2], 10);
+                  if (ss >= 60) return null;
+                  return mm + ss / 60;
+                }
+                const n = parseFloat(t);
+                return Number.isFinite(n) && n > 0 ? n : null;
+              };
+              // Left input: faster edge (runs/walks = lower min/mi; rides = higher mph)
+              // Right input: slower edge (runs/walks = higher min/mi; rides = lower mph)
+              const leftValue = isRide
+                ? (draft.paceMin === defaults.min ? "" : (60 / draft.paceMin).toFixed(1).replace(/\.0$/, ""))
+                : (draft.paceMin === defaults.min ? "" : paceToStr(draft.paceMin));
+              const rightValue = isRide
+                ? (draft.paceMax === defaults.max ? "" : (60 / draft.paceMax).toFixed(1).replace(/\.0$/, ""))
+                : (draft.paceMax === defaults.max ? "" : paceToStr(draft.paceMax));
               return (
-                <>
-                  <RangeSlider
-                    min={toSlider(4)} max={toSlider(15)} step={PACE_STEP}
-                    low={toSlider(draft.paceMin)} high={toSlider(draft.paceMax)}
-                    onLowChange={(v) => setDraft((p) => ({ ...p, paceMin: fromSlider(v) }))}
-                    onHighChange={(v) => setDraft((p) => ({ ...p, paceMax: fromSlider(v) }))}
-                    color={C.primary}
-                    trackColor={C.border}
-                  />
-                  <View style={fm.edgeRow}>
-                    <Text style={fm.edgeLabel}>{toDisplayPace(4, distUnit)}</Text>
-                    <Text style={fm.edgeLabel}>{toDisplayPace(15, distUnit)}</Text>
+                <View style={fm.distRow}>
+                  <View style={fm.distField}>
+                    <Text style={fm.distLabel}>{isRide ? "Max (mph)" : "Min"}</Text>
+                    <TextInput
+                      style={fm.distInput}
+                      keyboardType={isRide ? "decimal-pad" : "numbers-and-punctuation"}
+                      placeholder={isRide ? defaults.phMax : defaults.phMin}
+                      placeholderTextColor={C.textMuted}
+                      value={isRide ? rightValue : leftValue}
+                      onChangeText={(t) => {
+                        if (isRide) {
+                          const n = parseFloat(t);
+                          setDraft((p) => ({ ...p, paceMax: t === "" ? defaults.max : (Number.isFinite(n) && n > 0 ? 60 / n : p.paceMax) }));
+                        } else {
+                          const v = strToPace(t);
+                          setDraft((p) => ({ ...p, paceMin: t === "" ? defaults.min : (v ?? p.paceMin) }));
+                        }
+                      }}
+                      returnKeyType="done"
+                    />
                   </View>
-                </>
+                  <Text style={fm.distSep}>–</Text>
+                  <View style={fm.distField}>
+                    <Text style={fm.distLabel}>{isRide ? "Min (mph)" : "Max"}</Text>
+                    <TextInput
+                      style={fm.distInput}
+                      keyboardType={isRide ? "decimal-pad" : "numbers-and-punctuation"}
+                      placeholder={isRide ? defaults.phMin : defaults.phMax}
+                      placeholderTextColor={C.textMuted}
+                      value={isRide ? leftValue : rightValue}
+                      onChangeText={(t) => {
+                        if (isRide) {
+                          const n = parseFloat(t);
+                          setDraft((p) => ({ ...p, paceMin: t === "" ? defaults.min : (Number.isFinite(n) && n > 0 ? 60 / n : p.paceMin) }));
+                        } else {
+                          const v = strToPace(t);
+                          setDraft((p) => ({ ...p, paceMax: t === "" ? defaults.max : (v ?? p.paceMax) }));
+                        }
+                      }}
+                      returnKeyType="done"
+                    />
+                  </View>
+                </View>
               );
             })()}
           </View>
@@ -691,7 +745,7 @@ function LiveCardExpansion({ runId }: { runId: string }) {
           rotateEnabled={false}
           showsUserLocation={false}
         >
-          {path.length > 1 && <Polyline coordinates={path} strokeColor="#00D97E" strokeWidth={3} />}
+          {path.length > 1 && <Polyline coordinates={path} strokeColor={C.primary} strokeWidth={3} />}
           {present.map((p: any, i: number) => (
             <Marker key={p.user_id} coordinate={{ latitude: p.latitude, longitude: p.longitude }} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
               <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: LIVE_DOT_COLORS[i % LIVE_DOT_COLORS.length], alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#fff" }}>
@@ -916,7 +970,9 @@ function RunCard({
             })()}
             <Text style={s.hostColumnDist}>{toDisplayDist(run.min_distance, distUnit)}</Text>
             {weather && (
-              <Text style={s.hostColumnWeather}>{weather.emoji} {weather.tempF}°</Text>
+              <View style={s.hostColumnWeatherPill}>
+                <Text style={s.hostColumnWeather}>{weather.emoji} {weather.tempF}°</Text>
+              </View>
             )}
           </Pressable>
 
@@ -984,15 +1040,23 @@ function RunCard({
 
               <View style={s.cardStats}>
                 <View style={s.statPillPace}>
-                  {run.crew_id && run.pace_groups && run.pace_groups.length > 0 ? (
-                    <Text numberOfLines={1} style={[s.statPillValue, { color: C.primary }]}>Groups</Text>
-                  ) : (
-                    <Text numberOfLines={1} style={[s.statPillValue, { color: getPaceColor(run.min_pace, run.max_pace, C) }]}>
-                      {run.min_pace === run.max_pace
-                        ? toDisplayPace(run.min_pace, distUnit).replace(/ \/(mi|km)$/, "")
-                        : `${toDisplayPace(run.min_pace, distUnit).replace(/ \/(mi|km)$/, "")}–${toDisplayPace(run.max_pace, distUnit).replace(/ \/(mi|km)$/, "")}`}
-                    </Text>
-                  )}
+                  {(() => {
+                    const pg = run.pace_groups ?? [];
+                    const multiGroup = run.crew_id && pg.length > 1;
+                    const singleGroup = run.crew_id && pg.length === 1;
+                    const widestRange = !run.crew_id && run.min_pace <= PACE_SLIDER_MIN + 0.25 && run.max_pace >= PACE_SLIDER_MAX - 0.25;
+                    if (multiGroup) return <Text numberOfLines={1} style={[s.statPillValue, { color: C.primary }]}>Groups</Text>;
+                    if (widestRange) return <Text numberOfLines={1} style={[s.statPillValue, { color: C.primary }]}>ANY</Text>;
+                    const shownMin = singleGroup ? pg[0].minPace : run.min_pace;
+                    const shownMax = singleGroup ? pg[0].maxPace : run.max_pace;
+                    return (
+                      <Text numberOfLines={1} style={[s.statPillValue, { color: getPaceColor(shownMin, shownMax, C) }]}>
+                        {shownMin === shownMax
+                          ? toDisplayPace(shownMin, distUnit).replace(/ \/(mi|km)$/, "")
+                          : `${toDisplayPace(shownMin, distUnit).replace(/ \/(mi|km)$/, "")}–${toDisplayPace(shownMax, distUnit).replace(/ \/(mi|km)$/, "")}`}
+                      </Text>
+                    );
+                  })()}
                   <Text numberOfLines={1} style={s.statPillLabel}>{run.activity_type === "ride" ? "Speed mph" : `Pace ${distUnit === "km" ? "min/km" : "min/mi"}`}</Text>
                 </View>
                 <View style={s.statDiv} />
@@ -1020,7 +1084,7 @@ function RunCard({
                 </View>
               </View>
 
-              {run.crew_id && run.user_is_crew_member === false ? (
+              {run.crew_id && run.user_is_crew_member === false && (
                 <Pressable
                   style={s.joinCrewCta}
                   onPress={(e) => { e.stopPropagation?.(); router.push(`/crew-profile/${run.crew_id}`); }}
@@ -1029,13 +1093,6 @@ function RunCard({
                   <Text style={s.joinCrewCtaTxt}>Join crew to participate</Text>
                   <Feather name="chevron-right" size={12} color={C.primary} />
                 </Pressable>
-              ) : (
-                <View style={s.metaItem}>
-                  <Feather name="users" size={11} color={C.textMuted} />
-                  <Text style={s.metaText}>
-                    {run.participant_count ?? 1} {parseInt(run.participant_count ?? "1") === 1 ? "person" : "people"} going
-                  </Text>
-                </View>
               )}
             </Pressable>
 
@@ -1056,19 +1113,21 @@ function RunCard({
             )}
           </View>
 
-          {walkthroughActive && (
+        </View>
+
+        {walkthroughActive && (
+          <View style={{ paddingHorizontal: 12, paddingBottom: 12 }}>
             <WalkthroughPulse stepId="planning-to-come" style={{ borderRadius: 12 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: C.surface, borderRadius: 12, marginTop: 8 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 10, paddingHorizontal: 14, backgroundColor: C.primary + "18", borderRadius: 12, borderWidth: 1, borderColor: C.primary + "40" }}>
                 <Ionicons name="calendar-outline" size={16} color={C.primary} />
-                <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.text, flex: 1 }}>
+                <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.primary, flex: 1 }}>
                   {run.activity_type === "ride" ? "I Plan To Ride" : run.activity_type === "walk" ? "I Plan To Walk" : "I Plan To Run"}
                 </Text>
                 <Feather name="chevron-right" size={14} color={C.primary} />
               </View>
             </WalkthroughPulse>
-          )}
-
-        </View>
+          </View>
+        )}
       </View>
     </View>
   );
@@ -1195,7 +1254,7 @@ export default function DiscoverScreen() {
   const { C } = useTheme();
   const s = useMemo(() => makeStyles(C), [C]);
   const fm = useMemo(() => makeFmStyles(C), [C]);
-  const { isActive: walkthroughActive } = useWalkthrough();
+  const { isActive: walkthroughActive, nextStep: walkthroughNext } = useWalkthrough();
 
   const [search, setSearch] = useState("");
   const [aiSearchDisabled, setAiSearchDisabled] = useState(false);
@@ -1324,8 +1383,19 @@ export default function DiscoverScreen() {
   const respondJoin = (participantId: string, action: "approve" | "deny") => {
     respondJoinMutation.mutate({ participantId, action });
   };
-  const [draft,    setDraft]    = useState<FilterState>({ ...DEFAULT_FILTERS });
-  const [applied,  setApplied]  = useState<FilterState>({ ...DEFAULT_FILTERS });
+  const paceDefaultsFor = (act: "run" | "ride" | "walk") =>
+    act === "ride" ? { paceMin: 2.0, paceMax: 15.0 }
+    : act === "walk" ? { paceMin: 10.0, paceMax: 25.0 }
+    : { paceMin: 4.0, paceMax: 20.0 };
+  const [draft,    setDraft]    = useState<FilterState>({ ...DEFAULT_FILTERS, ...paceDefaultsFor(activityFilter) });
+  const [applied,  setApplied]  = useState<FilterState>({ ...DEFAULT_FILTERS, ...paceDefaultsFor(activityFilter) });
+
+  // When user toggles activity, reset pace bounds to activity-appropriate defaults
+  useEffect(() => {
+    const d = paceDefaultsFor(activityFilter);
+    setDraft((p) => ({ ...p, ...d }));
+    setApplied((p) => ({ ...p, ...d }));
+  }, [activityFilter]);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
 
   // ─── Host modal state ───────────────────────────────────────────────────────
@@ -1638,11 +1708,12 @@ export default function DiscoverScreen() {
     }
   }, [plannedRuns.length, user?.id, ghostPlannedDone]);
 
-  const { data: communityData } = useQuery<{ runs: any[] }>({
+  const { data: communityData } = useQuery<{ runs: any[]; tier?: string; window?: string }>({
     queryKey: ["/api/runs/community-activity"],
     staleTime: 300_000,
   });
   const communityRuns = communityData?.runs ?? [];
+  const communityTier = communityData?.tier ?? "recent";
 
   const checklistItems = useMemo(() => [
     {
@@ -1891,6 +1962,17 @@ export default function DiscoverScreen() {
     return sorted;
   }, [sorted, isLoading, search, userHasSetDistance, userLocation, runs, activityFilter, sortOption, distanceMap, friendIdSet, userState, applied]);
 
+  // While the walkthrough is active, prepend a seeded demo event so new users
+  // see the full Discover flow even before they have nearby events.
+  const listWithDemo = useMemo(() => {
+    if (!walkthroughActive) return displayList;
+    try {
+      const { getDemoEventCard } = require("@/lib/walkthroughDemo") as typeof import("@/lib/walkthroughDemo");
+      const demo = getDemoEventCard(activityFilter, userLocation?.latitude, userLocation?.longitude);
+      return [demo, ...displayList];
+    } catch { return displayList; }
+  }, [walkthroughActive, displayList, activityFilter, userLocation]);
+
   const isFallback = false;
 
   // Reset to 5 whenever the user changes search/filters/activity
@@ -1898,9 +1980,10 @@ export default function DiscoverScreen() {
 
   // ─── Filter state helpers ──────────────────────────────────────────────────
 
+  const paceDefaults = paceDefaultsFor(activityFilter);
   const isFiltered =
-    applied.paceMin !== DEFAULT_FILTERS.paceMin ||
-    applied.paceMax !== DEFAULT_FILTERS.paceMax ||
+    applied.paceMin !== paceDefaults.paceMin ||
+    applied.paceMax !== paceDefaults.paceMax ||
     applied.distMin !== DEFAULT_FILTERS.distMin ||
     applied.distMax !== DEFAULT_FILTERS.distMax ||
     userHasSetDistance ||
@@ -1927,7 +2010,7 @@ export default function DiscoverScreen() {
   }, [applied, activityFilter]);
 
   function resetFilters() {
-    setDraft({ ...DEFAULT_FILTERS });
+    setDraft({ ...DEFAULT_FILTERS, ...paceDefaultsFor(activityFilter) });
     setUserHasSetDistance(false);
   }
 
@@ -2050,7 +2133,7 @@ export default function DiscoverScreen() {
       ) : (
         <FlatList
           ref={flatListRef}
-          data={displayList.slice(0, visibleCount)}
+          data={listWithDemo.slice(0, visibleCount + (walkthroughActive ? 1 : 0))}
           keyExtractor={(r) => r.id}
           contentContainerStyle={[
             s.list,
@@ -2214,6 +2297,10 @@ export default function DiscoverScreen() {
                   onBookmark={user ? () => bookmarkMutation.mutate(item.id) : undefined}
                   onPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    if ((item as any).__demo) {
+                      walkthroughNext?.();
+                      return;
+                    }
                     if (isLiveItem) {
                       setExpandedLiveId((prev) => prev === item.id ? null : item.id);
                     } else {
@@ -3172,6 +3259,7 @@ export default function DiscoverScreen() {
               onHighChange={(v) => setHMaxPace(v)}
               color={C.primary}
               trackColor={C.border}
+              thumbColor={C.surface}
             />
             <View style={fm.edgeRow}>
               <Text style={fm.edgeLabel}>{hActivityType === "ride" ? `${(60 / PACE_SLIDER_MIN).toFixed(1)} mph` : "4:00"}</Text>
@@ -3286,19 +3374,17 @@ export default function DiscoverScreen() {
         </View>
       </Modal>
 
-      {/* ── Solo Run FAB ─────────────────────────────────────────────────────── */}
-      {Platform.OS === "web" ? (
-        <WebFAB onPress={() => router.push("/run-tracking" as any)} />
-      ) : (
+      {/* ── Map FAB ─────────────────────────────────────────────────────────── */}
+      {Platform.OS !== "web" && (
         <Pressable
           testID="map-fab"
           style={[s.fab, { bottom: insets.bottom + 92 }]}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            router.push("/run-tracking" as any);
+            router.push("/map" as any);
           }}
         >
-          <Ionicons name="stopwatch-outline" size={28} color={C.bg} />
+          <Ionicons name="map-outline" size={26} color={C.bg} />
         </Pressable>
       )}
 
@@ -3686,7 +3772,8 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   crewBadgeEmoji: { fontSize: 10 },
   crewBadgeName: { fontFamily: "Outfit_600SemiBold", fontSize: 9, color: C.primary, maxWidth: 60 },
   hostColumnDist: { fontFamily: "Outfit_700Bold", fontSize: 13, color: C.text, textAlign: "center", marginTop: 2 },
-  hostColumnWeather: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted, textAlign: "center", marginTop: 3 },
+  hostColumnWeather: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted, textAlign: "center" },
+  hostColumnWeatherPill: { marginTop: 5, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, borderWidth: 1, borderColor: C.border, alignSelf: "center" },
 
   cardMeta: { gap: 3 },
   metaItem: { flexDirection: "row", alignItems: "center", gap: 6 },

@@ -16,8 +16,8 @@ import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { darkColors as C } from "@/constants/colors";
 import { apiRequest } from "@/lib/query-client";
+import { useTheme } from "@/contexts/ThemeContext";
 import MAP_STYLE from "@/lib/mapStyle";
 import { toDisplayDist, type DistanceUnit } from "@/lib/units";
 
@@ -59,6 +59,7 @@ export default function SharedPathPreviewModal({
   onClose: () => void;
   distUnit?: DistanceUnit;
 }) {
+  const { C } = useTheme();
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
   const [userLoc, setUserLoc] = useState<RoutePoint | null>(null);

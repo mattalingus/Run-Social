@@ -17,11 +17,12 @@ import * as Haptics from "expo-haptics";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { darkColors as C } from "@/constants/colors";
 import { apiRequest } from "@/lib/query-client";
+import { useTheme } from "@/contexts/ThemeContext";
 import MAP_STYLE from "@/lib/mapStyle";
 import { toDisplayDist, type DistanceUnit } from "@/lib/units";
 import { useAuth } from "@/contexts/AuthContext";
+import ScreenHeader from "@/components/ScreenHeader";
 
 const MAP_TYPE = Platform.OS === "ios" ? ("mutedStandard" as const) : ("standard" as const);
 
@@ -50,6 +51,7 @@ function haversineMiles(a: RoutePoint, b: RoutePoint) {
 }
 
 export default function SharedPathScreen() {
+  const { C } = useTheme();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
@@ -123,15 +125,13 @@ export default function SharedPathScreen() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: C.bg, paddingTop: insets.top }}>
+    <View style={{ flex: 1, backgroundColor: C.bg }}>
       <Stack.Screen options={{ headerShown: false }} />
-      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 16 }}>
-        <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))} hitSlop={12}>
-          <Feather name="x" size={24} color={C.text} />
-        </Pressable>
-        <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 17, color: C.text }}>Shared Route</Text>
-        <View style={{ width: 24 }} />
-      </View>
+      <ScreenHeader
+        title="Shared Route"
+        variant="close"
+        onBack={() => (router.canGoBack() ? router.back() : router.replace("/"))}
+      />
 
       {isLoading ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>

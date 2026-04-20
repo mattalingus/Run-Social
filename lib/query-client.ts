@@ -111,7 +111,14 @@ export const queryClient = new QueryClient({
       refetchInterval: false,
       refetchOnWindowFocus: false,
       staleTime: Infinity,
-      retry: false,
+      // Retry transient network blips up to 2x so flaky networks don't surface
+      // empty/broken screens. Don't retry auth or client errors.
+      retry: (failureCount, error: any) => {
+        const msg = error?.message ?? "";
+        if (/\b(401|403|404|410)\b/.test(msg)) return false;
+        return failureCount < 2;
+      },
+      retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 4000),
     },
     mutations: {
       retry: false,

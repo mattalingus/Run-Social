@@ -279,6 +279,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function logout() {
     try {
+      // Unregister push token first so the server stops sending notifications
+      // to this device for this user. If this fails (offline), logout still proceeds.
+      await apiRequest("POST", "/api/users/me/push-token", { token: null });
+    } catch {}
+    try {
       const token = await AsyncStorage.getItem(REMEMBER_TOKEN_KEY);
       await apiRequest("POST", "/api/auth/logout", { rememberToken: token ?? undefined });
     } catch {}
@@ -286,7 +291,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await clearCachedUser();
     try {
       const allKeys = await AsyncStorage.getAllKeys();
-      const paceupKeys = allKeys.filter((k) => k.startsWith("@paceup_"));
+      const paceupKeys = allKeys.filter((k) => k.startsWith("@paceup_") || k.startsWith("paceup_"));
       if (paceupKeys.length > 0) await AsyncStorage.multiRemove(paceupKeys);
     } catch {}
     setIsSuspended(false);

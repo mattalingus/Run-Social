@@ -78,20 +78,66 @@ async function ensureHealthKitInitialized(): Promise<string | null> {
 /**
  * Requests HealthKit read + write permissions. Returns true on success.
  * Throws a descriptive Error on failure so callers can surface the reason.
+ *
+ * iOS quirk: initHealthKit returns success with null error even when the user
+ * denied read permissions. We probe with getAuthStatus (if available) and a
+ * sample read to distinguish real success from silent denial.
  */
 export async function requestHealthKitPermissions(): Promise<boolean> {
   const hk = getHealthKit();
-  if (!hk) return false;
+  if (!hk) {
+    throw new Error("HEALTHKIT_UNAVAILABLE: This build doesn't include Apple Health support. Update to the latest version from the App Store.");
+  }
 
   hkInitialized = false;
   const err = await ensureHealthKitInitialized();
   if (err) {
     throw new Error(err);
   }
+
+  const probeOk = await new Promise<boolean>((resolve) => {
+    try {
+      hk.getAnchoredWorkouts(
+        {
+          startDate: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString(),
+          endDate: new Date().toISOString(),
+          type: "Workout",
+          limit: 1,
+        },
+        (e: any) => {
+          if (e) {
+            console.warn("[HealthKit] permission probe error:", e);
+            resolve(false);
+          } else {
+            resolve(true);
+          }
+        }
+      );
+    } catch (e) {
+      console.warn("[HealthKit] permission probe exception:", e);
+      resolve(false);
+    }
+  });
+
+  if (!probeOk) {
+    throw new Error("PERMISSION_DENIED: Apple Health access was denied. Open Settings → Apps → Health → Data Access & Devices → PaceUp to enable it.");
+  }
+
   return true;
 }
 
-function mapWorkoutType(typeId: number | string): "run" | "ride" | "walk" | null {
+/** Diagnostic info for the Settings "Diagnose" action. */
+export function healthKitDiagnostics(): { platform: string; available: boolean; moduleLoaded: boolean; initialized: boolean } {
+  return {
+    platform: Platform.OS,
+    available: isHealthKitAvailable(),
+    moduleLoaded: AppleHealthKit !== null,
+    initialized: hkInitialized,
+  };
+}
+
+function mapWorkoutType(typeId: number | string | undefined): "run" | "ride" | "walk" | null {
+  if (typeId === undefined || typeId === null) return null;
   const id = typeof typeId === "string" ? parseInt(typeId, 10) : typeId;
   if (id === 37) return "run";
   if (id === 13) return "ride";
@@ -102,6 +148,8 @@ function mapWorkoutType(typeId: number | string): "run" | "ride" | "walk" | null
   if (strType.includes("walk") || strType.includes("hik")) return "walk";
   return null;
 }
+
+const MILES_TO_METERS = 1609.344;
 
 export async function fetchWorkouts(daysSince: number = 90): Promise<HealthKitWorkout[]> {
   const hk = getHealthKit();
@@ -117,29 +165,33 @@ export async function fetchWorkouts(daysSince: number = 90): Promise<HealthKitWo
   startDate.setDate(startDate.getDate() - daysSince);
 
   return new Promise((resolve) => {
-    hk.getSamples(
+    hk.getAnchoredWorkouts(
       {
-        typeIdentifier: "Workout",
         startDate: startDate.toISOString(),
         endDate: new Date().toISOString(),
+        type: "Workout",
         limit: 500,
       },
-      (err: any, results: any[]) => {
+      (err: any, results: any) => {
         if (err || !results) {
-          console.warn("[HealthKit] getSamples error:", err);
+          console.warn("[HealthKit] getAnchoredWorkouts error:", err);
           resolve([]);
           return;
         }
 
+        const data: any[] = Array.isArray(results) ? results : (results.data ?? []);
         const workouts: HealthKitWorkout[] = [];
-        for (const r of results) {
-          const actType = mapWorkoutType(r.activityType ?? r.workoutActivityType ?? "");
+        for (const r of data) {
+          const actType = mapWorkoutType(r.activityId ?? r.activityName ?? r.activityType ?? r.workoutActivityType);
           if (!actType) continue;
 
-          const start = new Date(r.startDate ?? r.start);
-          const end = new Date(r.endDate ?? r.end);
-          const durationSeconds = Math.round((end.getTime() - start.getTime()) / 1000);
-          const distMeters = r.distance ? r.distance * 1000 : (r.totalDistance ?? 0);
+          const start = new Date(r.start ?? r.startDate);
+          const end = new Date(r.end ?? r.endDate);
+          const durationSeconds = r.duration
+            ? Math.round(r.duration)
+            : Math.round((end.getTime() - start.getTime()) / 1000);
+          const distMiles = typeof r.distance === "number" ? r.distance : 0;
+          const distMeters = distMiles * MILES_TO_METERS;
 
           if (distMeters < 100 || durationSeconds < 60) continue;
 

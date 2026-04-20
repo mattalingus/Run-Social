@@ -30,6 +30,7 @@ import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest, getApiUrl, apiFetch } from "@/lib/query-client";
 import { useTheme } from "@/contexts/ThemeContext";
 import WalkthroughPulse from "@/components/WalkthroughPulse";
+import { useWalkthrough } from "@/contexts/WalkthroughContext";
 import { usePurchases } from "@/contexts/PurchasesContext";
 import PaywallSheet, { type PaywallPlan } from "@/components/PaywallSheet";
 import { darkColors, type ColorScheme } from "@/constants/colors";
@@ -1878,7 +1879,7 @@ function CrewDetailSheet({
                             <Text style={s.memberMeta}>
                               {memberRole === "crew_chief" ? "Crew Chief" : memberRole === "officer" ? "Officer" : "Member"}
                               {m.avg_pace && m.avg_pace > 0
-                                ? ` · ${activityTab === "ride" ? toDisplaySpeed(m.avg_pace, distUnit) : toDisplayPace(m.avg_pace, distUnit)} avg`
+                                ? ` · ${activityFilter === "ride" ? toDisplaySpeed(m.avg_pace, distUnit) : toDisplayPace(m.avg_pace, distUnit)} avg`
                                 : ""}
                             </Text>
                           </View>
@@ -2545,13 +2546,30 @@ interface RankedCrew {
   home_state?: string;
 }
 
-function RankingsModal({ visible, onClose, myCrewIds, myCrewId }: { visible: boolean; onClose: () => void; myCrewIds: string[]; myCrewId?: string }) {
+type SizeTier = "sprout" | "pack" | "squad" | "legion";
+const SIZE_TIERS: { key: SizeTier; name: string; icon: keyof typeof Ionicons.glyphMap; min: number; max: number }[] = [
+  { key: "sprout", name: "Sprout", icon: "leaf-outline",   min: 1,   max: 15 },
+  { key: "pack",   name: "Pack",   icon: "paw-outline",    min: 16,  max: 50 },
+  { key: "squad",  name: "Squad",  icon: "people-outline", min: 51,  max: 150 },
+  { key: "legion", name: "Legion", icon: "flag-outline",   min: 151, max: Infinity },
+];
+function tierFromCount(n: number): SizeTier {
+  return (SIZE_TIERS.find((t) => n >= t.min && n <= t.max)?.key) ?? "sprout";
+}
+
+function RankingsModal({ visible, onClose, myCrewIds, myCrewId, myCrewMemberCount }: { visible: boolean; onClose: () => void; myCrewIds: string[]; myCrewId?: string; myCrewMemberCount?: number }) {
   const { C } = useTheme();
   const { user: authUser } = useAuth();
   const distUnit: DistanceUnit = ((authUser as any)?.distance_unit ?? "miles") as DistanceUnit;
   const insets = useSafeAreaInsets();
   const [activityType, setActivityType] = useState<"run" | "ride" | "walk" | "mixed">("run");
   const [rankingTab, setRankingTab] = useState<"national" | "state" | "metro">("national");
+  const [sizeTier, setSizeTier] = useState<SizeTier>(() => myCrewMemberCount ? tierFromCount(myCrewMemberCount) : "sprout");
+  const [sizeMenuOpen, setSizeMenuOpen] = useState(false);
+  useEffect(() => {
+    if (myCrewMemberCount) setSizeTier(tierFromCount(myCrewMemberCount));
+  }, [myCrewMemberCount]);
+  const activeTier = SIZE_TIERS.find((t) => t.key === sizeTier) ?? SIZE_TIERS[0];
 
   const userMetro = (authUser as any)?.home_metro || "";
   const userState = (authUser as any)?.home_state || "";
@@ -2601,14 +2619,50 @@ function RankingsModal({ visible, onClose, myCrewIds, myCrewId }: { visible: boo
       <View style={{ flex: 1, backgroundColor: C.bg }}>
         {/* Header */}
         <View style={[rStyles.rankHeader, { paddingTop: insets.top > 0 ? 16 : 20 }]}>
-          <View>
-            <Text style={[rStyles.rankTitle, { color: C.text, fontFamily: "Outfit_700Bold" }]}>Crew Rankings</Text>
-            <Text style={[rStyles.rankSub, { color: C.textMuted, fontFamily: "Outfit_400Regular" }]}>Total miles logged by all members</Text>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Text style={[rStyles.rankTitle, { color: C.text, fontFamily: "Outfit_700Bold" }]}>Crew Rankings</Text>
+              <TouchableOpacity
+                onPress={() => { setSizeMenuOpen((v) => !v); Haptics.selectionAsync(); }}
+                activeOpacity={0.75}
+                style={{ flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: C.primaryMuted, borderWidth: 1, borderColor: C.primary + "55", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 }}
+              >
+                <Ionicons name={activeTier.icon} size={13} color={C.primary} />
+                <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.primary }}>{activeTier.name}</Text>
+                <Ionicons name={sizeMenuOpen ? "chevron-up" : "chevron-down"} size={11} color={C.primary} />
+              </TouchableOpacity>
+            </View>
+            <Text style={[rStyles.rankSub, { color: C.textMuted, fontFamily: "Outfit_400Regular" }]}>{activeTier.name} crews · {activeTier.min}{activeTier.max === Infinity ? "+" : `–${activeTier.max}`} members</Text>
           </View>
           <TouchableOpacity onPress={onClose} hitSlop={12}>
             <Ionicons name="close" size={24} color={C.textMuted} />
           </TouchableOpacity>
         </View>
+
+        {/* Size tier dropdown */}
+        {sizeMenuOpen && (
+          <View style={{ marginHorizontal: 20, marginBottom: 10, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 12, overflow: "hidden" }}>
+            {SIZE_TIERS.map((t, i) => {
+              const active = t.key === sizeTier;
+              return (
+                <TouchableOpacity
+                  key={t.key}
+                  onPress={() => { setSizeTier(t.key); setSizeMenuOpen(false); Haptics.selectionAsync(); }}
+                  style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: 11, borderTopWidth: i === 0 ? 0 : 1, borderTopColor: C.border, backgroundColor: active ? C.primaryMuted : "transparent" }}
+                >
+                  <Ionicons name={t.icon} size={16} color={active ? C.primary : C.textSecondary} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 14, color: active ? C.primary : C.text }}>{t.name}</Text>
+                    <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted }}>
+                      {t.min}{t.max === Infinity ? "+" : `–${t.max}`} members
+                    </Text>
+                  </View>
+                  {active && <Ionicons name="checkmark" size={16} color={C.primary} />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
 
         {/* Scope toggle: Local / State / National */}
         <View style={[rStyles.toggleRow, { backgroundColor: C.surface, borderColor: C.border, marginBottom: 8 }]}>
@@ -2645,7 +2699,7 @@ function RankingsModal({ visible, onClose, myCrewIds, myCrewId }: { visible: boo
           <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
             <ActivityIndicator color={C.primary} size="large" />
           </View>
-        ) : (rankings ?? []).length === 0 ? (
+        ) : (rankings ?? []).filter((r) => r.member_count >= activeTier.min && r.member_count <= activeTier.max).length === 0 ? (
           <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 10, paddingHorizontal: 40 }}>
             <Ionicons name="trophy-outline" size={48} color={C.textMuted} />
             <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text, textAlign: "center" }}>No rankings yet</Text>
@@ -2655,7 +2709,7 @@ function RankingsModal({ visible, onClose, myCrewIds, myCrewId }: { visible: boo
           </View>
         ) : (
           <FlatList
-            data={rankings}
+            data={(rankings ?? []).filter((r) => r.member_count >= activeTier.min && r.member_count <= activeTier.max)}
             keyExtractor={(item) => item.id}
             contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 30, paddingTop: 8 }}
             showsVerticalScrollIndicator={false}
@@ -2780,9 +2834,18 @@ export default function CrewScreen() {
   const { user: currentUser } = useAuth();
   const [ghostCrewDone, setGhostCrewDone] = useState(true);
 
-  const { data: crews = [], isLoading } = useQuery<Crew[]>({
+  const { data: crewsRaw = [], isLoading } = useQuery<Crew[]>({
     queryKey: ["/api/crews"],
   });
+  const { isActive: walkthroughActive, nextStep: walkthroughNext } = useWalkthrough();
+  const { activityFilter } = useActivity();
+  const crews = useMemo(() => {
+    if (!walkthroughActive) return crewsRaw;
+    try {
+      const { getDemoCrew } = require("@/lib/walkthroughDemo") as typeof import("@/lib/walkthroughDemo");
+      return [getDemoCrew(activityFilter), ...crewsRaw];
+    } catch { return crewsRaw; }
+  }, [walkthroughActive, crewsRaw, activityFilter]);
 
   useEffect(() => {
     if (!currentUser?.id) return;
@@ -2982,7 +3045,10 @@ export default function CrewScreen() {
           renderItem={({ item, index }) => (
             index === 0 ? (
               <WalkthroughPulse stepId="crew-intro" style={{ borderRadius: 16 }}>
-                <CrewCard crew={item} onPress={() => setSelectedCrew(item)} />
+                <CrewCard crew={item} onPress={() => {
+                  if ((item as any).__demo) { walkthroughNext?.(); return; }
+                  setSelectedCrew(item);
+                }} />
               </WalkthroughPulse>
             ) : (
               <CrewCard crew={item} onPress={() => setSelectedCrew(item)} />
@@ -3076,6 +3142,7 @@ export default function CrewScreen() {
         onClose={() => setShowRankings(false)}
         myCrewIds={(crews as Crew[]).map((c) => c.id)}
         myCrewId={(crews as Crew[])[0]?.id}
+        myCrewMemberCount={(crews as Crew[])[0]?.member_count}
       />
 
       {capUpsellCrewId && (
