@@ -784,7 +784,7 @@ export default function MapScreen() {
       </View>
 
       {/* ─── Map card ────────────────────────────────────────────────────── */}
-      <View style={[s.mapCard, { height: WIN_H - topPad - insets.bottom - (selectedCommunityPath ? Math.round(WIN_H * 0.5) + 24 : 244) }]}>
+      <View style={[s.mapCard, { height: WIN_H - topPad - insets.bottom - 244 }]}>
 
         {/* Map */}
         <MapView
@@ -1169,113 +1169,6 @@ export default function MapScreen() {
       {/* ─── Bottom strip: Events row → Paths row → Insights pills — stacked full-width */}
       <View style={[s.splitStrip, { paddingBottom: insets.bottom + 18 }]}>
 
-        {/* Inline path detail — fills the strip when a path is selected */}
-        {selectedCommunityPath && (
-          <View style={[s.inlinePathSheet, { padding: 16, maxHeight: WIN_H * 0.5 }]}>
-            <View style={s.inlinePathHeader}>
-              <Text style={s.pathSheetTitle} numberOfLines={2}>{selectedCommunityPath.name}</Text>
-              <Pressable onPress={closePathCard} hitSlop={12}>
-                <Feather name="x" size={22} color={C.textMuted} />
-              </Pressable>
-            </View>
-
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: 6 }}
-            >
-            <View style={s.pathStatRow}>
-              <View style={s.pathChip}>
-                <Feather name="move" size={14} color={C.primary} />
-                <Text style={s.pathChipTxt}>{toDisplayDist(selectedCommunityPath.distance_miles ?? 0, distUnit)}</Text>
-              </View>
-              <View style={[s.pathChip, { backgroundColor: C.primaryMuted + "55" }]}>
-                <Text style={[s.pathChipTxt, { color: C.primary, textTransform: "capitalize" }]}>
-                  {selectedCommunityPath.activity_type ?? "run"}
-                </Text>
-              </View>
-              <View style={s.pathChip}>
-                <Feather name="users" size={13} color={C.textMuted} />
-                <Text style={s.pathChipTxt}>{selectedCommunityPath.run_count ?? 1}</Text>
-              </View>
-            </View>
-
-            {nearbyPaths.length > 0 && (
-              <View style={{ marginBottom: 14 }}>
-                <Text style={[s.pathMutedTxt, { marginBottom: 8, fontWeight: "700", color: C.text }]}>
-                  {nearbyPaths.length === 1 ? "Another route here" : "Other routes here"}
-                </Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingRight: 16 }}>
-                  {nearbyPaths.map((np) => (
-                    <Pressable
-                      key={np.id}
-                      onPress={() => { Haptics.selectionAsync(); openPathCard(np); }}
-                      style={s.variantCard}
-                    >
-                      <VariantMiniMap pts={np.route_path} active={false} C={C} />
-                      <Text style={s.variantCardName} numberOfLines={1}>{np.name}</Text>
-                      <Text style={s.variantCardDist}>{toDisplayDist(np.distance_miles ?? 0, distUnit)}</Text>
-                    </Pressable>
-                  ))}
-                </ScrollView>
-              </View>
-            )}
-
-            {(selectedCommunityPath.variants?.length ?? 0) > 0 && (
-              <View style={{ marginBottom: 14 }}>
-                <Text style={[s.pathMutedTxt, { marginBottom: 8, fontWeight: "700", color: C.text }]}>Route options</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingRight: 16 }}>
-                  {selectedCommunityPath.variants!.map((v) => {
-                    const active = selectedVariantId === v.id;
-                    return (
-                      <Pressable
-                        key={v.id}
-                        onPress={() => {
-                          Haptics.selectionAsync();
-                          setSelectedVariantId(active ? null : v.id);
-                        }}
-                        style={[s.variantCard, active && { borderColor: C.primary, borderWidth: 2 }]}
-                      >
-                        <VariantMiniMap pts={v.route_path} active={active} C={C} />
-                        <Text style={s.variantCardName} numberOfLines={1}>{v.name}</Text>
-                        <Text style={s.variantCardDist}>{toDisplayDist(v.distance_miles, distUnit)}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-            )}
-
-            </ScrollView>
-
-            <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
-              <Pressable
-                style={[s.pathStartBtn, { flex: 1 }]}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  router.push("/run-tracking");
-                }}
-              >
-                <Text style={s.pathStartBtnTxt}>Start Here</Text>
-                <Feather name="play" size={18} color="#FFF" />
-              </Pressable>
-              <Pressable
-                style={[s.pathStartBtn, { backgroundColor: C.card, borderWidth: 1, borderColor: C.border, paddingHorizontal: 14 }]}
-                disabled={savingPathId === selectedCommunityPath.id}
-                onPress={() => saveCommunityPathToMyRoutes(selectedCommunityPath)}
-              >
-                {savingPathId === selectedCommunityPath.id ? (
-                  <ActivityIndicator size="small" color={C.primary} />
-                ) : (
-                  <>
-                    <Feather name="bookmark" size={16} color={C.primary} />
-                    <Text style={[s.pathStartBtnTxt, { color: C.primary }]}>Save</Text>
-                  </>
-                )}
-              </Pressable>
-            </View>
-          </View>
-        )}
-
         {/* Events row — full width, horizontally scrollable; ghost card when empty */}
         {!selectedRun && !selectedCommunityPath && (
           <View style={s.stackRow}>
@@ -1482,6 +1375,126 @@ export default function MapScreen() {
       </Modal>
 
       <HostProfileSheet hostId={hostProfileId} onClose={() => setHostProfileId(null)} />
+
+      {/* Floating path detail sheet — overlays the map with a tap-out backdrop */}
+      {selectedCommunityPath && (
+        <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+          <Pressable style={s.pathFloatBackdrop} onPress={closePathCard} />
+          <Animated.View
+            style={[
+              s.pathFloatSheet,
+              {
+                paddingBottom: insets.bottom + 16,
+                maxHeight: WIN_H * 0.7,
+                opacity: pathCardOpacity,
+                transform: [{ translateY: pathSlideAnim }],
+              },
+            ]}
+          >
+            <View style={s.pathFloatHandle} />
+            <View style={s.inlinePathHeader}>
+              <Text style={s.pathSheetTitle} numberOfLines={2}>{selectedCommunityPath.name}</Text>
+              <Pressable onPress={closePathCard} hitSlop={12}>
+                <Feather name="x" size={22} color={C.textMuted} />
+              </Pressable>
+            </View>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 6 }}
+            >
+              <View style={s.pathStatRow}>
+                <View style={s.pathChip}>
+                  <Feather name="move" size={14} color={C.primary} />
+                  <Text style={s.pathChipTxt}>{toDisplayDist(selectedCommunityPath.distance_miles ?? 0, distUnit)}</Text>
+                </View>
+                <View style={[s.pathChip, { backgroundColor: C.primaryMuted + "55" }]}>
+                  <Text style={[s.pathChipTxt, { color: C.primary, textTransform: "capitalize" }]}>
+                    {selectedCommunityPath.activity_type ?? "run"}
+                  </Text>
+                </View>
+                <View style={s.pathChip}>
+                  <Feather name="users" size={13} color={C.textMuted} />
+                  <Text style={s.pathChipTxt}>{selectedCommunityPath.run_count ?? 1}</Text>
+                </View>
+              </View>
+
+              {nearbyPaths.length > 0 && (
+                <View style={{ marginBottom: 14 }}>
+                  <Text style={[s.pathMutedTxt, { marginBottom: 8, fontWeight: "700", color: C.text }]}>
+                    {nearbyPaths.length === 1 ? "Another route here" : "Other routes here"}
+                  </Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingRight: 16 }}>
+                    {nearbyPaths.map((np) => (
+                      <Pressable
+                        key={np.id}
+                        onPress={() => { Haptics.selectionAsync(); openPathCard(np); }}
+                        style={s.variantCard}
+                      >
+                        <VariantMiniMap pts={np.route_path} active={false} C={C} />
+                        <Text style={s.variantCardName} numberOfLines={1}>{np.name}</Text>
+                        <Text style={s.variantCardDist}>{toDisplayDist(np.distance_miles ?? 0, distUnit)}</Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+
+              {(selectedCommunityPath.variants?.length ?? 0) > 0 && (
+                <View style={{ marginBottom: 14 }}>
+                  <Text style={[s.pathMutedTxt, { marginBottom: 8, fontWeight: "700", color: C.text }]}>Route options</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingRight: 16 }}>
+                    {selectedCommunityPath.variants!.map((v) => {
+                      const active = selectedVariantId === v.id;
+                      return (
+                        <Pressable
+                          key={v.id}
+                          onPress={() => {
+                            Haptics.selectionAsync();
+                            setSelectedVariantId(active ? null : v.id);
+                          }}
+                          style={[s.variantCard, active && { borderColor: C.primary, borderWidth: 2 }]}
+                        >
+                          <VariantMiniMap pts={v.route_path} active={active} C={C} />
+                          <Text style={s.variantCardName} numberOfLines={1}>{v.name}</Text>
+                          <Text style={s.variantCardDist}>{toDisplayDist(v.distance_miles, distUnit)}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              )}
+            </ScrollView>
+
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
+              <Pressable
+                style={[s.pathStartBtn, { flex: 1 }]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  router.push("/run-tracking");
+                }}
+              >
+                <Text style={s.pathStartBtnTxt}>Start Here</Text>
+                <Feather name="play" size={18} color="#FFF" />
+              </Pressable>
+              <Pressable
+                style={[s.pathStartBtn, { backgroundColor: C.card, borderWidth: 1, borderColor: C.border, paddingHorizontal: 14 }]}
+                disabled={savingPathId === selectedCommunityPath.id}
+                onPress={() => saveCommunityPathToMyRoutes(selectedCommunityPath)}
+              >
+                {savingPathId === selectedCommunityPath.id ? (
+                  <ActivityIndicator size="small" color={C.primary} />
+                ) : (
+                  <>
+                    <Feather name="bookmark" size={16} color={C.primary} />
+                    <Text style={[s.pathStartBtnTxt, { color: C.primary }]}>Save</Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
+          </Animated.View>
+        </View>
+      )}
     </View>
   );
 }
@@ -1872,6 +1885,38 @@ function makeSStyles(C: ColorScheme) { return StyleSheet.create({
   },
   inlinePathSheet: {
     width: "100%",
+  },
+  pathFloatBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.25)",
+  },
+  pathFloatSheet: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: C.card,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: C.border,
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: -4 },
+    elevation: 16,
+  },
+  pathFloatHandle: {
+    alignSelf: "center",
+    width: 44,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: C.border,
+    marginBottom: 10,
   },
   inlinePathHeader: {
     flexDirection: "row",
