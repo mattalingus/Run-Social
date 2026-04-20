@@ -203,15 +203,12 @@ export default function CreatePathScreen() {
         initialRegion={initialRegion}
         onPress={handleMapPress}
       >
-        {/* Straight-line preview from raw waypoints — renders instantly so the
-            line appears between points 1 & 2 before the snap request returns.
-            A dummy 2-point coords array keeps the Polyline mounted from first
-            render, which avoids react-native-maps' conditional-mount draw bug. */}
+        {/* Dummy mount-from-first-render polyline (invisible) to avoid
+            react-native-maps' conditional-mount draw bug. Kept at width 0. */}
         <Polyline
-          coordinates={waypoints.length >= 2 ? waypoints : [{ latitude: 0, longitude: 0 }, { latitude: 0, longitude: 0 }]}
-          strokeColor={C.primary}
-          strokeWidth={waypoints.length >= 2 ? 3 : 0}
-          lineDashPattern={[6, 6]}
+          coordinates={[{ latitude: 0, longitude: 0 }, { latitude: 0, longitude: 0 }]}
+          strokeColor="transparent"
+          strokeWidth={0}
         />
         {fullPolyline.length >= 2 && (
           <Polyline coordinates={fullPolyline} strokeColor={C.primary} strokeWidth={5} />
