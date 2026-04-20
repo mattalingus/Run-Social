@@ -958,6 +958,37 @@ function ProfileScreenInner() {
           </View>
         )}
 
+      {/* ── My Stats ──────────────────────────────────────────────────────── */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>My Stats</Text>
+        </View>
+        <View style={styles.statsRow}>
+          <View style={styles.statsItem}>
+            <Ionicons name={profileActivity === "ride" ? "bicycle" : profileActivity === "walk" ? "footsteps" : "walk"} size={16} color={C.orange} />
+            <View>
+              <Text style={styles.statsVal}>
+                {actStats.avgPace != null
+                  ? (profileActivity === "ride"
+                      ? toDisplaySpeed(actStats.avgPace, distUnit)
+                      : toDisplayPace(actStats.avgPace, distUnit))
+                  : "—"}
+              </Text>
+              <Text style={styles.statsLabel}>{profileActivity === "ride" ? "Avg Speed" : "Avg Pace"}</Text>
+            </View>
+          </View>
+          <View style={styles.statsItem}>
+            <Feather name="target" size={16} color={C.blue} />
+            <View>
+              <Text style={styles.statsVal}>
+                {user.avg_distance ? toDisplayDist(user.avg_distance, distUnit) : "—"}
+              </Text>
+              <Text style={styles.statsLabel}>Avg Distance</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+
       {/* ── Saved Routes shortcut ─────────────────────────────────────────── */}
       {(() => {
         const savedCount = profileSavedPaths.filter((p) => (p.activity_type ?? "run") === profileActivity).length;
@@ -985,8 +1016,25 @@ function ProfileScreenInner() {
         );
       })()}
 
+      {/* ── View Past Runs / Rides ────────────────────────────────────────── */}
+      <Pressable
+        style={({ pressed }) => [styles.viewPastBtn, { opacity: pressed ? 0.8 : 1 }]}
+        onPress={() => {
+          setHistoryActivityFilter(profileActivity);
+          setHistoryTypeFilter("all");
+          setShowSoloHistory(true);
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }}
+      >
+        <Ionicons name={profileActivity === "ride" ? "bicycle-outline" : profileActivity === "walk" ? "footsteps-outline" : "walk-outline"} size={16} color={C.primary} />
+        <Text style={styles.viewPastBtnTxt}>
+          {profileActivity === "ride" ? "View Past Rides" : profileActivity === "walk" ? "View Past Walks" : "View Past Runs"}
+        </Text>
+        <Feather name="chevron-right" size={16} color={C.primary} />
+      </Pressable>
+
       {/* ── Activity Toggle ────────────────────────────────────────────────── */}
-      <View style={styles.actToggleRow}>
+      <View style={[styles.actToggleRow, { marginBottom: 8 }]}>
         <Pressable
           style={[styles.actToggleBtn, profileActivity === "run" && styles.actToggleBtnActive]}
           onPress={() => { setProfileActivity("run"); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
@@ -1081,54 +1129,6 @@ function ProfileScreenInner() {
           </Text>
         </View>
       )}
-
-      {/* ── View Past Runs / Rides ────────────────────────────────────────── */}
-      <Pressable
-        style={({ pressed }) => [styles.viewPastBtn, { opacity: pressed ? 0.8 : 1 }]}
-        onPress={() => {
-          setHistoryActivityFilter(profileActivity);
-          setHistoryTypeFilter("all");
-          setShowSoloHistory(true);
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        }}
-      >
-        <Ionicons name={profileActivity === "ride" ? "bicycle-outline" : profileActivity === "walk" ? "footsteps-outline" : "walk-outline"} size={16} color={C.primary} />
-        <Text style={styles.viewPastBtnTxt}>
-          {profileActivity === "ride" ? "View Past Rides" : profileActivity === "walk" ? "View Past Walks" : "View Past Runs"}
-        </Text>
-        <Feather name="chevron-right" size={16} color={C.primary} />
-      </Pressable>
-
-      {/* ── My Stats ──────────────────────────────────────────────────────── */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>My Stats</Text>
-        </View>
-        <View style={styles.statsRow}>
-          <View style={styles.statsItem}>
-            <Ionicons name={profileActivity === "ride" ? "bicycle" : profileActivity === "walk" ? "footsteps" : "walk"} size={16} color={C.orange} />
-            <View>
-              <Text style={styles.statsVal}>
-                {actStats.avgPace != null
-                  ? (profileActivity === "ride"
-                      ? toDisplaySpeed(actStats.avgPace, distUnit)
-                      : toDisplayPace(actStats.avgPace, distUnit))
-                  : "—"}
-              </Text>
-              <Text style={styles.statsLabel}>{profileActivity === "ride" ? "Avg Speed" : "Avg Pace"}</Text>
-            </View>
-          </View>
-          <View style={styles.statsItem}>
-            <Feather name="target" size={16} color={C.blue} />
-            <View>
-              <Text style={styles.statsVal}>
-                {user.avg_distance ? toDisplayDist(user.avg_distance, distUnit) : "—"}
-              </Text>
-              <Text style={styles.statsLabel}>Avg Distance</Text>
-            </View>
-          </View>
-        </View>
-      </View>
 
       </View>
 
