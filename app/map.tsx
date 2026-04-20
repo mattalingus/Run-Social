@@ -782,7 +782,7 @@ export default function MapScreen() {
       </View>
 
       {/* ─── Map card ────────────────────────────────────────────────────── */}
-      <View style={[s.mapCard, { height: WIN_H - topPad - insets.bottom - 244 }]}>
+      <View style={[s.mapCard, { height: WIN_H - topPad - insets.bottom - (selectedCommunityPath ? Math.round(WIN_H * 0.5) + 24 : 244) }]}>
 
         {/* Map */}
         <MapView
@@ -1157,7 +1157,7 @@ export default function MapScreen() {
 
         {/* Inline path detail — fills the strip when a path is selected */}
         {selectedCommunityPath && (
-          <View style={[s.inlinePathSheet, { padding: 16 }]}>
+          <View style={[s.inlinePathSheet, { padding: 16, maxHeight: WIN_H * 0.5 }]}>
             <View style={s.inlinePathHeader}>
               <Text style={s.pathSheetTitle} numberOfLines={2}>{selectedCommunityPath.name}</Text>
               <Pressable onPress={closePathCard} hitSlop={12}>
@@ -1165,6 +1165,10 @@ export default function MapScreen() {
               </Pressable>
             </View>
 
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 6 }}
+            >
             <View style={s.pathStatRow}>
               <View style={s.pathChip}>
                 <Feather name="move" size={14} color={C.primary} />
@@ -1227,7 +1231,9 @@ export default function MapScreen() {
               </View>
             )}
 
-            <View style={{ flexDirection: "row", gap: 10 }}>
+            </ScrollView>
+
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
               <Pressable
                 style={[s.pathStartBtn, { flex: 1 }]}
                 onPress={() => {
