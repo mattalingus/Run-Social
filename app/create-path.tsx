@@ -15,7 +15,7 @@ import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from "react-native-maps";
 import * as Location from "expo-location";
 import * as Haptics from "expo-haptics";
 import { Feather, Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQueryClient } from "@tanstack/react-query";
 import ScreenHeader from "@/components/ScreenHeader";
@@ -49,6 +49,12 @@ export default function CreatePathScreen() {
   const { C } = useTheme();
   const qc = useQueryClient();
   const mapRef = useRef<MapView>(null);
+  const params = useLocalSearchParams<{ lat?: string; lng?: string; latDelta?: string; lngDelta?: string }>();
+  const startLat = params.lat ? parseFloat(String(params.lat)) : null;
+  const startLng = params.lng ? parseFloat(String(params.lng)) : null;
+  const startLatDelta = params.latDelta ? parseFloat(String(params.latDelta)) : null;
+  const startLngDelta = params.lngDelta ? parseFloat(String(params.lngDelta)) : null;
+  const hasStartRegion = startLat != null && startLng != null && !Number.isNaN(startLat) && !Number.isNaN(startLng);
 
   const [userLoc, setUserLoc] = useState<LatLng | null>(null);
   const [waypoints, setWaypoints] = useState<LatLng[]>([]);
@@ -78,9 +84,13 @@ export default function CreatePathScreen() {
       const loc = await Location.getCurrentPositionAsync({});
       const here = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
       setUserLoc(here);
-      mapRef.current?.animateToRegion({ ...here, latitudeDelta: 0.01, longitudeDelta: 0.01 }, 600);
+      // If the screen was opened with a start region (from the map), don't
+      // yank the view back to the user's GPS — stay wherever the user was.
+      if (!hasStartRegion) {
+        mapRef.current?.animateToRegion({ ...here, latitudeDelta: 0.01, longitudeDelta: 0.01 }, 600);
+      }
     })();
-  }, []);
+  }, [hasStartRegion]);
 
   async function snapSegment(from: LatLng, to: LatLng): Promise<LatLng[]> {
     try {
@@ -101,14 +111,17 @@ export default function CreatePathScreen() {
     let coord = e.nativeEvent.coordinate;
     const prev = waypoints[waypoints.length - 1];
     if (!prev) {
+      // Seed two identical points on the very first tap so the polyline is
+      // mounted with ≥2 coords from the start (avoids the iOS first-segment
+      // draw bug). Markers are unnumbered, so the duplicate is invisible.
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      setWaypoints([coord]);
+      setWaypoints([coord, coord]);
       return;
     }
     // Loop closure: if tapping within ~25m of the first waypoint AND we have
     // at least 2 segments already, snap exactly to the start to close cleanly.
     const first = waypoints[0];
-    const closingLoop = waypoints.length >= 3 && haversineMiles(coord, first) * 5280 < 82; // ~25m
+    const closingLoop = waypoints.length >= 4 && haversineMiles(coord, first) * 5280 < 82; // ~25m
     if (closingLoop) {
       coord = first;
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -125,6 +138,12 @@ export default function CreatePathScreen() {
   function handleUndo() {
     if (waypoints.length === 0) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // If only the seeded duplicate pair remains, clear entirely.
+    if (waypoints.length <= 2) {
+      setWaypoints([]);
+      setSegments([]);
+      return;
+    }
     setWaypoints((w) => w.slice(0, -1));
     setSegments((s) => s.slice(0, -1));
   }
@@ -138,7 +157,7 @@ export default function CreatePathScreen() {
   }
 
   function handleFinish() {
-    if (waypoints.length < 2) {
+    if (waypoints.length < 3) {
       Alert.alert("Need at least 2 points", "Tap on the map to add waypoints first.");
       return;
     }
@@ -186,7 +205,14 @@ export default function CreatePathScreen() {
   }
   const miles = polylineMiles(fullPolyline);
 
-  const initialRegion = userLoc
+  const initialRegion = hasStartRegion
+    ? {
+        latitude: startLat!,
+        longitude: startLng!,
+        latitudeDelta: startLatDelta ?? 0.02,
+        longitudeDelta: startLngDelta ?? 0.02,
+      }
+    : userLoc
     ? { ...userLoc, latitudeDelta: 0.01, longitudeDelta: 0.01 }
     : { latitude: 37.7749, longitude: -122.4194, latitudeDelta: 0.05, longitudeDelta: 0.05 };
 
@@ -203,28 +229,33 @@ export default function CreatePathScreen() {
         initialRegion={initialRegion}
         onPress={handleMapPress}
       >
-        {/* Dummy mount-from-first-render polyline (invisible) to avoid
-            react-native-maps' conditional-mount draw bug. Kept at width 0. */}
+        {/* Always mount the main polyline (dummy coords when empty) so iOS
+            draws the first real segment without the conditional-mount bug. */}
         <Polyline
-          coordinates={[{ latitude: 0, longitude: 0 }, { latitude: 0, longitude: 0 }]}
-          strokeColor="transparent"
-          strokeWidth={0}
+          coordinates={fullPolyline.length >= 2 ? fullPolyline : [{ latitude: 0, longitude: 0 }, { latitude: 0, longitude: 0 }]}
+          strokeColor={fullPolyline.length >= 2 ? C.primary : "transparent"}
+          strokeWidth={fullPolyline.length >= 2 ? 5 : 0}
         />
-        {fullPolyline.length >= 2 && (
-          <Polyline coordinates={fullPolyline} strokeColor={C.primary} strokeWidth={5} />
-        )}
-        {waypoints.map((w, i) => (
-          <Marker key={`wp-${i}`} coordinate={w} anchor={{ x: 0.5, y: 0.5 }}>
-            <View style={[styles.wpDot, { backgroundColor: C.primary, borderColor: C.bg }]}>
-              <Text style={styles.wpDotTxt}>{i + 1}</Text>
-            </View>
-          </Marker>
-        ))}
+        {waypoints.map((w, i) => {
+          // Skip duplicate-seeded marker at the start (first two coords are identical on first tap).
+          if (i === 1 && waypoints[0] && w.latitude === waypoints[0].latitude && w.longitude === waypoints[0].longitude) {
+            return null;
+          }
+          return (
+            <Marker key={`wp-${i}`} coordinate={w} anchor={{ x: 0.5, y: 0.5 }}>
+              <View style={[styles.wpDot, { backgroundColor: C.primary, borderColor: C.bg }]} />
+            </Marker>
+          );
+        })}
       </MapView>
 
       <View style={[styles.statusBar, { top: insets.top + 56, backgroundColor: C.surface, borderColor: C.borderLight }]}>
         <Text style={[styles.statusTxt, { color: C.text }]}>
-          {waypoints.length === 0 ? "Tap map to start" : `${waypoints.length} point${waypoints.length === 1 ? "" : "s"} · ${miles.toFixed(2)} mi`}
+          {(() => {
+            const n = waypoints.length === 0 ? 0 : waypoints.length - 1;
+            if (n === 0) return "Tap map to start";
+            return `${n} point${n === 1 ? "" : "s"} · ${miles.toFixed(2)} mi`;
+          })()}
         </Text>
         {snapping && <ActivityIndicator size="small" color={C.primary} style={{ marginLeft: 8 }} />}
       </View>
@@ -245,9 +276,9 @@ export default function CreatePathScreen() {
           <Feather name="trash-2" size={20} color={C.text} />
         </Pressable>
         <Pressable
-          style={[styles.finishBtn, { backgroundColor: C.primary, opacity: waypoints.length < 2 ? 0.4 : 1 }]}
+          style={[styles.finishBtn, { backgroundColor: C.primary, opacity: waypoints.length < 3 ? 0.4 : 1 }]}
           onPress={handleFinish}
-          disabled={waypoints.length < 2}
+          disabled={waypoints.length < 3}
         >
           <Text style={[styles.finishTxt, { color: C.bg }]}>Finish · {miles.toFixed(2)} mi</Text>
         </Pressable>
@@ -262,7 +293,7 @@ export default function CreatePathScreen() {
           <View style={{ backgroundColor: C.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 24, paddingBottom: insets.bottom + 24 }}>
           <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 20, color: C.text, marginBottom: 8 }}>Save Path</Text>
           <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 14, color: C.textMuted, marginBottom: 20 }}>
-            {miles.toFixed(2)} miles · {waypoints.length} waypoints. This will be published publicly.
+            {miles.toFixed(2)} miles · {Math.max(0, waypoints.length - 1)} waypoints. This will be published publicly.
           </Text>
           <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textMuted, marginBottom: 6 }}>Name</Text>
           <TextInput

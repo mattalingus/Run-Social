@@ -636,7 +636,9 @@ export default function MapScreen() {
     }
   }, [userLoc, locatedOnce]);
 
+  const currentRegionRef = useRef<Region | null>(null);
   function onRegionChange(r: Region) {
+    currentRegionRef.current = r;
     if (boundsTimer.current) clearTimeout(boundsTimer.current);
     boundsTimer.current = setTimeout(() => {
       setBounds(regionToBounds(r));
@@ -932,7 +934,19 @@ export default function MapScreen() {
                 Alert.alert("Create", undefined, [
                   { text: "Cancel", style: "cancel" },
                   { text: "Event", onPress: () => router.push({ pathname: "/create-run", params: { activityType: activityFilter } }) },
-                  { text: "Path", onPress: () => router.push("/create-path") },
+                  { text: "Path", onPress: () => {
+                      const r = currentRegionRef.current;
+                      if (r) {
+                        router.push({ pathname: "/create-path", params: {
+                          lat: String(r.latitude),
+                          lng: String(r.longitude),
+                          latDelta: String(r.latitudeDelta),
+                          lngDelta: String(r.longitudeDelta),
+                        }});
+                      } else {
+                        router.push("/create-path");
+                      }
+                    } },
                 ]);
               }}
             >
