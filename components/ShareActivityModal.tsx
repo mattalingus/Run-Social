@@ -48,6 +48,7 @@ export interface ShareRunData {
   participantCount?: number;
   finishRank?: number;
   eventTitle?: string;
+  crewName?: string | null;
 }
 
 interface Props {

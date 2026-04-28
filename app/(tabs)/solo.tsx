@@ -15,7 +15,7 @@ import {
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Feather, FontAwesome5, Ionicons } from "@expo/vector-icons";
+import { Feather, FontAwesome5, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Notifications from "@/lib/safeNotifications";
 import * as ImagePicker from "expo-image-picker";
@@ -64,6 +64,7 @@ interface SoloRun {
   source?: string | null;
   garmin_activity_id?: string | null;
   apple_health_id?: string | null;
+  strava_activity_id?: string | null;
   is_route_public?: boolean | null;
   public_route_id?: string | null;
 }
@@ -75,6 +76,7 @@ interface SavedPath {
   distance_miles: number | null;
   created_at: string;
   activity_type?: string | null;
+  activity_types?: string[] | null;
   community_path_id?: string | null;
 }
 
@@ -438,6 +440,37 @@ const RIDE_DISTANCE_CATEGORIES = [
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * Find the best contiguous N-mile segment within a run's per-mile splits.
+ * Returns the average pace (min/mile) over the best window, or null when
+ * splits are missing / the run isn't long enough to contain a window.
+ *
+ * Used by Personal Bests so a longer run still qualifies for shorter
+ * categories: a 2.43-mi run can register a "2 Miles" PB based on the
+ * fastest consecutive 2-mile span inside it, not just total pace.
+ *
+ * For fractional category distances (5K = 3.1 mi, 10K = 6.2 mi) we use
+ * floor(targetMiles) full splits — slightly optimistic by ≤4% but bounded
+ * by the actual run data, which is fine for ranking.
+ */
+function bestSegmentPace(
+  splits: Array<{ paceMinPerMile: number; isPartial: boolean }> | null | undefined,
+  targetMiles: number
+): number | null {
+  if (!splits || splits.length === 0) return null;
+  const fullMilePaces = splits.filter((s) => !s.isPartial).map((s) => s.paceMinPerMile);
+  const window = Math.floor(targetMiles);
+  if (window < 1 || fullMilePaces.length < window) return null;
+  let best = Infinity;
+  for (let i = 0; i + window <= fullMilePaces.length; i++) {
+    let sum = 0;
+    for (let j = 0; j < window; j++) sum += fullMilePaces[i + j];
+    const avg = sum / window;
+    if (avg < best) best = avg;
+  }
+  return Number.isFinite(best) ? best : null;
+}
+
 function formatPace(p: number) {
   let m = Math.floor(p);
   let s = Math.round((p - m) * 60);
@@ -570,6 +603,7 @@ export default function SoloScreen() {
   const sectionListRef = useRef<any>(null);
   const [ghostSoloDone, setGhostSoloDone] = useState(true);
   const [ghostPathDone, setGhostPathDone] = useState(true);
+  const [pbDistanceFilter, setPbDistanceFilter] = useState<string | null>(null);
 
   useEffect(() => {
     if (!walkthroughActive || !currentStepConfig) return;
@@ -721,7 +755,14 @@ export default function SoloScreen() {
 
   const filteredSavedPaths = useMemo(
     () => {
-      const base = savedPaths.filter((p) => (p.activity_type ?? "run") === activityFilter);
+      // Prefer the multi-type `activity_types` array (set from the map view),
+      // fall back to the legacy single `activity_type` if the array is null/empty.
+      const base = savedPaths.filter((p) => {
+        const types = Array.isArray(p.activity_types) && p.activity_types.length > 0
+          ? p.activity_types
+          : [p.activity_type ?? "run"];
+        return types.includes(activityFilter);
+      });
       if (walkthroughActive) {
         try {
           const { getDemoSavedPath } = require("@/lib/walkthroughDemo");
@@ -922,19 +963,41 @@ export default function SoloScreen() {
   const rankings = useMemo<RankingCategory[]>(() => {
     const cats = activityFilter === "ride" ? RIDE_DISTANCE_CATEGORIES : RUN_DISTANCE_CATEGORIES;
     return cats.map((cat) => {
+      // Eligibility: any run whose total distance reaches at least the
+      // category distance (minus tolerance, so a 0.99-mi run still
+      // qualifies for "1 Mile"). Longer runs are now eligible too — the
+      // cap on the upper side that used to exclude a 2.43-mi run from
+      // "2 Miles" is gone.
+      // Pace: when the run is longer than the category, use the best
+      // consecutive N-mile segment from mile_splits if available, falling
+      // back to total pace otherwise. Ride uses splits the same way (each
+      // split is 1 mile) — speed conversion happens at sort time.
       const qualifying = completedRuns
-        .filter((r) => Math.abs(r.distance_miles - cat.miles) <= cat.tolerance)
+        .filter((r) => r.distance_miles >= cat.miles - cat.tolerance)
+        .map((r) => {
+          const totalPace = r.pace_min_per_mile ?? null;
+          // Only use segment pace when the run is materially longer than
+          // the category — otherwise total pace IS the segment pace.
+          const useSegment = r.distance_miles > cat.miles + 0.05;
+          const segPace = useSegment
+            ? bestSegmentPace(r.mile_splits as any, cat.miles)
+            : null;
+          const pbPace = segPace ?? totalPace;
+          const pbDist = segPace != null ? cat.miles : r.distance_miles;
+          return { ...r, _pbPace: pbPace, _pbDist: pbDist, _pbViaSegment: segPace != null };
+        })
+        .filter((r) => r._pbPace != null && r._pbPace > 0)
         .sort((a, b) => {
           if (activityFilter === "ride") {
             // Rank by avg speed (mph) descending — higher speed = better rank
-            const speedA = a.pace_min_per_mile && a.pace_min_per_mile > 0 ? 60 / a.pace_min_per_mile : 0;
-            const speedB = b.pace_min_per_mile && b.pace_min_per_mile > 0 ? 60 / b.pace_min_per_mile : 0;
+            const speedA = a._pbPace! > 0 ? 60 / a._pbPace! : 0;
+            const speedB = b._pbPace! > 0 ? 60 / b._pbPace! : 0;
             return speedB - speedA;
           }
           // Run/walk: rank by pace ascending — lower min/mi = better rank
-          return (a.pace_min_per_mile ?? 99) - (b.pace_min_per_mile ?? 99);
+          return (a._pbPace ?? 99) - (b._pbPace ?? 99);
         });
-      return qualifying.length > 0 ? { ...cat, runs: qualifying } : null;
+      return qualifying.length > 0 ? { ...cat, runs: qualifying as any } : null;
     }).filter(Boolean) as RankingCategory[];
   }, [completedRuns, activityFilter]);
 
@@ -1094,6 +1157,11 @@ export default function SoloScreen() {
                 {(run.source === "apple_health" || run.apple_health_id) && (
                   <View style={[s.sourceBadge, { backgroundColor: "#FF3B3022" }]}>
                     <Ionicons name="heart" size={9} color="#FF3B30" />
+                  </View>
+                )}
+                {(run.source === "strava" || run.strava_activity_id) && (
+                  <View style={[s.sourceBadge, { backgroundColor: "#FC4C0222" }]}>
+                    <FontAwesome5 name="strava" size={9} color="#FC4C02" />
                   </View>
                 )}
               </View>
@@ -1328,7 +1396,7 @@ export default function SoloScreen() {
           style={[s.activityPill, activityFilter === "run" && s.activityPillActive]}
           onPress={() => { setActivityFilter("run"); Haptics.selectionAsync(); }}
         >
-          <Ionicons name="body" size={14} color={activityFilter === "run" ? C.bg : C.textMuted} />
+          <MaterialCommunityIcons name="run-fast" size={16} color={activityFilter === "run" ? C.bg : C.textMuted} />
           <Text style={[s.activityPillTxt, activityFilter === "run" && s.activityPillTxtActive]}>Runs</Text>
         </Pressable>
         <Pressable
@@ -1447,7 +1515,7 @@ export default function SoloScreen() {
           <View style={[s.goalSection, { borderTopWidth: 1, borderTopColor: C.border, paddingTop: 14, marginTop: 4 }]}>
             <View style={s.goalRow}>
               <View style={s.goalLabelRow}>
-                <Ionicons name="body" size={14} color={C.orange} />
+                <MaterialCommunityIcons name="run-fast" size={14} color={C.orange} />
                 <Text style={s.goalLabel}>Avg Pace Goal</Text>
               </View>
               <Text style={s.goalValues}>
@@ -1489,7 +1557,7 @@ export default function SoloScreen() {
 
         {/* ─── Scheduled Runs ──────────────────────────────────────────── */}
         {scheduledRuns.length > 0 && (
-          <View style={[s.section, { marginTop: 5 }]}>
+          <View style={[s.section, { marginTop: 18 }]}>
             <Text style={s.sectionTitle}>{activityFilter === "ride" ? "Scheduled Rides" : activityFilter === "walk" ? "Scheduled Walks" : "Scheduled Runs"}</Text>
             {scheduledRuns.map((run) => {
               const scheduledActLabel = run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run";
@@ -1534,7 +1602,7 @@ export default function SoloScreen() {
 
         {/* ─── Ghost Saved Path (first-run) ─────────────────────────────── */}
         {filteredSavedPaths.length === 0 && !ghostPathDone && (
-          <View style={[s.section, { marginTop: 5 }]}>
+          <View style={[s.section, { marginTop: 18 }]}>
             <Text style={s.sectionTitle}>Saved Paths</Text>
             <View style={s.ghostPathCard}>
               <View style={s.ghostPathIconWrap}>
@@ -1552,78 +1620,121 @@ export default function SoloScreen() {
         {/* ─── Saved Paths ──────────────────────────────────────────────── */}
         {filteredSavedPaths.length > 0 && (
           <WalkthroughPulse stepId="saved-paths" style={{ borderRadius: 14 }}>
-          <View style={[s.section, { marginTop: 5 }]}>
+          <View style={[s.section, { marginTop: 18 }]}>
             <Text style={s.sectionTitle}>Saved Paths</Text>
-            {filteredSavedPaths.map((path) => (
-              <Pressable
-                key={path.id}
-                style={({ pressed }) => [s.savedPathCard, { opacity: pressed ? 0.85 : 1 }]}
-                onPress={() => {
-                  if ((path as any).__demo) return;
-                  Haptics.selectionAsync(); setSelectedSavedPath(path); setPathRunMode((path.activity_type ?? "run") as "run" | "ride" | "walk");
-                }}
-                onLongPress={() => {
-                  if ((path as any).__demo) return;
-                  Alert.alert(
-                    "Delete Path",
-                    `Delete "${path.name}"? This won't delete your activity history.`,
-                    [
-                      { text: "Cancel", style: "cancel" },
-                      { text: "Delete", style: "destructive", onPress: () => deletePathMutation.mutate(path.id) },
-                    ]
-                  );
-                }}
+            <View style={s.savedPathsWrap}>
+              <ScrollView
+                style={filteredSavedPaths.length > 3 ? { maxHeight: 252 } : undefined}
+                nestedScrollEnabled
+                showsVerticalScrollIndicator={filteredSavedPaths.length > 3}
               >
-                <View style={s.savedPathIconWrap}>
-                  <Feather name="map" size={16} color={C.primary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.savedPathName} numberOfLines={1}>{path.name}</Text>
-                  {path.distance_miles != null && (
-                    <Text style={s.savedPathMeta}>{toDisplayDist(path.distance_miles ?? 0, distUnit)}</Text>
-                  )}
-                </View>
-                <Feather name="chevron-right" size={18} color={C.primary} />
-              </Pressable>
-            ))}
+                {filteredSavedPaths.map((path, idx) => (
+                  <Pressable
+                    key={path.id}
+                    style={({ pressed }) => [
+                      s.savedPathCard,
+                      { opacity: pressed ? 0.85 : 1 },
+                      idx === filteredSavedPaths.length - 1 && { marginBottom: 0 },
+                    ]}
+                    onPress={() => {
+                      if ((path as any).__demo) return;
+                      Haptics.selectionAsync(); setSelectedSavedPath(path); setPathRunMode((path.activity_type ?? "run") as "run" | "ride" | "walk");
+                    }}
+                    onLongPress={() => {
+                      if ((path as any).__demo) return;
+                      Alert.alert(
+                        "Delete Path",
+                        `Delete "${path.name}"? This won't delete your activity history.`,
+                        [
+                          { text: "Cancel", style: "cancel" },
+                          { text: "Delete", style: "destructive", onPress: () => deletePathMutation.mutate(path.id) },
+                        ]
+                      );
+                    }}
+                  >
+                    <View style={s.savedPathIconWrap}>
+                      <Feather name="map" size={16} color={C.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.savedPathName} numberOfLines={1}>{path.name}</Text>
+                      {path.distance_miles != null && (
+                        <Text style={s.savedPathMeta}>{toDisplayDist(path.distance_miles ?? 0, distUnit)}</Text>
+                      )}
+                    </View>
+                    <Feather name="chevron-right" size={18} color={C.primary} />
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
           </View>
           </WalkthroughPulse>
         )}
 
-        {/* ─── Rankings ────────────────────────────────────────────────── */}
+        {/* ─── Personal Bests ───────────────────────────────────────────── */}
         {rankings.length > 0 && (
           <View style={[s.section, { marginTop: 16 }]}>
-            <Text style={s.sectionTitle}>Performance Rankings</Text>
-            {rankings.map((cat) => (
+            <Text style={s.sectionTitle}>Personal Bests</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 8, paddingBottom: 12 }}
+              style={{ marginBottom: 4 }}
+            >
+              <Pressable
+                onPress={() => { setPbDistanceFilter(null); Haptics.selectionAsync(); }}
+                style={[s.pbToggle, pbDistanceFilter === null && s.pbToggleActive]}
+              >
+                <Text style={[s.pbToggleTxt, pbDistanceFilter === null && s.pbToggleTxtActive]}>All</Text>
+              </Pressable>
+              {(activityFilter === "ride" ? RIDE_DISTANCE_CATEGORIES : RUN_DISTANCE_CATEGORIES).map((cat) => {
+                const active = pbDistanceFilter === cat.label;
+                return (
+                  <Pressable
+                    key={cat.label}
+                    onPress={() => { setPbDistanceFilter(active ? null : cat.label); Haptics.selectionAsync(); }}
+                    style={[s.pbToggle, active && s.pbToggleActive]}
+                  >
+                    <Text style={[s.pbToggleTxt, active && s.pbToggleTxtActive]}>{cat.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+            {rankings.filter((c) => !pbDistanceFilter || c.label === pbDistanceFilter).map((cat) => {
+              // _pbPace / _pbDist hold the value used for ranking — segment
+              // pace + segment distance when the run was longer than the
+              // category, total pace + total distance otherwise.
+              const top = cat.runs[0] as any;
+              return (
               <View key={cat.label} style={s.rankCard}>
                 <View style={s.rankHeader}>
                   <Text style={s.rankCategory}>{cat.label}</Text>
                   <Text style={s.rankBest}>
-                    Best: {cat.runs[0].pace_min_per_mile
-                      ? (cat.runs[0].activity_type === "ride"
-                          ? toDisplaySpeed(cat.runs[0].pace_min_per_mile, distUnit)
-                          : toDisplayPace(cat.runs[0].pace_min_per_mile, distUnit))
+                    Best: {top._pbPace
+                      ? (top.activity_type === "ride"
+                          ? toDisplaySpeed(top._pbPace, distUnit)
+                          : toDisplayPace(top._pbPace, distUnit))
                       : "—"}
                   </Text>
                 </View>
-                {cat.runs.slice(0, 3).map((run, i) => (
+                {cat.runs.slice(0, 3).map((run: any, i: number) => (
                   <View key={run.id} style={s.rankRow}>
                     <View style={s.rankEmoji}>
                       <MedalBadge rank={(i + 1) as 1 | 2 | 3} size="sm" />
                     </View>
                     <Text style={s.rankDate}>{formatDisplayDate(run.date)}</Text>
-                    <Text style={s.rankDist}>{toDisplayDist(run.distance_miles, distUnit)}</Text>
+                    <Text style={s.rankDist}>{toDisplayDist(run._pbDist ?? run.distance_miles, distUnit)}</Text>
                     <Text style={s.rankPace}>
-                      {run.pace_min_per_mile
+                      {run._pbPace
                         ? (run.activity_type === "ride"
-                            ? toDisplaySpeed(run.pace_min_per_mile, distUnit)
-                            : toDisplayPace(run.pace_min_per_mile, distUnit))
+                            ? toDisplaySpeed(run._pbPace, distUnit)
+                            : toDisplayPace(run._pbPace, distUnit))
                         : "—"}
                     </Text>
                   </View>
                 ))}
               </View>
-            ))}
+              );
+            })}
           </View>
         )}
 
@@ -1735,6 +1846,15 @@ export default function SoloScreen() {
               </View>
             )}
           </>
+        )}
+        {/* Strava attribution: required by Strava Brand Guidelines whenever Strava data is displayed. */}
+        {showHistory && displayedRuns.some((r) => r.source === "strava" || r.strava_activity_id) && (
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 12, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.border }}>
+            <FontAwesome5 name="strava" size={10} color="#FC4C02" />
+            <Text style={{ fontFamily: "Outfit_500Medium", fontSize: 10, color: C.textMuted, letterSpacing: 0.5 }}>
+              POWERED BY STRAVA
+            </Text>
+          </View>
         )}
         </View>
       </View>
@@ -2865,6 +2985,27 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   },
   deleteScheduledTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.textMuted },
 
+  pbToggle: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.surface,
+  },
+  pbToggleActive: {
+    backgroundColor: C.primary,
+    borderColor: C.primary,
+  },
+  pbToggleTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary },
+  pbToggleTxtActive: { color: "#fff" },
+  savedPathsWrap: {
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 16,
+    backgroundColor: C.card,
+    padding: 10,
+  },
   savedPathCard: {
     backgroundColor: C.surface,
     borderRadius: 14,

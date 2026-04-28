@@ -177,6 +177,7 @@ export async function initDb() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS goal_period VARCHAR DEFAULT 'monthly';
     ALTER TABLE users ADD COLUMN IF NOT EXISTS push_token TEXT DEFAULT NULL;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS name_changed_at TIMESTAMPTZ DEFAULT NULL;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS username_change_count INT DEFAULT 0;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS distance_unit VARCHAR DEFAULT 'miles';
     ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_privacy VARCHAR DEFAULT 'public';
     ALTER TABLE users ADD COLUMN IF NOT EXISTS notif_run_reminders BOOLEAN DEFAULT true;
@@ -347,6 +348,7 @@ export async function initDb() {
     );
 
     ALTER TABLE runs ADD COLUMN IF NOT EXISTS crew_id VARCHAR REFERENCES crews(id) ON DELETE SET NULL;
+    ALTER TABLE runs ADD COLUMN IF NOT EXISTS crew_vibe VARCHAR(30) DEFAULT NULL;
     ALTER TABLE crews ADD COLUMN IF NOT EXISTS run_style TEXT DEFAULT NULL;
     ALTER TABLE crews ADD COLUMN IF NOT EXISTS tags TEXT[] DEFAULT '{}';
 
@@ -368,6 +370,18 @@ export async function initDb() {
       joined_at TIMESTAMP DEFAULT NOW(),
       UNIQUE(crew_id, user_id)
     );
+
+    CREATE TABLE IF NOT EXISTS crew_goals (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      crew_id VARCHAR NOT NULL REFERENCES crews(id) ON DELETE CASCADE,
+      activity_type TEXT NOT NULL DEFAULT 'all',
+      weekly_target_miles REAL,
+      monthly_target_miles REAL,
+      updated_by VARCHAR REFERENCES users(id),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(crew_id, activity_type)
+    );
+    CREATE INDEX IF NOT EXISTS idx_crew_goals_crew ON crew_goals(crew_id);
 
     CREATE TABLE IF NOT EXISTS crew_messages (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -414,6 +428,7 @@ export async function initDb() {
     ALTER TABLE crew_messages ADD COLUMN IF NOT EXISTS message_type TEXT DEFAULT 'text';
     ALTER TABLE crew_messages ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT NULL;
     ALTER TABLE crew_members ADD COLUMN IF NOT EXISTS chat_muted BOOLEAN DEFAULT false;
+    ALTER TABLE crew_members ADD COLUMN IF NOT EXISTS chat_last_read_at TIMESTAMPTZ DEFAULT NULL;
     ALTER TABLE crew_members ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'member';
     ALTER TABLE crews ADD COLUMN IF NOT EXISTS streak_risk_notif_week INTEGER DEFAULT NULL;
     -- Promote existing crew creators to crew_chief
@@ -443,6 +458,11 @@ export async function initDb() {
     );
     ALTER TABLE users ADD COLUMN IF NOT EXISTS garmin_access_token TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS garmin_token_secret TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS strava_athlete_id TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS strava_access_token TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS strava_refresh_token TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS strava_expires_at TIMESTAMPTZ;
+    ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS strava_activity_id TEXT UNIQUE;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS apple_health_connected BOOLEAN DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS health_connect_connected BOOLEAN DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_complete BOOLEAN DEFAULT true;
@@ -481,9 +501,80 @@ export async function initDb() {
         ALTER TABLE crews ADD COLUMN IF NOT EXISTS last_run_week TIMESTAMP DEFAULT NULL;
         ALTER TABLE crews ADD COLUMN IF NOT EXISTS home_metro TEXT DEFAULT NULL;
         ALTER TABLE crews ADD COLUMN IF NOT EXISTS home_state TEXT DEFAULT NULL;
+        -- getSuggestedCrews reads these off the users row to weight metro/state matches.
+        -- Without the migration, /api/crews/suggested throws "column home_metro does not exist"
+        -- and the Discover/Crews feed silently shows empty to the user.
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS home_metro TEXT DEFAULT NULL;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS home_state TEXT DEFAULT NULL;
         ALTER TABLE crews ADD COLUMN IF NOT EXISTS last_overtake_notif_at TIMESTAMP DEFAULT NULL;
         ALTER TABLE crews ADD COLUMN IF NOT EXISTS subscription_tier TEXT DEFAULT 'none';
         ALTER TABLE crews ADD COLUMN IF NOT EXISTS member_cap_override INTEGER DEFAULT NULL;
+        -- Soft-delete safeguard. Crews are NEVER hard-deleted anymore — three paths
+        -- (leave-as-last-member, chief-cascade-empty, explicit-disband) previously
+        -- ran a hard DELETE on crews with no audit trail or restore path, which is how
+        -- the "Founders" crew vanished during a failed hosted-start flow. A row with
+        -- disbanded_at IS NOT NULL is hidden from every query but can be recovered.
+        ALTER TABLE crews ADD COLUMN IF NOT EXISTS disbanded_at TIMESTAMPTZ DEFAULT NULL;
+        ALTER TABLE crews ADD COLUMN IF NOT EXISTS disbanded_by VARCHAR REFERENCES users(id) ON DELETE SET NULL;
+        ALTER TABLE crews ADD COLUMN IF NOT EXISTS disbanded_reason TEXT DEFAULT NULL;
+        CREATE INDEX IF NOT EXISTS idx_crews_not_disbanded ON crews(id) WHERE disbanded_at IS NULL;
+
+        -- One-time crew name change for the chief. Image edits are unlimited;
+        -- name edits are gated by name_change_count < 1 in the PATCH route.
+        ALTER TABLE crews ADD COLUMN IF NOT EXISTS name_change_count INTEGER DEFAULT 0;
+
+        -- Multi-sport events: a single event card can be both a Run AND a Walk
+        -- (or any combination of run/ride/walk). The legacy single activity_type
+        -- column stays as the primary for back-compat; the activity_types array
+        -- is the canonical multi-value field used for filtering, card icon
+        -- stack, and per-activity pace groups.
+        ALTER TABLE runs ADD COLUMN IF NOT EXISTS activity_types TEXT[];
+        ALTER TABLE run_participants ADD COLUMN IF NOT EXISTS activity_type TEXT;
+
+        -- T2.14: host-end grace period. When the host taps "End for Everyone",
+        -- we set this timestamp 60s in the future. Until then, runner-finish
+        -- calls are still accepted; the late-start monitor picks up runs with
+        -- pending_end_at < NOW() and seals them via forceCompleteRun.
+        ALTER TABLE runs ADD COLUMN IF NOT EXISTS pending_end_at TIMESTAMPTZ;
+
+        -- T3.10: second pre-run reminder, 5 min out (the 30-min reminder uses
+        -- the existing notif_pre_run_sent flag).
+        ALTER TABLE runs ADD COLUMN IF NOT EXISTS notif_pre_run_5_sent BOOLEAN DEFAULT FALSE;
+
+        -- T2.2 Mode B (chain/stages multi-sport). When set, the event is a
+        -- sequence of stages each participant runs through manually
+        -- ("Start Run" → finish → "Start Ride" → finish → ...). Schema:
+        --   stages: [{activityType:'run'|'ride'|'walk', distanceMiles:num, minPace:num, maxPace:num}]
+        -- Single shared pace-group set still applies (runs.pace_groups).
+        -- Stage 0 is the first; participants advance manually.
+        ALTER TABLE runs ADD COLUMN IF NOT EXISTS stages JSONB;
+        ALTER TABLE run_participants ADD COLUMN IF NOT EXISTS stage_splits JSONB;
+
+        -- Persisted pace-group labels per crew. When the chief renames "Group A"
+        -- to "Chill" on an event, the label is remembered and pre-fills the next
+        -- event's create form for that crew (position 0 = first group, etc.).
+        CREATE TABLE IF NOT EXISTS crew_pace_group_labels (
+          crew_id      VARCHAR NOT NULL REFERENCES crews(id) ON DELETE CASCADE,
+          position     INTEGER NOT NULL,
+          label        TEXT NOT NULL,
+          updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (crew_id, position)
+        );
+
+        -- Soft-delete safeguard for user accounts. Same reasoning as crews —
+        -- a year's worth of runs, friendships, achievements, crew chat, hosted
+        -- events cannot be un-done if deleteUser() cascades. We now scrub login
+        -- PII (email, password, push_token, oauth subs) but keep the row +
+        -- every relational record (runs, participants, messages, memberships)
+        -- intact. A row with deleted_at IS NOT NULL is treated as non-existent
+        -- by auth lookups (getUserByEmail/Username/Id) so the account cannot
+        -- sign back in, but restoreUser(userId) can reattach everything within
+        -- the retention window.
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ DEFAULT NULL;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_reason TEXT DEFAULT NULL;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS pre_delete_email TEXT DEFAULT NULL;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS pre_delete_username TEXT DEFAULT NULL;
+        CREATE INDEX IF NOT EXISTS idx_users_not_deleted ON users(id) WHERE deleted_at IS NULL;
 
     CREATE TABLE IF NOT EXISTS password_reset_tokens (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -516,6 +607,15 @@ export async function initDb() {
     );
     CREATE INDEX IF NOT EXISTS idx_user_blocks_blocker ON user_blocks(blocker_id);
     CREATE INDEX IF NOT EXISTS idx_user_blocks_blocked ON user_blocks(blocked_id);
+
+    -- Hot-path index for live-run state. The lateral subquery in
+    -- getLiveRunState() filters by (run_id, user_id) and orders by
+    -- recorded_at DESC; without this composite index Postgres falls
+    -- back to a sort over the entire run's points. Becomes the
+    -- difference between sub-100ms and multi-second response times
+    -- once a run has 50k+ tracking points (e.g. 200-person events).
+    CREATE INDEX IF NOT EXISTS idx_run_tracking_points_run_user_recorded
+      ON run_tracking_points (run_id, user_id, recorded_at DESC);
 
     CREATE TABLE IF NOT EXISTS path_shares (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -924,57 +1024,70 @@ export async function getNotifications(userId: string) {
     [userId]
   );
 
-  // Recent distance PRs (within 72h, must beat a prior run)
+  // T1.4: PRs sourced from BOTH solo runs and group-run participations.
+  // We build a combined view of (id, distance, pace, activity_type, date)
+  // and run the existing PR logic against it.
+  // Distance PRs (within 72h, must beat a prior run of any type)
   const distPRs = await pool.query(
-    `SELECT sr.id, sr.distance_miles, sr.date, sr.activity_type
-     FROM solo_runs sr
-     WHERE sr.user_id = $1
-       AND sr.completed = true
-       AND sr.is_deleted IS NOT TRUE
-       AND NOT EXISTS (SELECT 1 FROM run_notification_hidden rnh WHERE rnh.user_id = $1 AND rnh.run_id = sr.id)
-       AND sr.date >= NOW() - INTERVAL '72 hours'
-       AND EXISTS (
-         SELECT 1 FROM solo_runs s3
-         WHERE s3.user_id = $1 AND s3.completed = true
-           AND s3.is_deleted IS NOT TRUE AND s3.id != sr.id AND s3.date < sr.date
-       )
-       AND sr.distance_miles > COALESCE((
-         SELECT MAX(s2.distance_miles) FROM solo_runs s2
-         WHERE s2.user_id = $1 AND s2.completed = true
-           AND s2.is_deleted IS NOT TRUE AND s2.id != sr.id AND s2.date < sr.date
-       ), 0)
-     ORDER BY sr.date DESC
-     LIMIT 1`,
+    `WITH all_runs AS (
+       SELECT sr.id::text AS id, sr.distance_miles AS dist, sr.pace_min_per_mile AS pace, sr.activity_type, sr.date
+         FROM solo_runs sr
+        WHERE sr.user_id = $1 AND sr.completed = true AND sr.is_deleted IS NOT TRUE
+       UNION ALL
+       SELECT rp.id::text AS id, rp.final_distance AS dist, rp.final_pace AS pace, r.activity_type, COALESCE(r.started_at, r.date) AS date
+         FROM run_participants rp
+         JOIN runs r ON r.id = rp.run_id
+        WHERE rp.user_id = $1 AND rp.final_distance IS NOT NULL AND rp.final_distance > 0
+          AND r.is_completed = true AND r.is_deleted IS NOT TRUE
+     )
+     SELECT a.id, a.dist AS distance_miles, a.date, a.activity_type
+       FROM all_runs a
+      WHERE a.date >= NOW() - INTERVAL '72 hours'
+        AND a.dist IS NOT NULL
+        AND EXISTS (SELECT 1 FROM all_runs b WHERE b.id != a.id AND b.date < a.date)
+        AND a.dist > COALESCE((SELECT MAX(b.dist) FROM all_runs b WHERE b.id != a.id AND b.date < a.date), 0)
+        AND NOT EXISTS (
+          SELECT 1 FROM run_notification_hidden rnh
+           WHERE rnh.user_id = $1 AND rnh.run_id = a.id
+        )
+      ORDER BY a.date DESC
+      LIMIT 1`,
     [userId]
   );
 
-  // Recent pace PRs (within 72h, must beat a prior qualifying run)
+  // Pace PRs (within 72h, must beat a prior qualifying run; ≥0.5mi, ≥2.0min/mi)
   const pacePRs = await pool.query(
-    `SELECT sr.id, sr.pace_min_per_mile, sr.date, sr.activity_type
-     FROM solo_runs sr
-     WHERE sr.user_id = $1
-       AND sr.completed = true
-       AND sr.is_deleted IS NOT TRUE
-       AND NOT EXISTS (SELECT 1 FROM run_notification_hidden rnh WHERE rnh.user_id = $1 AND rnh.run_id = sr.id)
-       AND sr.distance_miles > 0.5
-       AND sr.pace_min_per_mile >= 2.0
-       AND sr.date >= NOW() - INTERVAL '72 hours'
-       AND EXISTS (
-         SELECT 1 FROM solo_runs s3
-         WHERE s3.user_id = $1 AND s3.completed = true
-           AND s3.is_deleted IS NOT TRUE AND s3.id != sr.id
-           AND s3.distance_miles > 0.5 AND s3.pace_min_per_mile >= 2.0
-           AND s3.date < sr.date
-       )
-       AND sr.pace_min_per_mile < COALESCE((
-         SELECT MIN(s2.pace_min_per_mile) FROM solo_runs s2
-         WHERE s2.user_id = $1 AND s2.completed = true
-           AND s2.is_deleted IS NOT TRUE AND s2.id != sr.id
-           AND s2.distance_miles > 0.5 AND s2.pace_min_per_mile >= 2.0
-           AND s2.date < sr.date
-       ), 999)
-     ORDER BY sr.date DESC
-     LIMIT 1`,
+    `WITH all_runs AS (
+       SELECT sr.id::text AS id, sr.distance_miles AS dist, sr.pace_min_per_mile AS pace, sr.activity_type, sr.date
+         FROM solo_runs sr
+        WHERE sr.user_id = $1 AND sr.completed = true AND sr.is_deleted IS NOT TRUE
+       UNION ALL
+       SELECT rp.id::text AS id, rp.final_distance AS dist, rp.final_pace AS pace, r.activity_type, COALESCE(r.started_at, r.date) AS date
+         FROM run_participants rp
+         JOIN runs r ON r.id = rp.run_id
+        WHERE rp.user_id = $1 AND rp.final_distance IS NOT NULL AND rp.final_distance > 0
+          AND r.is_completed = true AND r.is_deleted IS NOT TRUE
+     )
+     SELECT a.id, a.pace AS pace_min_per_mile, a.date, a.activity_type
+       FROM all_runs a
+      WHERE a.date >= NOW() - INTERVAL '72 hours'
+        AND a.pace IS NOT NULL AND a.pace >= 2.0 AND a.dist > 0.5
+        AND EXISTS (
+          SELECT 1 FROM all_runs b
+           WHERE b.id != a.id AND b.date < a.date
+             AND b.dist > 0.5 AND b.pace >= 2.0
+        )
+        AND a.pace < COALESCE((
+          SELECT MIN(b.pace) FROM all_runs b
+           WHERE b.id != a.id AND b.date < a.date
+             AND b.dist > 0.5 AND b.pace >= 2.0
+        ), 999)
+        AND NOT EXISTS (
+          SELECT 1 FROM run_notification_hidden rnh
+           WHERE rnh.user_id = $1 AND rnh.run_id = a.id
+        )
+      ORDER BY a.date DESC
+      LIMIT 1`,
     [userId]
   );
 
@@ -1263,7 +1376,7 @@ export async function isRunParticipant(runId: string, userId: string): Promise<b
 }
 
 export async function getUserByUsername(username: string) {
-  const res = await pool.query(`SELECT * FROM users WHERE LOWER(username) = LOWER($1)`, [username]);
+  const res = await pool.query(`SELECT * FROM users WHERE LOWER(username) = LOWER($1) AND deleted_at IS NULL`, [username]);
   return res.rows[0] || null;
 }
 
@@ -1283,12 +1396,17 @@ export async function createUser(data: { email: string; password: string; name: 
 }
 
 export async function getUserByEmail(email: string) {
-  const result = await pool.query(`SELECT * FROM users WHERE email = $1`, [email.toLowerCase()]);
+  const result = await pool.query(`SELECT * FROM users WHERE email = $1 AND deleted_at IS NULL`, [email.toLowerCase()]);
   return result.rows[0] || null;
 }
 
 export async function getUserById(id: string) {
-  const result = await pool.query(`SELECT * FROM users WHERE id = $1`, [id]);
+  // Auth/identity lookup — soft-deleted users are treated as non-existent so
+  // they cannot resume a session or be fetched by any caller that relies on
+  // this function. Past content they authored stays in the DB and is still
+  // readable via direct JOINs (e.g. run participants, crew messages) — we
+  // just don't resolve the user row through the identity path anymore.
+  const result = await pool.query(`SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL`, [id]);
   return result.rows[0] || null;
 }
 
@@ -1390,20 +1508,43 @@ export async function createRun(data: {
   runStyle?: string;
   activityType?: string;
   crewId?: string;
+  crewVibe?: string | null;
   savedPathId?: string | null;
   paceGroups?: { label: string; minPace: number; maxPace: number }[] | null;
   timezone?: string;
+  activityTypes?: string[] | null;
+  stages?: { activityType: string; distanceMiles?: number; minPace?: number; maxPace?: number }[] | null;
 }) {
   const inviteToken = data.privacy === "private"
     ? Math.random().toString(36).substring(2, 10).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase()
     : null;
   const activityType = data.activityType === "ride" ? "ride" : data.activityType === "walk" ? "walk" : "run";
+  // Sanitize activity_types: only allow run/walk/ride, dedupe, ensure primary is included.
+  const validTypes = ["run", "walk", "ride"];
+  const incomingTypes = Array.isArray(data.activityTypes) ? data.activityTypes : [];
+  const cleaned = Array.from(new Set([activityType, ...incomingTypes.filter((t) => validTypes.includes(t))]));
+  // Only persist activity_types if it's truly multi-type; single-type events keep activity_types NULL for back-compat.
+  const activityTypesArr = cleaned.length > 1 ? cleaned : null;
   const paceGroupsJson = data.paceGroups && data.paceGroups.length > 0 ? JSON.stringify(data.paceGroups) : null;
   const timezone = typeof data.timezone === "string" && data.timezone.length > 0 ? data.timezone : null;
+  // Sanitize stages: capped at 3, must have valid activityType
+  let stagesJson: string | null = null;
+  if (Array.isArray(data.stages) && data.stages.length > 0) {
+    const stagesClean = data.stages
+      .filter((s) => validTypes.includes(s?.activityType))
+      .slice(0, 3)
+      .map((s) => ({
+        activityType: s.activityType,
+        distanceMiles: typeof s.distanceMiles === "number" && s.distanceMiles > 0 ? s.distanceMiles : null,
+        minPace: typeof s.minPace === "number" && s.minPace > 0 ? s.minPace : null,
+        maxPace: typeof s.maxPace === "number" && s.maxPace > 0 ? s.maxPace : null,
+      }));
+    if (stagesClean.length > 0) stagesJson = JSON.stringify(stagesClean);
+  }
   const result = await pool.query(
-    `INSERT INTO runs (host_id, title, description, privacy, date, location_lat, location_lng, location_name, min_distance, max_distance, min_pace, max_pace, tags, max_participants, invite_token, invite_password, is_strict, run_style, activity_type, crew_id, saved_path_id, pace_groups, timezone)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23) RETURNING *`,
-    [data.hostId, data.title, data.description || null, data.privacy, data.date, data.locationLat, data.locationLng, data.locationName, data.minDistance, data.maxDistance, data.minPace, data.maxPace, data.tags, data.maxParticipants, inviteToken, data.invitePassword || null, data.isStrict ?? false, data.runStyle || null, activityType, data.crewId || null, data.savedPathId || null, paceGroupsJson, timezone]
+    `INSERT INTO runs (host_id, title, description, privacy, date, location_lat, location_lng, location_name, min_distance, max_distance, min_pace, max_pace, tags, max_participants, invite_token, invite_password, is_strict, run_style, activity_type, crew_id, saved_path_id, pace_groups, timezone, crew_vibe, activity_types, stages)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26) RETURNING *`,
+    [data.hostId, data.title, data.description || null, data.privacy, data.date, data.locationLat, data.locationLng, data.locationName, data.minDistance, data.maxDistance, data.minPace, data.maxPace, data.tags, data.maxParticipants, inviteToken, data.invitePassword || null, data.isStrict ?? false, data.runStyle || null, activityType, data.crewId || null, data.savedPathId || null, paceGroupsJson, timezone, data.crewId ? (data.crewVibe && data.crewVibe.trim() ? data.crewVibe.trim().slice(0, 30) : null) : null, activityTypesArr, stagesJson]
   );
   return result.rows[0];
 }
@@ -1563,7 +1704,12 @@ export async function getFriendPrivateRuns(userId: string, bounds?: { swLat: num
   WHERE r.privacy = 'private' AND r.date > NOW() AND r.is_completed = false
     AND f.status = 'accepted' AND r.host_id != $1
     AND r.id NOT IN (SELECT run_id FROM run_invites WHERE invitee_id = $1)
-    AND r.crew_id IS NULL`;
+    AND r.crew_id IS NULL
+    AND r.host_id NOT IN (
+      SELECT blocked_id FROM user_blocks WHERE blocker_id = $1
+      UNION
+      SELECT blocker_id FROM user_blocks WHERE blocked_id = $1
+    )`;
   const params: any[] = [userId];
   let idx = 2;
   if (bounds) {
@@ -1583,7 +1729,12 @@ export async function getInvitedPrivateRuns(userId: string, bounds?: { swLat: nu
   FROM runs r
   JOIN users u ON u.id = r.host_id
   JOIN run_invites ri ON ri.run_id = r.id AND ri.invitee_id = $1
-  WHERE r.privacy = 'private' AND r.date > NOW() AND r.is_completed = false AND r.crew_id IS NULL`;
+  WHERE r.privacy = 'private' AND r.date > NOW() AND r.is_completed = false AND r.crew_id IS NULL
+    AND r.host_id NOT IN (
+      SELECT blocked_id FROM user_blocks WHERE blocker_id = $1
+      UNION
+      SELECT blocker_id FROM user_blocks WHERE blocked_id = $1
+    )`;
   const params: any[] = [userId];
   let idx = 2;
   if (bounds) {
@@ -1635,7 +1786,12 @@ export async function getCrewVisibleRuns(userId: string, bounds?: { swLat: numbe
     JOIN users u ON u.id = r.host_id
     JOIN crew_members cm ON cm.crew_id = r.crew_id AND cm.user_id = $1 AND cm.status = 'member'
     LEFT JOIN crews c ON c.id = r.crew_id
-    WHERE r.crew_id IS NOT NULL AND (r.is_active = true OR r.date > NOW() - INTERVAL '90 minutes') AND r.is_completed = false`;
+    WHERE r.crew_id IS NOT NULL AND (r.is_active = true OR r.date > NOW() - INTERVAL '90 minutes') AND r.is_completed = false
+      AND r.host_id NOT IN (
+        SELECT blocked_id FROM user_blocks WHERE blocker_id = $1
+        UNION
+        SELECT blocker_id FROM user_blocks WHERE blocked_id = $1
+      )`;
   const params: any[] = [userId];
   query += ` ORDER BY r.date ASC LIMIT 100`;
   const result = await pool.query(query, params);
@@ -2134,17 +2290,9 @@ export async function joinRun(runId: string, userId: string, paceGroupLabel?: st
     );
     if (existing.rows.length > 0) {
       if (existing.rows[0].status === "cancelled") {
-        // Capacity check before re-activating a cancelled participant
-        if (maxP !== null) {
-          const countRes = await client.query(
-            `SELECT COUNT(*) FROM run_participants WHERE run_id = $1 AND status IN ('joined', 'confirmed')`,
-            [runId]
-          );
-          if (parseInt(countRes.rows[0].count, 10) >= maxP) {
-            await client.query('ROLLBACK');
-            throw new Error("EVENT_FULL");
-          }
-        }
+        // T1.5: max_participants is a suggestion, NOT a hard ceiling. People bring
+        // friends, walk-ins happen, RSVP overshoot is fine. We let the host see
+        // "X going" possibly above the planned cap and decide for themselves.
         await client.query(
           `UPDATE run_participants SET status = 'joined', pace_group_label = $3, is_present = $4
            WHERE run_id = $1 AND user_id = $2`,
@@ -2165,21 +2313,16 @@ export async function joinRun(runId: string, userId: string, paceGroupLabel?: st
       return updated.rows[0];
     }
 
-    // New participant — atomic conditional INSERT: only inserts when capacity allows
+    // New participant. T1.5: capacity is a suggestion, never a wall.
     const insertRes = await client.query(
       `INSERT INTO run_participants (run_id, user_id, pace_group_label, is_present)
-       SELECT $1, $2, $3, $5
-       WHERE $4::int IS NULL
-          OR (
-            SELECT COUNT(*) FROM run_participants
-            WHERE run_id = $1 AND status IN ('joined', 'confirmed')
-          ) < $4::int
+       VALUES ($1, $2, $3, $4)
        RETURNING *`,
-      [runId, userId, paceGroupLabel || null, maxP, !!runState.is_active]
+      [runId, userId, paceGroupLabel || null, !!runState.is_active]
     );
     if (!insertRes.rows.length) {
       await client.query('ROLLBACK');
-      throw new Error("EVENT_FULL");
+      throw new Error("RUN_NOT_FOUND");
     }
     await client.query(`DELETE FROM planned_runs WHERE user_id = $1 AND run_id = $2`, [userId, runId]);
     await client.query('COMMIT');
@@ -2282,6 +2425,294 @@ export async function saveGarminActivity(userId: string, garminActivityId: strin
   return true;
 }
 
+// ─── Strava (OAuth 2.0) ──────────────────────────────────────────────────────
+
+export async function getStravaTokens(userId: string): Promise<{
+  access_token: string;
+  refresh_token: string;
+  expires_at: Date;
+  athlete_id: string;
+} | null> {
+  const result = await pool.query(
+    `SELECT strava_access_token AS access_token,
+            strava_refresh_token AS refresh_token,
+            strava_expires_at AS expires_at,
+            strava_athlete_id AS athlete_id
+     FROM users WHERE id = $1`,
+    [userId]
+  );
+  const row = result.rows[0];
+  if (!row?.access_token) return null;
+  return row;
+}
+
+export async function saveStravaTokens(
+  userId: string,
+  athleteId: string,
+  accessToken: string,
+  refreshToken: string,
+  expiresAt: Date
+): Promise<void> {
+  await pool.query(
+    `UPDATE users
+       SET strava_athlete_id = $1,
+           strava_access_token = $2,
+           strava_refresh_token = $3,
+           strava_expires_at = $4
+     WHERE id = $5`,
+    [athleteId, accessToken, refreshToken, expiresAt, userId]
+  );
+}
+
+export async function clearStravaTokens(userId: string): Promise<void> {
+  await pool.query(
+    `UPDATE users
+       SET strava_athlete_id = NULL,
+           strava_access_token = NULL,
+           strava_refresh_token = NULL,
+           strava_expires_at = NULL
+     WHERE id = $1`,
+    [userId]
+  );
+}
+
+export async function getStravaLastSync(userId: string): Promise<string | null> {
+  const result = await pool.query(
+    `SELECT MAX(created_at) as last_sync
+       FROM solo_runs
+      WHERE user_id = $1 AND strava_activity_id IS NOT NULL`,
+    [userId]
+  );
+  return result.rows[0]?.last_sync?.toISOString() ?? null;
+}
+
+export async function saveStravaActivity(userId: string, stravaActivityId: string, data: {
+  title: string;
+  date: Date;
+  distanceMiles: number;
+  paceMinPerMile: number | null;
+  durationSeconds: number | null;
+  activityType: string;
+}): Promise<boolean> {
+  const existing = await pool.query(
+    `SELECT id FROM solo_runs WHERE strava_activity_id = $1`,
+    [stravaActivityId]
+  );
+  if (existing.rows.length > 0) return false;
+  await pool.query(
+    `INSERT INTO solo_runs (user_id, strava_activity_id, source, title, date, distance_miles, pace_min_per_mile, duration_seconds, activity_type, completed, planned)
+     VALUES ($1, $2, 'strava', $3, $4, $5, $6, $7, $8, true, false)`,
+    [userId, stravaActivityId, data.title, data.date, data.distanceMiles, data.paceMinPerMile, data.durationSeconds, data.activityType]
+  );
+  return true;
+}
+
+// ─── User Streaks ──────────────────────────────────────────────────────────
+
+export interface UserStreakInfo {
+  current_streak_days: number;
+  longest_streak_days: number;
+  last_run_date: string | null;
+  at_risk: boolean;
+  ran_today: boolean;
+}
+
+/**
+ * Compute current + longest streak of consecutive days on which the user
+ * logged at least one completed activity. Uses UTC day boundaries (good enough
+ * for MVP; edge cases near midnight can be off by a day).
+ */
+export async function getUserStreaks(userId: string): Promise<UserStreakInfo> {
+  const { rows } = await pool.query(
+    `SELECT DISTINCT DATE(date) AS day
+       FROM solo_runs
+      WHERE user_id = $1
+        AND completed = true
+        AND COALESCE(is_deleted, false) = false
+      ORDER BY day DESC
+      LIMIT 800`,
+    [userId]
+  );
+
+  if (!rows.length) {
+    return { current_streak_days: 0, longest_streak_days: 0, last_run_date: null, at_risk: false, ran_today: false };
+  }
+
+  const days: Date[] = rows.map((r: any) => {
+    const d = r.day instanceof Date ? r.day : new Date(r.day);
+    // Normalize to UTC midnight
+    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  });
+
+  const today = new Date();
+  const todayUtc = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+  const oneDayMs = 24 * 60 * 60 * 1000;
+
+  const ranToday = days[0].getTime() === todayUtc.getTime();
+
+  // Current streak: count consecutive days ending today or yesterday
+  let currentStreak = 0;
+  const yesterdayUtc = new Date(todayUtc.getTime() - oneDayMs);
+  let expected: Date;
+  if (ranToday) {
+    expected = todayUtc;
+  } else if (days[0].getTime() === yesterdayUtc.getTime()) {
+    expected = yesterdayUtc;
+  } else {
+    // Streak already broken
+    expected = new Date(0);
+  }
+
+  if (expected.getTime() > 0) {
+    for (const d of days) {
+      if (d.getTime() === expected.getTime()) {
+        currentStreak += 1;
+        expected = new Date(expected.getTime() - oneDayMs);
+      } else if (d.getTime() < expected.getTime()) {
+        break;
+      }
+    }
+  }
+
+  // Longest streak (simple walk)
+  let longest = 1;
+  let run = 1;
+  for (let i = 1; i < days.length; i++) {
+    const gap = (days[i - 1].getTime() - days[i].getTime()) / oneDayMs;
+    if (gap === 1) {
+      run += 1;
+      if (run > longest) longest = run;
+    } else if (gap > 1) {
+      run = 1;
+    }
+  }
+  if (currentStreak > longest) longest = currentStreak;
+
+  // "At risk" = streak is alive but user hasn't run today yet
+  const atRisk = currentStreak > 0 && !ranToday;
+
+  return {
+    current_streak_days: currentStreak,
+    longest_streak_days: longest,
+    last_run_date: days[0].toISOString().slice(0, 10),
+    at_risk: atRisk,
+    ran_today: ranToday,
+  };
+}
+
+// ─── Crew Goals ────────────────────────────────────────────────────────────
+
+export type CrewGoalActivityType = "run" | "ride" | "walk" | "all";
+
+export interface CrewGoalRow {
+  activity_type: CrewGoalActivityType;
+  weekly_target_miles: number | null;
+  monthly_target_miles: number | null;
+  updated_by: string | null;
+  updated_at: string | null;
+}
+
+export async function getCrewGoal(
+  crewId: string,
+  activityType: CrewGoalActivityType
+): Promise<CrewGoalRow | null> {
+  const { rows } = await pool.query(
+    `SELECT activity_type, weekly_target_miles, monthly_target_miles, updated_by, updated_at
+       FROM crew_goals
+      WHERE crew_id = $1 AND activity_type = $2`,
+    [crewId, activityType]
+  );
+  if (!rows.length) return null;
+  return {
+    activity_type: rows[0].activity_type,
+    weekly_target_miles: rows[0].weekly_target_miles,
+    monthly_target_miles: rows[0].monthly_target_miles,
+    updated_by: rows[0].updated_by,
+    updated_at: rows[0].updated_at?.toISOString?.() ?? null,
+  };
+}
+
+export async function getAllCrewGoals(crewId: string): Promise<CrewGoalRow[]> {
+  const { rows } = await pool.query(
+    `SELECT activity_type, weekly_target_miles, monthly_target_miles, updated_by, updated_at
+       FROM crew_goals
+      WHERE crew_id = $1`,
+    [crewId]
+  );
+  return rows.map((r: any) => ({
+    activity_type: r.activity_type,
+    weekly_target_miles: r.weekly_target_miles,
+    monthly_target_miles: r.monthly_target_miles,
+    updated_by: r.updated_by,
+    updated_at: r.updated_at?.toISOString?.() ?? null,
+  }));
+}
+
+export async function saveCrewGoal(
+  crewId: string,
+  activityType: CrewGoalActivityType,
+  weeklyTargetMiles: number | null,
+  monthlyTargetMiles: number | null,
+  updatedBy: string
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO crew_goals (crew_id, activity_type, weekly_target_miles, monthly_target_miles, updated_by, updated_at)
+     VALUES ($1, $2, $3, $4, $5, NOW())
+     ON CONFLICT (crew_id, activity_type) DO UPDATE
+       SET weekly_target_miles = EXCLUDED.weekly_target_miles,
+           monthly_target_miles = EXCLUDED.monthly_target_miles,
+           updated_by = EXCLUDED.updated_by,
+           updated_at = NOW()`,
+    [crewId, activityType, weeklyTargetMiles, monthlyTargetMiles, updatedBy]
+  );
+}
+
+/**
+ * Aggregate miles across all active crew members for the current week (Mon-based)
+ * and current month. Filtered by activity_type ('all' = run+ride+walk).
+ */
+export async function getCrewGoalProgress(
+  crewId: string,
+  activityType: CrewGoalActivityType
+): Promise<{ weekly_miles: number; monthly_miles: number }> {
+  // Start of current week (Monday 00:00 local/UTC — using UTC for consistency)
+  const now = new Date();
+  const weekStart = new Date(now);
+  const day = weekStart.getUTCDay(); // 0=Sun ... 6=Sat
+  const diff = (day === 0 ? -6 : 1 - day); // back to Monday
+  weekStart.setUTCDate(weekStart.getUTCDate() + diff);
+  weekStart.setUTCHours(0, 0, 0, 0);
+
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
+
+  const params: any[] = [crewId, monthStart.toISOString(), weekStart.toISOString()];
+  let activityFilter = "";
+  if (activityType !== "all") {
+    params.push(activityType);
+    activityFilter = `AND sr.activity_type = $${params.length}`;
+  }
+
+  const { rows } = await pool.query(
+    `SELECT
+       COALESCE(SUM(CASE WHEN sr.date >= $3 THEN sr.distance_miles ELSE 0 END), 0) AS weekly_miles,
+       COALESCE(SUM(sr.distance_miles), 0) AS monthly_miles
+       FROM solo_runs sr
+       JOIN crew_members cm ON cm.user_id = sr.user_id
+      WHERE cm.crew_id = $1
+        AND cm.status = 'member'
+        AND sr.completed = true
+        AND COALESCE(sr.is_deleted, false) = false
+        AND sr.date >= $2
+        ${activityFilter}`,
+    params
+  );
+
+  return {
+    weekly_miles: Number(rows[0]?.weekly_miles ?? 0),
+    monthly_miles: Number(rows[0]?.monthly_miles ?? 0),
+  };
+}
+
 export async function saveHealthKitActivity(userId: string, healthKitId: string, data: {
   title: string;
   date: Date;
@@ -2371,6 +2802,7 @@ export type RunEditableFields = Partial<{
   minPace: number;
   maxPace: number;
   maxParticipants: number;
+  paceGroups: { label: string; minPace: number; maxPace: number }[] | null;
 }>;
 
 export async function updateRun(runId: string, userId: string, patch: RunEditableFields) {
@@ -2380,7 +2812,7 @@ export async function updateRun(runId: string, userId: string, patch: RunEditabl
   if (before.host_id !== userId) throw new Error("Only the host can edit this run");
 
   // Whitelist → db-column mapping. Keys in patch that aren't here are ignored.
-  const map: Record<keyof RunEditableFields, string> = {
+  const map: Record<Exclude<keyof RunEditableFields, "paceGroups">, string> = {
     date: "date",
     title: "title",
     description: "description",
@@ -2396,7 +2828,7 @@ export async function updateRun(runId: string, userId: string, patch: RunEditabl
   const sets: string[] = [];
   const values: any[] = [runId];
   const changedFields: string[] = [];
-  for (const [k, col] of Object.entries(map) as [keyof RunEditableFields, string][]) {
+  for (const [k, col] of Object.entries(map) as [Exclude<keyof RunEditableFields, "paceGroups">, string][]) {
     if (patch[k] === undefined) continue;
     const v = patch[k];
     const cur = before[col];
@@ -2406,6 +2838,18 @@ export async function updateRun(runId: string, userId: string, patch: RunEditabl
     values.push(v);
     sets.push(`${col} = $${values.length}`);
     changedFields.push(k);
+  }
+  // pace_groups is JSONB — serialize the array (or null to clear).
+  if (patch.paceGroups !== undefined) {
+    const nextJson = patch.paceGroups === null || patch.paceGroups.length === 0
+      ? null
+      : JSON.stringify(patch.paceGroups);
+    const curJson = before.pace_groups == null ? null : JSON.stringify(before.pace_groups);
+    if (nextJson !== curJson) {
+      values.push(nextJson);
+      sets.push(`pace_groups = $${values.length}`);
+      changedFields.push("paceGroups");
+    }
   }
   if (sets.length === 0) {
     return { before, after: before, changedFields: [] };
@@ -2641,8 +3085,10 @@ export async function updateCrewStreakForRun(crewId: string): Promise<void> {
     const lastWeek = lastRun ? getWeekNumber(lastRun) : -1;
     const lastYear = lastRun ? lastRun.getFullYear() : -1;
     let newStreak = crew.current_streak_weeks || 0;
+    let sameWeek = false;
     if (lastYear === currentYear && lastWeek === currentWeek) {
-      // Same week — no change
+      // Same week — already credited, idempotent no-op
+      sameWeek = true;
     } else if (
       (lastYear === currentYear && lastWeek === currentWeek - 1) ||
       (lastYear === currentYear - 1 && lastWeek >= 52 && currentWeek === 1)
@@ -2651,10 +3097,15 @@ export async function updateCrewStreakForRun(crewId: string): Promise<void> {
     } else {
       newStreak = 1;
     }
-    await client.query(
-      `UPDATE crews SET current_streak_weeks = $2, last_run_week = $3 WHERE id = $1`,
-      [crewId, newStreak, now]
-    );
+    // T3.8: skip UPDATE entirely on same-week re-runs so we don't churn
+    // last_run_week for no reason. Otherwise we get noisy writes if the
+    // late-start monitor processes the same crew twice in a tick.
+    if (!sameWeek) {
+      await client.query(
+        `UPDATE crews SET current_streak_weeks = $2, last_run_week = $3 WHERE id = $1`,
+        [crewId, newStreak, now]
+      );
+    }
     await client.query("COMMIT");
   } catch (e) {
     await client.query("ROLLBACK");
@@ -2677,11 +3128,14 @@ export async function startGroupRun(runId: string, hostId: string) {
 
   // Mark ALL joined/confirmed participants as present immediately — so nobody is silently dropped
   // at start just because they haven't opened the tracking screen yet.
+  // NOTE: $1 is explicitly cast to text because Postgres can't deduce a single type
+  // when the same parameter appears in both the SELECT projection (insert value)
+  // and a WHERE comparison — throws "inconsistent types deduced for parameter $1".
   await pool.query(
     `INSERT INTO run_participants (run_id, user_id, status, is_present)
-     SELECT $1, user_id, status, true
+     SELECT $1::text, user_id, status, true
      FROM run_participants
-     WHERE run_id = $1 AND status IN ('joined', 'confirmed')
+     WHERE run_id = $1::text AND status IN ('joined', 'confirmed')
      ON CONFLICT (run_id, user_id) DO UPDATE SET is_present = true`,
     [runId]
   );
@@ -2716,6 +3170,87 @@ export async function startGroupRun(runId: string, hostId: string) {
     }
   }
   return getRunById(runId);
+}
+
+/**
+ * Stages (chain multi-sport): each participant manually advances through the
+ * configured stages. start/end-stage write into run_participants.stage_splits
+ * which is a JSONB array of:
+ *   { stageIdx, activityType, startedAt, finishedAt?, distance?, pace? }
+ * Indexed by stageIdx. start replaces existing entry if any (idempotent
+ * "I started stage 1 again" UX). end fills finishedAt + stats; throws if
+ * no startedAt yet for that stage.
+ */
+export async function startParticipantStage(
+  runId: string, userId: string, stageIdx: number, activityType: string
+) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    // Lock + read existing stage_splits
+    const cur = await client.query(
+      `SELECT stage_splits FROM run_participants WHERE run_id = $1 AND user_id = $2 FOR UPDATE`,
+      [runId, userId]
+    );
+    if (!cur.rows.length) throw new Error("PARTICIPANT_NOT_FOUND");
+    const splits: any[] = Array.isArray(cur.rows[0].stage_splits) ? cur.rows[0].stage_splits : [];
+    const existing = splits.findIndex((s: any) => s?.stageIdx === stageIdx);
+    const entry = {
+      stageIdx,
+      activityType,
+      startedAt: new Date().toISOString(),
+      finishedAt: null,
+      distance: null,
+      pace: null,
+    };
+    if (existing >= 0) splits[existing] = entry;
+    else splits.push(entry);
+    await client.query(
+      `UPDATE run_participants SET stage_splits = $3 WHERE run_id = $1 AND user_id = $2`,
+      [runId, userId, JSON.stringify(splits)]
+    );
+    await client.query("COMMIT");
+    return splits;
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+export async function endParticipantStage(
+  runId: string, userId: string, stageIdx: number, distance: number, pace: number
+) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const cur = await client.query(
+      `SELECT stage_splits FROM run_participants WHERE run_id = $1 AND user_id = $2 FOR UPDATE`,
+      [runId, userId]
+    );
+    if (!cur.rows.length) throw new Error("PARTICIPANT_NOT_FOUND");
+    const splits: any[] = Array.isArray(cur.rows[0].stage_splits) ? cur.rows[0].stage_splits : [];
+    const idx = splits.findIndex((s: any) => s?.stageIdx === stageIdx);
+    if (idx < 0) throw new Error("STAGE_NOT_STARTED");
+    splits[idx] = {
+      ...splits[idx],
+      finishedAt: new Date().toISOString(),
+      distance: distance || 0,
+      pace: pace || 0,
+    };
+    await client.query(
+      `UPDATE run_participants SET stage_splits = $3 WHERE run_id = $1 AND user_id = $2`,
+      [runId, userId, JSON.stringify(splits)]
+    );
+    await client.query("COMMIT");
+    return splits;
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
 }
 
 export async function pingRunLocation(
@@ -2787,7 +3322,48 @@ export async function pingRunLocation(
   return { isPresent, isActive: run.is_active };
 }
 
+// In-memory cache for getLiveRunState. The /api/runs/:id/live endpoint is
+// polled by every active participant (every 5s) and every spectator on the
+// home screen. For a 200-person event with 50 spectators that's ~50 reads/s
+// hitting two big DB queries. Cache the result for 2.5s — clients still see
+// fresh-feeling data (their own polling is 5s) and DB load drops by ~10×.
+//
+// Single-process cache is fine here: Railway runs one Node container, and
+// invalidation isn't critical because the TTL is short. If we ever scale
+// horizontally, replace with Redis SETEX.
+const _liveStateCache = new Map<string, { ts: number; data: any }>();
+const LIVE_STATE_TTL_MS = 2500;
+
+// Periodic GC so the cache doesn't grow unbounded. Runs at most once a minute
+// regardless of how many runs are active.
+let _liveStateLastGc = 0;
+function _gcLiveStateCache() {
+  const now = Date.now();
+  if (now - _liveStateLastGc < 60_000) return;
+  _liveStateLastGc = now;
+  for (const [k, v] of _liveStateCache.entries()) {
+    if (now - v.ts > LIVE_STATE_TTL_MS * 4) _liveStateCache.delete(k);
+  }
+}
+
+/** Public hook for routes that mutate run state (ping, end, decline-host)
+ * to drop the cached entry so the very next read sees the new value. */
+export function invalidateLiveRunStateCache(runId: string) {
+  _liveStateCache.delete(runId);
+}
+
 export async function getLiveRunState(runId: string) {
+  _gcLiveStateCache();
+  const cached = _liveStateCache.get(runId);
+  if (cached && Date.now() - cached.ts < LIVE_STATE_TTL_MS) {
+    return cached.data;
+  }
+  const fresh = await _computeLiveRunState(runId);
+  _liveStateCache.set(runId, { ts: Date.now(), data: fresh });
+  return fresh;
+}
+
+async function _computeLiveRunState(runId: string) {
   const runRes = await pool.query(`SELECT * FROM runs WHERE id = $1`, [runId]);
   if (!runRes.rows.length) return null;
   const run = runRes.rows[0];
@@ -3098,10 +3674,58 @@ export async function finishRunnerRun(runId: string, userId: string, finalDistan
         [runId, userId]
       );
     } else {
+      // T1.3 + T2.16: credit user stats and set miles_logged the first time the
+      // participant finishes. Idempotent — second finish just refreshes
+      // distance/pace/splits without double-counting (miles_logged IS NOT NULL guard).
+      const priorRes = await client.query(
+        `SELECT miles_logged FROM run_participants WHERE run_id = $1 AND user_id = $2`,
+        [runId, userId]
+      );
+      const alreadyCredited = priorRes.rows[0]?.miles_logged != null;
+
       await client.query(
-        `UPDATE run_participants SET final_distance = $3, final_pace = $4, mile_splits = $5 WHERE run_id = $1 AND user_id = $2`,
+        `UPDATE run_participants
+            SET final_distance = $3,
+                final_pace = $4,
+                mile_splits = $5,
+                miles_logged = COALESCE(miles_logged, $3)
+         WHERE run_id = $1 AND user_id = $2`,
         [runId, userId, finalDistance, finalPace, mileSplits && mileSplits.length > 0 ? JSON.stringify(mileSplits) : null]
       );
+
+      if (!alreadyCredited && finalDistance > 0) {
+        const userResult = await client.query(
+          `UPDATE users SET
+             completed_runs   = completed_runs   + 1,
+             total_miles      = total_miles      + $2,
+             miles_this_year  = miles_this_year  + $2,
+             miles_this_month = miles_this_month + $2
+           WHERE id = $1 RETURNING total_miles`,
+          [userId, finalDistance]
+        );
+        const totalMiles = userResult.rows[0]?.total_miles;
+
+        // T1.4: same-transaction achievement check (covers distance + count milestones).
+        // Pace PRs surface via the bell-feed query which now includes
+        // run_participants final_pace too — see getNotifications.
+        if (totalMiles !== undefined) {
+          await checkAndAwardAchievements(userId, totalMiles, client);
+        }
+
+        // Bump host_count exactly once per run on the host's first credited finisher
+        const runRes = await client.query(`SELECT host_id FROM runs WHERE id = $1`, [runId]);
+        const hostId = runRes.rows[0]?.host_id;
+        if (hostId && userId !== hostId) {
+          const confirmedNonHost = await client.query(
+            `SELECT COUNT(*) as cnt FROM run_participants
+             WHERE run_id = $1 AND miles_logged IS NOT NULL AND user_id != $2`,
+            [runId, hostId]
+          );
+          if (parseInt(confirmedNonHost.rows[0]?.cnt) === 1) {
+            await client.query(`UPDATE users SET hosted_runs = hosted_runs + 1 WHERE id = $1`, [hostId]);
+          }
+        }
+      }
     }
 
     const runRes = await client.query(`SELECT host_id FROM runs WHERE id = $1`, [runId]);
@@ -3176,34 +3800,37 @@ async function computeLeaderboardRanksWithClient(runId: string, db: any) {
     );
     for (const groupRow of groupsRes.rows) {
       const label = groupRow.pace_group_label;
-      const finishedRes = await db.query(
-        `SELECT user_id, final_pace FROM run_participants
-         WHERE run_id = $1 AND final_pace IS NOT NULL AND final_pace > 0
-           AND (abandoned IS NULL OR abandoned = false)
-           AND (pace_group_label = $2 OR ($2::text IS NULL AND pace_group_label IS NULL))
-         ORDER BY final_pace ASC`,
+      // T2.12: tied paces should share a rank. Use RANK() window — two runners
+      // at exactly 7:30 /mi both get rank 1; the next rank is 3.
+      await db.query(
+        `WITH ranked AS (
+           SELECT user_id, RANK() OVER (ORDER BY final_pace ASC) AS rk
+           FROM run_participants
+           WHERE run_id = $1 AND final_pace IS NOT NULL AND final_pace > 0
+             AND (abandoned IS NULL OR abandoned = false)
+             AND (pace_group_label = $2 OR ($2::text IS NULL AND pace_group_label IS NULL))
+         )
+         UPDATE run_participants rp
+         SET final_rank = ranked.rk
+         FROM ranked
+         WHERE rp.run_id = $1 AND rp.user_id = ranked.user_id`,
         [runId, label]
       );
-      for (let i = 0; i < finishedRes.rows.length; i++) {
-        await db.query(
-          `UPDATE run_participants SET final_rank = $3 WHERE run_id = $1 AND user_id = $2`,
-          [runId, finishedRes.rows[i].user_id, i + 1]
-        );
-      }
     }
   } else {
-    const finishedRes = await db.query(
-      `SELECT user_id, final_pace FROM run_participants
-       WHERE run_id = $1 AND final_pace IS NOT NULL AND final_pace > 0
-         AND (abandoned IS NULL OR abandoned = false) ORDER BY final_pace ASC`,
+    await db.query(
+      `WITH ranked AS (
+         SELECT user_id, RANK() OVER (ORDER BY final_pace ASC) AS rk
+         FROM run_participants
+         WHERE run_id = $1 AND final_pace IS NOT NULL AND final_pace > 0
+           AND (abandoned IS NULL OR abandoned = false)
+       )
+       UPDATE run_participants rp
+       SET final_rank = ranked.rk
+       FROM ranked
+       WHERE rp.run_id = $1 AND rp.user_id = ranked.user_id`,
       [runId]
     );
-    for (let i = 0; i < finishedRes.rows.length; i++) {
-      await db.query(
-        `UPDATE run_participants SET final_rank = $3 WHERE run_id = $1 AND user_id = $2`,
-        [runId, finishedRes.rows[i].user_id, i + 1]
-      );
-    }
   }
 }
 
@@ -3265,11 +3892,40 @@ export async function forceCompleteRun(runId: string) {
         const safeDist = parseFloat(tpRes.rows[0].cumulative_distance) || 0;
         const safePace = parseFloat(tpRes.rows[0].pace) || 0;
         if (safeDist > 0) {
+          // Idempotent stats credit — same pattern as finishRunnerRun. Without
+          // this, participants finalized by host-end (or the late-start
+          // monitor sweep) get their leaderboard rank set but no profile
+          // total_miles bump. T1.3 finishRunnerRun added the credit; this
+          // closes the symmetric gap.
+          const priorRes = await client.query(
+            `SELECT miles_logged FROM run_participants WHERE run_id = $1 AND user_id = $2`,
+            [runId, row.user_id]
+          );
+          const alreadyCredited = priorRes.rows[0]?.miles_logged != null;
           await client.query(
-            `UPDATE run_participants SET final_distance = $3, final_pace = $4, status = 'confirmed'
+            `UPDATE run_participants
+                SET final_distance = $3,
+                    final_pace = $4,
+                    status = 'confirmed',
+                    miles_logged = COALESCE(miles_logged, $3)
              WHERE run_id = $1 AND user_id = $2`,
             [runId, row.user_id, safeDist, safePace]
           );
+          if (!alreadyCredited) {
+            const userResult = await client.query(
+              `UPDATE users SET
+                 completed_runs   = completed_runs   + 1,
+                 total_miles      = total_miles      + $2,
+                 miles_this_year  = miles_this_year  + $2,
+                 miles_this_month = miles_this_month + $2
+               WHERE id = $1 RETURNING total_miles`,
+              [row.user_id, safeDist]
+            );
+            const totalMiles = userResult.rows[0]?.total_miles;
+            if (totalMiles !== undefined) {
+              await checkAndAwardAchievements(row.user_id, totalMiles, client);
+            }
+          }
         } else {
           // Present but no tracking data — mark confirmed so they show "Done"
           await client.query(
@@ -3308,7 +3964,7 @@ export async function forceCompleteRun(runId: string) {
 
 export async function getRunResults(runId: string) {
   const result = await pool.query(
-    `SELECT rp.user_id, u.name, u.photo_url, rp.final_distance, rp.final_pace, rp.final_rank, rp.is_present, rp.pace_group_label
+    `SELECT rp.user_id, u.name, u.photo_url, rp.final_distance, rp.final_pace, rp.final_rank, rp.is_present, rp.pace_group_label, rp.stage_splits
      FROM run_participants rp
      JOIN users u ON u.id = rp.user_id
      WHERE rp.run_id = $1
@@ -4310,6 +4966,16 @@ export async function getCommunityPaths(bounds?: { swLat: number; neLat: number;
   return rows;
 }
 
+export async function addPathVariant(parentId: string, variant: { name: string; route_path: any; distance_miles: number; activity_types: string[] }) {
+  const r = await pool.query(
+    `INSERT INTO path_variants (parent_path_id, name, route_path, distance_miles, activity_types)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, parent_path_id, name, route_path, distance_miles, activity_types`,
+    [parentId, variant.name, JSON.stringify(variant.route_path), variant.distance_miles, variant.activity_types]
+  );
+  return r.rows[0];
+}
+
 export async function replacePathVariants(parentId: string, variants: Array<{ name: string; route_path: any; distance_miles: number; activity_types: string[] }>) {
   await pool.query(`DELETE FROM path_variants WHERE parent_path_id = $1`, [parentId]);
   for (const v of variants) {
@@ -4360,6 +5026,14 @@ export async function getCrewMessages(crewId: string, limit = 50) {
     [crewId, limit]
   );
   return result.rows;
+}
+
+export async function markCrewChatRead(crewId: string, userId: string) {
+  await pool.query(
+    `UPDATE crew_members SET chat_last_read_at = NOW()
+     WHERE crew_id = $1 AND user_id = $2 AND status = 'member'`,
+    [crewId, userId]
+  );
 }
 
 export async function createCrewMessage(
@@ -4461,20 +5135,19 @@ export async function toggleBookmark(userId: string, runId: string) {
 }
 
 export async function togglePlan(userId: string, runId: string) {
-  const existing = await pool.query(
-    `SELECT id FROM planned_runs WHERE user_id = $1 AND run_id = $2`,
+  // T2.3: idempotent — single atomic DELETE then conditional INSERT. Two rapid
+  // taps no longer race: the second tap sees the row deleted and re-inserts,
+  // ending in a deterministic state (planned=true after odd taps, false after even).
+  const del = await pool.query(
+    `DELETE FROM planned_runs WHERE user_id = $1 AND run_id = $2 RETURNING id`,
     [userId, runId]
   );
-  if (existing.rows.length > 0) {
-    await pool.query(`DELETE FROM planned_runs WHERE user_id = $1 AND run_id = $2`, [userId, runId]);
-    return { planned: false };
-  } else {
-    await pool.query(
-      `INSERT INTO planned_runs (user_id, run_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-      [userId, runId]
-    );
-    return { planned: true };
-  }
+  if (del.rowCount && del.rowCount > 0) return { planned: false };
+  await pool.query(
+    `INSERT INTO planned_runs (user_id, run_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+    [userId, runId]
+  );
+  return { planned: true };
 }
 
 export async function getRunStatus(userId: string, runId: string) {
@@ -4498,9 +5171,12 @@ export async function getPlannedRuns(userId: string) {
      JOIN runs r ON r.id = pr.run_id
      JOIN users u ON u.id = r.host_id
      WHERE pr.user_id = $1
-       AND r.date >= NOW() - INTERVAL '3 hours'
+       -- T3.11: was a 3-hour past-floor that hid still-pending events the
+       -- user planned for. Now: keep planned events in the list as long as
+       -- they haven't been completed/cancelled, regardless of how late.
        AND r.is_completed = false
        AND r.is_deleted IS NOT TRUE
+       AND (r.is_abandoned IS NOT TRUE)
        AND NOT EXISTS (
          SELECT 1 FROM run_participants rp2
          WHERE rp2.run_id = r.id AND rp2.user_id = $1 AND rp2.status = 'confirmed'
@@ -4563,7 +5239,16 @@ export async function addRunPhoto(runId: string, userId: string, photoUrl: strin
 }
 
 export async function deleteRunPhoto(photoId: string, userId: string) {
-  await pool.query(`DELETE FROM run_photos WHERE id = $1 AND user_id = $2`, [photoId, userId]);
+  // T2.13: photographer OR host can delete (host needs moderation power).
+  await pool.query(
+    `DELETE FROM run_photos
+     WHERE id = $1
+       AND (
+         user_id = $2
+         OR run_id IN (SELECT id FROM runs WHERE host_id = $2)
+       )`,
+    [photoId, userId]
+  );
 }
 
 // ─── Solo Run Photos ──────────────────────────────────────────────────────────
@@ -4864,6 +5549,37 @@ export async function getCrewMemberRole(crewId: string, userId: string): Promise
   return res.rows[0]?.role ?? 'member';
 }
 
+export async function getCrewPaceGroupLabels(crewId: string): Promise<{ position: number; label: string }[]> {
+  const res = await pool.query(
+    `SELECT position, label FROM crew_pace_group_labels WHERE crew_id = $1 ORDER BY position ASC`,
+    [crewId]
+  );
+  return res.rows;
+}
+
+export async function setCrewPaceGroupLabels(crewId: string, labels: { position: number; label: string }[]) {
+  // Replace the full set in one transaction so deletes (e.g. shrinking from 4 → 2 groups) take effect.
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(`DELETE FROM crew_pace_group_labels WHERE crew_id = $1`, [crewId]);
+    for (const { position, label } of labels) {
+      const trimmed = (label ?? "").trim().slice(0, 30);
+      if (!trimmed) continue;
+      await client.query(
+        `INSERT INTO crew_pace_group_labels (crew_id, position, label) VALUES ($1, $2, $3)`,
+        [crewId, position, trimmed]
+      );
+    }
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
 export async function setCrewMemberRole(crewId: string, targetUserId: string, newRole: string, callerUserId: string) {
   // Promoting to crew_chief: demote current caller to officer first
   if (newRole === 'crew_chief') {
@@ -4915,11 +5631,27 @@ export async function getCrewsByUser(userId: string) {
        CASE WHEN c.created_by = $1
          THEN (SELECT COUNT(*) FROM crew_members WHERE crew_id = c.id AND status = 'pending' AND invited_by = user_id)
          ELSE 0
-       END AS pending_request_count
+       END AS pending_request_count,
+       last_msg.message AS last_message,
+       last_msg.created_at AS last_message_at,
+       last_msg.sender_name AS last_sender_name,
+       (SELECT COUNT(*) FROM crew_messages cm2
+          WHERE cm2.crew_id = c.id
+            AND cm2.created_at > COALESCE(cm.chat_last_read_at, 'epoch'::timestamp)
+            AND cm2.user_id != $1
+       ) AS unread_count
      FROM crews c
      JOIN crew_members cm ON cm.crew_id = c.id AND cm.user_id = $1 AND cm.status = 'member'
      LEFT JOIN users u ON u.id = c.created_by
-     ORDER BY c.created_at DESC`,
+     LEFT JOIN LATERAL (
+       SELECT message, created_at, sender_name
+       FROM crew_messages
+       WHERE crew_id = c.id
+       ORDER BY created_at DESC
+       LIMIT 1
+     ) last_msg ON true
+     WHERE c.disbanded_at IS NULL
+     ORDER BY COALESCE(last_msg.created_at, c.created_at) DESC`,
     [userId]
   );
   return res.rows;
@@ -4970,29 +5702,50 @@ export async function getCrewById(crewId: string, activityType: string = 'run') 
   );
   if (!crew.rows[0]) return null;
   const row = crew.rows[0];
+  // Avg pace matches profile's algorithm exactly: solo runs only, filtered by
+  // the viewer's currently-selected activity, pace >= 2.0, distance > 0.5 mi.
+  // Returns null when the member has no qualifying runs for the activity —
+  // client hides the pill via `avg_pace > 0` check.
   const members = await pool.query(
-    `SELECT cm.*, u.name, u.photo_url, u.hosted_runs, u.default_activity,
-       COALESCE((
-         SELECT AVG(p) FROM (
-           SELECT NULLIF(sr.pace_min_per_mile, 0) AS p
-           FROM solo_runs sr
-           WHERE sr.user_id = u.id AND sr.completed = true AND sr.is_deleted IS NOT TRUE
-           AND sr.activity_type = COALESCE(u.default_activity, 'run')
-           AND sr.pace_min_per_mile IS NOT NULL AND sr.pace_min_per_mile > 0
-           UNION ALL
-           SELECT NULLIF(rp.final_pace, 0) AS p
-           FROM run_participants rp
-           JOIN runs r ON r.id = rp.run_id
-           WHERE rp.user_id = u.id AND rp.final_pace IS NOT NULL AND rp.final_pace > 0
-           AND r.is_completed = true AND r.is_deleted IS NOT TRUE
-           AND r.activity_type = COALESCE(u.default_activity, 'run')
-         ) paces
-       ), 0) AS avg_pace
+    `SELECT cm.*, u.name, u.username, u.photo_url, u.hosted_runs, u.default_activity,
+       (
+         SELECT AVG(sr.pace_min_per_mile)
+         FROM solo_runs sr
+         WHERE sr.user_id = u.id
+           AND sr.completed = true
+           AND sr.is_deleted IS NOT TRUE
+           AND sr.activity_type = $2
+           AND sr.pace_min_per_mile IS NOT NULL
+           AND sr.pace_min_per_mile >= 2.0
+           AND sr.distance_miles > 0.5
+       ) AS avg_pace,
+       -- Weekly (last 7 days) stats for top performers
+       (SELECT COUNT(*) FROM solo_runs sr WHERE sr.user_id = u.id AND sr.completed = true
+         AND sr.is_deleted IS NOT TRUE AND sr.activity_type = $2
+         AND sr.date >= NOW() - INTERVAL '7 days') AS weekly_runs,
+       (SELECT COALESCE(SUM(sr.distance_miles), 0) FROM solo_runs sr WHERE sr.user_id = u.id AND sr.completed = true
+         AND sr.is_deleted IS NOT TRUE AND sr.activity_type = $2
+         AND sr.date >= NOW() - INTERVAL '7 days') AS weekly_miles,
+       (SELECT AVG(sr.pace_min_per_mile) FROM solo_runs sr WHERE sr.user_id = u.id AND sr.completed = true
+         AND sr.is_deleted IS NOT TRUE AND sr.activity_type = $2
+         AND sr.pace_min_per_mile IS NOT NULL AND sr.pace_min_per_mile >= 2.0 AND sr.distance_miles > 0.5
+         AND sr.date >= NOW() - INTERVAL '7 days') AS weekly_pace,
+       -- Monthly (last 30 days) stats for top performers
+       (SELECT COUNT(*) FROM solo_runs sr WHERE sr.user_id = u.id AND sr.completed = true
+         AND sr.is_deleted IS NOT TRUE AND sr.activity_type = $2
+         AND sr.date >= NOW() - INTERVAL '30 days') AS monthly_runs,
+       (SELECT COALESCE(SUM(sr.distance_miles), 0) FROM solo_runs sr WHERE sr.user_id = u.id AND sr.completed = true
+         AND sr.is_deleted IS NOT TRUE AND sr.activity_type = $2
+         AND sr.date >= NOW() - INTERVAL '30 days') AS monthly_miles,
+       (SELECT AVG(sr.pace_min_per_mile) FROM solo_runs sr WHERE sr.user_id = u.id AND sr.completed = true
+         AND sr.is_deleted IS NOT TRUE AND sr.activity_type = $2
+         AND sr.pace_min_per_mile IS NOT NULL AND sr.pace_min_per_mile >= 2.0 AND sr.distance_miles > 0.5
+         AND sr.date >= NOW() - INTERVAL '30 days') AS monthly_pace
      FROM crew_members cm
      JOIN users u ON u.id = cm.user_id
      WHERE cm.crew_id = $1 AND cm.status = 'member'
      ORDER BY cm.joined_at ASC`,
-    [crewId]
+    [crewId, activityType]
   );
   return { ...row, member_count: parseInt(row.member_count ?? "0"), members: members.rows };
 }
@@ -5043,7 +5796,11 @@ export async function leaveCrewById(crewId: string, userId: string) {
   const remaining = parseInt(countRes.rows[0]?.cnt ?? 0);
 
   if (remaining === 0) {
-    await pool.query(`DELETE FROM crews WHERE id = $1`, [crewId]);
+    // Soft-disband. Row is retained so it can be restored if this fires by mistake.
+    await pool.query(
+      `UPDATE crews SET disbanded_at = NOW(), disbanded_by = $2, disbanded_reason = 'last_member_left' WHERE id = $1 AND disbanded_at IS NULL`,
+      [crewId, userId]
+    );
     return { disbanded: true, newOwnerId: null, crewName: null };
   }
 
@@ -5144,7 +5901,12 @@ export async function declineCrewChiefPromotion(
   const allMembers: string[] = membersRes.rows.map((r) => r.user_id);
 
   if (allMembers.length === 0) {
-    await pool.query(`DELETE FROM crews WHERE id = $1`, [crewId]);
+    // Soft-disband so an empty-members race (e.g. the hosted-start crash that caused
+    // this migration) can never silently annihilate a crew.
+    await pool.query(
+      `UPDATE crews SET disbanded_at = NOW(), disbanded_reason = 'chief_cascade_empty' WHERE id = $1 AND disbanded_at IS NULL`,
+      [crewId]
+    );
     return { newOwnerId: null, disbanded: true, forced: false, noOp: false };
   }
 
@@ -5218,10 +5980,24 @@ export async function updateUserEmailForVerification(userId: string, newEmail: s
 }
 
 export async function disbandCrewById(crewId: string, userId: string) {
-  const crewRes = await pool.query(`SELECT created_by FROM crews WHERE id = $1`, [crewId]);
+  const crewRes = await pool.query(`SELECT created_by FROM crews WHERE id = $1 AND disbanded_at IS NULL`, [crewId]);
   if (!crewRes.rows[0]) throw new Error("Crew not found");
   if (crewRes.rows[0].created_by !== userId) throw new Error("Only the creator can disband this crew");
-  await pool.query(`DELETE FROM crews WHERE id = $1`, [crewId]);
+  // Soft-disband — row retained for audit + restore.
+  await pool.query(
+    `UPDATE crews SET disbanded_at = NOW(), disbanded_by = $2, disbanded_reason = 'owner_disband' WHERE id = $1 AND disbanded_at IS NULL`,
+    [crewId, userId]
+  );
+}
+
+// Admin / ops: restore a soft-disbanded crew. Idempotent.
+export async function restoreDisbandedCrew(crewId: string): Promise<boolean> {
+  const r = await pool.query(
+    `UPDATE crews SET disbanded_at = NULL, disbanded_by = NULL, disbanded_reason = NULL
+     WHERE id = $1 AND disbanded_at IS NOT NULL RETURNING id`,
+    [crewId]
+  );
+  return r.rows.length > 0;
 }
 
 export async function getCrewRuns(crewId: string) {
@@ -5320,6 +6096,9 @@ export async function checkAndAwardCrewAchievements(crewId: string): Promise<str
       { key: "members_50", category: "members", threshold: 50, label: "50 Members", msg: "👥 50 crew members — that's a movement!" },
     ];
 
+    // T2.11: batch new unlocks into a single milestone message instead of one
+    // crew_message (and one push) per milestone. 5 unlocks at once = 1 push.
+    const unlockedMessages: string[] = [];
     for (const m of MILESTONES) {
       const value =
         m.category === "miles" ? stats.totalMiles :
@@ -5338,14 +6117,19 @@ export async function checkAndAwardCrewAchievements(crewId: string): Promise<str
         `INSERT INTO crew_achievements (crew_id, achievement_key, achieved_value) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
         [crewId, m.key, value]
       );
+      unlockedMessages.push(m.msg);
+      newKeys.push(m.key);
+    }
 
+    if (unlockedMessages.length > 0) {
+      const combined = unlockedMessages.length === 1
+        ? unlockedMessages[0]
+        : `🏆 ${unlockedMessages.length} crew milestones unlocked!\n\n${unlockedMessages.map((s) => `• ${s.replace(/^[^\s]+ /, "")}`).join("\n")}`;
       await pool.query(
         `INSERT INTO crew_messages (crew_id, sender_name, message, message_type)
          VALUES ($1, 'PaceUp', $2, 'milestone')`,
-        [crewId, m.msg]
+        [crewId, combined]
       );
-
-      newKeys.push(m.key);
     }
 
     return newKeys;
@@ -5485,7 +6269,8 @@ export async function getSuggestedCrews(userId: string, limit = 10): Promise<Sug
        COALESCE(c.subscription_tier, 'none') AS sub_tier
      FROM crews c
      LEFT JOIN users u ON u.id = c.created_by
-     WHERE NOT EXISTS (
+     WHERE c.disbanded_at IS NULL
+       AND NOT EXISTS (
        SELECT 1 FROM crew_members cm WHERE cm.crew_id = c.id AND cm.user_id = $1
      )
      ORDER BY
@@ -5527,7 +6312,7 @@ export async function getSuggestedCrews(userId: string, limit = 10): Promise<Sug
 
 export async function getPublicCrewRuns(filters?: {
   swLat?: number; swLng?: number; neLat?: number; neLng?: number;
-}) {
+}, currentUserId?: string) {
   let query = `SELECT r.*, u.name as host_name, u.username as host_username, u.avg_rating as host_rating, u.rating_count as host_rating_count, u.photo_url as host_photo,
       u.marker_icon as host_marker_icon, u.hosted_runs as host_hosted_runs,
       (1 + (SELECT COUNT(*) FROM run_participants rp WHERE rp.run_id = r.id AND rp.status IS DISTINCT FROM 'cancelled' AND rp.user_id != r.host_id)) as participant_count,
@@ -5550,6 +6335,15 @@ export async function getPublicCrewRuns(filters?: {
   if (filters?.swLng !== undefined && filters.neLng !== undefined) {
     query += ` AND r.location_lng BETWEEN $${idx++} AND $${idx++}`;
     params.push(filters.swLng, filters.neLng);
+  }
+  if (currentUserId) {
+    query += ` AND r.host_id NOT IN (
+      SELECT blocked_id FROM user_blocks WHERE blocker_id = $${idx}
+      UNION
+      SELECT blocker_id FROM user_blocks WHERE blocked_id = $${idx}
+    )`;
+    idx++;
+    params.push(currentUserId);
   }
   query += ` ORDER BY r.date ASC LIMIT 100`;
   const result = await pool.query(query, params);
@@ -5648,41 +6442,132 @@ export async function getRunPresentParticipantTokensFiltered(runId: string, noti
 }
 
 export async function getRunBroadcastTokens(runId: string): Promise<string[]> {
+  // T3.4 + T3.5: dedupe by user_id (one push per person even if they're both
+  // RSVP'd and planned), and cap to 100 tokens to avoid blast notifications
+  // for very large events. Apple/Expo throttle past ~100 anyway.
   const result = await pool.query(
-    `SELECT u.push_token FROM run_participants rp
-     JOIN users u ON rp.user_id = u.id
-     WHERE rp.run_id = $1 AND rp.status != 'cancelled'
-       AND u.push_token IS NOT NULL AND u.notifications_enabled = true
-     UNION
-     SELECT u.push_token FROM planned_runs pr
-     JOIN users u ON pr.user_id = u.id
-     WHERE pr.run_id = $1
-       AND u.push_token IS NOT NULL AND u.notifications_enabled = true`,
+    `SELECT DISTINCT ON (u.id) u.push_token
+       FROM (
+         SELECT user_id FROM run_participants
+          WHERE run_id = $1 AND status != 'cancelled'
+         UNION
+         SELECT user_id FROM planned_runs WHERE run_id = $1
+       ) sub
+       JOIN users u ON u.id = sub.user_id
+      WHERE u.push_token IS NOT NULL AND u.notifications_enabled = true
+      LIMIT 100`,
     [runId]
   );
   return result.rows.map((r: any) => r.push_token);
 }
 
-export async function deleteUser(userId: string): Promise<void> {
+export async function deleteUser(userId: string, reason: string = "user_initiated"): Promise<void> {
+  // SOFT DELETE. We never hard-delete user rows or their content anymore.
+  //
+  // Why: a year-old account holds runs, crew memberships, chat history,
+  // achievements, hosted events, friendships, saved routes — blowing all of
+  // that away on a single tap (or a single bug that invokes this function)
+  // is unrecoverable. The earlier hard-delete also cascaded into `crews`
+  // (owner FK), which is how the Founders crew disappeared.
+  //
+  // New behavior:
+  //   1. Stash the user's email + username into pre_delete_* columns so we
+  //      can restore them exactly.
+  //   2. Scrub the live email / username to `deleted-<id>@paceup.deleted` /
+  //      `deleted-<short>` so the old ones are freed up for a new signup
+  //      AND so nothing can match them via auth lookup.
+  //   3. Clear push_token + facebook_id + phone_hash so no notification /
+  //      oauth / contact-match paths treat this account as live.
+  //   4. Remove remember/reset tokens so active sessions can't resume.
+  //   5. Mark deleted_at = NOW() + deleted_reason. That's the only filter
+  //      used by getUserBy{Id,Email,Username} — row is effectively invisible.
+  //
+  // Everything else (runs, crew_members, messages, host_ratings, solo_runs,
+  // friends, achievements, etc.) stays on disk. restoreUser(userId) can
+  // flip deleted_at back to NULL and rehydrate email/username from the
+  // pre_delete_* columns, reattaching every historical record untouched.
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    // Nullify nullable FK references
-    await client.query(`UPDATE crew_members SET invited_by = NULL WHERE invited_by = $1`, [userId]);
-    // Remove records without cascade that reference this user
-    await client.query(`DELETE FROM run_participants WHERE run_id IN (SELECT id FROM runs WHERE host_id = $1)`, [userId]);
-    await client.query(`DELETE FROM host_ratings WHERE run_id IN (SELECT id FROM runs WHERE host_id = $1)`, [userId]);
-    await client.query(`DELETE FROM host_ratings WHERE host_id = $1 OR rater_id = $1`, [userId]);
-    await client.query(`DELETE FROM run_participants WHERE user_id = $1`, [userId]);
-    await client.query(`DELETE FROM achievements WHERE user_id = $1`, [userId]);
-    // Delete hosted runs (cascades run_invites, run_messages, run_photos, run_tracking_points, tag_along_requests)
-    await client.query(`DELETE FROM runs WHERE host_id = $1`, [userId]);
-    // Delete the user (cascades: solo_runs, friends, remember_tokens, password_reset_tokens,
-    //   saved_paths, bookmarked_runs, planned_runs, crew_members, crew_messages, direct_messages,
-    //   run_messages, path_contributions, path_shares, facebook_friends, user_blocks,
-    //   tag_along_requests, crews)
-    await client.query(`DELETE FROM users WHERE id = $1`, [userId]);
+    const cur = await client.query(
+      `SELECT email, username FROM users WHERE id = $1 FOR UPDATE`,
+      [userId]
+    );
+    if (cur.rowCount === 0) {
+      await client.query("ROLLBACK");
+      return;
+    }
+    const { email: liveEmail, username: liveUsername } = cur.rows[0];
+    const short = userId.slice(0, 8);
+    await client.query(
+      `UPDATE users
+         SET deleted_at = NOW(),
+             deleted_reason = $2,
+             pre_delete_email = COALESCE(pre_delete_email, $3),
+             pre_delete_username = COALESCE(pre_delete_username, $4),
+             email = 'deleted-' || id || '@paceup.deleted',
+             username = 'deleted-' || $5,
+             push_token = NULL,
+             notifications_enabled = false,
+             facebook_id = NULL,
+             phone_hash = NULL
+       WHERE id = $1`,
+      [userId, reason, liveEmail, liveUsername, short]
+    );
+    // Kill any active session primitives so a stolen cookie or a cached
+    // remember-token can't keep the account alive after delete.
+    await client.query(`DELETE FROM remember_tokens WHERE user_id = $1`, [userId]);
+    await client.query(`DELETE FROM password_reset_tokens WHERE user_id = $1`, [userId]);
     await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+export async function restoreUser(userId: string): Promise<{ restored: boolean; email?: string; username?: string }> {
+  // Reverses deleteUser: flip deleted_at back to NULL and rehydrate the
+  // pre_delete_* values if the original email/username aren't now in use
+  // by another (new) account. If they are, we hand back control to the
+  // caller so an admin can choose a new handle for the restored user.
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const row = await client.query(
+      `SELECT pre_delete_email, pre_delete_username FROM users
+        WHERE id = $1 AND deleted_at IS NOT NULL FOR UPDATE`,
+      [userId]
+    );
+    if (row.rowCount === 0) {
+      await client.query("ROLLBACK");
+      return { restored: false };
+    }
+    const { pre_delete_email: email, pre_delete_username: username } = row.rows[0];
+    const emailTaken = email
+      ? (await client.query(`SELECT 1 FROM users WHERE email = $1 AND id <> $2 AND deleted_at IS NULL`, [email, userId])).rowCount! > 0
+      : false;
+    const usernameTaken = username
+      ? (await client.query(`SELECT 1 FROM users WHERE LOWER(username) = LOWER($1) AND id <> $2 AND deleted_at IS NULL`, [username, userId])).rowCount! > 0
+      : false;
+    if (emailTaken || usernameTaken) {
+      await client.query("ROLLBACK");
+      return { restored: false, email, username };
+    }
+    await client.query(
+      `UPDATE users
+         SET deleted_at = NULL,
+             deleted_reason = NULL,
+             email = COALESCE($2, email),
+             username = COALESCE($3, username),
+             pre_delete_email = NULL,
+             pre_delete_username = NULL
+       WHERE id = $1`,
+      [userId, email, username]
+    );
+    await client.query("COMMIT");
+    return { restored: true, email, username };
   } catch (e) {
     await client.query("ROLLBACK");
     throw e;
@@ -5747,6 +6632,11 @@ export async function getDmConversations(userId: string) {
        WHERE sender_id = $1 OR recipient_id = $1
      ) pairs
      JOIN users other_user ON other_user.id = pairs.other_id
+       AND other_user.id NOT IN (
+         SELECT blocked_id FROM user_blocks WHERE blocker_id = $1
+         UNION
+         SELECT blocker_id FROM user_blocks WHERE blocked_id = $1
+       )
      JOIN LATERAL (
        SELECT message, created_at, sender_id
        FROM direct_messages
@@ -6008,8 +6898,6 @@ export async function isContentHidden(targetType: string, targetId: string): Pro
 
 // ─── Public Routes (Global Map) ───────────────────────────────────────────────
 
-import { createHash } from "crypto";
-
 type Coord = { latitude: number; longitude: number };
 
 function rdpSimplify(pts: Coord[], epsilon: number): Coord[] {
@@ -6193,8 +7081,13 @@ export async function getMapRoutes(params: {
 
   return res.rows.map((r: any) => {
     let path = typeof r.path === "string" ? JSON.parse(r.path) : r.path;
-    if (zoomEpsilon > 0 && Array.isArray(path) && path.length > 2) {
-      path = rdpSimplify(path.map((p: any) => ({ latitude: p.latitude ?? p.lat, longitude: p.longitude ?? p.lng })), zoomEpsilon);
+    // Always normalize to {latitude, longitude} so the client Polyline always renders,
+    // regardless of what key shape was stored. Only simplify if epsilon > 0.
+    if (Array.isArray(path)) {
+      path = path.map((p: any) => ({ latitude: p.latitude ?? p.lat, longitude: p.longitude ?? p.lng }));
+      if (zoomEpsilon > 0 && path.length > 2) {
+        path = rdpSimplify(path, zoomEpsilon);
+      }
     }
     return {
       id: r.id,

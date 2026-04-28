@@ -57,3 +57,13 @@ export const addNotificationResponseReceivedListener = (
     return { remove: () => {} };
   }
 };
+
+export const addNotificationReceivedListener = (
+  ...args: Parameters<typeof import("expo-notifications").addNotificationReceivedListener>
+): { remove: () => void } => {
+  try {
+    return Notifs?.addNotificationReceivedListener(...args) ?? { remove: () => {} };
+  } catch (_) {
+    return { remove: () => {} };
+  }
+};

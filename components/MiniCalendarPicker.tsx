@@ -14,6 +14,11 @@ interface Props {
   onChange: (date: Date) => void;
   minDate?: Date;
   maxDate?: Date;
+  /**
+   * When provided, renders in a row next to the date trigger (e.g. a time input).
+   * The calendar panel still drops down full-width below both.
+   */
+  rightSlot?: React.ReactNode;
 }
 
 const DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
@@ -44,7 +49,7 @@ function buildGrid(year: number, month: number): (number | null)[][] {
 
 const CALENDAR_MAX_HEIGHT = 320;
 
-export default function MiniCalendarPicker({ value, onChange, minDate, maxDate }: Props) {
+export default function MiniCalendarPicker({ value, onChange, minDate, maxDate, rightSlot }: Props) {
   const { C } = useTheme();
   const [open, setOpen] = useState(false);
   const [viewYear, setViewYear] = useState(value.getFullYear());
@@ -112,6 +117,8 @@ export default function MiniCalendarPicker({ value, onChange, minDate, maxDate }
       StyleSheet.create({
         container: {
           zIndex: 20,
+          width: "100%",
+          alignSelf: "stretch",
         },
         trigger: {
           flexDirection: "row",
@@ -147,6 +154,8 @@ export default function MiniCalendarPicker({ value, onChange, minDate, maxDate }
           paddingTop: 12,
           overflow: "hidden",
           zIndex: 20,
+          width: "100%",
+          alignSelf: "stretch",
         },
         monthHeader: {
           flexDirection: "row",
@@ -203,14 +212,28 @@ export default function MiniCalendarPicker({ value, onChange, minDate, maxDate }
         <Pressable style={s.backdrop} onPress={closeCalendar} />
       )}
 
-      <Pressable style={s.trigger} onPress={toggle}>
-        <Text style={s.triggerText}>{formattedValue}</Text>
-        <Feather
-          name={open ? "chevron-up" : "calendar"}
-          size={16}
-          color={open ? C.primary : C.textMuted}
-        />
-      </Pressable>
+      {rightSlot ? (
+        <View style={{ flexDirection: "row", gap: 6, alignItems: "stretch" }}>
+          <Pressable style={[s.trigger, { flex: 1 }]} onPress={toggle}>
+            <Text style={s.triggerText}>{formattedValue}</Text>
+            <Feather
+              name={open ? "chevron-up" : "calendar"}
+              size={16}
+              color={open ? C.primary : C.textMuted}
+            />
+          </Pressable>
+          {rightSlot}
+        </View>
+      ) : (
+        <Pressable style={s.trigger} onPress={toggle}>
+          <Text style={s.triggerText}>{formattedValue}</Text>
+          <Feather
+            name={open ? "chevron-up" : "calendar"}
+            size={16}
+            color={open ? C.primary : C.textMuted}
+          />
+        </Pressable>
+      )}
 
       {open && (
         <Animated.View style={[s.calendar, calendarAnimStyle]}>

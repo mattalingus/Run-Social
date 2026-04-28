@@ -11,12 +11,14 @@ import {
   Animated,
   PanResponder,
   Alert,
+  Pressable,
 } from "react-native";
 import { Image as ExpoImage } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons, Feather } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
+import * as Haptics from "expo-haptics";
 import { useTheme } from "@/contexts/ThemeContext";
 import { darkColors, type ColorScheme } from "@/constants/colors";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
@@ -41,6 +43,19 @@ interface Conversation {
   unread_count: number;
 }
 
+interface CrewRow {
+  id: string;
+  name: string;
+  emoji: string;
+  image_url?: string | null;
+  member_count: number;
+  last_message?: string | null;
+  last_message_at?: string | null;
+  last_sender_name?: string | null;
+  unread_count?: number | string;
+  chat_muted?: boolean;
+}
+
 interface Friend {
   id: string;
   name: string;
@@ -48,6 +63,12 @@ interface Friend {
   photo_url: string | null;
   friendship_id: string;
 }
+
+type InboxFilter = "all" | "crews" | "dms";
+
+type InboxItem =
+  | { kind: "crew"; id: string; data: CrewRow; ts: number }
+  | { kind: "dm"; id: string; data: Conversation; ts: number };
 
 function formatTime(iso: string): string {
   const d = new Date(iso);
@@ -70,7 +91,7 @@ function makeStyles(C: ColorScheme) {
     container: { flex: 1, backgroundColor: C.bg },
     header: {
       paddingHorizontal: 20,
-      paddingBottom: 12,
+      paddingBottom: 8,
       paddingTop: isWeb ? 67 : 0,
       flexDirection: "row",
       alignItems: "center",
@@ -82,6 +103,34 @@ function makeStyles(C: ColorScheme) {
       backgroundColor: C.card,
       alignItems: "center", justifyContent: "center",
     },
+    tabsRow: {
+      flexDirection: "row",
+      gap: 8,
+      paddingHorizontal: 20,
+      marginBottom: 8,
+    },
+    tabPill: {
+      paddingHorizontal: 14,
+      paddingVertical: 7,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: C.border,
+      backgroundColor: C.surface,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+    tabPillActive: { backgroundColor: C.primary, borderColor: C.primary },
+    tabPillTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary },
+    tabPillTxtActive: { color: C.bg },
+    tabPillBadge: {
+      minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5,
+      backgroundColor: C.primary + "33",
+      alignItems: "center", justifyContent: "center",
+    },
+    tabPillBadgeActive: { backgroundColor: "rgba(255,255,255,0.3)" },
+    tabPillBadgeTxt: { fontFamily: "Outfit_700Bold", fontSize: 10, color: C.primary },
+    tabPillBadgeTxtActive: { color: C.bg },
     listContent: { paddingBottom: isWeb ? 34 : 100 },
     swipeContainer: { overflow: "hidden" },
     deleteBack: {
@@ -106,18 +155,38 @@ function makeStyles(C: ColorScheme) {
       backgroundColor: C.primaryMuted,
       alignItems: "center", justifyContent: "center",
     },
+    crewAvatar: {
+      width: 50, height: 50, borderRadius: 14,
+      backgroundColor: C.primary + "22",
+      alignItems: "center", justifyContent: "center",
+    },
+    crewAvatarEmoji: { fontSize: 24 },
     avatarLetter: { fontFamily: "Outfit_700Bold", fontSize: 20, color: C.primary },
     convoMeta: { flex: 1 },
     convoNameRow: {
       flexDirection: "row", alignItems: "center",
       justifyContent: "space-between", marginBottom: 3,
     },
-    convoName: { fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.text },
+    convoNameInner: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1 },
+    convoName: { fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.text, flexShrink: 1 },
+    crewTag: {
+      fontFamily: "Outfit_600SemiBold", fontSize: 10,
+      color: C.primary, letterSpacing: 0.3,
+      backgroundColor: C.primary + "22",
+      paddingHorizontal: 6, paddingVertical: 1,
+      borderRadius: 6, overflow: "hidden",
+    },
     convoTime: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted },
     convoPreviewRow: { flexDirection: "row", alignItems: "center", gap: 6 },
     convoPreview: { flex: 1, fontFamily: "Outfit_400Regular", fontSize: 13, color: C.textSecondary },
     convoPreviewUnread: { fontFamily: "Outfit_600SemiBold", color: C.text },
     unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.primary },
+    unreadBadge: {
+      minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 6,
+      backgroundColor: C.primary,
+      alignItems: "center", justifyContent: "center",
+    },
+    unreadBadgeTxt: { fontFamily: "Outfit_700Bold", fontSize: 11, color: C.bg },
     emptyWrap: {
       flex: 1, alignItems: "center", justifyContent: "center",
       paddingHorizontal: 40, gap: 12,
@@ -163,19 +232,17 @@ function makeStyles(C: ColorScheme) {
   });
 }
 
-// ─── Swipeable Row ─────────────────────────────────────────────────────────────
+// ─── Swipeable DM Row ───────────────────────────────────────────────────────────
 function SwipeableConvoRow({
   item,
-  index,
-  total,
+  showBorder,
   s,
   C,
   onOpen,
   onDelete,
 }: {
   item: Conversation;
-  index: number;
-  total: number;
+  showBorder: boolean;
   s: ReturnType<typeof makeStyles>;
   C: ColorScheme;
   onOpen: () => void;
@@ -213,26 +280,21 @@ function SwipeableConvoRow({
 
   return (
     <View style={s.swipeContainer}>
-      {/* Red delete background */}
       <View style={s.deleteBack}>
         <TouchableOpacity
-          onPress={() => {
-            close();
-            onDelete();
-          }}
+          onPress={() => { close(); onDelete(); }}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
           <Ionicons name="trash" size={22} color="#fff" />
         </TouchableOpacity>
       </View>
 
-      {/* Sliding row */}
       <Animated.View
         style={{ transform: [{ translateX }] }}
         {...panResponder.panHandlers}
       >
         <TouchableOpacity
-          style={[s.convoRow, index < total - 1 && s.convoRowBorder]}
+          style={[s.convoRow, showBorder && s.convoRowBorder]}
           onPress={() => {
             if (isOpen.current) { close(); return; }
             onOpen();
@@ -253,7 +315,11 @@ function SwipeableConvoRow({
           </View>
           <View style={s.convoMeta}>
             <View style={s.convoNameRow}>
-              <Text style={s.convoName}>{item.friend_username ? `@${item.friend_username}` : item.friend_name}</Text>
+              <View style={s.convoNameInner}>
+                <Text style={s.convoName} numberOfLines={1}>
+                  {item.friend_username ? `@${item.friend_username}` : item.friend_name}
+                </Text>
+              </View>
               <Text style={s.convoTime}>{formatTime(item.last_message_at)}</Text>
             </View>
             <View style={s.convoPreviewRow}>
@@ -272,6 +338,70 @@ function SwipeableConvoRow({
   );
 }
 
+// ─── Crew Row ──────────────────────────────────────────────────────────────────
+function CrewConvoRow({
+  item,
+  showBorder,
+  s,
+  C,
+  onOpen,
+}: {
+  item: CrewRow;
+  showBorder: boolean;
+  s: ReturnType<typeof makeStyles>;
+  C: ColorScheme;
+  onOpen: () => void;
+}) {
+  const unread = Number(item.unread_count ?? 0);
+  const hasUnread = unread > 0;
+  const photo = resolveImgUrl(item.image_url);
+  const preview = item.last_message
+    ? (item.last_sender_name ? `${item.last_sender_name}: ${item.last_message}` : item.last_message)
+    : `${item.member_count} member${item.member_count === 1 ? "" : "s"} · tap to chat`;
+  return (
+    <TouchableOpacity
+      style={[s.convoRow, showBorder && s.convoRowBorder]}
+      onPress={onOpen}
+      activeOpacity={0.85}
+      testID={`crew-convo-${item.id}`}
+    >
+      <View style={s.crewAvatar}>
+        {photo ? (
+          <ExpoImage
+            source={{ uri: photo }}
+            style={{ width: 50, height: 50, borderRadius: 14 }}
+            contentFit="cover"
+          />
+        ) : (
+          <Text style={s.crewAvatarEmoji}>{item.emoji || "🏃"}</Text>
+        )}
+      </View>
+      <View style={s.convoMeta}>
+        <View style={s.convoNameRow}>
+          <View style={s.convoNameInner}>
+            <Text style={s.convoName} numberOfLines={1}>{item.name}</Text>
+            <Text style={s.crewTag}>CREW</Text>
+          </View>
+          {item.last_message_at && <Text style={s.convoTime}>{formatTime(item.last_message_at)}</Text>}
+        </View>
+        <View style={s.convoPreviewRow}>
+          <Text
+            style={[s.convoPreview, hasUnread && s.convoPreviewUnread]}
+            numberOfLines={1}
+          >
+            {preview}
+          </Text>
+          {hasUnread && (
+            <View style={s.unreadBadge}>
+              <Text style={s.unreadBadgeTxt}>{unread > 99 ? "99+" : unread}</Text>
+            </View>
+          )}
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
 // ─── Main Screen ───────────────────────────────────────────────────────────────
 export default function MessagesScreen() {
   const { C } = useTheme();
@@ -280,10 +410,16 @@ export default function MessagesScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const [showCompose, setShowCompose] = useState(false);
+  const [filter, setFilter] = useState<InboxFilter>("all");
 
-  const { data: conversations = [], isLoading } = useQuery<Conversation[]>({
+  const { data: conversations = [], isLoading: isLoadingDms } = useQuery<Conversation[]>({
     queryKey: ["/api/dm/conversations"],
     refetchInterval: 10000,
+  });
+
+  const { data: crews = [], isLoading: isLoadingCrews } = useQuery<CrewRow[]>({
+    queryKey: ["/api/crews"],
+    refetchInterval: 15000,
   });
 
   const { data: friends = [] } = useQuery<Friend[]>({
@@ -306,22 +442,52 @@ export default function MessagesScreen() {
     router.push({ pathname: "/dm/[friendId]", params: { friendId, friendName, friendUsername: friendUsername ?? "", friendPhoto: friendPhoto ?? "" } });
   }, [router]);
 
+  const openCrew = useCallback((crewId: string) => {
+    Haptics.selectionAsync();
+    router.push({ pathname: "/(tabs)/crew", params: { crewId } });
+  }, [router]);
+
   const handleDelete = useCallback((friendId: string, friendName: string) => {
     Alert.alert(
       "Delete conversation",
       `Delete your conversation with ${friendName}? This cannot be undone.`,
       [
         { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => deleteMutation.mutate(friendId),
-        },
+        { text: "Delete", style: "destructive", onPress: () => deleteMutation.mutate(friendId) },
       ]
     );
   }, [deleteMutation]);
 
+  // Merge + sort inbox
+  const inbox = useMemo<InboxItem[]>(() => {
+    const items: InboxItem[] = [];
+    if (filter === "all" || filter === "crews") {
+      for (const c of crews) {
+        const ts = c.last_message_at ? new Date(c.last_message_at).getTime() : 0;
+        items.push({ kind: "crew", id: `crew-${c.id}`, data: c, ts });
+      }
+    }
+    if (filter === "all" || filter === "dms") {
+      for (const d of conversations) {
+        const ts = d.last_message_at ? new Date(d.last_message_at).getTime() : 0;
+        items.push({ kind: "dm", id: `dm-${d.friend_id}`, data: d, ts });
+      }
+    }
+    items.sort((a, b) => b.ts - a.ts);
+    return items;
+  }, [crews, conversations, filter]);
+
+  const totalCrewUnread = useMemo(
+    () => crews.reduce((sum, c) => sum + Number(c.unread_count ?? 0), 0),
+    [crews]
+  );
+  const totalDmUnread = useMemo(
+    () => conversations.reduce((sum, c) => sum + Number(c.unread_count ?? 0), 0),
+    [conversations]
+  );
+
   const topPad = Platform.OS === "web" ? 0 : insets.top;
+  const isLoading = isLoadingDms || isLoadingCrews;
 
   if (isLoading) {
     return (
@@ -340,34 +506,82 @@ export default function MessagesScreen() {
         </TouchableOpacity>
       </View>
 
-      {conversations.length === 0 ? (
+      {/* Tabs: All / Crews / DMs */}
+      <View style={s.tabsRow}>
+        {([
+          { k: "all" as const, label: "All", count: totalCrewUnread + totalDmUnread },
+          { k: "crews" as const, label: "Crews", count: totalCrewUnread },
+          { k: "dms" as const, label: "DMs", count: totalDmUnread },
+        ]).map((t) => {
+          const active = filter === t.k;
+          return (
+            <Pressable
+              key={t.k}
+              onPress={() => { Haptics.selectionAsync(); setFilter(t.k); }}
+              style={[s.tabPill, active && s.tabPillActive]}
+            >
+              <Text style={[s.tabPillTxt, active && s.tabPillTxtActive]}>{t.label}</Text>
+              {t.count > 0 && (
+                <View style={[s.tabPillBadge, active && s.tabPillBadgeActive]}>
+                  <Text style={[s.tabPillBadgeTxt, active && s.tabPillBadgeTxtActive]}>
+                    {t.count > 99 ? "99+" : t.count}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {inbox.length === 0 ? (
         <View style={s.emptyWrap}>
           <View style={s.emptyIcon}>
             <Ionicons name="chatbubble-outline" size={28} color={C.textMuted} />
           </View>
-          <Text style={s.emptyTitle}>No messages yet</Text>
-          <Text style={s.emptyDesc}>Send a message to a friend to get started</Text>
-          <TouchableOpacity style={s.emptyBtn} onPress={() => setShowCompose(true)}>
-            <Text style={s.emptyBtnTxt}>Start a conversation</Text>
-          </TouchableOpacity>
+          <Text style={s.emptyTitle}>
+            {filter === "crews" ? "No crew chats" : filter === "dms" ? "No messages yet" : "Inbox is empty"}
+          </Text>
+          <Text style={s.emptyDesc}>
+            {filter === "crews"
+              ? "Join a crew to chat with other runners"
+              : "Send a message to a friend to get started"}
+          </Text>
+          {filter !== "crews" && (
+            <TouchableOpacity style={s.emptyBtn} onPress={() => setShowCompose(true)}>
+              <Text style={s.emptyBtnTxt}>Start a conversation</Text>
+            </TouchableOpacity>
+          )}
         </View>
       ) : (
         <FlatList
-          data={conversations}
-          keyExtractor={(item) => item.friend_id}
+          data={inbox}
+          keyExtractor={(it) => it.id}
           contentContainerStyle={s.listContent}
           showsVerticalScrollIndicator={false}
-          renderItem={({ item, index }) => (
-            <SwipeableConvoRow
-              item={item}
-              index={index}
-              total={conversations.length}
-              s={s}
-              C={C}
-              onOpen={() => openThread(item.friend_id, item.friend_name, item.friend_username, item.friend_photo)}
-              onDelete={() => handleDelete(item.friend_id, item.friend_name)}
-            />
-          )}
+          renderItem={({ item, index }) => {
+            const showBorder = index < inbox.length - 1;
+            if (item.kind === "crew") {
+              return (
+                <CrewConvoRow
+                  item={item.data}
+                  showBorder={showBorder}
+                  s={s}
+                  C={C}
+                  onOpen={() => openCrew(item.data.id)}
+                />
+              );
+            }
+            return (
+              <SwipeableConvoRow
+                item={item.data}
+                showBorder={showBorder}
+                s={s}
+                C={C}
+                onOpen={() => openThread(item.data.friend_id, item.data.friend_name, item.data.friend_username, item.data.friend_photo)}
+                onDelete={() => handleDelete(item.data.friend_id, item.data.friend_name)}
+              />
+            );
+          }}
         />
       )}
 

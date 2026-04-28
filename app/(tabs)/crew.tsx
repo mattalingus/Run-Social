@@ -16,15 +16,16 @@ import {
   Image,
   Pressable,
   Linking,
+  Share,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Feather } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { router, useFocusEffect } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest, getApiUrl, apiFetch } from "@/lib/query-client";
@@ -34,9 +35,10 @@ import { useWalkthrough } from "@/contexts/WalkthroughContext";
 import { usePurchases } from "@/contexts/PurchasesContext";
 import PaywallSheet, { type PaywallPlan } from "@/components/PaywallSheet";
 import { darkColors, type ColorScheme } from "@/constants/colors";
-import { toDisplayPace, toDisplaySpeed, toDisplayDist, unitLabel, type DistanceUnit } from "@/lib/units";
+import { toDisplayPace, toDisplaySpeed, toDisplayDist, toDisplayDistSmart, toDisplayDistShort, unitLabel, type DistanceUnit } from "@/lib/units";
 import { Image as ExpoImage } from "expo-image";
 import { formatEventDateTime } from "@/lib/formatDate";
+import { uploadImageUri } from "@/lib/uploadImage";
 
 const C = darkColors;
 
@@ -115,11 +117,18 @@ interface CrewMember {
   id: string;
   user_id: string;
   name: string;
+  username?: string | null;
   photo_url?: string;
   avg_pace?: number;
   hosted_runs?: number;
   joined_at: string;
   role?: string;
+  weekly_runs?: number;
+  weekly_miles?: number;
+  weekly_pace?: number;
+  monthly_runs?: number;
+  monthly_miles?: number;
+  monthly_pace?: number;
 }
 
 interface CrewDetail extends Crew {
@@ -278,19 +287,10 @@ function CreateCrewSheet({ visible, onClose, onCreated }: { visible: boolean; on
     setImageUri(asset.uri);
     setIsUploading(true);
     try {
-      const formData = new FormData();
-      const ext = asset.uri.split(".").pop() ?? "jpg";
-      formData.append("photo", { uri: asset.uri, name: `crew-image.${ext}`, type: `image/${ext}` } as any);
-      const base = getApiUrl();
-      const res = await apiFetch(new URL("/api/upload/photo", base).toString(), {
-        method: "POST",
-        body: formData,
-      });
-      const data = await res.json();
-      if (data.url) setImageUrl(data.url);
-      else throw new Error("Upload failed");
-    } catch {
-      Alert.alert("Upload failed", "Could not upload image. Please try again.");
+      const url = await uploadImageUri(asset.uri, "crew", asset.mimeType ?? undefined);
+      setImageUrl(url);
+    } catch (e: any) {
+      Alert.alert("Upload failed", e?.message || "Could not upload image. Please try again.");
       setImageUri(null);
       setImageUrl(null);
     } finally {
@@ -358,34 +358,37 @@ function CreateCrewSheet({ visible, onClose, onCreated }: { visible: boolean; on
           </View>
 
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 24, paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
-            <Text style={s.fieldLabel}>Crew Icon</Text>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 16 }}>
-              {/* Upload photo button */}
-              <TouchableOpacity style={s.imagePickerBtn} onPress={pickImage} disabled={isUploading}>
-                {isUploading ? (
-                  <ActivityIndicator color={C.primary} />
-                ) : imageUri ? (
-                  <Image source={{ uri: imageUri }} style={s.imagePickerPreview} />
-                ) : (
-                  <>
-                    <Ionicons name="add" size={24} color={C.textMuted} />
-                    <Text style={s.imagePickerTxt}>Photo</Text>
-                  </>
-                )}
+            {/* Centered icon hero — tap circle to upload photo */}
+            <View style={s.iconHero}>
+              <TouchableOpacity onPress={pickImage} disabled={isUploading} activeOpacity={0.85}>
+                <View style={s.iconHeroCircle}>
+                  {isUploading ? (
+                    <ActivityIndicator color={C.primary} size="large" />
+                  ) : imageUri ? (
+                    <Image source={{ uri: imageUri }} style={s.iconHeroImage} />
+                  ) : (
+                    <Text style={s.iconHeroEmoji}>{emoji}</Text>
+                  )}
+                </View>
+                <View style={s.iconHeroEditBadge}>
+                  <Ionicons name={imageUri ? "create" : "camera"} size={14} color={C.bg} />
+                </View>
               </TouchableOpacity>
-              {/* Emoji scroll */}
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ gap: 8 }}>
-                {EMOJIS.map((e) => (
-                  <TouchableOpacity
-                    key={e}
-                    style={[s.emojiOption, !imageUri && emoji === e && s.emojiOptionActive]}
-                    onPress={() => { setEmoji(e); setImageUri(null); setImageUrl(null); }}
-                  >
-                    <Text style={s.emojiOptionText}>{e}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
+              <Text style={s.iconHeroHint}>{imageUri ? "Tap photo to change" : "Tap to upload a photo"}</Text>
             </View>
+
+            <Text style={s.fieldLabelCenter}>OR PICK AN EMOJI</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.emojiRowCentered}>
+              {EMOJIS.map((e) => (
+                <TouchableOpacity
+                  key={e}
+                  style={[s.emojiOption, !imageUri && emoji === e && s.emojiOptionActive]}
+                  onPress={() => { setEmoji(e); setImageUri(null); setImageUrl(null); }}
+                >
+                  <Text style={s.emojiOptionText}>{e}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
 
             <Text style={s.fieldLabel}>Crew name</Text>
             <TextInput
@@ -490,11 +493,15 @@ function CreateCrewSheet({ visible, onClose, onCreated }: { visible: boolean; on
 function InviteUserSheet({
   onClose,
   crewId,
+  crewName,
+  crewEmoji,
   existingMemberIds,
   pendingRequestIds,
 }: {
   onClose: () => void;
   crewId: string;
+  crewName?: string;
+  crewEmoji?: string;
   existingMemberIds: string[];
   pendingRequestIds: string[];
 }) {
@@ -556,20 +563,47 @@ function InviteUserSheet({
           </TouchableOpacity>
         </View>
 
-        <View style={s.memberSearchBar}>
-          <Ionicons name="search-outline" size={18} color={C.textMuted} style={{ marginRight: 8 }} />
-          <TextInput
-            style={s.memberSearchInput}
-            value={query}
-            onChangeText={search}
-            placeholder="Search by username"
-            placeholderTextColor={C.textMuted}
-            autoFocus
-            autoCapitalize="none"
-            autoCorrect={false}
-            testID="invite-search-input"
-          />
-          {searching && <ActivityIndicator size="small" color={C.primary} />}
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <View style={[s.memberSearchBar, { flex: 1 }]}>
+            <Ionicons name="search-outline" size={18} color={C.textMuted} style={{ marginRight: 8 }} />
+            <TextInput
+              style={s.memberSearchInput}
+              value={query}
+              onChangeText={search}
+              placeholder="Search by username"
+              placeholderTextColor={C.textMuted}
+              autoFocus
+              autoCapitalize="none"
+              autoCorrect={false}
+              testID="invite-search-input"
+            />
+            {searching && <ActivityIndicator size="small" color={C.primary} />}
+          </View>
+          <TouchableOpacity
+            testID="invite-share-btn"
+            onPress={async () => {
+              try {
+                const crewLabel = `${crewEmoji ? crewEmoji + " " : ""}${crewName ?? "our crew"}`;
+                const url = `paceup://crew/${crewId}`;
+                await Share.share({
+                  message: `Join ${crewLabel} on PaceUp! ${url}`,
+                  url, // iOS-only — adds the link as an attachment
+                } as any);
+              } catch (e: any) {
+                // user canceled or share unavailable — silent
+              }
+            }}
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: 12,
+              backgroundColor: C.primary,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Feather name="share" size={18} color="#fff" />
+          </TouchableOpacity>
         </View>
 
         <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
@@ -769,7 +803,7 @@ function MemberProfileSheet({
               {activityStats && (
                 <View style={{ flexDirection: "row", justifyContent: "space-around", paddingHorizontal: 16, paddingVertical: 8 }}>
                   <View style={{ alignItems: "center" }}>
-                    <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 17, color: C.primary }}>{toDisplayDist(activityStats.total_miles, distUnit)} {unitLabel(distUnit)}</Text>
+                    <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 17, color: C.primary }}>{toDisplayDist(activityStats.total_miles, distUnit)}</Text>
                     <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted }}>Total</Text>
                   </View>
                   <View style={{ alignItems: "center" }}>
@@ -854,6 +888,310 @@ function formatAchievedDate(dateStr: string): string {
     const d = new Date(dateStr);
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   } catch { return ""; }
+}
+
+// ─── Crew Goals ────────────────────────────────────────────────────────────
+
+type GoalActivity = "run" | "ride" | "walk" | "all";
+
+interface CrewGoalResponse {
+  activity_type: GoalActivity;
+  weekly_target_miles: number | null;
+  monthly_target_miles: number | null;
+  weekly_miles: number;
+  monthly_miles: number;
+  updated_by: string | null;
+  updated_at: string | null;
+}
+
+function GoalProgressBar({
+  label,
+  currentMiles,
+  targetMiles,
+  distUnit,
+  C,
+}: {
+  label: string;
+  currentMiles: number;
+  targetMiles: number | null;
+  distUnit: DistanceUnit;
+  C: any;
+}) {
+  const pct = targetMiles && targetMiles > 0 ? Math.min(1, currentMiles / targetMiles) : 0;
+  const pctDisplay = Math.round(pct * 100);
+  const isHit = targetMiles != null && currentMiles >= targetMiles && targetMiles > 0;
+  return (
+    <View style={{ marginBottom: 10 }}>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
+        <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.textMuted }}>
+          {label}
+        </Text>
+        <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.text }}>
+          {toDisplayDistShort(currentMiles, distUnit)} / {targetMiles != null ? toDisplayDistSmart(targetMiles, distUnit) : "—"}
+          {targetMiles != null ? `  · ${pctDisplay}%` : ""}
+        </Text>
+      </View>
+      <View style={{ height: 8, borderRadius: 4, backgroundColor: C.border, overflow: "hidden" }}>
+        <View
+          style={{
+            width: `${pctDisplay}%`,
+            height: "100%",
+            backgroundColor: isHit ? "#FFD700" : C.primary,
+          }}
+        />
+      </View>
+    </View>
+  );
+}
+
+function CrewGoalEditModal({
+  visible,
+  onClose,
+  crewId,
+  activityType,
+  current,
+  distUnit,
+  C,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  crewId: string;
+  activityType: GoalActivity;
+  current: { weekly: number | null; monthly: number | null };
+  distUnit: DistanceUnit;
+  C: any;
+}) {
+  const qc = useQueryClient();
+  const KM_PER_MILE = 1.60934;
+  const toInput = (miles: number | null): string => {
+    if (miles == null) return "";
+    return distUnit === "km" ? (miles * KM_PER_MILE).toFixed(2) : miles.toFixed(2);
+  };
+  const fromInput = (val: string): number | null => {
+    const trimmed = val.trim();
+    if (!trimmed) return null;
+    const num = parseFloat(trimmed);
+    if (!isFinite(num) || num < 0) return null;
+    return distUnit === "km" ? num / KM_PER_MILE : num;
+  };
+
+  const [weeklyInput, setWeeklyInput] = useState(toInput(current.weekly));
+  const [monthlyInput, setMonthlyInput] = useState(toInput(current.monthly));
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (visible) {
+      setWeeklyInput(toInput(current.weekly));
+      setMonthlyInput(toInput(current.monthly));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, current.weekly, current.monthly, distUnit]);
+
+  const activityLabel =
+    activityType === "all" ? "All activities"
+    : activityType === "run" ? "Runs"
+    : activityType === "ride" ? "Rides"
+    : "Walks";
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const weekly = fromInput(weeklyInput);
+      const monthly = fromInput(monthlyInput);
+      await apiRequest("PUT", `/api/crews/${crewId}/goals`, {
+        activity_type: activityType,
+        weekly_target_miles: weekly,
+        monthly_target_miles: monthly,
+      });
+      qc.invalidateQueries({ queryKey: ["/api/crews", crewId, "goals", activityType] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      onClose();
+    } catch (e: any) {
+      Alert.alert("Couldn't save goal", e?.message ?? "Try again later");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable
+        style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "center", padding: 24 }}
+        onPress={onClose}
+      >
+        <Pressable
+          onPress={(e) => e.stopPropagation?.()}
+          style={{ backgroundColor: C.surface, borderRadius: 16, padding: 20, borderWidth: 1, borderColor: C.border }}
+        >
+          <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text, marginBottom: 4 }}>
+            Crew Goal — {activityLabel}
+          </Text>
+          <Text style={{ fontFamily: "Outfit_500Medium", fontSize: 12, color: C.textMuted, marginBottom: 16 }}>
+            Set total distance targets in {unitLabel(distUnit)}. Leave blank to clear.
+          </Text>
+
+          <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.textMuted, marginBottom: 6 }}>
+            Weekly target ({unitLabel(distUnit)})
+          </Text>
+          <TextInput
+            value={weeklyInput}
+            onChangeText={setWeeklyInput}
+            placeholder="e.g. 50"
+            placeholderTextColor={C.textMuted}
+            keyboardType="decimal-pad"
+            style={{
+              backgroundColor: C.bg, borderRadius: 10, borderWidth: 1, borderColor: C.border,
+              paddingHorizontal: 12, paddingVertical: 10, fontFamily: "Outfit_500Medium",
+              fontSize: 15, color: C.text, marginBottom: 12,
+            }}
+          />
+
+          <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.textMuted, marginBottom: 6 }}>
+            Monthly target ({unitLabel(distUnit)})
+          </Text>
+          <TextInput
+            value={monthlyInput}
+            onChangeText={setMonthlyInput}
+            placeholder="e.g. 200"
+            placeholderTextColor={C.textMuted}
+            keyboardType="decimal-pad"
+            style={{
+              backgroundColor: C.bg, borderRadius: 10, borderWidth: 1, borderColor: C.border,
+              paddingHorizontal: 12, paddingVertical: 10, fontFamily: "Outfit_500Medium",
+              fontSize: 15, color: C.text, marginBottom: 20,
+            }}
+          />
+
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            <Pressable
+              onPress={onClose}
+              style={{ flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1, borderColor: C.border, alignItems: "center" }}
+            >
+              <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.textMuted }}>Cancel</Text>
+            </Pressable>
+            <Pressable
+              onPress={handleSave}
+              disabled={saving}
+              style={{ flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: saving ? C.primaryMuted : C.primary, alignItems: "center" }}
+            >
+              <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 14, color: saving ? C.primary : C.bg }}>
+                {saving ? "Saving…" : "Save"}
+              </Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function CrewGoalSection({
+  crewId,
+  isChief,
+  styles: s,
+  C,
+  distUnit,
+}: {
+  crewId: string;
+  isChief: boolean;
+  styles: any;
+  C: any;
+  distUnit: DistanceUnit;
+}) {
+  const [activityType, setActivityType] = useState<GoalActivity>("all");
+  const [editOpen, setEditOpen] = useState(false);
+
+  const { data } = useQuery<CrewGoalResponse>({
+    queryKey: ["/api/crews", crewId, "goals", activityType],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/crews/${crewId}/goals?activity=${activityType}`);
+      return res.json();
+    },
+    enabled: !!crewId,
+  });
+
+  const weeklyTarget = data?.weekly_target_miles ?? null;
+  const monthlyTarget = data?.monthly_target_miles ?? null;
+  const weeklyMiles = data?.weekly_miles ?? 0;
+  const monthlyMiles = data?.monthly_miles ?? 0;
+  const hasGoal = (weeklyTarget ?? 0) > 0 || (monthlyTarget ?? 0) > 0;
+
+  return (
+    <View style={s.detailSection}>
+      <View style={s.detailSectionHeader}>
+        <Text style={s.detailSectionTitle}>Crew Goals</Text>
+        {isChief && (
+          <Pressable
+            onPress={() => { Haptics.selectionAsync(); setEditOpen(true); }}
+            hitSlop={10}
+            style={{ padding: 4 }}
+          >
+            <Ionicons name="settings-outline" size={18} color={C.textMuted} />
+          </Pressable>
+        )}
+      </View>
+
+      <View style={{ flexDirection: "row", gap: 6, marginBottom: 12 }}>
+        {(["run", "ride", "walk", "all"] as const).map((a) => {
+          const active = activityType === a;
+          const label = a === "all" ? "All" : a === "run" ? "Run" : a === "ride" ? "Ride" : "Walk";
+          return (
+            <Pressable
+              key={a}
+              onPress={() => { setActivityType(a); Haptics.selectionAsync(); }}
+              style={{
+                flex: 1, paddingVertical: 7, borderRadius: 10, borderWidth: 1,
+                borderColor: active ? C.primary : C.border,
+                backgroundColor: active ? C.primaryMuted : C.surface,
+                alignItems: "center",
+              }}
+            >
+              <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: active ? C.primary : C.textMuted }}>
+                {label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {!hasGoal ? (
+        <View style={{ paddingVertical: 14, alignItems: "center" }}>
+          <Text style={{ fontFamily: "Outfit_500Medium", fontSize: 13, color: C.textMuted, textAlign: "center" }}>
+            {isChief
+              ? "No goal set for this activity. Tap the gear icon to add one."
+              : "Your Crew Chief hasn't set a goal for this activity yet."}
+          </Text>
+        </View>
+      ) : (
+        <>
+          <GoalProgressBar
+            label="Weekly"
+            currentMiles={weeklyMiles}
+            targetMiles={weeklyTarget}
+            distUnit={distUnit}
+            C={C}
+          />
+          <GoalProgressBar
+            label="Monthly"
+            currentMiles={monthlyMiles}
+            targetMiles={monthlyTarget}
+            distUnit={distUnit}
+            C={C}
+          />
+        </>
+      )}
+
+      <CrewGoalEditModal
+        visible={editOpen}
+        onClose={() => setEditOpen(false)}
+        crewId={crewId}
+        activityType={activityType}
+        current={{ weekly: weeklyTarget, monthly: monthlyTarget }}
+        distUnit={distUnit}
+        C={C}
+      />
+    </View>
+  );
 }
 
 function CrewAchievementsSection({
@@ -1054,6 +1392,8 @@ function CrewDetailSheet({
   const { activityFilter, setActivityFilter } = useActivity();
   const [showInvite, setShowInvite] = useState(false);
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
+  const [topPerfMetric, setTopPerfMetric] = useState<"runs" | "miles" | "pace">("miles");
+  const [topPerfRange, setTopPerfRange] = useState<"week" | "month">("week");
   const [roleSheetMember, setRoleSheetMember] = useState<{ user_id: string; name: string; role: string } | null>(null);
   const qc = useQueryClient();
 
@@ -1152,6 +1492,83 @@ function CrewDetailSheet({
 
   const isMuted = crew?.chat_muted ?? false;
 
+  // ─── Chief edit: image (unlimited) + name (one-time) ────────────────────────
+  const [isEditingImage, setIsEditingImage] = useState(false);
+  const nameChangeUsed = ((crew as any)?.name_change_count ?? 0) > 0;
+  const canEditName = isCreatorLocal && !nameChangeUsed && !isMockCrew;
+  const canEditImage = isCreatorLocal && !isMockCrew;
+
+  const editCrewMutation = useMutation({
+    mutationFn: (patch: { name?: string; image_url?: string | null; emoji?: string }) =>
+      apiRequest("PATCH", `/api/crews/${crew?.id}`, patch).then((r) => r.json()),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/crews"] });
+      qc.invalidateQueries({ queryKey: ["/api/crews", crew?.id] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    onError: (e: any) => Alert.alert("Error", e?.message ?? "Could not update crew"),
+  });
+
+  async function handleEditCrewImage() {
+    if (!canEditImage) return;
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission needed", "Please allow photo library access to upload a crew image.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    setIsEditingImage(true);
+    try {
+      const url = await uploadImageUri(asset.uri, "crew", asset.mimeType ?? undefined);
+      await editCrewMutation.mutateAsync({ image_url: url });
+    } catch (e: any) {
+      Alert.alert("Upload failed", e?.message ?? "Could not upload image. Please try again.");
+    } finally {
+      setIsEditingImage(false);
+    }
+  }
+
+  function handleEditCrewName() {
+    if (!canEditName) return;
+    if (Platform.OS !== "ios") {
+      Alert.alert("Rename crew", "Crew rename is currently iOS-only. Android support is coming soon.");
+      return;
+    }
+    Alert.prompt(
+      "Rename crew",
+      "You can change the crew name once. After this, the name is locked.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Save",
+          onPress: (text?: string) => {
+            const next = (text ?? "").trim();
+            if (!next) return;
+            if (next.toLowerCase() === (crew?.name ?? "").toLowerCase()) return;
+            Alert.alert(
+              "Confirm rename",
+              `Change name to "${next}"? This is permanent.`,
+              [
+                { text: "Cancel", style: "cancel" },
+                { text: "Rename", style: "destructive", onPress: () => editCrewMutation.mutate({ name: next }) },
+              ]
+            );
+          },
+        },
+      ],
+      "plain-text",
+      crew?.name ?? "",
+      "default"
+    );
+  }
+
   function handleRemoveMember(memberId: string, memberName: string) {
     Alert.alert(
       "Remove Member",
@@ -1179,43 +1596,24 @@ function CrewDetailSheet({
   });
 
   function handleMemberRolePress(m: { user_id: string; name: string; role: string }) {
-    const currentRole = m.role ?? "member";
-    const options: { label: string; role: string; destructive?: boolean }[] = [];
-    if (currentRole !== "crew_chief") {
-      options.push({ label: "Make Crew Chief", role: "crew_chief" });
+    setRoleSheetMember(m);
+  }
+
+  function applyRoleChange(m: { user_id: string; name: string; role: string }, newRole: string) {
+    setRoleSheetMember(null);
+    if (newRole === "crew_chief") {
+      // Transfer Leadership confirmation stays as a native confirm — short text, OS-level pattern is appropriate.
+      Alert.alert(
+        "Transfer Leadership",
+        `Make ${m.name} the new Crew Chief? You will become an Officer.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Confirm", onPress: () => promoteRoleMutation.mutate({ userId: m.user_id, role: newRole }) },
+        ]
+      );
+    } else {
+      promoteRoleMutation.mutate({ userId: m.user_id, role: newRole });
     }
-    if (currentRole !== "officer") {
-      options.push({ label: currentRole === "crew_chief" ? "Demote to Officer" : "Make Officer", role: "officer" });
-    }
-    if (currentRole !== "member") {
-      options.push({ label: "Demote to Member", role: "member", destructive: true });
-    }
-    Alert.alert(
-      m.name,
-      `Current role: ${currentRole === "crew_chief" ? "Crew Chief" : currentRole === "officer" ? "Officer" : "Member"}`,
-      [
-        ...options.map((o) => ({
-          text: o.label,
-          style: (o.destructive ? "destructive" : "default") as "destructive" | "default",
-          onPress: () => {
-            if (o.role === "crew_chief") {
-              Alert.alert(
-                "Transfer Leadership",
-                `Make ${m.name} the new Crew Chief? You will become an Officer.`,
-                [
-                  { text: "Cancel", style: "cancel" },
-                  { text: "Confirm", onPress: () => promoteRoleMutation.mutate({ userId: m.user_id, role: o.role }) },
-                ]
-              );
-            } else {
-              promoteRoleMutation.mutate({ userId: m.user_id, role: o.role });
-            }
-          },
-        })),
-        { text: "View Profile", onPress: () => setSelectedMemberId(m.user_id) },
-        { text: "Cancel", style: "cancel" },
-      ]
-    );
   }
 
   const handleLeave = () => {
@@ -1423,12 +1821,37 @@ function CrewDetailSheet({
 
                 {/* Hero title */}
                 <View style={s.detailHero}>
-                  {crew.image_url ? (
-                    <Image source={{ uri: resolveImgUrl(crew.image_url)! }} style={s.detailHeroImage} />
-                  ) : (
-                    <Text style={s.detailHeroEmoji}>{crew.emoji}</Text>
-                  )}
-                  <Text style={s.detailHeroName}>{crew.name}</Text>
+                  <TouchableOpacity
+                    onPress={canEditImage ? handleEditCrewImage : undefined}
+                    disabled={!canEditImage || isEditingImage || editCrewMutation.isPending}
+                    activeOpacity={canEditImage ? 0.85 : 1}
+                  >
+                    {crew.image_url ? (
+                      <Image source={{ uri: resolveImgUrl(crew.image_url)! }} style={s.detailHeroImage} />
+                    ) : (
+                      <Text style={s.detailHeroEmoji}>{crew.emoji}</Text>
+                    )}
+                    {canEditImage && (
+                      <View style={s.detailHeroEditBadge}>
+                        {isEditingImage ? (
+                          <ActivityIndicator size="small" color={C.bg} />
+                        ) : (
+                          <Ionicons name="camera" size={14} color={C.bg} />
+                        )}
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={canEditName ? handleEditCrewName : undefined}
+                    disabled={!canEditName || editCrewMutation.isPending}
+                    activeOpacity={canEditName ? 0.7 : 1}
+                    style={s.detailHeroNameRow}
+                  >
+                    <Text style={s.detailHeroName}>{crew.name}</Text>
+                    {canEditName && (
+                      <Ionicons name="pencil" size={14} color={C.textMuted} style={{ marginLeft: 6 }} />
+                    )}
+                  </TouchableOpacity>
                   {crew.description ? (
                     <Text style={s.detailDesc}>{crew.description}</Text>
                   ) : null}
@@ -1440,7 +1863,7 @@ function CrewDetailSheet({
                     style={[s.detailToggleBtn, activityFilter === "run" && s.detailToggleBtnActive]}
                     onPress={() => { setActivityFilter("run"); setEventsExpanded(false); }}
                   >
-                    <Ionicons name="body" size={14} color={activityFilter === "run" ? C.bg : C.textMuted} />
+                    <MaterialCommunityIcons name="run-fast" size={16} color={activityFilter === "run" ? C.bg : C.textMuted} />
                     <Text style={[s.detailToggleTxt, activityFilter === "run" && s.detailToggleTxtActive]}>Runs</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -1505,6 +1928,17 @@ function CrewDetailSheet({
                   </View>
                 )}
 
+                {/* ── Crew Goals ── */}
+                {crew?.id && !isMockCrew && (
+                  <CrewGoalSection
+                    crewId={crew.id}
+                    isChief={(members.find((x) => x.user_id === currentUserId)?.role ?? (isCreator ? "crew_chief" : "member")) === "crew_chief"}
+                    styles={s}
+                    C={C}
+                    distUnit={distUnit}
+                  />
+                )}
+
                 {/* ── Upcoming Events (big cards) ── */}
                 <View style={[s.detailSection, { paddingBottom: 5 }]}>
                   <View style={s.detailSectionHeader}>
@@ -1531,50 +1965,65 @@ function CrewDetailSheet({
                       </Text>
                     </View>
                   ) : (
-                    visibleRuns.map((run) => (
-                      <TouchableOpacity
-                        key={run.id}
-                        style={s.eventCard}
-                        activeOpacity={0.75}
-                        testID={`crew-run-row-${run.id}`}
-                        onPress={() => {
-                          onClose();
-                          router.push({ pathname: "/run/[id]", params: { id: run.id } });
-                        }}
-                      >
-                        <View style={s.eventCardTop}>
-                          <View style={s.eventActivityPill}>
-                            <Ionicons
-                              name={run.activity_type === "ride" ? "bicycle-outline" : run.activity_type === "walk" ? "footsteps-outline" : "walk-outline"}
-                              size={13}
-                              color={C.primary}
-                            />
-                            <Text style={s.eventActivityTxt}>
-                              {run.activity_type === "ride" ? "Ride" : run.activity_type === "walk" ? "Walk" : "Run"}
+                    visibleRuns.map((run) => {
+                      const dt = new Date(run.date);
+                      const dayName = dt.toLocaleDateString(undefined, { weekday: "short" }).toUpperCase();
+                      const dayNum = dt.getDate();
+                      const monthName = dt.toLocaleDateString(undefined, { month: "short" }).toUpperCase();
+                      const timeStr = dt.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+                      const actName = run.activity_type === "ride" ? "Ride" : run.activity_type === "walk" ? "Walk" : "Run";
+                      const actIcon = run.activity_type === "ride" ? "bicycle" : run.activity_type === "walk" ? "footsteps" : "walk";
+                      return (
+                        <TouchableOpacity
+                          key={run.id}
+                          style={s.eventCardV2}
+                          activeOpacity={0.78}
+                          testID={`crew-run-row-${run.id}`}
+                          onPress={() => {
+                            onClose();
+                            router.push({ pathname: "/run/[id]", params: { id: run.id } });
+                          }}
+                        >
+                          {/* Date tile */}
+                          <View style={s.eventDateTile}>
+                            <Text style={s.eventDateDay}>{dayName}</Text>
+                            <Text style={s.eventDateNum}>{dayNum}</Text>
+                            <Text style={s.eventDateMonth}>{monthName}</Text>
+                          </View>
+
+                          {/* Content */}
+                          <View style={s.eventCardContent}>
+                            <View style={s.eventCardHeaderRow}>
+                              <Text style={s.eventCardTitleV2} numberOfLines={1}>{run.title}</Text>
+                              <View style={s.eventActivityBadge}>
+                                <Ionicons name={actIcon as any} size={11} color={C.primary} />
+                                <Text style={s.eventActivityBadgeTxt}>{actName}</Text>
+                              </View>
+                            </View>
+                            <View style={s.eventCardPillsRow}>
+                              <View style={s.eventPill}>
+                                <Ionicons name="time-outline" size={11} color={C.textSecondary} />
+                                <Text style={s.eventPillTxt}>{timeStr}</Text>
+                              </View>
+                              {run.min_distance ? (
+                                <View style={s.eventPill}>
+                                  <Ionicons name="navigate-outline" size={11} color={C.textSecondary} />
+                                  <Text style={s.eventPillTxt}>{toDisplayDistSmart(run.min_distance, distUnit)}</Text>
+                                </View>
+                              ) : null}
+                              <View style={[s.eventPill, { backgroundColor: C.primaryMuted, borderColor: C.primary + "44" }]}>
+                                <Ionicons name="people" size={11} color={C.primary} />
+                                <Text style={[s.eventPillTxt, { color: C.primary }]}>{run.participant_count ?? 1}</Text>
+                              </View>
+                            </View>
+                            <Text style={s.eventCardHostV2} numberOfLines={1}>
+                              {run.host_id === crew?.created_by ? "👑 " : ""}Hosted by {run.host_name}
                             </Text>
                           </View>
-                          <Ionicons name="chevron-forward" size={14} color={C.textMuted} />
-                        </View>
-                        <Text style={s.eventCardTitle} numberOfLines={2}>{run.title}</Text>
-                        <View style={s.eventCardMeta}>
-                          <View style={s.eventMetaChip}>
-                            <Ionicons name="calendar-outline" size={12} color={C.textMuted} />
-                            <Text style={s.eventMetaChipTxt}>{formatEventDateTime(run.date, run.timezone)}</Text>
-                          </View>
-                          {run.min_distance ? (
-                            <View style={s.eventMetaChip}>
-                              <Ionicons name="navigate-outline" size={12} color={C.textMuted} />
-                              <Text style={s.eventMetaChipTxt}>{toDisplayDist(run.min_distance, distUnit)}</Text>
-                            </View>
-                          ) : null}
-                          <View style={s.eventMetaChip}>
-                            <Ionicons name="people-outline" size={12} color={C.textMuted} />
-                            <Text style={s.eventMetaChipTxt}>{run.participant_count ?? 1} going</Text>
-                          </View>
-                        </View>
-                        <Text style={s.eventCardHost}>{run.host_id === crew?.created_by ? "👑 " : ""}Hosted by {run.host_name}</Text>
-                      </TouchableOpacity>
-                    ))
+                          <Ionicons name="chevron-forward" size={16} color={C.textMuted} style={{ alignSelf: "center" }} />
+                        </TouchableOpacity>
+                      );
+                    })
                   )}
                 </View>
 
@@ -1819,6 +2268,135 @@ function CrewDetailSheet({
                   </View>
                 </View>
 
+                {/* ── Top Performers ── */}
+                {members.length > 0 && (
+                  <View style={s.detailSection}>
+                    <View style={s.detailSectionHeader}>
+                      <Text style={s.detailSectionTitle}>Top Performers</Text>
+                      <View style={{ flexDirection: "row", gap: 6 }}>
+                        {(["week", "month"] as const).map((r) => (
+                          <Pressable
+                            key={r}
+                            onPress={() => { setTopPerfRange(r); Haptics.selectionAsync(); }}
+                            style={{
+                              paddingHorizontal: 10, paddingVertical: 4, borderRadius: 14,
+                              borderWidth: 1,
+                              borderColor: topPerfRange === r ? C.primary : C.border,
+                              backgroundColor: topPerfRange === r ? C.primaryMuted : C.surface,
+                            }}
+                          >
+                            <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 11, color: topPerfRange === r ? C.primary : C.textMuted }}>
+                              {r === "week" ? "Week" : "Month"}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </View>
+
+                    {/* Metric toggles */}
+                    <View style={{ flexDirection: "row", gap: 6, marginBottom: 10 }}>
+                      {(["runs", "miles", "pace"] as const).map((m) => {
+                        const label = m === "runs"
+                          ? `# ${activityFilter === "ride" ? "Rides" : activityFilter === "walk" ? "Walks" : "Runs"}`
+                          : m === "miles"
+                          ? `# ${unitLabel(distUnit)}`
+                          : activityFilter === "ride" ? "Avg Speed" : "Avg Pace";
+                        const active = topPerfMetric === m;
+                        return (
+                          <Pressable
+                            key={m}
+                            onPress={() => { setTopPerfMetric(m); Haptics.selectionAsync(); }}
+                            style={{
+                              flex: 1, paddingVertical: 8, borderRadius: 10,
+                              borderWidth: 1,
+                              borderColor: active ? C.primary : C.border,
+                              backgroundColor: active ? C.primaryMuted : C.surface,
+                              alignItems: "center",
+                            }}
+                          >
+                            <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: active ? C.primary : C.textMuted }}>
+                              {label}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+
+                    {/* Sorted member list with horizontal bars */}
+                    {(() => {
+                      const getMetric = (m: CrewMember): number => {
+                        if (topPerfMetric === "runs") {
+                          return topPerfRange === "week" ? (m.weekly_runs ?? 0) : (m.monthly_runs ?? 0);
+                        }
+                        if (topPerfMetric === "miles") {
+                          return topPerfRange === "week" ? (m.weekly_miles ?? 0) : (m.monthly_miles ?? 0);
+                        }
+                        // pace: lower is better for run/walk, higher speed is better for ride
+                        return topPerfRange === "week" ? (m.weekly_pace ?? 0) : (m.monthly_pace ?? 0);
+                      };
+                      const formatMetric = (val: number, m: CrewMember): string => {
+                        if (topPerfMetric === "runs") return `${Math.round(val)}`;
+                        if (topPerfMetric === "miles") return toDisplayDist(val, distUnit);
+                        if (!val) return "—";
+                        return activityFilter === "ride" ? toDisplaySpeed(val, distUnit) : toDisplayPace(val, distUnit);
+                      };
+                      const withVals = members.map((m) => ({ m, v: getMetric(m) }));
+                      // For pace (lower = better), sort asc; for speed (ride pace, lower min/mi = higher mph = better), still asc.
+                      // For runs/miles, higher is better — sort desc.
+                      const sorted = [...withVals].sort((a, b) => {
+                        if (topPerfMetric === "pace") {
+                          if (a.v === 0) return 1;
+                          if (b.v === 0) return -1;
+                          return activityFilter === "ride" ? a.v - b.v : a.v - b.v;
+                        }
+                        return b.v - a.v;
+                      });
+                      const maxV = topPerfMetric === "pace"
+                        ? Math.max(...sorted.filter(x => x.v > 0).map(x => x.v), 1)
+                        : Math.max(...sorted.map(x => x.v), 1);
+                      return (
+                        <ScrollView style={{ maxHeight: 260 }} nestedScrollEnabled>
+                          {sorted.map(({ m, v }, idx) => {
+                            const isTop = idx < 3 && v > 0;
+                            const barPct = topPerfMetric === "pace"
+                              ? (v > 0 ? Math.min(1, v === maxV ? 1 : (maxV > 0 ? (1 - (v - maxV) / maxV) : 0)) : 0)
+                              : (maxV > 0 ? v / maxV : 0);
+                            return (
+                              <Pressable
+                                key={m.user_id}
+                                onPress={() => { Haptics.selectionAsync(); setSelectedMemberId(m.user_id); }}
+                                style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", paddingVertical: 6, gap: 10, opacity: pressed ? 0.6 : 1 })}
+                              >
+                                <Text style={{ width: 18, fontFamily: "Outfit_700Bold", fontSize: 12, color: isTop ? C.primary : C.textMuted }}>
+                                  {idx + 1}
+                                </Text>
+                                {resolveImgUrl(m.photo_url) ? (
+                                  <Image source={{ uri: resolveImgUrl(m.photo_url)! }} style={{ width: 28, height: 28, borderRadius: 14 }} />
+                                ) : (
+                                  <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: C.primaryMuted, alignItems: "center", justifyContent: "center" }}>
+                                    <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 12, color: C.primary }}>{(m.username || m.name)[0]?.toUpperCase()}</Text>
+                                  </View>
+                                )}
+                                <View style={{ flex: 1 }}>
+                                  <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.text }} numberOfLines={1}>
+                                    {m.username ? `@${m.username}` : m.name}
+                                  </Text>
+                                  <View style={{ height: 6, borderRadius: 3, backgroundColor: C.border, marginTop: 4, overflow: "hidden" }}>
+                                    <View style={{ width: `${Math.round(Math.max(0, Math.min(1, barPct)) * 100)}%`, height: "100%", backgroundColor: isTop ? C.primary : C.primary + "80" }} />
+                                  </View>
+                                </View>
+                                <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 12, color: C.text, minWidth: 60, textAlign: "right" }}>
+                                  {formatMetric(v, m)}
+                                </Text>
+                              </Pressable>
+                            );
+                          })}
+                        </ScrollView>
+                      );
+                    })()}
+                  </View>
+                )}
+
                 {/* ── Achievements ── */}
                 <CrewAchievementsSection
                   achievementsData={crewAchievementsData}
@@ -1863,12 +2441,12 @@ function CrewDetailSheet({
                             />
                           ) : (
                             <View style={s.memberAvatar}>
-                              <Text style={s.memberAvatarText}>{m.name[0]?.toUpperCase()}</Text>
+                              <Text style={s.memberAvatarText}>{(m.username || m.name)[0]?.toUpperCase()}</Text>
                             </View>
                           )}
                           <View style={s.memberInfo}>
                             <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                              <Text style={s.memberName} numberOfLines={1}>{m.name}</Text>
+                              <Text style={s.memberName} numberOfLines={1}>{m.username ? `@${m.username}` : m.name}</Text>
                               {memberRole === "crew_chief" && (
                                 <Ionicons name="shield" size={13} color="#FFD700" />
                               )}
@@ -1930,7 +2508,7 @@ function CrewDetailSheet({
                               </Text>
                               <Text style={s.historyRunDot}>·</Text>
                               <Text style={s.historyRunMetaTxt}>
-                                {toDisplayDist(run.min_distance, distUnit)}
+                                {toDisplayDistSmart(run.min_distance, distUnit)}
                               </Text>
                               {Number(run.avg_attendee_pace) > 0 && (
                                 <>
@@ -2010,6 +2588,8 @@ function CrewDetailSheet({
             <InviteUserSheet
               onClose={() => setShowInvite(false)}
               crewId={crew.id}
+              crewName={crew.name}
+              crewEmoji={crew.emoji}
               existingMemberIds={memberIds}
               pendingRequestIds={joinRequests.map((r) => r.user_id)}
             />
@@ -2169,6 +2749,84 @@ function CrewDetailSheet({
           }}
         />
       )}
+
+      {/* Member-role action sheet — PaceUp-styled replacement for the iOS Alert.alert.
+          Rendered as an inline absolute overlay (NOT a nested <Modal>) — nested
+          modals on iOS pageSheet sometimes silently fail to mount. */}
+      {roleSheetMember && (() => {
+        const m = roleSheetMember;
+        const currentRole = m.role ?? "member";
+        const roleLabel = currentRole === "crew_chief" ? "Crew Chief" : currentRole === "officer" ? "Officer" : "Member";
+        type Opt = { label: string; sublabel?: string; icon: any; onPress: () => void; tone?: "primary" | "destructive" | "default" };
+        const opts: Opt[] = [];
+        opts.push({ label: "View Profile", icon: "user", onPress: () => { setSelectedMemberId(m.user_id); setRoleSheetMember(null); } });
+        if (currentRole !== "crew_chief") {
+          opts.push({ label: "Make Crew Chief", sublabel: "Transfer leadership of the crew", icon: "shield", tone: "primary", onPress: () => applyRoleChange(m, "crew_chief") });
+        }
+        if (currentRole !== "officer") {
+          opts.push({
+            label: currentRole === "crew_chief" ? "Demote to Officer" : "Make Officer",
+            sublabel: "Officers help manage events and members",
+            icon: "star",
+            onPress: () => applyRoleChange(m, "officer"),
+          });
+        }
+        if (currentRole !== "member") {
+          opts.push({ label: "Demote to Member", icon: "user-minus", tone: "destructive", onPress: () => applyRoleChange(m, "member") });
+        }
+        return (
+          <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+            <Pressable style={s.roleSheetOverlay} onPress={() => setRoleSheetMember(null)} />
+            <View style={s.roleSheetWrap}>
+              <View style={s.roleSheetHandle} />
+              <View style={s.roleSheetHeader}>
+                <Text style={s.roleSheetTitle}>{m.name}</Text>
+                <View style={s.roleSheetBadge}>
+                  <Text style={s.roleSheetBadgeTxt}>{roleLabel}</Text>
+                </View>
+              </View>
+              <View style={{ paddingHorizontal: 8, paddingTop: 4 }}>
+                {opts.map((o, idx) => (
+                  <Pressable
+                    key={idx}
+                    onPress={() => { Haptics.selectionAsync(); o.onPress(); }}
+                    style={({ pressed }) => [
+                      s.roleSheetRow,
+                      pressed && { backgroundColor: C.surface },
+                      o.tone === "destructive" && { borderColor: C.danger + "33" },
+                    ]}
+                  >
+                    <View style={[
+                      s.roleSheetIconWrap,
+                      o.tone === "primary" && { backgroundColor: C.primaryMuted },
+                      o.tone === "destructive" && { backgroundColor: C.danger + "1A" },
+                    ]}>
+                      <Feather name={o.icon} size={16} color={o.tone === "destructive" ? C.danger : o.tone === "primary" ? C.primary : C.text} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[
+                        s.roleSheetRowLabel,
+                        o.tone === "destructive" && { color: C.danger },
+                        o.tone === "primary" && { color: C.primary },
+                      ]}>
+                        {o.label}
+                      </Text>
+                      {o.sublabel && <Text style={s.roleSheetRowSub}>{o.sublabel}</Text>}
+                    </View>
+                    <Feather name="chevron-right" size={14} color={C.textMuted} />
+                  </Pressable>
+                ))}
+              </View>
+              <Pressable
+                onPress={() => setRoleSheetMember(null)}
+                style={({ pressed }) => [s.roleSheetCancel, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={s.roleSheetCancelTxt}>Cancel</Text>
+              </Pressable>
+            </View>
+          </View>
+        );
+      })()}
     </>
   );
 }
@@ -2837,6 +3495,15 @@ export default function CrewScreen() {
   const { data: crewsRaw = [], isLoading } = useQuery<Crew[]>({
     queryKey: ["/api/crews"],
   });
+
+  // Deep link: /crew?crewId=... auto-opens that crew
+  const params = useLocalSearchParams<{ crewId?: string }>();
+  useEffect(() => {
+    if (!params.crewId || selectedCrew) return;
+    const match = crewsRaw.find((c) => c.id === params.crewId);
+    if (match) setSelectedCrew(match);
+  }, [params.crewId, crewsRaw, selectedCrew]);
+
   const { isActive: walkthroughActive, nextStep: walkthroughNext } = useWalkthrough();
   const { activityFilter } = useActivity();
   const crews = useMemo(() => {
@@ -2924,17 +3591,19 @@ export default function CrewScreen() {
 
       {/* Create A Crew CTA — only when user already has crews */}
       {crews.length > 0 && (
-        <WalkthroughPulse stepId="crew-cta" style={{ borderRadius: 16, marginHorizontal: 20 }}>
-        <TouchableOpacity
-          style={s.createCrewBtn}
-          onPress={() => setShowCreate(true)}
-          testID="open-create-crew"
-          activeOpacity={0.88}
-        >
-          <Ionicons name="people" size={20} color={C.bg} />
-          <Text style={s.createCrewBtnTxt}>Create A Crew</Text>
-        </TouchableOpacity>
-        </WalkthroughPulse>
+        <View style={{ marginHorizontal: 20 }}>
+          <WalkthroughPulse stepId="crew-cta" style={{ borderRadius: 16 }}>
+            <TouchableOpacity
+              style={s.createCrewBtn}
+              onPress={() => setShowCreate(true)}
+              testID="open-create-crew"
+              activeOpacity={0.88}
+            >
+              <Ionicons name="people" size={20} color={C.bg} />
+              <Text style={s.createCrewBtnTxt}>Create A Crew</Text>
+            </TouchableOpacity>
+          </WalkthroughPulse>
+        </View>
       )}
 
       {/* Search bar */}
@@ -3307,7 +3976,9 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     borderRadius: 16,
     paddingVertical: 16,
     marginBottom: 14,
-    marginHorizontal: 16,
+    // Horizontal inset is handled by the parent WalkthroughPulse wrapper
+    // (marginHorizontal: 20). Adding it here too double-indented the button,
+    // making it look narrower than the cards below it.
   },
   createCrewBtnTxt: {
     fontFamily: "Outfit_700Bold",
@@ -3615,6 +4286,65 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     flexDirection: "row",
     marginBottom: 4,
   },
+  // Centered icon hero (mock-aligned with profile)
+  iconHero: {
+    alignItems: "center",
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  iconHeroCircle: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: C.primaryMuted,
+    borderWidth: 3,
+    borderColor: C.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  iconHeroImage: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+  },
+  iconHeroEmoji: {
+    fontSize: 56,
+  },
+  iconHeroEditBadge: {
+    position: "absolute",
+    right: -2,
+    bottom: 2,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: C.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 3,
+    borderColor: C.bg,
+  },
+  iconHeroHint: {
+    fontFamily: "Outfit_500Medium",
+    fontSize: 12,
+    color: C.textMuted,
+    marginTop: 12,
+  },
+  fieldLabelCenter: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 11,
+    color: C.textMuted,
+    letterSpacing: 0.8,
+    textAlign: "center",
+    textTransform: "uppercase",
+    marginTop: 18,
+    marginBottom: 10,
+  },
+  emojiRowCentered: {
+    gap: 8,
+    paddingHorizontal: 4,
+    paddingBottom: 4,
+  },
   emojiOption: {
     width: 46,
     height: 46,
@@ -3793,6 +4523,123 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     color: C.text,
     textAlign: "center",
     marginBottom: 6,
+  },
+  detailHeroNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // Member-role action sheet (PaceUp-styled)
+  roleSheetOverlay: {
+    position: "absolute",
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  roleSheetWrap: {
+    position: "absolute",
+    left: 0, right: 0, bottom: 0,
+    backgroundColor: C.bg,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 8,
+    paddingBottom: 28,
+  },
+  roleSheetHandle: {
+    alignSelf: "center",
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: C.border,
+    marginBottom: 12,
+  },
+  roleSheetHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+    marginBottom: 4,
+  },
+  roleSheetTitle: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 18,
+    color: C.text,
+    flex: 1,
+  },
+  roleSheetBadge: {
+    backgroundColor: C.primaryMuted,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: C.primary + "55",
+  },
+  roleSheetBadgeTxt: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 11,
+    color: C.primary,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  roleSheetRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginVertical: 4,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  roleSheetIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: C.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  roleSheetRowLabel: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 15,
+    color: C.text,
+  },
+  roleSheetRowSub: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 12,
+    color: C.textMuted,
+    marginTop: 2,
+  },
+  roleSheetCancel: {
+    marginTop: 8,
+    marginHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 14,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
+    alignItems: "center",
+  },
+  roleSheetCancelTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 15,
+    color: C.textSecondary,
+  },
+  detailHeroEditBadge: {
+    position: "absolute",
+    right: -2,
+    bottom: 6,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: C.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: C.bg,
   },
   detailDesc: {
     fontFamily: "Outfit_400Regular",
@@ -4225,6 +5072,109 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     fontSize: 12,
     color: C.textSecondary,
     marginTop: 2,
+  },
+  // Restyled event card (date-tile + content row)
+  eventCardV2: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 12,
+    backgroundColor: C.card,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  eventDateTile: {
+    width: 56,
+    backgroundColor: C.primaryMuted,
+    borderRadius: 12,
+    paddingVertical: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: C.primary + "33",
+  },
+  eventDateDay: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 10,
+    color: C.primary,
+    letterSpacing: 0.6,
+  },
+  eventDateNum: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 22,
+    color: C.primary,
+    lineHeight: 26,
+    marginTop: 1,
+  },
+  eventDateMonth: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 9,
+    color: C.primary,
+    letterSpacing: 0.6,
+    marginTop: 1,
+  },
+  eventCardContent: {
+    flex: 1,
+    justifyContent: "center",
+    gap: 6,
+  },
+  eventCardHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  eventCardTitleV2: {
+    flex: 1,
+    fontFamily: "Outfit_700Bold",
+    fontSize: 15,
+    color: C.text,
+    lineHeight: 19,
+  },
+  eventActivityBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: C.primary + "15",
+    borderRadius: 999,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  eventActivityBadgeTxt: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 10,
+    color: C.primary,
+    letterSpacing: 0.4,
+  },
+  eventCardPillsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  eventPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: C.surface,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  eventPillTxt: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 11,
+    color: C.textSecondary,
+    letterSpacing: 0.2,
+  },
+  eventCardHostV2: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 11,
+    color: C.textMuted,
   },
   // Inline crew chat
   inlineChatBox: {

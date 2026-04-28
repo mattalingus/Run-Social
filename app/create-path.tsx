@@ -49,7 +49,8 @@ export default function CreatePathScreen() {
   const { C } = useTheme();
   const qc = useQueryClient();
   const mapRef = useRef<MapView>(null);
-  const params = useLocalSearchParams<{ lat?: string; lng?: string; latDelta?: string; lngDelta?: string }>();
+  const params = useLocalSearchParams<{ lat?: string; lng?: string; latDelta?: string; lngDelta?: string; parentPathId?: string }>();
+  const parentPathId = params.parentPathId ? String(params.parentPathId) : null;
   const startLat = params.lat ? parseFloat(String(params.lat)) : null;
   const startLng = params.lng ? parseFloat(String(params.lng)) : null;
   const startLatDelta = params.latDelta ? parseFloat(String(params.latDelta)) : null;
@@ -186,6 +187,20 @@ export default function CreatePathScreen() {
       const saved = await res.json();
       if (!saved?.id) throw new Error("Failed to create path");
       await apiRequest("POST", `/api/saved-paths/${saved.id}/publish`);
+      // If this draw was launched as "+ Route Option" from an existing community path,
+      // attach the new route as a variant of that parent so it's grouped under the same path.
+      if (parentPathId) {
+        try {
+          await apiRequest("POST", `/api/community-paths/${parentPathId}/variants`, {
+            name,
+            routePath: fullPts,
+            distanceMiles: miles,
+            activityTypes: activities,
+          });
+        } catch {
+          // non-fatal — the saved path still exists standalone
+        }
+      }
       qc.invalidateQueries({ queryKey: ["/api/saved-paths"] });
       qc.invalidateQueries({ queryKey: ["/api/community-paths"] });
       setShowSave(false);
@@ -394,5 +409,4 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  wpDotTxt: { color: "#fff", fontFamily: "Outfit_700Bold", fontSize: 12 },
 });

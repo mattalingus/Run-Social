@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1032.0",
+    "@bacons/apple-targets": "^4.0.6",
     "@expo-google-fonts/dancing-script": "^0.4.2",
     "@expo-google-fonts/nunito": "^0.4.2",
     "@expo-google-fonts/outfit": "^0.4.3",

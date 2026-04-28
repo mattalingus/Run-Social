@@ -1,5 +1,41 @@
 import { fetch } from "expo/fetch";
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+const REMEMBER_TOKEN_KEY = "paceup_remember_token";
+
+// Silent re-auth on 401. Uses the locally-stored remember token to call
+// /api/auth/restore-session which re-establishes the session cookie. Any
+// concurrent 401s share one in-flight attempt so we don't stampede the server.
+let _rehydrateInFlight: Promise<boolean> | null = null;
+async function attemptSessionRestore(): Promise<boolean> {
+  if (_rehydrateInFlight) return _rehydrateInFlight;
+  _rehydrateInFlight = (async () => {
+    try {
+      const token = await AsyncStorage.getItem(REMEMBER_TOKEN_KEY);
+      if (!token) return false;
+      const baseUrl = getApiUrl();
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 6000);
+      const res = await fetch(new URL("/api/auth/restore-session", baseUrl).toString(), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+        credentials: "include",
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      return res.ok;
+    } catch {
+      return false;
+    } finally {
+      // Clear the in-flight guard on the next tick so overlapping calls share
+      // the same result but subsequent requests get a fresh attempt.
+      setTimeout(() => { _rehydrateInFlight = null; }, 100);
+    }
+  })();
+  return _rehydrateInFlight;
+}
 
 /**
  * Gets the base URL for the Express API server (e.g., "http://localhost:3000")
@@ -52,7 +88,12 @@ export function setHandleSuspendedSession(handler: ((suspendedUntil?: string) =>
  * For all other cases, returns the Response (check res.ok yourself).
  */
 export async function apiFetch(url: string, options?: RequestInit): Promise<Response> {
-  const res = await fetch(url, { credentials: "include", ...options });
+  let res = await fetch(url, { credentials: "include", ...options });
+  // Same auto-recovery as apiRequest, but only for non-auth URLs.
+  if (res.status === 401 && !url.includes("/api/auth/")) {
+    const ok = await attemptSessionRestore();
+    if (ok) res = await fetch(url, { credentials: "include", ...options });
+  }
   if (res.status === 403) {
     let data: ApiErrorPayload | undefined;
     try { data = (await res.clone().json()) as ApiErrorPayload; } catch {}
@@ -72,12 +113,24 @@ export async function apiRequest(
   const baseUrl = getApiUrl();
   const url = new URL(route, baseUrl);
 
-  const res = await fetch(url.toString(), {
+  const send = () => fetch(url.toString(), {
     method,
     headers: data ? { "Content-Type": "application/json" } : {},
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
+
+  let res = await send();
+
+  // Auto-recover on 401 (except for auth routes themselves — those 401s are
+  // the user ACTUALLY being rejected and must propagate). Re-establishes the
+  // session via restore-session + remember-token, then retries once.
+  // This prevents silent session expiry from surfacing as user-visible errors
+  // on writes like POST /api/solo-runs where a failure loses user work.
+  if (res.status === 401 && !route.startsWith("/api/auth/")) {
+    const ok = await attemptSessionRestore();
+    if (ok) res = await send();
+  }
 
   await throwIfResNotOk(res);
   return res;

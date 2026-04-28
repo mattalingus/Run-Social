@@ -2,6 +2,32 @@ import React, { createContext, useContext, useState, useEffect, ReactNode, useMe
 import { apiRequest, getApiUrl, setHandleSuspendedSession } from "@/lib/query-client";
 import { fetch } from "expo/fetch";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { WatchBridge } from "@/lib/watchBridge";
+
+/** Push the current auth state to the paired Apple Watch (no-op on Android). */
+async function syncWatch(
+  user: { id: string | number; default_activity?: string } | null,
+) {
+  try {
+    if (!user) {
+      await WatchBridge.clearAuth();
+      return;
+    }
+    const token = await AsyncStorage.getItem(REMEMBER_TOKEN_KEY);
+    if (!token) return;
+    const apiHost = getApiUrl();
+    const unitRaw = await AsyncStorage.getItem("paceup_distance_unit");
+    const distanceUnit: "mi" | "km" = unitRaw === "km" ? "km" : "mi";
+    await WatchBridge.sendAuthToken({
+      token,
+      apiHost,
+      userId: typeof user.id === "string" ? parseInt(user.id, 10) || 0 : user.id,
+      distanceUnit,
+    });
+  } catch {
+    // best-effort
+  }
+}
 
 export const SUSPENDED_NOTICE_KEY = "paceup_suspended_notice";
 
@@ -73,6 +99,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     fetchMe();
   }, []);
+
+  // Keep paired Apple Watch in sync with auth state (no-op on Android).
+  useEffect(() => {
+    syncWatch(user);
+  }, [user?.id]);
 
   useEffect(() => {
     setHandleSuspendedSession(async (suspendedUntilDate?: string) => {
@@ -265,6 +296,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearSuspendedState();
     await storeCachedUser(userOnly);
     setUser(userOnly);
+    syncWatch(userOnly);
   }
 
   async function register(email: string, password: string, firstName: string, lastName: string, username: string, gender: string | null) {
@@ -275,6 +307,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearSuspendedState();
     await storeCachedUser(userOnly);
     setUser(userOnly);
+    syncWatch(userOnly);
   }
 
   async function logout() {
@@ -297,6 +330,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsSuspended(false);
     setSuspendedUntil(null);
     setUser(null);
+    syncWatch(null);
   }
 
   async function refreshUser() {

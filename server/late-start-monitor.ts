@@ -1,7 +1,10 @@
 import { pool, checkAndAwardAchievements, checkAndAwardRideAchievements, checkAndAwardCrewAchievements } from "./storage";
 import { sendPushNotification } from "./notifications";
 
-const CHECK_INTERVAL_MS = 5 * 60 * 1000;
+// T1.10: tighter cadence so a silent host doesn't leave a crew stuck for
+// minutes. 60s is responsive enough that participants won't notice the gap;
+// the work in each pass is bounded by tiny SQL queries.
+const CHECK_INTERVAL_MS = 60 * 1000;
 
 async function checkLateStarts(): Promise<void> {
   try {
@@ -252,6 +255,57 @@ const PRE_RUN_PHRASES = [
   (type: string, title: string) => `Rise and roll — "${title}" kicks off in 30 minutes ⚡`,
 ];
 
+// T3.10: 5-minute-out reminder. Independent flag so it can fire after the
+// 30-min reminder for the same event.
+async function checkPreRunReminders5Min(): Promise<void> {
+  try {
+    const result = await pool.query<{ id: string; title: string; activity_type: string; host_id: string; }>(
+      `UPDATE runs
+       SET notif_pre_run_5_sent = true
+       WHERE is_active = false
+         AND is_completed = false
+         AND (is_deleted IS NULL OR is_deleted = false)
+         AND (notif_pre_run_5_sent IS NULL OR notif_pre_run_5_sent = false)
+         AND date > NOW() + INTERVAL '3 minutes'
+         AND date < NOW() + INTERVAL '7 minutes'
+       RETURNING id, title, activity_type, host_id`
+    );
+    if (!result.rows.length) return;
+    for (const run of result.rows) {
+      const type = run.activity_type === "ride" ? "ride" : run.activity_type === "walk" ? "walk" : "run";
+      const title = `🟢 ${run.title} starts in ~5 min`;
+      const body = `Time to head over — your ${type} kicks off shortly.`;
+      const data = { screen: "run", runId: run.id };
+      const hostRes = await pool.query<{ push_token: string | null; notifications_enabled: boolean; notif_run_reminders: boolean; }>(
+        `SELECT push_token, notifications_enabled, notif_run_reminders FROM users WHERE id = $1`,
+        [run.host_id]
+      );
+      const host = hostRes.rows[0];
+      const participantsRes = await pool.query<{ push_token: string | null; notifications_enabled: boolean; notif_run_reminders: boolean; }>(
+        `SELECT u.push_token, u.notifications_enabled, u.notif_run_reminders
+           FROM run_participants rp
+           JOIN users u ON u.id = rp.user_id
+          WHERE rp.run_id = $1
+            AND rp.status IN ('joined', 'confirmed')
+            AND rp.user_id != $2
+            AND u.push_token IS NOT NULL`,
+        [run.id, run.host_id]
+      );
+      const tokens = new Set<string>();
+      if (host?.push_token && host.notifications_enabled !== false && host.notif_run_reminders !== false && host.push_token.startsWith("ExponentPushToken[")) {
+        tokens.add(host.push_token);
+      }
+      for (const p of participantsRes.rows) {
+        if (p.push_token && p.notifications_enabled !== false && p.notif_run_reminders !== false) tokens.add(p.push_token);
+      }
+      if (tokens.size > 0) await sendPushNotification(Array.from(tokens), title, body, data);
+      console.log(`[pre-run-5] Sent 5-min reminder for run ${run.id} ("${run.title}") to ${tokens.size} recipient(s)`);
+    }
+  } catch (err) {
+    console.error("[pre-run-5] Check failed:", err);
+  }
+}
+
 async function checkPreRunReminders(): Promise<void> {
   try {
     // Atomically claim qualifying runs so concurrent/restart-duplicate fires are impossible
@@ -382,7 +436,17 @@ async function checkAndPromoteHost(): Promise<void> {
           (a: any, b: any) => parseFloat(b.cumulative_distance) - parseFloat(a.cumulative_distance)
         );
         const newHostId = sorted[0].user_id;
-        await pool.query(`UPDATE runs SET host_id = $1 WHERE id = $2`, [newHostId, run.id]);
+        // T1.11: atomic conditional UPDATE — only the FIRST process whose
+        // WHERE matches lands; concurrent runs see RETURNING empty and bail.
+        // No more "two new hosts" race when two cron ticks overlap.
+        const promoted = await pool.query(
+          `UPDATE runs SET host_id = $1 WHERE id = $2 AND host_id = $3 RETURNING id`,
+          [newHostId, run.id, run.host_id]
+        );
+        if (promoted.rowCount === 0) {
+          console.log(`[late-start] Skipped promotion for ${run.id} — already promoted by another process`);
+          continue;
+        }
         console.log(`[late-start] Auto-promoted user ${newHostId} to host for run ${run.id} (original host went silent)`);
 
         // Notify the old host that they've been replaced
@@ -421,18 +485,57 @@ async function checkAndPromoteHost(): Promise<void> {
   }
 }
 
+// T2.14: sweep runs with an expired pending_end_at and finalize them.
+// Runs every cron tick.
+async function processPendingHostEnds(): Promise<void> {
+  try {
+    const due = await pool.query<{ id: string; title: string }>(
+      `SELECT id, title FROM runs
+        WHERE is_active = true
+          AND is_completed = false
+          AND pending_end_at IS NOT NULL
+          AND pending_end_at < NOW()`
+    );
+    for (const r of due.rows) {
+      try {
+        // Atomically clear the marker so a concurrent tick doesn't double-finalize.
+        const claim = await pool.query(
+          `UPDATE runs SET pending_end_at = NULL
+            WHERE id = $1 AND pending_end_at IS NOT NULL AND pending_end_at < NOW()
+            RETURNING id`,
+          [r.id]
+        );
+        if (claim.rowCount === 0) continue;
+        const { forceCompleteRun, finalizeTagAlongsForRun } = await import("./storage");
+        await forceCompleteRun(r.id);
+        finalizeTagAlongsForRun(r.id).catch((e: any) =>
+          console.error("[late-start] finalizeTagAlongs after grace:", e?.message ?? e)
+        );
+        console.log(`[late-start] Sealed run ${r.id} ("${r.title}") after host-end grace window`);
+      } catch (err: any) {
+        console.error(`[late-start] processPendingHostEnds for ${r.id}:`, err?.message ?? err);
+      }
+    }
+  } catch (err) {
+    console.error("[late-start] processPendingHostEnds failed:", err);
+  }
+}
+
 export function scheduleLateStartMonitor(): void {
-  console.log("[late-start] Monitor started — checking every 5 minutes");
+  console.log("[late-start] Monitor started — checking every 60 seconds");
   setInterval(() => {
     checkPreRunReminders();
+    checkPreRunReminders5Min();
     checkLateStarts();
     cleanupStaleActiveRuns();
     cleanupUnstartedRuns();
     checkAndPromoteHost();
+    processPendingHostEnds();
   }, CHECK_INTERVAL_MS);
   checkPreRunReminders();
   checkLateStarts();
   cleanupStaleActiveRuns();
   cleanupUnstartedRuns();
   checkAndPromoteHost();
+  processPendingHostEnds();
 }

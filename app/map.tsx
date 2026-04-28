@@ -22,7 +22,7 @@ import MapView, { Marker, Polyline, Region } from "react-native-maps";
 const MAP_TYPE = Platform.OS === "ios" ? ("mutedStandard" as const) : ("standard" as const);
 import * as Location from "expo-location";
 import * as Haptics from "expo-haptics";
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
@@ -33,7 +33,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { type ColorScheme } from "@/constants/colors";
 import RangeSlider from "@/components/RangeSlider";
 import { formatDistance } from "@/lib/formatDistance";
-import { toDisplayDist, toDisplayPace, unitLabel, type DistanceUnit } from "@/lib/units";
+import { toDisplayDist, toDisplayDistSmart, toDisplayPace, unitLabel, type DistanceUnit } from "@/lib/units";
 import HostProfileSheet from "@/components/HostProfileSheet";
 import PathBadge from "@/components/PathBadge";
 import { getApiUrl, apiRequest } from "@/lib/query-client";
@@ -165,11 +165,37 @@ function avatarUrl(name: string) {
   return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1A2E21&color=00D97E&bold=true&size=200`;
 }
 
-function getPaceColor(minPace: number, maxPace: number, C: { orange: string; gold: string; primary: string }): string {
+function getPaceColor(
+  minPace: number,
+  maxPace: number,
+  C: { orange: string; gold: string; primary: string },
+  activityType: "run" | "ride" | "walk" = "run",
+): string {
+  // Very wide range → treat as mixed / beginner-friendly → green default
+  if (activityType === "ride") {
+    // Ride pace is mph (higher = faster = harder)
+    if ((maxPace - minPace) >= 10) return C.primary;
+    const median = (minPace + maxPace) / 2;
+    if (median >= 20) return "#C0392B"; // elite
+    if (median >= 17) return C.orange;  // hard
+    if (median >= 14) return C.gold;    // moderate
+    return C.primary;                   // easy
+  }
+  // Run/walk pace is min/mi (lower = faster = harder)
   if (maxPace >= 15 || (maxPace - minPace) >= 10) return C.primary;
-  if (minPace < 6) return "#C0392B";
-  if (minPace < 9) return C.orange;
-  return C.gold;
+  const median = (minPace + maxPace) / 2;
+  if (activityType === "walk") {
+    // Walk: easier thresholds (walkers don't hit sub-6 paces)
+    if (median < 13) return "#C0392B"; // power walk / race walk
+    if (median < 15) return C.orange;  // brisk
+    if (median < 18) return C.gold;    // moderate
+    return C.primary;                  // casual
+  }
+  // Run
+  if (median < 6) return "#C0392B";    // elite (sub-6 /mi)
+  if (median < 8.5) return C.orange;   // hard (e.g. 7–10 range → median 8.5 → orange boundary)
+  if (median < 10) return C.gold;      // moderate
+  return C.primary;                    // easy
 }
 
 // ─── Custom Marker ─────────────────────────────────────────────────────────
@@ -244,7 +270,7 @@ function LockedRunMarker({ run, isSelected, onPress }: { run: Run; isSelected: b
   );
 }
 
-function RunMarker({ run, isSelected, isFriend, onPress }: { run: Run; isSelected: boolean; isFriend?: boolean; onPress: () => void }) {
+function RunMarker({ run, isSelected, isFriend, zoom, onPress }: { run: Run; isSelected: boolean; isFriend?: boolean; zoom: number; onPress: () => void }) {
   const { C } = useTheme();
   const mk = useMemo(() => makeMkStyles(C), [C]);
   const scale = useRef(new Animated.Value(1)).current;
@@ -261,6 +287,9 @@ function RunMarker({ run, isSelected, isFriend, onPress }: { run: Run; isSelecte
   );
   const soon = isWithin24h(run.date);
   const isLiveNow = !!run.is_active && (run.participant_count ?? 0) > 0;
+  const diffColor = getPaceColor(run.min_pace, run.max_pace, C, (run.activity_type as any) ?? "run");
+  // Scale marker with zoom: full size at zoom>=14, shrinks down to 0.4 at zoom 11, hidden below 11.
+  const zoomScale = Math.min(1, Math.max(0.4, 0.4 + (zoom - 11) * 0.2));
   const icon = run.host_marker_icon;
   const isEmojiIcon = !!icon && !icon.startsWith("http") && !icon.startsWith("/api/objects");
   const isUrlIcon = !!icon && (icon.startsWith("http") || icon.startsWith("/api/objects"));
@@ -270,7 +299,10 @@ function RunMarker({ run, isSelected, isFriend, onPress }: { run: Run; isSelecte
   // tracksViewChanges must NOT include isSelected — toggling it on tap causes
   // the native marker to briefly unregister and jump to (0,0) = top-left.
   // Scale animation uses native driver so it doesn't need tracksViewChanges=true.
-  const tracksViewChanges = isLiveNow || !contentReady;
+  // Track view changes while in the zoom-scaling range so the native marker
+  // picks up the shrinking transform; freeze it once we're close-in (zoom >= 14)
+  // where zoomScale is clamped at 1.0 and won't change.
+  const tracksViewChanges = isLiveNow || !contentReady || zoom < 14;
 
   useEffect(() => {
     if (isLiveNow) return;
@@ -289,6 +321,7 @@ function RunMarker({ run, isSelected, isFriend, onPress }: { run: Run; isSelecte
       Animated.spring(scale, { toValue: 1, useNativeDriver: true, tension: 300, friction: 12 }).start();
     });
   }, [isSelected]);
+
 
   useEffect(() => {
     if (!isLiveNow) return;
@@ -322,10 +355,10 @@ function RunMarker({ run, isSelected, isFriend, onPress }: { run: Run; isSelecte
       anchor={{ x: 0.5, y: 0.5 }}
       tracksViewChanges={tracksViewChanges}
     >
-      <Animated.View style={[mk.wrap, { transform: [{ scale }] }]}>
-        {soon && <View style={mk.glow} />}
-        {isLiveNow && <Animated.View style={[mk.liveRing, { opacity: pulseAnim }]} />}
-        <View style={[mk.circle, isFriend && mk.circleFriend, !!run.crew_id && mk.circleCrew, isSelected && mk.circleSelected]}>
+      <Animated.View style={[mk.wrap, { transform: [{ scale: zoomScale }, { scale }] }]}>
+        {soon && <View style={[mk.glow, { borderColor: diffColor, shadowColor: diffColor }]} />}
+        {isLiveNow && <Animated.View style={[mk.liveRing, { opacity: pulseAnim, borderColor: diffColor, shadowColor: diffColor }]} />}
+        <View style={[mk.circle, { borderColor: diffColor, shadowColor: diffColor }, isSelected && mk.circleSelected]}>
           {isEmojiIcon ? (
             <Text style={mk.emoji}>{icon}</Text>
           ) : (
@@ -336,9 +369,10 @@ function RunMarker({ run, isSelected, isFriend, onPress }: { run: Run; isSelecte
             />
           )}
         </View>
-        <View style={[mk.pin, isFriend && mk.pinFriend, !!run.crew_id && mk.pinCrew]} />
+        {/* Branded teardrop tail — difficulty-colored */}
+        <View style={[mk.tail, { borderTopColor: diffColor }]} />
         {isLiveNow && (
-          <View style={mk.liveBadge}>
+          <View style={[mk.liveBadge, { backgroundColor: diffColor }]}>
             <Text style={mk.liveBadgeText}>LIVE</Text>
           </View>
         )}
@@ -348,7 +382,7 @@ function RunMarker({ run, isSelected, isFriend, onPress }: { run: Run; isSelecte
 }
 
 function makeMkStyles(C: ColorScheme) { return StyleSheet.create({
-  wrap: { alignItems: "center", width: 62, height: 66 },
+  wrap: { alignItems: "center", width: 62, height: 70 },
   glow: {
     position: "absolute", top: -3,
     width: 58, height: 58, borderRadius: 29,
@@ -361,25 +395,23 @@ function makeMkStyles(C: ColorScheme) { return StyleSheet.create({
     borderWidth: 3, borderColor: C.textMuted,
     overflow: "hidden", backgroundColor: C.card,
     alignItems: "center", justifyContent: "center",
-    shadowColor: C.textMuted, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.2, shadowRadius: 4,
+    shadowColor: C.textMuted, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.35, shadowRadius: 4,
     elevation: 10,
   },
-  circleSelected: { borderColor: "#FFFFFF", shadowColor: C.primary, shadowOpacity: 1, shadowRadius: 16 },
-  circleFriend: { borderColor: C.primary, shadowColor: C.primary, shadowOpacity: 0.6, shadowRadius: 10 },
-  circleCrew: { borderColor: "#FFFFFF", shadowColor: "#FFFFFF", shadowOpacity: 0.45, shadowRadius: 8 },
+  circleSelected: { borderColor: "#FFFFFF", shadowOpacity: 1, shadowRadius: 16 },
   circleGray: { borderColor: "#444", shadowColor: "#000", shadowOpacity: 0.2 },
   circleGraySelected: { borderColor: "#888" },
   img: { width: "100%", height: "100%" },
   emoji: { fontSize: 26 },
-  pin: {
-    width: 6, height: 6, borderRadius: 3,
-    backgroundColor: C.textMuted, marginTop: 3,
-    shadowColor: C.textMuted, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 3,
-    elevation: 3,
+  // Teardrop tail — triangle pointing down, colored by difficulty via inline borderTopColor
+  tail: {
+    marginTop: -2,
+    width: 0, height: 0,
+    borderLeftWidth: 8, borderRightWidth: 8, borderTopWidth: 10,
+    borderLeftColor: "transparent", borderRightColor: "transparent",
+    borderTopColor: C.primary,
   },
-  pinFriend: { backgroundColor: C.primary, shadowColor: C.primary, shadowOpacity: 0.9, shadowRadius: 4 },
-  pinCrew: { backgroundColor: "#FFFFFF", shadowColor: "#FFFFFF", shadowOpacity: 0.9, shadowRadius: 4 },
-  pinGray: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#555", marginTop: 3 },
+  pinGray: { width: 0, height: 0, borderLeftWidth: 8, borderRightWidth: 8, borderTopWidth: 10, borderLeftColor: "transparent", borderRightColor: "transparent", borderTopColor: "#555", marginTop: -2 },
   liveRing: {
     position: "absolute", top: -5,
     width: 62, height: 62, borderRadius: 31,
@@ -400,7 +432,7 @@ export default function MapScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const distUnit: DistanceUnit = ((user as any)?.distance_unit ?? "miles") as DistanceUnit;
-  const { activityFilter } = useActivity();
+  const { activityFilter, setActivityFilter } = useActivity();
   const { isActive: walkthroughActive, nextStep: walkthroughNext } = useWalkthrough();
   const { C } = useTheme();
   const mk = useMemo(() => makeMkStyles(C), [C]);
@@ -408,6 +440,7 @@ export default function MapScreen() {
   const mapRef = useRef<MapView>(null);
   const params = useLocalSearchParams<{ styles?: string }>();
 
+  const [activityRailOpen, setActivityRailOpen] = useState(false);
   const [userLoc, setUserLoc] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locatedOnce, setLocatedOnce] = useState(false);
   const [selectedRun, setSelectedRun] = useState<Run | null>(null);
@@ -823,6 +856,7 @@ export default function MapScreen() {
             const strokeColor = baseColor + Math.round(opacity * 255).toString(16).padStart(2, "0");
             const path = typeof route.path === "string" ? JSON.parse(route.path) : (route.path || []);
             if (!path || path.length < 2) return null;
+            if (currentZoom < 11) return null;
             const baseWidth = currentZoom >= 14 ? 4 : 2.5;
             return (
               <Polyline
@@ -838,7 +872,7 @@ export default function MapScreen() {
               />
             );
           })}
-          {communityPaths.map((path) => (
+          {currentZoom >= 11 && communityPaths.map((path) => (
             <Polyline
               key={path.id}
               coordinates={path.route_path}
@@ -890,12 +924,13 @@ export default function MapScreen() {
               </Marker>
             );
           })}
-          {layers.events && visibleRuns.map((run) => (
+          {currentZoom >= 11 && layers.events && visibleRuns.map((run) => (
             <RunMarker
               key={run.id}
               run={run}
               isSelected={selectedRun?.id === run.id}
               isFriend={friendIdSet.has(run.host_id)}
+              zoom={currentZoom}
               onPress={() => openCard(run)}
             />
           ))}
@@ -954,6 +989,51 @@ export default function MapScreen() {
             </Pressable>
           )}
         </View>
+
+        {/* ─── Activity filter rail (right edge, mid) — collapsed by default ── */}
+        {(() => {
+          const options = [
+            { key: "run", iconSet: "mci", icon: "run-fast", label: "Runs" },
+            { key: "ride", iconSet: "ion", icon: "bicycle", label: "Rides" },
+            { key: "walk", iconSet: "ion", icon: "footsteps", label: "Walks" },
+          ] as const;
+          const selected = options.find((o) => o.key === activityFilter) ?? options[0];
+          const others = options.filter((o) => o.key !== activityFilter);
+          const renderIcon = (a: typeof options[number], color: string) =>
+            a.iconSet === "mci" ? (
+              <MaterialCommunityIcons name={a.icon as any} size={22} color={color} />
+            ) : (
+              <Ionicons name={a.icon as any} size={20} color={color} />
+            );
+          return (
+            <View style={s.activityRail}>
+              {/* Selected pill with dropdown chevron */}
+              <Pressable
+                onPress={() => { Haptics.selectionAsync(); setActivityRailOpen((o) => !o); }}
+                style={[s.activityRailBtn, s.activityRailBtnActive, { flexDirection: "row", gap: 4, paddingHorizontal: 8 }]}
+                hitSlop={6}
+              >
+                {renderIcon(selected, C.bg)}
+                <Feather name={activityRailOpen ? "chevron-up" : "chevron-down"} size={14} color={C.bg} />
+              </Pressable>
+              {/* Expanded options */}
+              {activityRailOpen && others.map((a) => (
+                <Pressable
+                  key={a.key}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setActivityFilter(a.key);
+                    setActivityRailOpen(false);
+                  }}
+                  style={s.activityRailBtn}
+                  hitSlop={6}
+                >
+                  {renderIcon(a, C.text)}
+                </Pressable>
+              ))}
+            </View>
+          );
+        })()}
 
         {/* ─── Run card (inside map card) ───────────────────────────────── */}
         {selectedRun && (
@@ -1039,15 +1119,15 @@ export default function MapScreen() {
                   <Text style={s.chipTxt}>{formatDate(selectedRun.date)} · {formatTime(selectedRun.date)}</Text>
                 </View>
                 <View style={s.chip}>
-                  <Ionicons name={selectedRun.activity_type === "ride" ? "bicycle" : selectedRun.activity_type === "walk" ? "footsteps" : "body"} size={11} color={getPaceColor(selectedRun.min_pace, selectedRun.max_pace, C)} />
-                  <Text style={[s.chipTxt, { color: getPaceColor(selectedRun.min_pace, selectedRun.max_pace, C) }]}>
+                  <Ionicons name={selectedRun.activity_type === "ride" ? "bicycle" : selectedRun.activity_type === "walk" ? "footsteps" : "body"} size={11} color={getPaceColor(selectedRun.min_pace, selectedRun.max_pace, C, (selectedRun.activity_type as any) ?? "run")} />
+                  <Text style={[s.chipTxt, { color: getPaceColor(selectedRun.min_pace, selectedRun.max_pace, C, (selectedRun.activity_type as any) ?? "run") }]}>
                     {selectedRun.min_pace === selectedRun.max_pace ? toDisplayPace(selectedRun.min_pace, distUnit) : `${toDisplayPace(selectedRun.min_pace, distUnit)}–${toDisplayPace(selectedRun.max_pace, distUnit)}`}
                   </Text>
                 </View>
                 <View style={s.chip}>
                   <Feather name="map" size={11} color={C.blue} />
                   <Text style={[s.chipTxt, { color: C.blue }]}>
-                    {selectedRun.min_distance === selectedRun.max_distance ? toDisplayDist(selectedRun.min_distance, distUnit) : `${toDisplayDist(selectedRun.min_distance, distUnit)}–${toDisplayDist(selectedRun.max_distance, distUnit)}`}
+                    {(!selectedRun.min_distance || selectedRun.min_distance === selectedRun.max_distance) ? toDisplayDistSmart(selectedRun.max_distance, distUnit) : `${toDisplayDist(selectedRun.min_distance, distUnit)}–${toDisplayDist(selectedRun.max_distance, distUnit)}`}
                   </Text>
                 </View>
                 <View style={[s.chip, selectedRun.is_active && s.chipLive]}>
@@ -1059,7 +1139,7 @@ export default function MapScreen() {
                   <Text style={[s.chipTxt, selectedRun.is_active && { color: C.primary }]}>
                     {selectedRun.is_active
                       ? `${selectedRun.participant_count} arrived`
-                      : selectedRun.crew_id
+                      : (selectedRun.crew_id || (selectedRun.max_participants ?? 0) >= 9999)
                         ? `${selectedRun.participant_count} going`
                         : `${selectedRun.participant_count}/${selectedRun.max_participants}`}
                   </Text>
@@ -1186,9 +1266,9 @@ export default function MapScreen() {
                     <View style={s.miniAvatar}><Text style={s.miniAvatarTxt}>{run.host_name?.charAt(0).toUpperCase()}</Text></View>
                   )}
                   <View style={{ flex: 1, gap: 3 }}>
-                    <View style={s.miniStatRow}><Feather name="map" size={10} color={C.primary} /><Text style={s.miniStatTxt}>{toDisplayDist(run.min_distance, distUnit)}</Text></View>
+                    <View style={s.miniStatRow}><Feather name="map" size={10} color={C.primary} /><Text style={s.miniStatTxt}>{toDisplayDistSmart(run.min_distance, distUnit)}</Text></View>
                     <View style={s.miniStatRow}><Feather name="zap" size={10} color="#F4C542" /><Text style={[s.miniStatTxt, { color: "#F4C542" }]}>{toDisplayPace(run.min_pace, distUnit)}</Text></View>
-                    <View style={s.miniStatRow}><Feather name="users" size={10} color={C.textSecondary} /><Text style={[s.miniStatTxt, { color: C.textSecondary }]}>{run.crew_id ? `${run.participant_count} going` : `${run.participant_count}/${run.max_participants}`}</Text></View>
+                    <View style={s.miniStatRow}><Feather name="users" size={10} color={C.textSecondary} /><Text style={[s.miniStatTxt, { color: C.textSecondary }]}>{(run.crew_id || (run.max_participants ?? 0) >= 9999) ? `${run.participant_count} going` : `${run.participant_count}/${run.max_participants}`}</Text></View>
                   </View>
                 </Pressable>
               ))}
@@ -1417,6 +1497,24 @@ export default function MapScreen() {
                   <Feather name="users" size={13} color={C.textMuted} />
                   <Text style={s.pathChipTxt}>{selectedCommunityPath.run_count ?? 1}</Text>
                 </View>
+                <Pressable
+                  style={({ pressed }) => [s.pathChip, { backgroundColor: C.primary, borderColor: C.primary, opacity: pressed ? 0.85 : 1 }]}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    const r = currentRegionRef.current;
+                    const p: Record<string, string> = { parentPathId: selectedCommunityPath.id };
+                    if (r) {
+                      p.lat = String(r.latitude);
+                      p.lng = String(r.longitude);
+                      p.latDelta = String(r.latitudeDelta);
+                      p.lngDelta = String(r.longitudeDelta);
+                    }
+                    router.push({ pathname: "/create-path", params: p });
+                  }}
+                >
+                  <Feather name="plus" size={13} color={C.bg} />
+                  <Text style={[s.pathChipTxt, { color: C.bg, fontFamily: "Outfit_700Bold" }]}>Route Option</Text>
+                </Pressable>
               </View>
 
               {nearbyPaths.length > 0 && (
@@ -1566,6 +1664,33 @@ function makeSStyles(C: ColorScheme) { return StyleSheet.create({
   },
 
   sideBar: { position: "absolute", right: 12, top: 12, gap: 10, alignItems: "flex-end" },
+
+  activityRail: {
+    position: "absolute",
+    right: 12,
+    top: "30%",
+    gap: 8,
+    alignItems: "center",
+  },
+  activityRailBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: C.card,
+    borderWidth: 1,
+    borderColor: C.border,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  activityRailBtnActive: {
+    backgroundColor: C.primary,
+    borderColor: C.primary,
+  },
 
   layerToggleGroup: {
     backgroundColor: "rgba(0,0,0,0.6)",

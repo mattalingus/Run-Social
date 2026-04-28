@@ -1,4 +1,4 @@
-import { Platform } from "react-native";
+import { Platform, NativeModules } from "react-native";
 
 export interface HealthKitWorkout {
   id: string;
@@ -14,18 +14,63 @@ export interface HealthKitWorkout {
 let AppleHealthKit: any = null;
 let hkInitialized = false;
 
+/**
+ * Resolves the AppleHealthKit native module.
+ *
+ * react-native-health v1.19.0 wraps the native module with:
+ *   `Object.assign({}, NativeModules.AppleHealthKit, { Constants: {...} })`
+ *
+ * On React Native's New Architecture (bridgeless / TurboModule interop),
+ * NativeModules.AppleHealthKit is a lazy proxy whose methods are NOT
+ * enumerable, so Object.assign silently drops `initHealthKit` and friends.
+ * The library then exports only `{ Constants }` with no working methods.
+ *
+ * To handle this we prefer the library's export, but fall back to the
+ * raw NativeModules entry and attach Constants from the library. This keeps
+ * the public API identical (hk.initHealthKit, hk.saveWorkout, hk.Constants.*)
+ * while surviving New Arch module resolution.
+ */
 function getHealthKit(): any {
   if (Platform.OS !== "ios" || Platform.isPad) return null;
   if (AppleHealthKit) return AppleHealthKit;
+
+  let libraryExport: any = null;
   try {
     const mod = require("react-native-health");
-    const hk = mod.default ?? mod;
-    if (!hk || typeof hk.initHealthKit !== "function") return null;
-    AppleHealthKit = hk;
-    return AppleHealthKit;
-  } catch {
-    return null;
+    libraryExport = mod?.default ?? mod ?? null;
+  } catch (e) {
+    console.warn("[HealthKit] require('react-native-health') failed:", e);
   }
+
+  // Preferred path: library export already has working methods (old arch).
+  if (libraryExport && typeof libraryExport.initHealthKit === "function") {
+    AppleHealthKit = libraryExport;
+    return AppleHealthKit;
+  }
+
+  // New Arch path: read the native module directly.
+  const native = (NativeModules as any)?.AppleHealthKit;
+  if (native && typeof native.initHealthKit === "function") {
+    // Compose: expose native methods + the library's Constants (permissions/units/activities maps).
+    const constants = libraryExport?.Constants;
+    AppleHealthKit = constants
+      ? new Proxy(native, {
+          get(target, prop, recv) {
+            if (prop === "Constants") return constants;
+            return Reflect.get(target, prop, recv);
+          },
+        })
+      : native;
+    return AppleHealthKit;
+  }
+
+  console.warn(
+    "[HealthKit] Native module AppleHealthKit not found. libraryExportKeys=",
+    libraryExport ? Object.keys(libraryExport) : null,
+    " nativeKeys=",
+    native ? Object.keys(native) : null
+  );
+  return null;
 }
 
 export function isHealthKitAvailable(): boolean {

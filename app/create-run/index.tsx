@@ -15,13 +15,13 @@ import {
   KeyboardAvoidingView,
   Switch,
 } from "react-native";
-import MapView, { Marker } from "react-native-maps";
+import MapView, { Marker, Polyline } from "react-native-maps";
 import Svg, { Polyline as SvgPolyline } from "react-native-svg";
 import * as Location from "expo-location";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Clipboard from "expo-clipboard";
@@ -119,7 +119,95 @@ export default function CreateRunScreen() {
   const qc = useQueryClient();
   const params = useLocalSearchParams<{ pathLat?: string; pathLng?: string; pathName?: string; pathDistance?: string; activityType?: string; crewId?: string; crewName?: string; visibility?: string }>();
 
-  const [activityType, setActivityType] = useState<"run" | "ride" | "walk">(params.activityType === "ride" ? "ride" : params.activityType === "walk" ? "walk" : "run");
+  // Multi-sport: a single ordered list of selected activities. First item is
+  // the "primary" (drives titles, primary activity_type column). Tapping a
+  // pill toggles in/out, capped at 3 max and 1 min.
+  const initialActivity: "run" | "ride" | "walk" = params.activityType === "ride" ? "ride" : params.activityType === "walk" ? "walk" : "run";
+  const [selectedActs, setSelectedActs] = useState<("run" | "ride" | "walk")[]>([initialActivity]);
+  const activityType = selectedActs[0];
+  const setActivityType = (a: "run" | "ride" | "walk") => setSelectedActs([a]);
+  const toggleActivity = (a: "run" | "ride" | "walk") => {
+    Haptics.selectionAsync();
+    setSelectedActs((prev) => {
+      if (prev.includes(a)) {
+        if (prev.length <= 1) return prev; // can't remove the last one
+        return prev.filter((x) => x !== a);
+      }
+      if (prev.length >= 3) return prev; // capped at 3
+      return [...prev, a];
+    });
+  };
+  const allActivities = selectedActs;
+  const isMultiSport = allActivities.length > 1;
+  // Walk-effort buttons replace the pace selector for walks. Maps to a
+  // pace range under the hood.
+  const WALK_EFFORT: Record<"easy" | "steady" | "brisk", { min: string; max: string; label: string }> = {
+    easy:   { min: "17", max: "22", label: "Easy" },
+    steady: { min: "14", max: "17", label: "Steady" },
+    brisk:  { min: "11", max: "14", label: "Brisk" },
+  };
+  const [walkEffort, setWalkEffort] = useState<"easy" | "steady" | "brisk">("steady");
+
+  // T2.2 Mode B: chain/stages multi-sport. When ON, the activity is a sequence
+  // of stages (e.g. Run 5mi → Ride 10mi → Walk 1mi). Each participant taps
+  // "Start [activity]" to advance through stages during the live event.
+  type Stage = { activityType: "run" | "ride" | "walk"; distanceMiles: string; minPace: string; maxPace: string };
+  const [useStages, setUseStages] = useState(false);
+  const [stages, setStages] = useState<Stage[]>([
+    { activityType: "run", distanceMiles: "3", minPace: "8", maxPace: "10" },
+    { activityType: "ride", distanceMiles: "10", minPace: "14", maxPace: "20" },
+  ]);
+  const updateStage = (idx: number, patch: Partial<Stage>) => {
+    setStages((prev) => prev.map((s, i) => (i === idx ? { ...s, ...patch } : s)));
+  };
+  const addStage = () => {
+    if (stages.length >= 3) return;
+    Haptics.selectionAsync();
+    // Default new stage to whatever isn't already in the list, in priority run > ride > walk
+    const used = new Set(stages.map((s) => s.activityType));
+    const next: "run" | "ride" | "walk" = (["run", "ride", "walk"] as const).find((a) => !used.has(a)) ?? "walk";
+    const defaults: Record<typeof next, Stage> = {
+      run:  { activityType: "run",  distanceMiles: "3",  minPace: "8",  maxPace: "10" },
+      ride: { activityType: "ride", distanceMiles: "10", minPace: "14", maxPace: "20" },
+      walk: { activityType: "walk", distanceMiles: "1",  minPace: "13", maxPace: "18" },
+    };
+    setStages((prev) => [...prev, defaults[next]]);
+  };
+  const removeStage = (idx: number) => {
+    if (stages.length <= 2) return; // need at least 2 stages to be a "chain"
+    Haptics.selectionAsync();
+    setStages((prev) => prev.filter((_, i) => i !== idx));
+  };
+  const moveStage = (idx: number, dir: -1 | 1) => {
+    const j = idx + dir;
+    if (j < 0 || j >= stages.length) return;
+    Haptics.selectionAsync();
+    setStages((prev) => {
+      const next = prev.slice();
+      [next[idx], next[j]] = [next[j], next[idx]];
+      return next;
+    });
+  };
+  // Per-activity pace inputs (only used when multi-sport).
+  const paceInputDefaults = (act: "run" | "ride" | "walk") => {
+    if (act === "ride") return { min: "12", max: "20" };
+    if (act === "walk") return { min: "13", max: "18" };
+    return { min: "7", max: "10" };
+  };
+  const [perActivityPace, setPerActivityPace] = useState<Record<string, { min: string; max: string }>>({});
+  useEffect(() => {
+    setPerActivityPace((prev) => {
+      const next = { ...prev };
+      for (const a of allActivities) {
+        if (!next[a]) next[a] = paceInputDefaults(a);
+      }
+      // Drop entries no longer in the selected set
+      for (const k of Object.keys(next)) {
+        if (!allActivities.includes(k as any)) delete next[k];
+      }
+      return next;
+    });
+  }, [allActivities.join(",")]);
   const [title, setTitle] = useState(params.pathName ? `${params.activityType === "ride" ? "Ride on" : params.activityType === "walk" ? "Walk on" : "Run on"} ${params.pathName}` : "");
   const [description, setDescription] = useState("");
   const [privacy, setPrivacy] = useState(params.visibility === "crew" || params.visibility === "friends" || params.visibility === "public" ? params.visibility : "public");
@@ -137,7 +225,7 @@ export default function CreateRunScreen() {
   const [maxParticipants, setMaxParticipants] = useState("20");
   const [invitePassword, setInvitePassword] = useState("");
   const [inviteModal, setInviteModal] = useState<{ token: string; title: string } | null>(null);
-  const [crewSuccessModal, setCrewSuccessModal] = useState<{ runId: string; title: string; crewName: string } | null>(null);
+  const [crewSuccessModal, setCrewSuccessModal] = useState<{ runId: string; title: string; crewName: string; crewId: string } | null>(null);
   const [page, setPage] = useState<"form" | "location">("form");
   const [pinCoord, setPinCoord] = useState<{ latitude: number; longitude: number } | null>(
     params.pathLat ? { latitude: parseFloat(params.pathLat), longitude: parseFloat(params.pathLng ?? "-122.4194") } : null
@@ -166,8 +254,28 @@ export default function CreateRunScreen() {
   const [pickerLat, setPickerLat] = useState(parseFloat(locationLat) || 0);
   const [pickerLng, setPickerLng] = useState(parseFloat(locationLng) || 0);
   const [pickerName, setPickerName] = useState(locationName);
+  const [pickerSelectedRouteId, setPickerSelectedRouteId] = useState<string | null>(null);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [selectedCrewId, setSelectedCrewId] = useState<string | null>(params.crewId ?? null);
+  const [crewVibe, setCrewVibe] = useState<string>("");
+
+  // Pre-fill pace-group labels from the crew's stored memory (if any).
+  // Chief renamed "Group A" → "Chill" on a previous event; that name pre-fills
+  // here so the chief doesn't have to retype it. Min/max stay from defaults.
+  const crewIdForLabels = params.crewId ?? selectedCrewId ?? null;
+  const { data: storedLabels } = useQuery<{ labels: { position: number; label: string }[] }>({
+    queryKey: ["/api/crews", crewIdForLabels, "pace-group-labels"],
+    enabled: !!crewIdForLabels && usePaceGroups,
+    staleTime: 60_000,
+  });
+  useEffect(() => {
+    const items = storedLabels?.labels ?? [];
+    if (items.length === 0 || paceGroupsCustomized.current) return;
+    setPaceGroups((prev) => prev.map((g, i) => {
+      const stored = items.find((s) => s.position === i);
+      return stored ? { ...g, label: stored.label } : g;
+    }));
+  }, [storedLabels?.labels?.length]);
 
   type HostTemplate = {
     id: string;
@@ -268,6 +376,40 @@ export default function CreateRunScreen() {
     enabled: !!user,
   });
 
+  // Public routes + community paths near the picker center, for rendering as polylines on the location picker map.
+  const pickerRoutesKey = useMemo(() => {
+    if (!locationPickerOpen || !pickerLat || !pickerLng) return null;
+    const d = 0.08; // ~9km lat; wide enough to show neighborhood routes without loading the world
+    const swLat = pickerLat - d, swLng = pickerLng - d, neLat = pickerLat + d, neLng = pickerLng + d;
+    const layer = activityType === "ride" ? "ride" : "foot";
+    return `/api/map/routes?swLat=${swLat.toFixed(3)}&swLng=${swLng.toFixed(3)}&neLat=${neLat.toFixed(3)}&neLng=${neLng.toFixed(3)}&layer=${layer}&limit=300&zoom=14`;
+  }, [locationPickerOpen, pickerLat, pickerLng, activityType]);
+
+  const { data: pickerPublicRoutes = [] } = useQuery<any[]>({
+    queryKey: [pickerRoutesKey],
+    enabled: !!pickerRoutesKey,
+    staleTime: 300_000,
+  });
+
+  const { data: pickerCommunityPathsRaw = [] } = useQuery<any[]>({
+    queryKey: ["/api/community-paths"],
+    enabled: locationPickerOpen,
+    staleTime: 300_000,
+  });
+
+  const pickerCommunityPaths = useMemo(() => {
+    return pickerCommunityPathsRaw
+      .map((p: any) => ({
+        ...p,
+        route_path: typeof p.route_path === "string" ? JSON.parse(p.route_path) : p.route_path,
+      }))
+      .filter((p: any) => {
+        if (!p.route_path || p.route_path.length < 2) return false;
+        const first = p.route_path[0];
+        return haversineKm(pickerLat, pickerLng, first.latitude, first.longitude) < 10;
+      });
+  }, [pickerCommunityPathsRaw, pickerLat, pickerLng]);
+
   const hasMatchingPath = useMemo(() => {
     const lat = parseFloat(locationLat);
     const lng = parseFloat(locationLng);
@@ -353,24 +495,50 @@ export default function CreateRunScreen() {
       if (isNaN(dateTime.getTime())) throw new Error("Invalid date or time");
       if (dateTime.getTime() < Date.now() - 60_000) throw new Error("Event date cannot be in the past");
 
-      // Crew runs have no lower bound — send 0 as min so the server's strict
-      // minDist < maxDist and minPace < maxPace checks are satisfied naturally.
-      const dist = isCrew ? 0 : parseFloat(minDistance);
-      const distMax = isCrew ? parseFloat(plannedDistance) || 3 : parseFloat(maxDistance);
+      // Single-distance events: store min = max = plannedDistance so the info
+      // card and map pills render "3 mi" instead of "0–3 mi" or "3–6 mi".
+      const plannedDistNum = parseFloat(plannedDistance) || 3;
+      const dist = plannedDistNum;
+      const distMax = plannedDistNum;
       // For crew runs with pace groups, spread across all groups; default min to 0.
       let pace: number, paceMax: number;
-      const groupsOn = isCrew || usePaceGroups;
+      const groupsOn = usePaceGroups;
       if (groupsOn && paceGroups.length > 0) {
         const allMin = paceGroups.map((g) => parseFloat(g.minPace)).filter((n) => !isNaN(n));
         const allMax = paceGroups.map((g) => parseFloat(g.maxPace)).filter((n) => !isNaN(n));
         pace = allMin.length > 0 ? Math.min(...allMin) : 0;
         paceMax = allMax.length > 0 ? Math.max(...allMax) : parseFloat(plannedPace) || 9;
+      } else if (activityType === "walk" && !isMultiSport) {
+        // Solo walk: walk effort buttons map to a pace range under the hood.
+        const eff = WALK_EFFORT[walkEffort];
+        pace = parseFloat(eff.min);
+        paceMax = parseFloat(eff.max);
       } else {
-        pace = isCrew ? 0 : parseFloat(minPace);
-        paceMax = isCrew ? parseFloat(plannedPace) || 9 : parseFloat(maxPace);
+        // Pace groups OFF: use the regular Fastest/Slowest pace inputs for both
+        // solo and crew events. Crews previously force-overrode this to a
+        // hardcoded plannedPace; now the chief sets the same way solo hosts do.
+        pace = parseFloat(minPace);
+        paceMax = parseFloat(maxPace);
       }
 
       if (privacy === "crew" && !selectedCrewId && !params.crewId) throw new Error("Please select a crew for this run");
+      // For multi-sport events, broaden minPace/maxPace to span all activity ranges
+      // so the row passes any per-tab pace filter on Discover. Walk uses the
+      // mapped effort range instead of typed pace inputs.
+      let multiPaceMin = pace;
+      let multiPaceMax = paceMax;
+      if (isMultiSport) {
+        const mins = allActivities.map((a) => {
+          if (a === "walk") return parseFloat(WALK_EFFORT[walkEffort].min);
+          return parseFloat(perActivityPace[a]?.min ?? "");
+        }).filter((n) => !isNaN(n));
+        const maxs = allActivities.map((a) => {
+          if (a === "walk") return parseFloat(WALK_EFFORT[walkEffort].max);
+          return parseFloat(perActivityPace[a]?.max ?? "");
+        }).filter((n) => !isNaN(n));
+        if (mins.length) multiPaceMin = Math.min(...mins);
+        if (maxs.length) multiPaceMax = Math.max(...maxs);
+      }
       const res = await apiRequest("POST", "/api/runs", {
         title: title.trim(),
         description: description.trim() || undefined,
@@ -382,15 +550,36 @@ export default function CreateRunScreen() {
         locationName: locationName.trim(),
         minDistance: dist,
         maxDistance: distMax,
-        minPace: pace,
-        maxPace: paceMax,
+        minPace: isMultiSport ? multiPaceMin : pace,
+        maxPace: isMultiSport ? multiPaceMax : paceMax,
+        activityTypes: isMultiSport ? allActivities : undefined,
+        stages: useStages && stages.length >= 2
+          ? stages.map((s) => {
+              if (s.activityType === "walk") {
+                const eff = WALK_EFFORT[walkEffort];
+                return {
+                  activityType: s.activityType,
+                  distanceMiles: parseFloat(s.distanceMiles) || 0,
+                  minPace: parseFloat(eff.min),
+                  maxPace: parseFloat(eff.max),
+                };
+              }
+              return {
+                activityType: s.activityType,
+                distanceMiles: parseFloat(s.distanceMiles) || 0,
+                minPace: parseFloat(s.minPace) || 0,
+                maxPace: parseFloat(s.maxPace) || 0,
+              };
+            })
+          : undefined,
         tags: isCrew ? [] : hostTags,
         maxParticipants: isCrew ? 9999 : Math.max(1, Math.min(500, parseInt(maxParticipants) || 20)),
         activityType,
         crewId: effectiveCrewId || undefined,
+        crewVibe: isCrew && crewVibe.trim() ? crewVibe.trim().slice(0, 30) : undefined,
         isStrict: false,
         savedPathId: selectedSavedPathId || undefined,
-        paceGroups: (isCrew || usePaceGroups) && paceGroups.length > 0
+        paceGroups: (usePaceGroups) && paceGroups.length > 0
           ? paceGroups.map((g) => ({
               label: g.label.trim() || `Group ${paceGroups.indexOf(g) + 1}`,
               minPace: parseFloat(g.minPace) || 0,
@@ -407,13 +596,25 @@ export default function CreateRunScreen() {
       if (effectiveCrewId) {
         qc.invalidateQueries({ queryKey: ["/api/crews", effectiveCrewId, "runs"] });
         qc.invalidateQueries({ queryKey: ["/api/crews"] });
+        // Persist any custom pace-group labels for this crew so the next event
+        // pre-fills with the chief's preferred names.
+        if (usePaceGroups && paceGroups.length > 0) {
+          const labelsPayload = paceGroups
+            .map((g, i) => ({ position: i, label: (g.label ?? "").trim() }))
+            .filter((g) => g.label.length > 0);
+          if (labelsPayload.length > 0) {
+            apiRequest("PUT", `/api/crews/${effectiveCrewId}/pace-group-labels`, { labels: labelsPayload })
+              .then(() => qc.invalidateQueries({ queryKey: ["/api/crews", effectiveCrewId, "pace-group-labels"] }))
+              .catch(() => { /* non-fatal — label memory is a nice-to-have */ });
+          }
+        }
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       if (effectiveCrewId) {
         const crewName = params.crewName
           ?? myCrews.find((c) => c.id === effectiveCrewId)?.name
           ?? "Your Crew";
-        setCrewSuccessModal({ runId: run.id, title: run.title, crewName });
+        setCrewSuccessModal({ runId: run.id, title: run.title, crewName, crewId: effectiveCrewId });
       } else if (run?.privacy === "private" && run?.invite_token) {
         setInviteModal({ token: run.invite_token, title: run.title });
       } else {
@@ -444,7 +645,7 @@ export default function CreateRunScreen() {
   function validateAndSubmit() {
     if (submittingRef.current || createMutation.isPending) return;
     submittingRef.current = true;
-    if ((isCrew || usePaceGroups) && paceGroups.length > 0) {
+    if ((usePaceGroups) && paceGroups.length > 0) {
       const errors = paceGroups.map((g) => {
         const min = parseFloat(g.minPace);
         const max = parseFloat(g.maxPace);
@@ -489,78 +690,337 @@ export default function CreateRunScreen() {
         bottomOffset={20}
       >
         {params.crewId ? (
-          <View style={styles.crewBanner}>
-            <Ionicons name="people" size={16} color="#00D97E" />
-            <Text style={styles.crewBannerTxt}>
-              Scheduling for <Text style={styles.crewBannerName}>{params.crewName ?? "your crew"}</Text> — only members will see this
-            </Text>
-          </View>
+          <>
+            <View style={styles.crewBanner}>
+              <Ionicons name="people" size={16} color="#00D97E" />
+              <Text style={styles.crewBannerTxt}>
+                Scheduling for <Text style={styles.crewBannerName}>{params.crewName ?? "your crew"}</Text> — only members will see this
+              </Text>
+            </View>
+            {/* Title (top of crew form — swapped above vibe per request) */}
+            <View style={styles.field}>
+              <Text style={styles.label}>{activityType === "ride" ? "Ride Title *" : activityType === "walk" ? "Walk Title *" : "Run Title *"}</Text>
+              <TextInput
+                style={styles.input}
+                value={title}
+                onChangeText={setTitle}
+                placeholder={activityType === "ride" ? "e.g. Sunday Morning Group Ride" : activityType === "walk" ? "e.g. Morning Walk Around the Park" : "e.g. Morning 5K in the Park"}
+                placeholderTextColor={C.textMuted}
+                maxLength={60}
+              />
+            </View>
+            <View style={styles.field}>
+              <Text style={styles.label}>Vibe (optional)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Bring a towel · Coffee after"
+                placeholderTextColor={C.textMuted}
+                value={crewVibe}
+                onChangeText={(t) => setCrewVibe(t.slice(0, 30))}
+                maxLength={30}
+                returnKeyType="done"
+              />
+              <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted, marginTop: 4, textAlign: "right" }}>
+                {crewVibe.length}/30
+              </Text>
+            </View>
+          </>
         ) : null}
-        {/* 1. Activity Type */}
+        {/* 1. Activity Type — single row, multi-select up to 3 */}
         <View style={styles.field}>
-          <Text style={styles.label}>Activity Type</Text>
+          <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 }}>
+            <Text style={[styles.label, { marginBottom: 0 }]}>Activity Type</Text>
+            <Text style={[styles.fieldHint, { marginTop: 0, marginBottom: 0 }]}>(select up to 3)</Text>
+          </View>
           <View style={styles.activityRow}>
-            <Pressable
-              style={[styles.activityPill, activityType === "run" && styles.activityPillActive]}
-              onPress={() => { setActivityType("run"); Haptics.selectionAsync(); }}
-            >
-              <Ionicons name="body" size={14} color={activityType === "run" ? C.bg : C.textMuted} />
-              <Text style={[styles.activityPillTxt, activityType === "run" && styles.activityPillTxtActive]}>Run</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.activityPill, activityType === "ride" && styles.activityPillActive]}
-              onPress={() => { setActivityType("ride"); Haptics.selectionAsync(); }}
-            >
-              <Ionicons name="bicycle" size={14} color={activityType === "ride" ? C.bg : C.textMuted} />
-              <Text style={[styles.activityPillTxt, activityType === "ride" && styles.activityPillTxtActive]}>Ride</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.activityPill, activityType === "walk" && styles.activityPillActive]}
-              onPress={() => { setActivityType("walk"); Haptics.selectionAsync(); }}
-            >
-              <Ionicons name="footsteps" size={14} color={activityType === "walk" ? C.bg : C.textMuted} />
-              <Text style={[styles.activityPillTxt, activityType === "walk" && styles.activityPillTxtActive]}>Walk</Text>
-            </Pressable>
+            {(["run", "ride", "walk"] as const).map((a) => {
+              const on = selectedActs.includes(a);
+              return (
+                <Pressable
+                  key={a}
+                  style={[styles.activityPill, on && styles.activityPillActive]}
+                  onPress={() => toggleActivity(a)}
+                >
+                  {a === "run" ? (
+                    <MaterialCommunityIcons name="run-fast" size={16} color={on ? C.bg : C.textMuted} />
+                  ) : a === "ride" ? (
+                    <Ionicons name="bicycle" size={14} color={on ? C.bg : C.textMuted} />
+                  ) : (
+                    <Ionicons name="footsteps" size={14} color={on ? C.bg : C.textMuted} />
+                  )}
+                  <Text style={[styles.activityPillTxt, on && styles.activityPillTxtActive]}>
+                    {a === "run" ? "Run" : a === "ride" ? "Ride" : "Walk"}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
         </View>
 
-        {/* 2. Title */}
-        <View style={styles.field}>
-          <Text style={styles.label}>{activityType === "ride" ? "Ride Title *" : activityType === "walk" ? "Walk Title *" : "Run Title *"}</Text>
-          <TextInput
-            style={styles.input}
-            value={title}
-            onChangeText={setTitle}
-            placeholder={activityType === "ride" ? "e.g. Sunday Morning Group Ride" : activityType === "walk" ? "e.g. Morning Walk Around the Park" : "e.g. Morning 5K in the Park"}
-            placeholderTextColor={C.textMuted}
-            maxLength={60}
+        {/* T2.2 Mode B: Stages toggle. Off by default. When on, the event is a
+            sequence (e.g. Run → Ride → Walk) where each participant manually
+            advances through stages. Mutually exclusive with the Pick-One
+            multi-sport toggle (which lets each joiner pick a single activity). */}
+        <View style={[styles.field, styles.toggleCard, { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 4 }]}>
+          <View style={{ flex: 1, paddingRight: 12 }}>
+            <Text style={styles.label}>Stages (sequential)</Text>
+            <Text style={styles.fieldHint}>
+              Run → Ride → Walk in order. Everyone goes through each stage. Up to 3 stages.
+            </Text>
+          </View>
+          <Switch
+            value={useStages}
+            onValueChange={setUseStages}
+            trackColor={{ false: C.border, true: C.primary }}
+            thumbColor={"#FFFFFF"}
+            ios_backgroundColor={C.border}
           />
         </View>
+
+        {useStages && (
+          <View style={styles.field}>
+            {stages.map((stage, idx) => {
+              const isRide = stage.activityType === "ride";
+              const isWalk = stage.activityType === "walk";
+              return (
+                <View key={idx} style={{ backgroundColor: C.surface, borderRadius: 12, borderWidth: 1, borderColor: C.border, padding: 12, marginTop: idx === 0 ? 0 : 10 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 10, gap: 8 }}>
+                    <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: C.primary, alignItems: "center", justifyContent: "center" }}>
+                      <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 12, color: C.bg }}>{idx + 1}</Text>
+                    </View>
+                    <Text style={[styles.label, { flex: 1 }]}>Stage {idx + 1}</Text>
+                    <Pressable
+                      onPress={() => moveStage(idx, -1)}
+                      disabled={idx === 0}
+                      style={{ padding: 4, opacity: idx === 0 ? 0.3 : 1 }}
+                    >
+                      <Feather name="arrow-up" size={16} color={C.textSecondary} />
+                    </Pressable>
+                    <Pressable
+                      onPress={() => moveStage(idx, 1)}
+                      disabled={idx === stages.length - 1}
+                      style={{ padding: 4, opacity: idx === stages.length - 1 ? 0.3 : 1 }}
+                    >
+                      <Feather name="arrow-down" size={16} color={C.textSecondary} />
+                    </Pressable>
+                    {stages.length > 2 && (
+                      <Pressable
+                        onPress={() => removeStage(idx)}
+                        style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: C.danger + "22", alignItems: "center", justifyContent: "center" }}
+                      >
+                        <Feather name="trash-2" size={13} color={C.danger} />
+                      </Pressable>
+                    )}
+                  </View>
+
+                  {/* Activity picker for this stage */}
+                  <View style={[styles.activityRow, { marginBottom: 10 }]}>
+                    {(["run", "ride", "walk"] as const).map((a) => {
+                      const on = stage.activityType === a;
+                      return (
+                        <Pressable
+                          key={a}
+                          style={[styles.activityPill, on && styles.activityPillActive]}
+                          onPress={() => { Haptics.selectionAsync(); updateStage(idx, { activityType: a }); }}
+                        >
+                          {a === "run" ? (
+                            <MaterialCommunityIcons name="run-fast" size={14} color={on ? C.bg : C.textMuted} />
+                          ) : a === "ride" ? (
+                            <Ionicons name="bicycle" size={13} color={on ? C.bg : C.textMuted} />
+                          ) : (
+                            <Ionicons name="footsteps" size={13} color={on ? C.bg : C.textMuted} />
+                          )}
+                          <Text style={[styles.activityPillTxt, on && styles.activityPillTxtActive]}>
+                            {a === "run" ? "Run" : a === "ride" ? "Ride" : "Walk"}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+
+                  {/* Distance */}
+                  <Text style={[styles.splitLabel, { marginBottom: 4 }]}>Distance (miles)</Text>
+                  <TextInput
+                    style={[styles.input, { marginBottom: 10 }]}
+                    value={stage.distanceMiles}
+                    onChangeText={(t) => updateStage(idx, { distanceMiles: t })}
+                    keyboardType="decimal-pad"
+                    placeholder="3"
+                    placeholderTextColor={C.textMuted}
+                  />
+
+                  {/* Pace inputs (run/ride) or effort buttons (walk) */}
+                  {isWalk ? (
+                    <View>
+                      <Text style={[styles.splitLabel, { marginBottom: 6 }]}>Walk Effort</Text>
+                      <View style={styles.activityRow}>
+                        {(["easy", "steady", "brisk"] as const).map((eff) => {
+                          const on = walkEffort === eff;
+                          return (
+                            <Pressable
+                              key={eff}
+                              style={[styles.activityPill, on && styles.activityPillActive]}
+                              onPress={() => { Haptics.selectionAsync(); setWalkEffort(eff); }}
+                            >
+                              <Text style={[styles.activityPillTxt, on && styles.activityPillTxtActive]}>
+                                {WALK_EFFORT[eff].label}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={styles.row}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.splitLabel}>{isRide ? "Slowest mph" : "Fastest min/mi"}</Text>
+                        <TextInput
+                          style={styles.input}
+                          value={stage.minPace}
+                          onChangeText={(t) => updateStage(idx, { minPace: t })}
+                          keyboardType="decimal-pad"
+                          placeholder={isRide ? "12" : "7"}
+                          placeholderTextColor={C.textMuted}
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.splitLabel}>{isRide ? "Fastest mph" : "Slowest min/mi"}</Text>
+                        <TextInput
+                          style={styles.input}
+                          value={stage.maxPace}
+                          onChangeText={(t) => updateStage(idx, { maxPace: t })}
+                          keyboardType="decimal-pad"
+                          placeholder={isRide ? "20" : "10"}
+                          placeholderTextColor={C.textMuted}
+                        />
+                      </View>
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+
+            {stages.length < 3 && (
+              <Pressable
+                onPress={addStage}
+                style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 10, paddingVertical: 12, borderRadius: 12, backgroundColor: C.primaryMuted, borderWidth: 1, borderColor: C.primary + "55", borderStyle: "dashed" }}
+              >
+                <Feather name="plus" size={14} color={C.primary} />
+                <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 13, color: C.primary }}>Add Stage ({stages.length}/3)</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
+
+        {/* Per-activity pace/effort inputs (multi-sport only) */}
+        {isMultiSport && !useStages && (
+          <View style={styles.field}>
+            <Text style={styles.label}>Per-activity pace / speed</Text>
+            <Text style={styles.fieldHint}>Set a separate range for each activity in this event.</Text>
+            {allActivities.map((a) => {
+              const isRide = a === "ride";
+              const isWalk = a === "walk";
+              const v = perActivityPace[a] ?? paceInputDefaults(a);
+              return (
+                <View key={a} style={{ backgroundColor: C.surface, borderRadius: 12, borderWidth: 1, borderColor: C.border, padding: 12, marginTop: 8 }}>
+                  <Text style={[styles.label, { marginBottom: 8 }]}>
+                    {isRide ? "Ride · Speed (mph)" : isWalk ? "Walk · Effort" : "Run · Pace (min/mi)"}
+                  </Text>
+                  {isWalk ? (
+                    <View style={styles.activityRow}>
+                      {(["easy", "steady", "brisk"] as const).map((eff) => {
+                        const on = walkEffort === eff;
+                        return (
+                          <Pressable
+                            key={eff}
+                            style={[styles.activityPill, on && styles.activityPillActive]}
+                            onPress={() => { Haptics.selectionAsync(); setWalkEffort(eff); }}
+                          >
+                            <Text style={[styles.activityPillTxt, on && styles.activityPillTxtActive]}>
+                              {WALK_EFFORT[eff].label}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  ) : (
+                    <View style={styles.row}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.splitLabel}>{isRide ? "Slowest" : "Fastest"}</Text>
+                        <TextInput
+                          style={styles.input}
+                          value={v.min}
+                          onChangeText={(t) => setPerActivityPace((prev) => ({ ...prev, [a]: { ...v, min: t } }))}
+                          keyboardType="decimal-pad"
+                          placeholder={isRide ? "12" : "7"}
+                          placeholderTextColor={C.textMuted}
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.splitLabel}>{isRide ? "Fastest" : "Slowest"}</Text>
+                        <TextInput
+                          style={styles.input}
+                          value={v.max}
+                          onChangeText={(t) => setPerActivityPace((prev) => ({ ...prev, [a]: { ...v, max: t } }))}
+                          keyboardType="decimal-pad"
+                          placeholder={isRide ? "20" : "10"}
+                          placeholderTextColor={C.textMuted}
+                        />
+                      </View>
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        {/* 2. Title — solo only; crew events render Title at the very top */}
+        {!params.crewId && (
+          <View style={styles.field}>
+            <Text style={styles.label}>{activityType === "ride" ? "Ride Title *" : activityType === "walk" ? "Walk Title *" : "Run Title *"}</Text>
+            <TextInput
+              style={styles.input}
+              value={title}
+              onChangeText={setTitle}
+              placeholder={activityType === "ride" ? "e.g. Sunday Morning Group Ride" : activityType === "walk" ? "e.g. Morning Walk Around the Park" : "e.g. Morning 5K in the Park"}
+              placeholderTextColor={C.textMuted}
+              maxLength={60}
+            />
+          </View>
+        )}
 
         {/* 4. Date & Time */}
         <View style={styles.field}>
           <Text style={styles.label}>Date & Time *</Text>
-          <MiniCalendarPicker value={date} onChange={setDate} />
-          <View style={{ flexDirection: "row", gap: 6, marginTop: 8 }}>
-            <TextInput
-              style={[styles.input, { flex: 1, marginBottom: 0 }]}
-              value={time}
-              onChangeText={handleTimeChange}
-              placeholder="7:30"
-              placeholderTextColor={C.textMuted}
-              keyboardType="number-pad"
-              maxLength={5}
-            />
-            {(["AM", "PM"] as const).map((period) => (
-              <Pressable
-                key={period}
-                style={{ paddingHorizontal: 18, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center", backgroundColor: amPm === period ? C.primaryMuted : C.surface, borderColor: amPm === period ? C.primary : C.border }}
-                onPress={() => { setAmPm(period); Haptics.selectionAsync(); }}
-              >
-                <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 13, color: amPm === period ? C.primary : C.textMuted }}>{period}</Text>
-              </Pressable>
-            ))}
-          </View>
+          <MiniCalendarPicker
+            value={date}
+            onChange={setDate}
+            rightSlot={
+              <View style={{ flexDirection: "row", gap: 6, flex: 1 }}>
+                <TextInput
+                  style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                  value={time}
+                  onChangeText={handleTimeChange}
+                  placeholder="7:30"
+                  placeholderTextColor={C.textMuted}
+                  keyboardType="number-pad"
+                  maxLength={5}
+                />
+                <View style={{ flexDirection: "column", gap: 4 }}>
+                  {(["AM", "PM"] as const).map((period) => (
+                    <Pressable
+                      key={period}
+                      style={{ paddingHorizontal: 12, paddingVertical: 4, borderRadius: 8, borderWidth: 1, alignItems: "center", justifyContent: "center", flex: 1, backgroundColor: amPm === period ? C.primaryMuted : C.surface, borderColor: amPm === period ? C.primary : C.border }}
+                      onPress={() => { setAmPm(period); Haptics.selectionAsync(); }}
+                    >
+                      <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 11, color: amPm === period ? C.primary : C.textMuted }}>{period}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            }
+          />
         </View>
 
         {/* Saved Templates — horizontally scrollable */}
@@ -678,21 +1138,25 @@ export default function CreateRunScreen() {
           </View>
         )}
 
-        {/* 8. Pace Range */}
-        {!isCrew && (
-          <View style={[styles.field, { flexDirection: "row", alignItems: "center", justifyContent: "space-between" }]}>
-            <View style={{ flex: 1, paddingRight: 12 }}>
-              <Text style={styles.label}>{activityType === "ride" ? "Use Speed Groups" : "Use Pace Groups"}</Text>
-              <Text style={styles.fieldHint}>
-                {activityType === "ride"
-                  ? "Good for larger rides — let joiners pick an A / B / C group."
-                  : "Good for larger runs — let joiners pick their pace group."}
-              </Text>
-            </View>
-            <Switch value={usePaceGroups} onValueChange={setUsePaceGroups} />
+        {/* 8. Pace Range — toggle is shown for crew + solo. Default OFF; chief opts in. */}
+        <View style={[styles.field, styles.toggleCard, { flexDirection: "row", alignItems: "center", justifyContent: "space-between" }]}>
+          <View style={{ flex: 1, paddingRight: 12 }}>
+            <Text style={styles.label}>{activityType === "ride" ? "Use Speed Groups" : "Use Pace Groups"}</Text>
+            <Text style={styles.fieldHint}>
+              {activityType === "ride"
+                ? "Good for larger rides — let joiners pick an A / B / C group."
+                : "Good for larger runs — let joiners pick their pace group."}
+            </Text>
           </View>
-        )}
-        {(isCrew || usePaceGroups) ? (
+          <Switch
+            value={usePaceGroups}
+            onValueChange={setUsePaceGroups}
+            trackColor={{ false: C.border, true: C.primary }}
+            thumbColor={usePaceGroups ? "#FFFFFF" : "#FFFFFF"}
+            ios_backgroundColor={C.border}
+          />
+        </View>
+        {(usePaceGroups) ? (
           <View style={styles.field}>
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
               <View>
@@ -717,6 +1181,7 @@ export default function CreateRunScreen() {
             {paceGroups.map((group, idx) => (
               <View key={idx} style={{ backgroundColor: C.surface, borderRadius: 12, borderWidth: 1, borderColor: paceGroupErrors[idx] ? C.danger : C.border, padding: 12, marginBottom: 8 }}>
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                  <Feather name="edit-2" size={12} color={C.textMuted} style={{ marginRight: 6 }} />
                   <TextInput
                     style={[styles.input, { flex: 1, marginRight: 8, marginBottom: 0 }]}
                     value={group.label}
@@ -790,6 +1255,27 @@ export default function CreateRunScreen() {
                 )}
               </View>
             ))}
+          </View>
+        ) : activityType === "walk" && !isMultiSport ? (
+          // Solo walk: 3 effort buttons in place of a pace selector
+          <View style={styles.field}>
+            <Text style={styles.label}>Walk Effort</Text>
+            <View style={styles.activityRow}>
+              {(["easy", "steady", "brisk"] as const).map((eff) => {
+                const on = walkEffort === eff;
+                return (
+                  <Pressable
+                    key={eff}
+                    style={[styles.activityPill, on && styles.activityPillActive]}
+                    onPress={() => { Haptics.selectionAsync(); setWalkEffort(eff); }}
+                  >
+                    <Text style={[styles.activityPillTxt, on && styles.activityPillTxtActive]}>
+                      {WALK_EFFORT[eff].label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
         ) : (
           <View style={styles.field}>
@@ -940,6 +1426,50 @@ export default function CreateRunScreen() {
                     Haptics.selectionAsync();
                   }}
                 >
+                  {/* Public routes (orange = run/walk, blue = ride) */}
+                  {pickerPublicRoutes.map((route: any) => {
+                    const path = typeof route.path === "string" ? JSON.parse(route.path) : (route.path || []);
+                    if (!path || path.length < 2) return null;
+                    const isRide = route.activity_type === "ride";
+                    const stroke = isRide ? "#2E86AB" : "#FF6B35";
+                    return (
+                      <Polyline
+                        key={`pr-${route.id}`}
+                        coordinates={path}
+                        strokeColor={pickerSelectedRouteId === `pr-${route.id}` ? "#FFFFFF" : stroke}
+                        strokeWidth={pickerSelectedRouteId === `pr-${route.id}` ? 5 : 3}
+                        tappable
+                        onPress={() => {
+                          const start = path[0];
+                          setPickerLat(start.latitude);
+                          setPickerLng(start.longitude);
+                          setPickerSelectedRouteId(`pr-${route.id}`);
+                          if (route.name) setPickerName(route.name);
+                          else reverseGeocode(start.latitude, start.longitude);
+                          Haptics.selectionAsync();
+                        }}
+                      />
+                    );
+                  })}
+                  {/* Community paths (green) */}
+                  {pickerCommunityPaths.map((path: any) => (
+                    <Polyline
+                      key={`cp-${path.id}`}
+                      coordinates={path.route_path}
+                      strokeColor={pickerSelectedRouteId === `cp-${path.id}` ? "#FFFFFF" : "#00D97E"}
+                      strokeWidth={pickerSelectedRouteId === `cp-${path.id}` ? 5 : 3}
+                      tappable
+                      onPress={() => {
+                        const start = path.route_path[0];
+                        setPickerLat(start.latitude);
+                        setPickerLng(start.longitude);
+                        setPickerSelectedRouteId(`cp-${path.id}`);
+                        if (path.name) setPickerName(path.name);
+                        else reverseGeocode(start.latitude, start.longitude);
+                        Haptics.selectionAsync();
+                      }}
+                    />
+                  ))}
                   <Marker coordinate={{ latitude: pickerLat, longitude: pickerLng }} pinColor="#00D97E" />
                 </MapView>
               </>
@@ -1024,22 +1554,13 @@ export default function CreateRunScreen() {
 
               <View style={styles.crewSuccessActions}>
                 <Pressable
-                  style={styles.crewInviteBtn}
+                  style={[styles.crewShareBtn, { flex: 1 }]}
                   onPress={() => {
+                    const url = `paceup://run/${crewSuccessModal.runId}`;
                     Share.share({
-                      message: `Join my crew on PaceUp to see upcoming runs & rides! Search for "${crewSuccessModal.crewName}" in the Crew tab.`,
-                    });
-                  }}
-                >
-                  <Feather name="user-plus" size={15} color={C.primary} />
-                  <Text style={styles.crewInviteTxt}>Invite to Crew</Text>
-                </Pressable>
-                <Pressable
-                  style={styles.crewShareBtn}
-                  onPress={() => {
-                    Share.share({
-                      message: `Check out "${crewSuccessModal.title}" on PaceUp! Open the app to join.`,
-                    });
+                      message: `Check out "${crewSuccessModal.title}" on PaceUp! ${url}`,
+                      url,
+                    } as any);
                   }}
                 >
                   <Feather name="share-2" size={15} color={C.bg} />
@@ -1218,6 +1739,16 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   createBtnText: { fontFamily: "Outfit_700Bold", fontSize: 14, color: C.bg },
   form: { padding: 20, gap: 16 },
   field: { gap: 6 },
+  // Highlighted toggle card — visible green outline so users notice the
+  // pace-groups + stages switches.
+  toggleCard: {
+    backgroundColor: C.primaryMuted,
+    borderWidth: 1.5,
+    borderColor: C.primary,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
   label: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary },
   splitLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.textMuted, marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 },
   splitInput: {

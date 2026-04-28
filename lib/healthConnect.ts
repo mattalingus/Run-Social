@@ -21,18 +21,49 @@ export interface SaveWorkoutOptions {
 }
 
 let hcInitialized = false;
+let cachedHC: any = null;
 
 function getHC(): any {
   if (Platform.OS !== "android") return null;
+  if (cachedHC) return cachedHC;
   try {
-    return require("react-native-health-connect");
-  } catch {
+    const mod = require("react-native-health-connect");
+    const hc = mod?.default ?? mod;
+    // Sanity-check that the module exposes the core API we rely on. If the
+    // native side failed to link, these will all be undefined and we should
+    // treat the connector as unavailable rather than crashing later.
+    if (!hc || typeof hc.initialize !== "function" || typeof hc.requestPermission !== "function") {
+      console.warn(
+        "[HealthConnect] Module loaded but API missing. keys=",
+        hc ? Object.keys(hc) : null
+      );
+      return null;
+    }
+    cachedHC = hc;
+    return cachedHC;
+  } catch (e) {
+    console.warn("[HealthConnect] require('react-native-health-connect') failed:", e);
     return null;
   }
 }
 
 export function isHealthConnectAvailable(): boolean {
   return Platform.OS === "android" && getHC() !== null;
+}
+
+/** Diagnostic info for the Settings "Diagnose" action. */
+export function healthConnectDiagnostics(): {
+  platform: string;
+  available: boolean;
+  moduleLoaded: boolean;
+  initialized: boolean;
+} {
+  return {
+    platform: Platform.OS,
+    available: isHealthConnectAvailable(),
+    moduleLoaded: cachedHC !== null,
+    initialized: hcInitialized,
+  };
 }
 
 export type HCSdkStatus = "available" | "unavailable" | "update_required" | "unknown";

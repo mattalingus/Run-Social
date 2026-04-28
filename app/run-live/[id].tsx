@@ -10,6 +10,7 @@ import {
   FlatList,
   ScrollView,
   TextInput,
+  AppState,
 } from "react-native";
 import MapView, { Marker, Polyline, Circle } from "react-native-maps";
 import { KeyboardAvoidingView as KAV } from "react-native-keyboard-controller";
@@ -162,6 +163,17 @@ export default function RunLiveScreen() {
   const [countdown, setCountdown] = useState<number | null>(null);
   const navigatedAwayRef = useRef(false);
 
+  // T2.2 Mode B — chain stages state. currentStageIdx is the in-progress
+  // stage index (-1 = haven't started any stage yet); stageBaselineDist
+  // captures totalDistRef.current at the moment a stage starts so we can
+  // compute per-stage distance as (current - baseline). null = no stage active.
+  // eventStages / isStaged derived from `run` are computed below, after the
+  // run useQuery resolves the row.
+  const [currentStageIdx, setCurrentStageIdx] = useState<number>(-1);
+  const stageBaselineDistRef = useRef<number>(0);
+  const stageBaselineTimeRef = useRef<number>(0);
+  const [completedStages, setCompletedStages] = useState<number[]>([]);
+
   // Countdown tick: 3→2→1→0(GO!)→call handleStartTracking
   useEffect(() => {
     if (countdown === null) return;
@@ -225,6 +237,117 @@ export default function RunLiveScreen() {
       return res.json();
     },
   });
+
+  const eventStages: any[] | null = Array.isArray((run as any)?.stages) && (run as any).stages.length >= 2
+    ? ((run as any).stages as any[])
+    : null;
+  const isStaged = !!eventStages;
+
+  // T2.10 client UI — pace-group recommendation drop-down. Only shows once
+  // per run after 1 mile of tracking when the participant's actual pace is
+  // outside their declared group's range.
+  const { data: myParticipationData } = useQuery<{ pace_group_label?: string | null } | null>({
+    queryKey: ["/api/runs", id, "my-participant"],
+    queryFn: async () => {
+      try {
+        const res = await apiRequest("GET", `/api/runs/${id}/participants`);
+        const list = (await res.json()) as any[];
+        return list.find((p: any) => p.id === user?.id || p.user_id === user?.id) ?? null;
+      } catch { return null; }
+    },
+    enabled: !!user?.id && !!id,
+    refetchInterval: 60_000,
+  });
+  const [paceRecBanner, setPaceRecBanner] = useState<{ suggestGroup: string; reason: "faster" | "slower"; minPace: number; maxPace: number } | null>(null);
+  const paceRecShownOnceRef = useRef(false);
+  useEffect(() => {
+    if (paceRecShownOnceRef.current) return;
+    if (!run?.pace_groups || !Array.isArray(run.pace_groups) || run.pace_groups.length < 2) return;
+    const myLabel = (myParticipationData as any)?.pace_group_label;
+    if (!myLabel) return;
+    const dist = totalDistRef.current;
+    const elapsed = elapsedRef.current;
+    if (dist < 1 || elapsed < 60) return;
+    const livePace = (elapsed / 60) / dist;
+    if (!isFinite(livePace) || livePace <= 0) return;
+    const groups: any[] = run.pace_groups as any[];
+    const myGroup = groups.find((g: any) => g.label === myLabel);
+    if (!myGroup) return;
+    const isRide = run?.activity_type === "ride";
+    const myMetric = isRide ? (livePace > 0 ? 60 / livePace : 0) : livePace;
+    let rec: typeof paceRecBanner = null;
+    if (isRide) {
+      if (myMetric > myGroup.maxPace + 1) {
+        const faster = groups.filter((g: any) => g.minPace > myGroup.maxPace).sort((a: any, b: any) => a.minPace - b.minPace)[0];
+        if (faster) rec = { suggestGroup: faster.label, reason: "faster", minPace: faster.minPace, maxPace: faster.maxPace };
+      } else if (myMetric < myGroup.minPace - 1) {
+        const slower = groups.filter((g: any) => g.maxPace < myGroup.minPace).sort((a: any, b: any) => b.maxPace - a.maxPace)[0];
+        if (slower) rec = { suggestGroup: slower.label, reason: "slower", minPace: slower.minPace, maxPace: slower.maxPace };
+      }
+    } else {
+      if (myMetric < myGroup.minPace - 0.3) {
+        const faster = groups.filter((g: any) => g.maxPace < myGroup.minPace).sort((a: any, b: any) => b.maxPace - a.maxPace)[0];
+        if (faster) rec = { suggestGroup: faster.label, reason: "faster", minPace: faster.minPace, maxPace: faster.maxPace };
+      } else if (myMetric > myGroup.maxPace + 0.3) {
+        const slower = groups.filter((g: any) => g.minPace > myGroup.maxPace).sort((a: any, b: any) => a.minPace - b.minPace)[0];
+        if (slower) rec = { suggestGroup: slower.label, reason: "slower", minPace: slower.minPace, maxPace: slower.maxPace };
+      }
+    }
+    if (rec) {
+      paceRecShownOnceRef.current = true;
+      setPaceRecBanner(rec);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+    }
+  // Fire only when the moving distance crosses thresholds — refs aren't reactive,
+  // so we re-run whenever the participation row refreshes (every 60s) and
+  // whenever the run pace_groups data changes.
+  }, [myParticipationData?.pace_group_label, run?.pace_groups, run?.activity_type]);
+
+  // T3.6: Live Activity restart on foreground. iOS occasionally drops the
+  // Live Activity if the app is killed by the OS in deep background; when the
+  // host returns to foreground while a run is still active, re-arm it so the
+  // Dynamic Island stays accurate.
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state !== "active") return;
+      if (phase !== "active") return;
+      try {
+        const dist = totalDistRef.current;
+        const elapsed = elapsedRef.current;
+        const pace = calcPaceNum(dist, elapsed);
+        const actType = ((run?.activity_type ?? "run") as "run" | "ride" | "walk");
+        LiveActivity.update({
+          elapsedSeconds: elapsed,
+          distanceMiles: dist,
+          paceMinPerMile: pace,
+          activityType: actType,
+        });
+        if (!liveActivityStartedRef.current) {
+          LiveActivity.start({
+            elapsedSeconds: elapsed,
+            distanceMiles: dist,
+            paceMinPerMile: pace,
+            activityType: actType,
+          });
+          liveActivityStartedRef.current = true;
+        }
+      } catch (_) {}
+    });
+    return () => sub.remove();
+  }, [phase, run?.activity_type]);
+
+  async function applyPaceRecSwitch() {
+    if (!paceRecBanner) return;
+    try {
+      await apiRequest("PATCH", `/api/runs/${id}/pace-group`, { paceGroupLabel: paceRecBanner.suggestGroup });
+      qc.invalidateQueries({ queryKey: ["/api/runs", id, "my-participant"] });
+      qc.invalidateQueries({ queryKey: ["/api/runs", id, "participants"] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setPaceRecBanner(null);
+    } catch (e: any) {
+      Alert.alert("Could not switch group", e?.message ?? "Please try again.");
+    }
+  }
 
   // Track liveState fetch time and compute staleness every second
   useEffect(() => {
@@ -432,6 +555,61 @@ export default function RunLiveScreen() {
       });
     }
     liveActivityStartedRef.current = true;
+  }
+
+  // T2.2 Mode B: stage handlers
+  async function handleStartStage(stageIdx: number) {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      await apiRequest("POST", `/api/runs/${id}/start-stage`, { stageIdx });
+      stageBaselineDistRef.current = totalDistRef.current;
+      stageBaselineTimeRef.current = elapsedRef.current;
+      setCurrentStageIdx(stageIdx);
+    } catch (e: any) {
+      Alert.alert("Could not start stage", e?.message ?? "Please try again.");
+    }
+  }
+
+  async function handleEndStage(stageIdx: number) {
+    const stage = eventStages?.[stageIdx];
+    if (!stage) return;
+    const stageDist = Math.max(0, totalDistRef.current - stageBaselineDistRef.current);
+    const stageTimeSec = Math.max(1, elapsedRef.current - stageBaselineTimeRef.current);
+    const stagePace = stageDist > 0 ? (stageTimeSec / 60) / stageDist : 0;
+    const isLast = stageIdx === (eventStages?.length ?? 0) - 1;
+    Alert.alert(
+      `End ${stage.activityType === "ride" ? "Ride" : stage.activityType === "walk" ? "Walk" : "Run"} Stage`,
+      isLast
+        ? "End the final stage and submit your overall result?"
+        : `End this stage? You'll be ready to start the next one.`,
+      [
+        { text: "Keep going", style: "cancel" },
+        {
+          text: isLast ? "Finish event" : "End stage",
+          onPress: async () => {
+            try {
+              await apiRequest("POST", `/api/runs/${id}/end-stage`, {
+                stageIdx,
+                distance: stageDist,
+                pace: stagePace,
+              });
+              setCompletedStages((prev) => prev.includes(stageIdx) ? prev : [...prev, stageIdx]);
+              setCurrentStageIdx(-1);
+              if (isLast) {
+                // The last stage finishes the whole event — call runner-finish
+                // with the total accumulated distance/pace so the existing
+                // results pipeline (rank, stats credit, achievements) runs.
+                handleFinishRun();
+              } else {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              }
+            } catch (e: any) {
+              Alert.alert("Could not end stage", e?.message ?? "Please try again.");
+            }
+          },
+        },
+      ]
+    );
   }
 
   // ── Finish tracking ───────────────────────────────────────────────────────
@@ -721,6 +899,56 @@ export default function RunLiveScreen() {
 
   return (
     <View style={s.container}>
+      {/* T2.10: pace-group recommendation drop-down. Floats over the top of
+          the live screen; tap Switch to move groups, X to dismiss. */}
+      {paceRecBanner && (
+        <View
+          style={{
+            position: "absolute",
+            top: topPad + 4,
+            left: 12,
+            right: 12,
+            zIndex: 9999,
+            backgroundColor: C.primary,
+            borderRadius: 14,
+            paddingVertical: 10,
+            paddingHorizontal: 14,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 10,
+            shadowColor: "#000",
+            shadowOpacity: 0.2,
+            shadowRadius: 12,
+            shadowOffset: { width: 0, height: 6 },
+            elevation: 8,
+          }}
+        >
+          <Feather
+            name={paceRecBanner.reason === "faster" ? "trending-up" : "trending-down"}
+            size={18}
+            color={C.bg}
+          />
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 13, color: C.bg }}>
+              {paceRecBanner.reason === "faster" ? "You're crushing your group" : "Take it easy?"}
+            </Text>
+            <Text style={{ fontFamily: "Outfit_500Medium", fontSize: 11, color: C.bg, opacity: 0.92, marginTop: 1 }}>
+              Switch to {paceRecBanner.suggestGroup} ({run?.activity_type === "ride"
+                ? `${paceRecBanner.minPace}–${paceRecBanner.maxPace} mph`
+                : `${paceRecBanner.minPace}–${paceRecBanner.maxPace} /mi`})?
+            </Text>
+          </View>
+          <Pressable
+            onPress={applyPaceRecSwitch}
+            style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: "#FFFFFF22", borderWidth: 1, borderColor: "#FFFFFF66" }}
+          >
+            <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 11, color: C.bg, letterSpacing: 0.4 }}>SWITCH</Text>
+          </Pressable>
+          <Pressable onPress={() => setPaceRecBanner(null)} hitSlop={10}>
+            <Feather name="x" size={16} color={C.bg} />
+          </Pressable>
+        </View>
+      )}
       {/* Header */}
       <View style={[s.header, { paddingTop: topPad + 10 }]}>
         <Pressable onPress={handleClose} style={s.backBtn} hitSlop={12}>
@@ -1116,10 +1344,51 @@ export default function RunLiveScreen() {
                 >
                   <Feather name={phase === "active" ? "pause" : "play"} size={20} color={phase === "paused" ? C.bg : C.text} />
                 </Pressable>
-                <Pressable style={({ pressed }) => [s.finishBtn, s.finishBtnFlex, { opacity: pressed ? 0.85 : 1 }]} onPress={handleFinishRun}>
-                  <Feather name="flag" size={20} color="#fff" />
-                  <Text style={s.finishBtnText}>{run?.activity_type === "ride" ? "Finish My Ride" : run?.activity_type === "walk" ? "Finish My Walk" : "Finish My Run"}</Text>
-                </Pressable>
+                {isStaged ? (() => {
+                  // Stage UI: either "Start Stage X" or "End Stage X"
+                  if (currentStageIdx >= 0) {
+                    const stage = eventStages![currentStageIdx];
+                    const actLabel = stage.activityType === "ride" ? "Ride" : stage.activityType === "walk" ? "Walk" : "Run";
+                    return (
+                      <Pressable
+                        style={({ pressed }) => [s.finishBtn, s.finishBtnFlex, { opacity: pressed ? 0.85 : 1 }]}
+                        onPress={() => handleEndStage(currentStageIdx)}
+                      >
+                        <Feather name="flag" size={20} color="#fff" />
+                        <Text style={s.finishBtnText}>End Stage {currentStageIdx + 1} · {actLabel}</Text>
+                      </Pressable>
+                    );
+                  }
+                  // Pick the next un-completed stage to offer
+                  const nextIdx = eventStages!.findIndex((_, i) => !completedStages.includes(i));
+                  if (nextIdx < 0) {
+                    return (
+                      <Pressable
+                        style={({ pressed }) => [s.finishBtn, s.finishBtnFlex, { opacity: pressed ? 0.85 : 1 }]}
+                        onPress={handleFinishRun}
+                      >
+                        <Feather name="check-circle" size={20} color="#fff" />
+                        <Text style={s.finishBtnText}>Submit results</Text>
+                      </Pressable>
+                    );
+                  }
+                  const stage = eventStages![nextIdx];
+                  const actLabel = stage.activityType === "ride" ? "Ride" : stage.activityType === "walk" ? "Walk" : "Run";
+                  return (
+                    <Pressable
+                      style={({ pressed }) => [s.finishBtn, s.finishBtnFlex, { backgroundColor: C.primary, opacity: pressed ? 0.85 : 1 }]}
+                      onPress={() => handleStartStage(nextIdx)}
+                    >
+                      <Feather name="play" size={20} color="#fff" />
+                      <Text style={s.finishBtnText}>Start Stage {nextIdx + 1} · {actLabel}</Text>
+                    </Pressable>
+                  );
+                })() : (
+                  <Pressable style={({ pressed }) => [s.finishBtn, s.finishBtnFlex, { opacity: pressed ? 0.85 : 1 }]} onPress={handleFinishRun}>
+                    <Feather name="flag" size={20} color="#fff" />
+                    <Text style={s.finishBtnText}>{run?.activity_type === "ride" ? "Finish My Ride" : run?.activity_type === "walk" ? "Finish My Walk" : "Finish My Run"}</Text>
+                  </Pressable>
+                )}
               </View>
             )}
             {phase === "finishing" && (

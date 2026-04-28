@@ -16,11 +16,11 @@ import {
   Animated,
   Share,
 } from "react-native";
-import MapView, { Polyline } from "react-native-maps";
+import MapView, { Polyline, Marker } from "react-native-maps";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
@@ -31,7 +31,7 @@ import { apiRequest, getApiUrl, apiFetch } from "@/lib/query-client";
 import { type ColorScheme } from "@/constants/colors";
 import { useTheme } from "@/contexts/ThemeContext";
 import { formatDistance } from "@/lib/formatDistance";
-import { toDisplayDist, toDisplayPace, unitLabel, type DistanceUnit } from "@/lib/units";
+import { toDisplayDist, toDisplayDistSmart, toDisplayPace, unitLabel, type DistanceUnit } from "@/lib/units";
 import HostProfileSheet from "@/components/HostProfileSheet";
 import { resolvePhotoUrl } from "@/lib/photoUrl";
 import { formatEventDateFull, formatEventTime } from "@/lib/formatDate";
@@ -105,6 +105,7 @@ export default function RunDetailScreen() {
   const [broadcasting, setBroadcasting] = useState(false);
   const [showPaceGroupSheet, setShowPaceGroupSheet] = useState(false);
   const [pendingJoinPaceGroup, setPendingJoinPaceGroup] = useState<string | null>(null);
+  const [paceGroupSheetMode, setPaceGroupSheetMode] = useState<"join" | "switch">("join");
   const [editDate, setEditDate] = useState("");
   const [editTime, setEditTime] = useState("");
   const [editAmPm, setEditAmPm] = useState<"AM" | "PM">("AM");
@@ -116,6 +117,7 @@ export default function RunDetailScreen() {
   const [editMinPace, setEditMinPace] = useState("");
   const [editMaxPace, setEditMaxPace] = useState("");
   const [editMaxParticipants, setEditMaxParticipants] = useState("");
+  const [editPaceGroups, setEditPaceGroups] = useState<{ label: string; minPace: string; maxPace: string }[]>([]);
   const [editSaving, setEditSaving] = useState(false);
   const [cancelling, setCancelling] = useState(false);
 
@@ -448,6 +450,12 @@ export default function RunDetailScreen() {
     setEditMinPace(String(run.min_pace ?? ""));
     setEditMaxPace(String(run.max_pace ?? ""));
     setEditMaxParticipants(String(run.max_participants ?? ""));
+    const pg = Array.isArray(run.pace_groups) ? (run.pace_groups as any[]) : [];
+    setEditPaceGroups(pg.map((g) => ({
+      label: String(g.label ?? ""),
+      minPace: g.minPace != null ? String(g.minPace) : "",
+      maxPace: g.maxPace != null ? String(g.maxPace) : "",
+    })));
     setShowEditSheet(true);
   }
 
@@ -517,6 +525,26 @@ export default function RunDetailScreen() {
       Alert.alert("Invalid pace", "Faster pace must be ≤ slower pace."); return;
     }
 
+    // Validate + serialize pace groups
+    let paceGroupsPayload: { label: string; minPace: number; maxPace: number }[] | null | undefined = undefined;
+    if (editPaceGroups.length > 0) {
+      const cleaned: { label: string; minPace: number; maxPace: number }[] = [];
+      for (let i = 0; i < editPaceGroups.length; i++) {
+        const g = editPaceGroups[i];
+        const label = g.label.trim();
+        const mn = parseFloat(g.minPace);
+        const mx = parseFloat(g.maxPace);
+        if (!label) { Alert.alert("Pace group", `Group ${i + 1} needs a label.`); return; }
+        if (!isFinite(mn) || !isFinite(mx)) { Alert.alert("Pace group", `Group "${label}" needs both paces.`); return; }
+        if (mn > mx) { Alert.alert("Pace group", `Group "${label}": faster pace must be ≤ slower pace.`); return; }
+        cleaned.push({ label, minPace: mn, maxPace: mx });
+      }
+      paceGroupsPayload = cleaned;
+    } else if (Array.isArray((run as any).pace_groups) && (run as any).pace_groups.length > 0) {
+      // User cleared all groups → tell server to clear them
+      paceGroupsPayload = null;
+    }
+
     setEditSaving(true);
     try {
       await apiRequest("PATCH", `/api/runs/${id}`, {
@@ -529,6 +557,7 @@ export default function RunDetailScreen() {
         minPace: isFinite(minPaceNum) ? minPaceNum : undefined,
         maxPace: isFinite(maxPaceNum) ? maxPaceNum : undefined,
         maxParticipants: Number.isInteger(maxPartNum) ? maxPartNum : undefined,
+        paceGroups: paceGroupsPayload,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       qc.invalidateQueries({ queryKey: ["/api/runs", id] });
@@ -593,8 +622,13 @@ export default function RunDetailScreen() {
   }
 
   async function doJoin(paceGroupLabel?: string) {
-    // If this event has pace groups and no group selected yet, show the picker first
+    // If this event has pace groups and no group selected yet, show the picker first.
+    // Pre-select the auto-suggested group so the user can confirm with one tap.
     if (!paceGroupLabel && run?.pace_groups && (run.pace_groups as any[]).length > 0) {
+      if (!pendingJoinPaceGroup && bestPaceGroup?.label) {
+        setPendingJoinPaceGroup(bestPaceGroup.label);
+      }
+      setPaceGroupSheetMode("join");
       setShowPaceGroupSheet(true);
       return;
     }
@@ -836,7 +870,109 @@ export default function RunDetailScreen() {
           </View>
         </View>
 
-        <Text style={styles.title} numberOfLines={2} ellipsizeMode="tail">{run.title}</Text>
+        <Text style={styles.heroDateLabel}>
+          {formatEventDateFull(run.date, run.timezone)} · {formatEventTime(run.date, run.timezone)}
+        </Text>
+        <Text style={styles.title} numberOfLines={3} ellipsizeMode="tail">{run.title}</Text>
+
+        {/* T2.2 Mode B: stages preview — chain multi-sport events */}
+        {Array.isArray((run as any).stages) && (run as any).stages.length >= 2 && (
+          <View style={styles.stagesPreview}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 }}>
+              <Feather name="git-branch" size={13} color={C.primary} />
+              <Text style={styles.stagesPreviewLabel}>STAGES</Text>
+              <Text style={styles.stagesPreviewSub}>· {(run as any).stages.length} legs</Text>
+            </View>
+            {(run as any).stages.map((stage: any, idx: number) => {
+              const isRide = stage.activityType === "ride";
+              const isWalk = stage.activityType === "walk";
+              const actLabel = isRide ? "Ride" : isWalk ? "Walk" : "Run";
+              return (
+                <View key={idx} style={styles.stagesPreviewRow}>
+                  <View style={styles.stagesPreviewBadge}>
+                    <Text style={styles.stagesPreviewBadgeTxt}>{idx + 1}</Text>
+                  </View>
+                  {isRide ? <Ionicons name="bicycle" size={14} color={C.primary} /> :
+                   isWalk ? <Ionicons name="footsteps" size={14} color={C.primary} /> :
+                   <MaterialCommunityIcons name="run-fast" size={14} color={C.primary} />}
+                  <Text style={styles.stagesPreviewActivity}>{actLabel}</Text>
+                  {stage.distanceMiles ? (
+                    <Text style={styles.stagesPreviewDist}>· {toDisplayDistSmart(stage.distanceMiles, distUnit)}</Text>
+                  ) : null}
+                  {stage.minPace && stage.maxPace ? (
+                    <Text style={styles.stagesPreviewPace} numberOfLines={1}>
+                      · {isRide ? `${stage.minPace}–${stage.maxPace} mph` : `${stage.minPace}–${stage.maxPace} /mi`}
+                    </Text>
+                  ) : null}
+                  {idx < (run as any).stages.length - 1 && (
+                    <Feather name="chevron-down" size={11} color={C.textMuted} style={{ marginLeft: "auto" }} />
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        <Pressable
+          style={styles.heroLocationRow}
+          onPress={() => {
+            const lat = run.location_lat;
+            const lng = run.location_lng;
+            const label = encodeURIComponent(run.location_name);
+            const url = Platform.select({
+              ios: `maps://maps.apple.com/?ll=${lat},${lng}&q=${label}`,
+              android: `geo:${lat},${lng}?q=${label}`,
+              default: `https://www.google.com/maps?q=${lat},${lng}`,
+            });
+            if (url) Linking.openURL(url).catch(() => {});
+          }}
+        >
+          <Feather name="map-pin" size={14} color={C.textMuted} />
+          <Text style={styles.heroLocationTxt} numberOfLines={1}>{run.location_name}</Text>
+        </Pressable>
+
+        {/* Mini map of the event location */}
+        {Platform.OS !== "web" && run.location_lat != null && run.location_lng != null && (
+          <Pressable
+            style={styles.locationMapCard}
+            onPress={() => {
+              const lat = run.location_lat;
+              const lng = run.location_lng;
+              const label = encodeURIComponent(run.location_name);
+              const url = Platform.select({
+                ios: `maps://maps.apple.com/?ll=${lat},${lng}&q=${label}`,
+                android: `geo:${lat},${lng}?q=${label}`,
+                default: `https://www.google.com/maps?q=${lat},${lng}`,
+              });
+              if (url) Linking.openURL(url).catch(() => {});
+            }}
+          >
+            <MapView
+              style={StyleSheet.absoluteFill}
+              initialRegion={{
+                latitude: run.location_lat,
+                longitude: run.location_lng,
+                latitudeDelta: 0.012,
+                longitudeDelta: 0.012,
+              }}
+              scrollEnabled={false}
+              zoomEnabled={false}
+              rotateEnabled={false}
+              pitchEnabled={false}
+              pointerEvents="none"
+            >
+              <Marker coordinate={{ latitude: run.location_lat, longitude: run.location_lng }}>
+                <View style={styles.locationMapPin}>
+                  <Feather name="map-pin" size={16} color={C.bg} />
+                </View>
+              </Marker>
+            </MapView>
+            <View style={styles.locationMapOpenHint}>
+              <Feather name="external-link" size={12} color={C.text} />
+              <Text style={styles.locationMapOpenHintTxt}>Open in Maps</Text>
+            </View>
+          </Pressable>
+        )}
 
         {isStillJoinable && (
           <View style={styles.stillJoinableRow}>
@@ -844,7 +980,7 @@ export default function RunDetailScreen() {
             <Text style={styles.stillJoinableTxt}>
               {isLive
                 ? `Started ${minutesSinceRun < 60 ? `${minutesSinceRun}m` : `${Math.floor(minutesSinceRun / 60)}h ${minutesSinceRun % 60}m`} ago · Live`
-                : `Ended ${minutesSinceRun < 60 ? `${minutesSinceRun}m` : `${Math.floor(minutesSinceRun / 60)}h ${minutesSinceRun % 60}m`} ago · Still joinable`}
+                : `Still joinable`}
             </Text>
           </View>
         )}
@@ -861,6 +997,7 @@ export default function RunDetailScreen() {
             </View>
           )}
           <View style={styles.hostInfo}>
+            <Text style={styles.hostedByLabel}>HOSTED BY</Text>
             <Text style={styles.hostName}>{run.host_name}</Text>
             <View style={styles.hostMeta}>
               {(run.host_rating_count ?? 0) >= 5 && (run.host_rating ?? 0) >= 4.5 && (
@@ -870,7 +1007,7 @@ export default function RunDetailScreen() {
               )}
               {(() => { const b = getHostBadge(run.host_hosted_runs); return b ? <Text style={[styles.hostBadgeText, { color: b.color }]}>{b.label}</Text> : null; })()}
             </View>
-            <Text style={styles.hostPlannedDist}>{toDisplayDist(run.min_distance, distUnit)} planned</Text>
+            <Text style={styles.hostPlannedDist}>{toDisplayDistSmart(run.min_distance, distUnit)} planned</Text>
           </View>
           {isHost && (
             <View style={styles.yourRunBadge}>
@@ -882,35 +1019,7 @@ export default function RunDetailScreen() {
           )}
         </Pressable>
 
-        <View style={styles.infoGrid}>
-          <View style={styles.infoCard}>
-            <Feather name="calendar" size={18} color={C.primary} />
-            <View>
-              <Text style={styles.infoValue}>{formatEventDateFull(run.date, run.timezone)}</Text>
-              <Text style={styles.infoLabel}>at {formatEventTime(run.date, run.timezone)}</Text>
-            </View>
-          </View>
-          <Pressable
-            style={styles.infoCard}
-            onPress={() => {
-              const lat = run.location_lat;
-              const lng = run.location_lng;
-              const label = encodeURIComponent(run.location_name);
-              const url = Platform.select({
-                ios: `maps://maps.apple.com/?ll=${lat},${lng}&q=${label}`,
-                android: `geo:${lat},${lng}?q=${label}`,
-                default: `https://www.google.com/maps?q=${lat},${lng}`,
-              });
-              if (url) Linking.openURL(url).catch(() => {});
-            }}
-          >
-            <Feather name="map-pin" size={18} color={C.primary} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.infoValue} numberOfLines={2}>{run.location_name}</Text>
-              <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 11, color: C.primary, marginTop: 1 }}>Tap to view map</Text>
-            </View>
-          </Pressable>
-        </View>
+        {/* Date + location moved to hero above; infoGrid removed to adopt mock layout */}
 
         <View style={styles.requirementsCard}>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
@@ -934,7 +1043,7 @@ export default function RunDetailScreen() {
             <View style={styles.reqDivider} />
             <View style={styles.reqItem}>
               <Feather name="target" size={20} color={C.blue} />
-              <Text style={styles.reqValue}>{run.min_distance === run.max_distance ? toDisplayDist(run.min_distance, distUnit) : `${toDisplayDist(run.min_distance, distUnit)} – ${toDisplayDist(run.max_distance, distUnit)}`}</Text>
+              <Text style={styles.reqValue}>{(!run.min_distance || run.min_distance === run.max_distance) ? toDisplayDistSmart(run.max_distance, distUnit) : `${toDisplayDist(run.min_distance, distUnit)} – ${toDisplayDist(run.max_distance, distUnit)}`}</Text>
               <Text style={styles.reqLabel}>{`Distance (${unitLabel(distUnit)})`}</Text>
             </View>
             <View style={styles.reqDivider} />
@@ -956,7 +1065,11 @@ export default function RunDetailScreen() {
               ) : (
                 <>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                    <Text style={styles.reqValue}>{run.participant_count ?? 1}/{run.max_participants}</Text>
+                    <Text style={styles.reqValue}>
+                      {run.crew_id || (run.max_participants ?? 0) >= 9999
+                        ? `${run.participant_count ?? 1} going`
+                        : `${run.participant_count ?? 1}/${run.max_participants}`}
+                    </Text>
                     {parseInt(run.plan_count) > 0 && (
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 2, backgroundColor: C.card, borderRadius: 6, paddingHorizontal: 5, paddingVertical: 2 }}>
                         <Feather name="calendar" size={10} color={C.textMuted} />
@@ -1104,6 +1217,34 @@ export default function RunDetailScreen() {
           const pendingParticipants = participants.filter((p: any) => p.status === "pending");
           return (
             <>
+              {/* Switch-group pill — visible only to participants in pace-group events. */}
+              {(() => {
+                const hasPaceGroups = run?.pace_groups && (run.pace_groups as any[]).length > 0;
+                if (!hasPaceGroups || !isParticipant || isPastRun || run?.is_active) return null;
+                const myLabel = (myParticipation as any)?.pace_group_label;
+                return (
+                  <View style={{ paddingHorizontal: 16, marginTop: 4, marginBottom: 8 }}>
+                    <Pressable
+                      onPress={() => {
+                        setPendingJoinPaceGroup(myLabel ?? bestPaceGroup?.label ?? null);
+                        setPaceGroupSheetMode("switch");
+                        setShowPaceGroupSheet(true);
+                      }}
+                      style={{
+                        flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+                        backgroundColor: C.primaryMuted, borderWidth: 1, borderColor: C.primary + "55",
+                        borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12,
+                      }}
+                    >
+                      <Feather name="repeat" size={13} color={C.primary} />
+                      <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 13, color: C.primary }}>
+                        {myLabel ? `Switch from ${myLabel}` : `Pick your ${run?.activity_type === "ride" ? "speed" : "pace"} group`}
+                      </Text>
+                    </Pressable>
+                  </View>
+                );
+              })()}
+
               {joinedParticipants.length > 0 && (() => {
                 const hasPaceGroups = run?.pace_groups && (run.pace_groups as any[]).length > 0;
                 const hasAnyGroupLabel = joinedParticipants.some((p: any) => p.pace_group_label);
@@ -1316,7 +1457,7 @@ export default function RunDetailScreen() {
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
         {isHost && !run.is_completed && (
           <>
-            {!isLive && (
+            {(
               <View style={styles.hostMgmtRow}>
                 <Pressable
                   style={({ pressed }) => [styles.hostMgmtBtn, { opacity: pressed ? 0.75 : 1 }]}
@@ -1324,7 +1465,7 @@ export default function RunDetailScreen() {
                   testID="edit-run-btn"
                 >
                   <Feather name="edit-2" size={15} color={C.textSecondary} />
-                  <Text style={styles.hostMgmtTxt}>Edit Time</Text>
+                  <Text style={styles.hostMgmtTxt}>Edit Event</Text>
                 </Pressable>
                 <Pressable
                   style={({ pressed }) => [styles.hostMgmtBtn, { opacity: pressed ? 0.75 : 1, borderColor: C.primary + "55", backgroundColor: C.primaryMuted }]}
@@ -1422,7 +1563,10 @@ export default function RunDetailScreen() {
           </View>
         )}
         {!isHost && !isParticipant && user && (() => {
-          const notJoinable = run.is_deleted || run.is_completed || isPastRun;
+          // Joinable while: not deleted, not completed. Past the planned time
+          // is fine — the host may still be running late. Once the late-start
+          // monitor auto-removes the event, is_deleted flips and we land here.
+          const notJoinable = run.is_deleted || run.is_completed;
           if (notJoinable) {
             const label = run.is_deleted ? "Event Cancelled" : "Event Ended";
             return (
@@ -1842,6 +1986,88 @@ export default function RunDetailScreen() {
                       keyboardType="number-pad"
                     />
                   </View>
+                  {/* Pace groups editor — add/remove on the fly, even while the event is live */}
+                  <View style={styles.editFieldGroup}>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                      <Text style={styles.editFieldLabel}>Pace groups</Text>
+                      {editPaceGroups.length < 8 && (
+                        <Pressable
+                          onPress={() => {
+                            const letters = ["A", "B", "C", "D", "E", "F", "G", "H"];
+                            const next = letters[editPaceGroups.length] ?? String(editPaceGroups.length + 1);
+                            setEditPaceGroups([...editPaceGroups, { label: `Group ${next}`, minPace: "", maxPace: "" }]);
+                            Haptics.selectionAsync();
+                          }}
+                          style={({ pressed }) => [{
+                            flexDirection: "row", alignItems: "center", gap: 4,
+                            paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999,
+                            backgroundColor: C.primaryMuted, borderWidth: 1, borderColor: C.primary + "55",
+                            opacity: pressed ? 0.75 : 1,
+                          }]}
+                          testID="edit-add-pace-group"
+                        >
+                          <Feather name="plus" size={12} color={C.primary} />
+                          <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.primary }}>Add group</Text>
+                        </Pressable>
+                      )}
+                    </View>
+                    {editPaceGroups.length === 0 && (
+                      <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, fontStyle: "italic" }}>
+                        No pace groups. Tap Add group to create one.
+                      </Text>
+                    )}
+                    {editPaceGroups.map((g, idx) => (
+                      <View key={idx} style={{ flexDirection: "row", gap: 8, marginBottom: 8, alignItems: "center" }}>
+                        <TextInput
+                          style={[styles.editInput, { flex: 1.2 }]}
+                          value={g.label}
+                          onChangeText={(t) => {
+                            const copy = [...editPaceGroups];
+                            copy[idx] = { ...copy[idx], label: t };
+                            setEditPaceGroups(copy);
+                          }}
+                          placeholder="Label"
+                          placeholderTextColor={C.textMuted}
+                          maxLength={40}
+                        />
+                        <TextInput
+                          style={[styles.editInput, { flex: 1 }]}
+                          value={g.minPace}
+                          onChangeText={(t) => {
+                            const copy = [...editPaceGroups];
+                            copy[idx] = { ...copy[idx], minPace: t };
+                            setEditPaceGroups(copy);
+                          }}
+                          placeholder="Fast"
+                          placeholderTextColor={C.textMuted}
+                          keyboardType="decimal-pad"
+                        />
+                        <TextInput
+                          style={[styles.editInput, { flex: 1 }]}
+                          value={g.maxPace}
+                          onChangeText={(t) => {
+                            const copy = [...editPaceGroups];
+                            copy[idx] = { ...copy[idx], maxPace: t };
+                            setEditPaceGroups(copy);
+                          }}
+                          placeholder="Slow"
+                          placeholderTextColor={C.textMuted}
+                          keyboardType="decimal-pad"
+                        />
+                        <Pressable
+                          onPress={() => {
+                            setEditPaceGroups(editPaceGroups.filter((_, i) => i !== idx));
+                            Haptics.selectionAsync();
+                          }}
+                          hitSlop={8}
+                          style={({ pressed }) => [{ padding: 6, opacity: pressed ? 0.6 : 1 }]}
+                          testID={`edit-remove-pace-group-${idx}`}
+                        >
+                          <Feather name="x" size={16} color={C.textMuted} />
+                        </Pressable>
+                      </View>
+                    ))}
+                  </View>
                   <Pressable
                     style={({ pressed }) => [styles.primaryBtn, { opacity: pressed || editSaving ? 0.85 : 1, marginTop: 8 }]}
                     onPress={handleSaveEdit}
@@ -1988,15 +2214,28 @@ export default function RunDetailScreen() {
               </ScrollView>
               <Pressable
                 style={{ marginTop: 16, backgroundColor: pendingJoinPaceGroup ? C.primary : C.surface, borderRadius: 14, paddingVertical: 15, alignItems: "center", opacity: pendingJoinPaceGroup ? 1 : 0.5 }}
-                onPress={() => {
+                onPress={async () => {
                   if (!pendingJoinPaceGroup) return;
                   setShowPaceGroupSheet(false);
-                  doJoin(pendingJoinPaceGroup);
+                  if (paceGroupSheetMode === "switch") {
+                    try {
+                      await apiRequest("PATCH", `/api/runs/${id}/pace-group`, { paceGroupLabel: pendingJoinPaceGroup });
+                      qc.invalidateQueries({ queryKey: ["/api/runs", id, "participants"] });
+                      qc.invalidateQueries({ queryKey: ["/api/runs", id] });
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    } catch (e: any) {
+                      Alert.alert("Could not switch group", e?.message ?? "Please try again.");
+                    }
+                  } else {
+                    doJoin(pendingJoinPaceGroup);
+                  }
                 }}
                 disabled={!pendingJoinPaceGroup}
               >
                 <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 16, color: pendingJoinPaceGroup ? "#000" : C.textMuted }}>
-                  {pendingJoinPaceGroup ? `Join as ${pendingJoinPaceGroup}` : "Select a group to continue"}
+                  {pendingJoinPaceGroup
+                    ? (paceGroupSheetMode === "switch" ? `Switch to ${pendingJoinPaceGroup}` : `Join as ${pendingJoinPaceGroup}`)
+                    : "Select a group to continue"}
                 </Text>
               </Pressable>
             </View>
@@ -2047,11 +2286,104 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   planBtnActive: { backgroundColor: C.primaryMuted, borderColor: C.primary + "55" },
   planBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary },
   planBtnTextActive: { color: C.primary },
-  title: { fontFamily: "Outfit_700Bold", fontSize: 26, color: C.text, marginBottom: 16, lineHeight: 32 },
-  hostCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: C.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.border, marginBottom: 16 },
-  hostAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.primaryMuted, borderWidth: 1, borderColor: C.primary + "44", alignItems: "center", justifyContent: "center" },
+  heroDateLabel: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, marginBottom: 6, fontStyle: "italic" },
+  title: { fontFamily: "Outfit_700Bold", fontSize: 30, color: C.text, marginBottom: 10, lineHeight: 36 },
+  heroLocationRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 12 },
+  heroLocationTxt: { fontFamily: "Outfit_500Medium", fontSize: 13, color: C.textSecondary, flex: 1 },
+  locationMapCard: {
+    height: 160,
+    borderRadius: 16,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: C.border,
+    marginBottom: 16,
+    backgroundColor: C.surface,
+  },
+  locationMapPin: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: C.primary,
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 2, borderColor: C.bg,
+  },
+  locationMapOpenHint: {
+    position: "absolute",
+    bottom: 10, right: 10,
+    flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: C.card + "EB",
+    borderWidth: 1, borderColor: C.border,
+    borderRadius: 999,
+    paddingHorizontal: 10, paddingVertical: 5,
+  },
+  locationMapOpenHintTxt: {
+    fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.text, letterSpacing: 0.4,
+  },
+  hostCard: { flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: C.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: C.border, marginBottom: 16 },
+  hostAvatar: { width: 54, height: 54, borderRadius: 27, backgroundColor: C.primaryMuted, borderWidth: 2, borderColor: C.primary, alignItems: "center", justifyContent: "center" },
   hostAvatarText: { fontFamily: "Outfit_700Bold", fontSize: 18, color: C.primary },
   hostInfo: { flex: 1, gap: 2 },
+  stagesPreview: {
+    backgroundColor: C.primaryMuted,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.primary + "44",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  stagesPreviewLabel: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 11,
+    color: C.primary,
+    letterSpacing: 0.6,
+  },
+  stagesPreviewSub: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 11,
+    color: C.textMuted,
+  },
+  stagesPreviewRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 5,
+  },
+  stagesPreviewBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: C.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stagesPreviewBadgeTxt: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 11,
+    color: C.bg,
+  },
+  stagesPreviewActivity: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 13,
+    color: C.text,
+  },
+  stagesPreviewDist: {
+    fontFamily: "Outfit_500Medium",
+    fontSize: 12,
+    color: C.textSecondary,
+  },
+  stagesPreviewPace: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 11,
+    color: C.textMuted,
+    flexShrink: 1,
+  },
+  hostedByLabel: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 10,
+    color: C.textMuted,
+    letterSpacing: 0.8,
+    marginBottom: 2,
+  },
   hostName: { fontFamily: "Outfit_600SemiBold", fontSize: 15, color: C.text },
   hostPlannedDist: { fontFamily: "Outfit_700Bold", fontSize: 14, color: C.text, marginTop: 3 },
   hostMeta: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },

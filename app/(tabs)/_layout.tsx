@@ -108,7 +108,10 @@ export default function TabLayout() {
           left:            0,
           right:           0,
           marginHorizontal: isWeb ? 140 : PILL_MX,
-          bottom:          insets.bottom + (isWeb ? 34 : 8),
+          // On Android, the system nav bar sits outside the app window (no edge-to-edge)
+          // — safe-area insets.bottom would double-count that space, leaving a gray
+          // strip between the pill and the nav bar. Use a flat offset instead.
+          bottom:          isWeb ? insets.bottom + 34 : Platform.OS === "android" ? 12 : insets.bottom + 8,
           borderRadius:    PILL_RADIUS,
           borderTopWidth:  0,
           backgroundColor: Platform.OS === "android" ? C.tabBar : "transparent",

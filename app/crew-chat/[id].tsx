@@ -201,7 +201,14 @@ export default function CrewChatScreen() {
       {/* Header */}
       <ScreenHeader
         title={crew?.name || "Crew Chat"}
+        variant="close"
         topPaddingExtra={Platform.OS === "web" ? 67 : 0}
+        onBack={() => {
+          // Deep-link (notification) opens may have no back-stack — fall back to
+          // the Messages tab so the close button always works.
+          if (router.canGoBack()) router.back();
+          else router.replace("/(tabs)/messages");
+        }}
         right={<Text style={s.memberCount}>{crew?.member_count || 0} members</Text>}
       />
 

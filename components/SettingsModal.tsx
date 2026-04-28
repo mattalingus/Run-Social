@@ -137,7 +137,6 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
   const notifWeeklySummary: boolean = (user as any)?.notif_weekly_summary ?? true;
   const showRunRoutes: boolean = (user as any)?.show_run_routes ?? true;
 
-  const stravaConnected = !!(user as any)?.strava_id;
   const appleHealthConnected = !!(user as any)?.apple_health_connected;
   const healthConnectConnected = !!(user as any)?.health_connect_connected;
 
@@ -147,6 +146,13 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
   });
   const garminConnected = garminStatus?.connected ?? false;
   const garminLastSync = garminStatus?.lastSync ? new Date(garminStatus.lastSync) : null;
+
+  const { data: stravaStatus, refetch: refetchStrava } = useQuery<{ connected: boolean; lastSync: string | null }>({
+    queryKey: ["/api/strava/status"],
+    enabled: visible,
+  });
+  const stravaConnected = stravaStatus?.connected ?? false;
+  const stravaLastSync = stravaStatus?.lastSync ? new Date(stravaStatus.lastSync) : null;
 
   const [updatingField, setUpdatingField] = useState<string | null>(null);
   const [showTerms, setShowTerms] = useState(false);
@@ -165,6 +171,8 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
   const [newEmailInput, setNewEmailInput] = useState("");
   const [garminSyncing, setGarminSyncing] = useState(false);
   const [garminSyncMsg, setGarminSyncMsg] = useState<string | null>(null);
+  const [stravaSyncing, setStravaSyncing] = useState(false);
+  const [stravaSyncMsg, setStravaSyncMsg] = useState<string | null>(null);
   const [showMapPinPicker, setShowMapPinPicker] = useState(false);
   const [uploadingPin, setUploadingPin] = useState(false);
 
@@ -195,18 +203,22 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
     }
   }
 
-  // Listen for the deep link fired after Garmin OAuth completes in the in-app browser.
-  // The callback page redirects to paceup://garmin-connected which triggers this listener.
+  // Listen for deep links fired after OAuth completes in the in-app browser.
+  // Each connector's server-side callback page redirects to a unique paceup:// URL.
   useEffect(() => {
     const sub = Linking.addEventListener("url", ({ url }) => {
       if (url.startsWith("paceup://garmin-connected")) {
         refetchGarmin().then(() => {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         });
+      } else if (url.startsWith("paceup://strava-connected")) {
+        refetchStrava().then(() => {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        });
       }
     });
     return () => sub.remove();
-  }, [refetchGarmin]);
+  }, [refetchGarmin, refetchStrava]);
 
   const updateUser = useCallback(async (updates: Record<string, any>, fieldKey: string) => {
     setUpdatingField(fieldKey);
@@ -223,13 +235,71 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
 
   // ─── Social connect handlers ───────────────────────────────────────────────
 
-  function handleConnectStrava() {
+  async function handleConnectStrava() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Alert.alert(
-      "Strava — Coming Soon",
-      "Strava integration is coming in a future update. You'll be able to import activities and sync your training data.",
-      [{ text: "Got it" }]
-    );
+    if (stravaConnected) {
+      Alert.alert(
+        "Disconnect Strava",
+        "Remove your Strava account from PaceUp? Your imported activities will remain.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Disconnect",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await apiRequest("POST", "/api/strava/disconnect", {});
+                await refetchStrava();
+                setStravaSyncMsg(null);
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              } catch (e: any) {
+                Alert.alert("Error", e.message || "Could not disconnect Strava.");
+              }
+            },
+          },
+        ]
+      );
+      return;
+    }
+    try {
+      const base = getApiUrl();
+      const resp = await fetch(new URL("/api/strava/auth", base).toString(), { credentials: "include" });
+      const data = await resp.json();
+      if (!resp.ok) {
+        Alert.alert("Strava", data.message || "Could not start Strava authorization.");
+        return;
+      }
+      const { authUrl } = data;
+      await WebBrowser.openBrowserAsync(authUrl);
+      await refetchStrava();
+    } catch (e: any) {
+      Alert.alert("Error", e.message || "Could not open Strava authorization.");
+    }
+  }
+
+  async function handleStravaSync() {
+    if (stravaSyncing) return;
+    setStravaSyncing(true);
+    setStravaSyncMsg(null);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      const base = getApiUrl();
+      const resp = await fetch(new URL("/api/strava/sync", base).toString(), { method: "POST", credentials: "include" });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.message || "Sync failed");
+      const msg = data.imported > 0
+        ? `${data.imported} new activit${data.imported === 1 ? "y" : "ies"} imported!`
+        : "All activities already synced.";
+      setStravaSyncMsg(msg);
+      await refetchStrava();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      qc.invalidateQueries({ queryKey: ["/api/solo-runs"] });
+    } catch (e: any) {
+      setStravaSyncMsg(`Sync failed: ${e.message}`);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setStravaSyncing(false);
+    }
   }
 
   const [healthSyncing, setHealthSyncing] = useState(false);
@@ -420,6 +490,16 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
       );
       return;
     }
+    // Coming-soon stub. Garmin OAuth flow + production credentials
+    // aren't fully wired yet — show a friendly alert instead of opening
+    // the half-finished flow. iOS and Android both stubbed for now.
+    Alert.alert(
+      "Garmin Connect — Coming Soon",
+      "We're finishing the Garmin Connect integration. It'll be available in a future update.",
+      [{ text: "OK" }]
+    );
+    return;
+    // eslint-disable-next-line no-unreachable
     try {
       const base = getApiUrl();
       const resp = await fetch(new URL("/api/garmin/auth", base).toString(), { credentials: "include" });
@@ -488,6 +568,18 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
       );
       return;
     }
+    // Coming-soon stub. The native rationale Activity in
+    // react-native-health-connect crashes on the Play Store reviewer's
+    // device — disable the entry point until the config-plugin manifest
+    // intent filter is wired up. Disconnect path above still works for
+    // anyone connected on a prior build.
+    Alert.alert(
+      "Health Connect — Coming Soon",
+      "We're polishing the Health Connect integration. It'll be available in a future update.",
+      [{ text: "OK" }]
+    );
+    return;
+    // eslint-disable-next-line no-unreachable
     const { isHealthConnectAvailable, getHealthConnectSdkStatus, requestHealthConnectPermissions } = require("@/lib/healthConnect");
     if (!isHealthConnectAvailable()) {
       Alert.alert("Health Connect", "Google Health Connect is not available on this device. Install it from the Play Store to use this feature.");
@@ -984,22 +1076,40 @@ export default function SettingsModal({ visible, onClose, onSignOut }: Props) {
           {/* ── CONNECTED ACCOUNTS ───────────────────────────────────────── */}
           <SectionHeader label="Connected Accounts" C={C} />
           <SectionCard C={C}>
-            {/* Strava */}
+            {/* Strava — "Powered by Strava" attribution required by their brand guidelines */}
             <SettingRow
               C={C}
               iconBg="#3A1A0A"
               icon={<FontAwesome5 name="strava" size={18} color="#FC4C02" />}
               label="Strava"
-              sublabel="Coming soon"
+              sublabel={
+                stravaConnected
+                  ? (stravaSyncMsg ?? (stravaLastSync ? `Last synced ${stravaLastSync.toLocaleDateString()} · Powered by Strava` : "Connected — tap Sync to import · Powered by Strava"))
+                  : "Import runs, rides & walks · Powered by Strava"
+              }
               right={
-                <Pressable
-                  style={[st.connectBtn, { borderColor: C.border, backgroundColor: C.surface, opacity: 0.5 }]}
-                  onPress={handleConnectStrava}
-                >
-                  <Text style={[st.connectBtnTxt, { color: C.textMuted }]}>
-                    Soon
-                  </Text>
-                </Pressable>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  {stravaConnected && (
+                    <Pressable
+                      style={[st.connectBtn, { borderColor: "#FC4C02", backgroundColor: "#FC4C0222" }]}
+                      onPress={handleStravaSync}
+                      disabled={stravaSyncing}
+                    >
+                      {stravaSyncing
+                        ? <ActivityIndicator size="small" color="#FC4C02" />
+                        : <Text style={[st.connectBtnTxt, { color: "#FC4C02" }]}>Sync</Text>
+                      }
+                    </Pressable>
+                  )}
+                  <Pressable
+                    style={[st.connectBtn, { borderColor: stravaConnected ? "#FF4D4D" : C.border, backgroundColor: stravaConnected ? "#FF4D4D22" : C.surface }]}
+                    onPress={handleConnectStrava}
+                  >
+                    <Text style={[st.connectBtnTxt, { color: stravaConnected ? "#FF4D4D" : C.textSecondary }]}>
+                      {stravaConnected ? "Disconnect" : "Connect"}
+                    </Text>
+                  </Pressable>
+                </View>
               }
             />
             <Divider C={C} />

@@ -18,9 +18,9 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
-import Svg, { Polyline as SvgPolyline } from "react-native-svg";
+import Svg, { Polyline as SvgPolyline, Rect as SvgRect, Ellipse as SvgEllipse, Path as SvgPath, G as SvgG } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -31,7 +31,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { type ColorScheme } from "@/constants/colors";
 import RangeSlider from "@/components/RangeSlider";
 import { formatDistance } from "@/lib/formatDistance";
-import { toDisplayDist, toDisplayPace, toDisplaySpeed, unitLabel, type DistanceUnit } from "@/lib/units";
+import { toDisplayDist, toDisplayDistSmart, toDisplayPace, toDisplaySpeed, unitLabel, type DistanceUnit } from "@/lib/units";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActivity } from "@/contexts/ActivityContext";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
@@ -42,6 +42,7 @@ import { useWalkthrough } from "@/contexts/WalkthroughContext";
 import MiniCalendarPicker from "@/components/MiniCalendarPicker";
 import SharedPathPreviewModal from "@/components/SharedPathPreviewModal";
 import { formatEventDateTime } from "@/lib/formatDate";
+import { matchesActivity, eventActivityTypes } from "@/lib/activityFilter";
 
 function formatDaysAgo(dateStr: string): string {
   const d = new Date(dateStr);
@@ -215,9 +216,11 @@ interface Run {
   is_completed?: boolean;
   run_style?: string;
   activity_type?: string;
+  activity_types?: string[] | null;
   crew_id?: string | null;
   crew_name?: string | null;
   crew_emoji?: string | null;
+  crew_vibe?: string | null;
   pace_groups?: { label: string; minPace: number; maxPace: number }[] | null;
   plan_count?: string;
   user_is_crew_member?: boolean;
@@ -290,11 +293,32 @@ function formatPace(pace: number) {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
-function getPaceColor(minPace: number, maxPace: number, C: { orange: string; gold: string; primary: string }): string {
+function getPaceColor(
+  minPace: number,
+  maxPace: number,
+  C: { orange: string; gold: string; primary: string },
+  activityType: "run" | "ride" | "walk" = "run",
+): string {
+  if (activityType === "ride") {
+    if ((maxPace - minPace) >= 10) return C.primary;
+    const median = (minPace + maxPace) / 2;
+    if (median >= 20) return "#C0392B";
+    if (median >= 17) return C.orange;
+    if (median >= 14) return C.gold;
+    return C.primary;
+  }
   if (maxPace >= 15 || (maxPace - minPace) >= 10) return C.primary;
-  if (minPace < 6) return "#C0392B";
-  if (minPace < 9) return C.orange;
-  return C.gold;
+  const median = (minPace + maxPace) / 2;
+  if (activityType === "walk") {
+    if (median < 13) return "#C0392B";
+    if (median < 15) return C.orange;
+    if (median < 18) return C.gold;
+    return C.primary;
+  }
+  if (median < 6) return "#C0392B";
+  if (median < 8.5) return C.orange;
+  if (median < 10) return C.gold;
+  return C.primary;
 }
 
 // ─── Filter Modal ─────────────────────────────────────────────────────────────
@@ -956,7 +980,7 @@ function RunCard({
                 </View>
               );
             })()}
-            <Text style={s.hostColumnName} numberOfLines={2}>@{run.host_username ?? run.host_name}</Text>
+            <Text style={s.hostColumnName} numberOfLines={2}>{run.host_username ?? run.host_name}</Text>
             {run.crew_id && run.crew_name && (
               <View style={s.crewBadge}>
                 <Text style={s.crewBadgeEmoji}>{run.crew_emoji || "🏃"}</Text>
@@ -969,7 +993,7 @@ function RunCard({
               if (badge) return <Text style={[s.hostColumnBadge, { color: badge.color }]}>{badge.label}</Text>;
               return null;
             })()}
-            <Text style={s.hostColumnDist}>{toDisplayDist(run.crew_id ? run.max_distance : run.min_distance, distUnit)}</Text>
+            <Text style={s.hostColumnDist}>{toDisplayDistSmart(run.crew_id ? run.max_distance : run.min_distance, distUnit)}</Text>
           </Pressable>
 
           {/* Vertical divider — stretches to full row height (left col vs right col+tags) */}
@@ -1016,7 +1040,7 @@ function RunCard({
                     <Text style={[s.metaText, { color: "#F5A623", fontFamily: "Outfit_600SemiBold" }]}>
                       {isLiveNow
                         ? `Started ${minsAgoCard < 60 ? `${minsAgoCard}m` : `${Math.floor(minsAgoCard / 60)}h ${minsAgoCard % 60}m`} ago · Live`
-                        : `Ended ${minsAgoCard < 60 ? `${minsAgoCard}m` : `${Math.floor(minsAgoCard / 60)}h ${minsAgoCard % 60}m`} ago · Still joinable`}
+                        : `Still joinable`}
                     </Text>
                   ) : (
                     <Text style={s.metaText}>{formatEventDateTime(run.date, run.timezone)}</Text>
@@ -1047,7 +1071,14 @@ function RunCard({
             </Pressable>
 
             {/* Tags outside Pressable — scroll works, still inside right column so divider spans them */}
-            {run.tags?.length > 0 && (
+            {run.crew_id && run.crew_vibe ? (
+              <View style={s.tagsScroll}>
+                <View style={s.crewVibePill}>
+                  <Ionicons name="sparkles-outline" size={11} color={C.primary} />
+                  <Text style={s.crewVibePillTxt} numberOfLines={1}>{run.crew_vibe}</Text>
+                </View>
+              </View>
+            ) : run.tags?.length > 0 && (
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -1067,6 +1098,19 @@ function RunCard({
 
         {/* ── Full-width stat pills ── */}
         <View style={s.cardStats}>
+          {/* Activity icons (narrow column, leftmost). Vertical stack when
+              the event supports multiple workout types. */}
+          <View style={s.statPillActivity}>
+            {eventActivityTypes(run).slice(0, 3).map((t) => (
+              <MaterialCommunityIcons
+                key={t}
+                name={t === "ride" ? "bike-fast" : t === "walk" ? "walk" : "run-fast"}
+                size={16}
+                color={C.primary}
+              />
+            ))}
+          </View>
+          <View style={s.statDiv} />
           <View style={s.statPillPace}>
             {(() => {
               const pg = run.pace_groups ?? [];
@@ -1078,7 +1122,7 @@ function RunCard({
               const shownMin = singleGroup ? pg[0].minPace : run.min_pace;
               const shownMax = singleGroup ? pg[0].maxPace : run.max_pace;
               return (
-                <Text numberOfLines={1} style={[s.statPillValue, { color: getPaceColor(shownMin, shownMax, C) }]}>
+                <Text numberOfLines={1} style={[s.statPillValue, { color: getPaceColor(shownMin, shownMax, C, (run.activity_type as any) ?? "run") }]}>
                   {shownMin === shownMax
                     ? toDisplayPace(shownMin, distUnit).replace(/ \/(mi|km)$/, "")
                     : `${toDisplayPace(shownMin, distUnit).replace(/ \/(mi|km)$/, "")}–${toDisplayPace(shownMax, distUnit).replace(/ \/(mi|km)$/, "")}`}
@@ -1101,7 +1145,7 @@ function RunCard({
               <Text numberOfLines={1} style={[s.statPillValue, run.is_active && { color: C.primary }]}>
                 {run.is_active
                   ? (liveParticipantCount !== undefined ? liveParticipantCount : run.participant_count)
-                  : run.crew_id
+                  : (run.crew_id || (run.max_participants ?? 0) >= 9999)
                     ? run.participant_count
                     : `${run.participant_count}/${run.max_participants}`}
               </Text>
@@ -1246,7 +1290,7 @@ export default function DiscoverScreen() {
   const { user } = useAuth();
   const distUnit: DistanceUnit = ((user as any)?.distance_unit ?? "miles") as DistanceUnit;
   const qc = useQueryClient();
-  const { C } = useTheme();
+  const { C, theme } = useTheme();
   const s = useMemo(() => makeStyles(C), [C]);
   const fm = useMemo(() => makeFmStyles(C), [C]);
   const { isActive: walkthroughActive, nextStep: walkthroughNext } = useWalkthrough();
@@ -1425,6 +1469,40 @@ export default function DiscoverScreen() {
     staleTime: 60_000,
     enabled: !!user,
   });
+
+  // Public routes + community paths near pin-drop center — for rendering as polylines on the host location picker.
+  const [pickerSelectedRouteId, setPickerSelectedRouteId] = useState<string | null>(null);
+  const hPickerRoutesKey = useMemo(() => {
+    if (hostPage !== "location" || !pinCoord) return null;
+    const d = 0.08;
+    const swLat = pinCoord.latitude - d, swLng = pinCoord.longitude - d, neLat = pinCoord.latitude + d, neLng = pinCoord.longitude + d;
+    const layer = hActivityType === "ride" ? "ride" : "foot";
+    return `/api/map/routes?swLat=${swLat.toFixed(3)}&swLng=${swLng.toFixed(3)}&neLat=${neLat.toFixed(3)}&neLng=${neLng.toFixed(3)}&layer=${layer}&limit=300&zoom=14`;
+  }, [hostPage, pinCoord?.latitude, pinCoord?.longitude, hActivityType]);
+  const { data: hPickerPublicRoutes = [] } = useQuery<any[]>({
+    queryKey: [hPickerRoutesKey],
+    enabled: !!hPickerRoutesKey,
+    staleTime: 300_000,
+  });
+  const { data: hPickerCommunityPathsRaw = [] } = useQuery<any[]>({
+    queryKey: ["/api/community-paths"],
+    enabled: hostPage === "location",
+    staleTime: 300_000,
+  });
+  const hPickerCommunityPaths = useMemo(() => {
+    if (!pinCoord) return [];
+    return hPickerCommunityPathsRaw
+      .map((p: any) => ({
+        ...p,
+        route_path: typeof p.route_path === "string" ? JSON.parse(p.route_path) : p.route_path,
+      }))
+      .filter((p: any) => {
+        if (!p.route_path || p.route_path.length < 2) return false;
+        const first = p.route_path[0];
+        const dKm = haversine(pinCoord.latitude, pinCoord.longitude, first.latitude, first.longitude);
+        return dKm < 10;
+      });
+  }, [hPickerCommunityPathsRaw, pinCoord?.latitude, pinCoord?.longitude]);
 
   function resetHostForm() {
     const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
@@ -1665,7 +1743,7 @@ export default function DiscoverScreen() {
   const bookmarkedIds = useMemo(() => new Set(bookmarkedRuns.map((r) => r.id)), [bookmarkedRuns]);
   const sortedBookmarkedRuns = useMemo(() =>
     [...bookmarkedRuns]
-      .filter((r) => (r.activity_type ?? "run") === activityFilter)
+      .filter((r) => matchesActivity(r, activityFilter))
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
     [bookmarkedRuns, activityFilter]
   );
@@ -1832,7 +1910,7 @@ export default function DiscoverScreen() {
       const matchTime = appliedTimes.length === 0 ||
         appliedTimes.includes(runTimeSlot(runHour));
 
-      const matchActivity = (r.activity_type ?? "run") === activityFilter;
+      const matchActivity = matchesActivity(r, activityFilter);
       // Hide runs that ended more than 2 hours ago (mirrors the server-side grace window)
       const matchFuture = !r.date || (Date.now() - new Date(r.date).getTime()) < 2 * 60 * 60 * 1000;
       return matchSearch && matchPace && matchDist && matchProx && matchStyle && matchVisibility && matchDay && matchTime && matchActivity && matchFuture;
@@ -1903,7 +1981,7 @@ export default function DiscoverScreen() {
         const runHour = new Date(r.date).getHours();
         const appliedTimes = applied.times ?? [];
         const matchTime = appliedTimes.length === 0 || appliedTimes.includes(runTimeSlot(runHour));
-        const matchActivity = (r.activity_type ?? "run") === activityFilter;
+        const matchActivity = matchesActivity(r, activityFilter);
         const matchFuture = !r.date || (Date.now() - new Date(r.date).getTime()) < 2 * 60 * 60 * 1000;
         return matchSearch && matchPace && matchDist && matchStyle && matchVisibility && matchDay && matchTime && matchActivity && matchFuture;
       };
@@ -2009,6 +2087,42 @@ export default function DiscoverScreen() {
     setUserHasSetDistance(false);
   }
 
+  // ─── Map Preview nearby-stats ─────────────────────────────────────────────
+  const nearbyStats = useMemo(() => {
+    if (!userLocation) return null;
+    const RADIUS_MI = 15;
+    const now = Date.now();
+    const nearby = runs.filter((r) => {
+      if (r.is_completed) return false;
+      if (!matchesActivity(r, activityFilter)) return false;
+      const d = distanceMap[r.id];
+      if (d == null || d > RADIUS_MI) return false;
+      if (new Date(r.date).getTime() < now) return false;
+      return true;
+    });
+    if (nearby.length === 0) return { count: 0, soonestMs: null as number | null, minDist: null as number | null, maxDist: null as number | null };
+    const sortedByDate = [...nearby].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const soonestMs = new Date(sortedByDate[0].date).getTime() - now;
+    // Treat min_distance = 0 as "no lower bound" (single-distance events) —
+    // use the event's max as its effective distance so the range pill reads sanely.
+    const effectiveMins = nearby.map((r) => r.min_distance || r.max_distance);
+    const minDist = Math.min(...effectiveMins);
+    const maxDist = Math.max(...nearby.map((r) => r.max_distance));
+    return { count: nearby.length, soonestMs, minDist, maxDist };
+  }, [runs, userLocation, distanceMap, activityFilter]);
+
+  function formatCountdown(ms: number) {
+    const mins = Math.max(0, Math.floor(ms / 60000));
+    if (mins < 60) return `IN ${mins}M`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) {
+      const rem = mins % 60;
+      return rem > 0 ? `IN ${hours}H ${rem}M` : `IN ${hours}H`;
+    }
+    const days = Math.floor(hours / 24);
+    return `IN ${days}D`;
+  }
+
   // ─── Navigate to map ───────────────────────────────────────────────────────
 
   function goToMap() {
@@ -2091,21 +2205,21 @@ export default function DiscoverScreen() {
             style={[s.activityPill, activityFilter === "run" && s.activityPillActive]}
             onPress={() => { setActivityFilter("run"); Haptics.selectionAsync(); }}
           >
-            <Ionicons name="body" size={13} color={activityFilter === "run" ? C.bg : C.textMuted} />
+            <MaterialCommunityIcons name="run-fast" size={17} color={activityFilter === "run" ? C.bg : C.textMuted} />
             <Text style={[s.activityPillTxt, activityFilter === "run" && s.activityPillTxtActive]}>Runs</Text>
           </Pressable>
           <Pressable
             style={[s.activityPill, activityFilter === "ride" && s.activityPillActive]}
             onPress={() => { setActivityFilter("ride"); Haptics.selectionAsync(); }}
           >
-            <Ionicons name="bicycle" size={13} color={activityFilter === "ride" ? C.bg : C.textMuted} />
+            <Ionicons name="bicycle" size={15} color={activityFilter === "ride" ? C.bg : C.textMuted} />
             <Text style={[s.activityPillTxt, activityFilter === "ride" && s.activityPillTxtActive]}>Rides</Text>
           </Pressable>
           <Pressable
             style={[s.activityPill, activityFilter === "walk" && s.activityPillActive]}
             onPress={() => { setActivityFilter("walk"); Haptics.selectionAsync(); }}
           >
-            <Ionicons name="footsteps" size={13} color={activityFilter === "walk" ? C.bg : C.textMuted} />
+            <Ionicons name="footsteps" size={15} color={activityFilter === "walk" ? C.bg : C.textMuted} />
             <Text style={[s.activityPillTxt, activityFilter === "walk" && s.activityPillTxtActive]}>Walks</Text>
           </Pressable>
           <Pressable
@@ -2141,8 +2255,8 @@ export default function DiscoverScreen() {
           }
           ListHeaderComponent={
             <View>
-            {user && ((!ghostBookmarkDone || sortedBookmarkedRuns.length > 0) || (!ghostPlannedDone || plannedRuns.filter((r) => (r.activity_type ?? "run") === activityFilter && !r.is_completed).length > 0)) && (() => {
-              const filteredPlanned = plannedRuns.filter((r) => (r.activity_type ?? "run") === activityFilter && !r.is_completed);
+            {user && ((!ghostBookmarkDone || sortedBookmarkedRuns.length > 0) || (!ghostPlannedDone || plannedRuns.filter((r) => matchesActivity(r, activityFilter) && !r.is_completed).length > 0)) && (() => {
+              const filteredPlanned = plannedRuns.filter((r) => matchesActivity(r, activityFilter) && !r.is_completed);
               const SCROLL_CARD_W = 140;
               return (
                 <View style={s.sideBySideRow}>
@@ -2265,12 +2379,145 @@ export default function DiscoverScreen() {
             <Text style={s.nearbyLabel}>{isFallback ? (activityFilter === "ride" ? "All Upcoming Rides" : activityFilter === "walk" ? "All Upcoming Walks" : "All Upcoming Events") : (activityFilter === "ride" ? "Upcoming Rides Nearby" : activityFilter === "walk" ? "Upcoming Walks Nearby" : "Upcoming Runs Nearby")}</Text>
             <WalkthroughPulse stepId="map-view" style={{ borderRadius: 16 }}>
             <Pressable
-              style={s.viewOnMapBtn}
+              style={s.mapPreviewCard}
               onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); goToMap(); }}
             >
-              <Feather name="map" size={15} color={C.bg} />
-              <Text style={s.viewOnMapBtnTxt}>MAP VIEW</Text>
-              <Feather name="chevron-right" size={15} color={C.bg} />
+              <View style={s.mapPreviewMapWrap} pointerEvents="none">
+                {/* PaceUp-styled map mockup — drawn in SVG, fills box exactly */}
+                {(() => {
+                  const isDark = theme === "dark";
+                  const bg = isDark ? "#0B0D0A" : "#F5F2EA";
+                  const grid = isDark ? "#FFFFFF" : "#8A7A58";
+                  const blob = isDark ? "#1F3A28" : "#CFE4C3";
+                  const river = isDark ? "#17324A" : "#CDE1EC";
+                  const route = isDark ? "#3CE070" : "#1F9E3C";
+                  const dash = isDark ? "#2A5E3A" : "#A8C9A8";
+                  const pinRing = "#FFFFFF";
+                  const pinGreen = isDark ? "#2EE66B" : "#1FA94A";
+                  return (
+                    <Svg
+                      style={StyleSheet.absoluteFill}
+                      viewBox="0 0 200 100"
+                      preserveAspectRatio="none"
+                    >
+                      {/* Background */}
+                      <SvgRect x="0" y="0" width="200" height="100" fill={bg} />
+                      {/* Grid — gentle curves */}
+                      <SvgG stroke={grid} strokeWidth={0.25} fill="none" opacity={isDark ? 0.18 : 0.35}>
+                        <SvgPath d="M0,18 Q60,12 120,20 T200,16" />
+                        <SvgPath d="M0,40 Q50,44 100,40 T200,42" />
+                        <SvgPath d="M0,64 Q60,60 120,66 T200,62" />
+                        <SvgPath d="M0,86 Q60,82 120,88 T200,86" />
+                        <SvgPath d="M28,0 Q30,40 24,100" />
+                        <SvgPath d="M70,0 Q66,50 74,100" />
+                        <SvgPath d="M118,0 Q114,50 120,100" />
+                        <SvgPath d="M164,0 Q168,50 162,100" />
+                      </SvgG>
+                      {/* Green blobs (park areas) */}
+                      <SvgEllipse cx="38" cy="22" rx="42" ry="22" fill={blob} opacity={isDark ? 0.45 : 0.75} />
+                      <SvgEllipse cx="158" cy="76" rx="42" ry="20" fill={blob} opacity={isDark ? 0.45 : 0.7} />
+                      {/* Blue river band — wavy */}
+                      <SvgPath
+                        d="M-5,58 Q40,52 80,62 T200,60 L200,72 Q160,78 100,72 T-5,74 Z"
+                        fill={river}
+                        opacity={isDark ? 0.85 : 0.9}
+                      />
+                      {/* Dashed trail across middle */}
+                      <SvgPath
+                        d="M0,56 Q80,52 200,56"
+                        stroke={dash}
+                        strokeWidth={1.2}
+                        strokeDasharray="3,2.5"
+                        strokeLinecap="round"
+                        fill="none"
+                      />
+                      {/* Main route — starts bottom-left, full up wave, full down wave, ends top-right */}
+                      <SvgPath
+                        d="M-6,85 C20,82 40,25 65,30 C95,36 115,64 140,62 C170,58 185,28 206,12"
+                        stroke={route}
+                        strokeWidth={3.2}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        fill="none"
+                      />
+                    </Svg>
+                  );
+                })()}
+                {/* PaceUp logo pins (placed over mockup) — use the actual app icon asset */}
+                {[
+                  { left: "20%", top: "62%" },
+                  { left: "78%", top: "30%" },
+                ].map((pos, i) => (
+                  <View
+                    key={`mock-pin-${i}`}
+                    pointerEvents="none"
+                    style={{ position: "absolute", left: pos.left as any, top: pos.top as any, marginLeft: -14, marginTop: -30, alignItems: "center" }}
+                  >
+                    <View
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 14,
+                        backgroundColor: theme === "dark" ? "#2EE66B" : "#1FA94A",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        borderWidth: 2,
+                        borderColor: "#FFFFFF",
+                        shadowColor: "#000",
+                        shadowOpacity: 0.3,
+                        shadowRadius: 3,
+                        shadowOffset: { width: 0, height: 1 },
+                      }}
+                    >
+                      <Image source={require("../../assets/images/icon.png")} style={{ width: 20, height: 20, borderRadius: 10 }} />
+                    </View>
+                    {/* teardrop tail */}
+                    <View
+                      style={{
+                        width: 0,
+                        height: 0,
+                        borderLeftWidth: 5,
+                        borderRightWidth: 5,
+                        borderTopWidth: 7,
+                        borderLeftColor: "transparent",
+                        borderRightColor: "transparent",
+                        borderTopColor: theme === "dark" ? "#2EE66B" : "#1FA94A",
+                        marginTop: -2,
+                      }}
+                    />
+                  </View>
+                ))}
+                {/* User location dot (center) */}
+                <View style={{ position: "absolute", left: "50%", top: "55%", marginLeft: -11, marginTop: -11, width: 22, height: 22, borderRadius: 11, backgroundColor: C.primary + "33", alignItems: "center", justifyContent: "center" }}>
+                  <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: C.primary, borderWidth: 2, borderColor: C.card }} />
+                </View>
+                <View style={s.mapPreviewPillRow} pointerEvents="none">
+                  {nearbyStats && nearbyStats.count > 0 && nearbyStats.soonestMs != null && (
+                    <View style={s.mapPreviewPill}>
+                      <Text style={s.mapPreviewPillTxt}>{formatCountdown(nearbyStats.soonestMs)}</Text>
+                    </View>
+                  )}
+                  {nearbyStats && (
+                    <View style={s.mapPreviewPill}>
+                      <Text style={s.mapPreviewPillTxt}>{nearbyStats.count} NEARBY</Text>
+                    </View>
+                  )}
+                  {nearbyStats && nearbyStats.count > 0 && nearbyStats.minDist != null && nearbyStats.maxDist != null && (
+                    <View style={s.mapPreviewPill}>
+                      <Text style={s.mapPreviewPillTxt}>
+                        {nearbyStats.minDist === nearbyStats.maxDist
+                          ? `${toDisplayDist(nearbyStats.minDist, distUnit)}`
+                          : `${toDisplayDist(nearbyStats.minDist, distUnit)}–${toDisplayDist(nearbyStats.maxDist, distUnit)}`}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+              <View style={s.mapPreviewCta}>
+                <Feather name="map" size={15} color={C.bg} />
+                <Text style={s.viewOnMapBtnTxt}>MAP VIEW</Text>
+                <Feather name="chevron-right" size={15} color={C.bg} />
+              </View>
             </Pressable>
             </WalkthroughPulse>
             </View>
@@ -2489,7 +2736,7 @@ export default function DiscoverScreen() {
               {/* Slide 0 — Welcome */}
               <ScrollView style={{ width: screenWidth - 48 }} contentContainerStyle={s.onboardContent} showsVerticalScrollIndicator={false} bounces={false}>
                 <View style={s.onboardIconWrap}>
-                  <Ionicons name="body" size={56} color={C.primary} />
+                  <MaterialCommunityIcons name="run-fast" size={64} color={C.primary} />
                 </View>
                 <Text style={s.onboardTitle}>Welcome to PaceUp</Text>
                 <Text style={s.onboardBody}>
@@ -2632,7 +2879,7 @@ export default function DiscoverScreen() {
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 20 }}>
-            {notifCount === 0 ? (
+            {notifications.length === 0 ? (
               <View style={s.emptyNotifs}>
                 <Feather name="bell" size={48} color={C.textMuted} />
                 <Text style={s.emptyNotifsText}>You're all caught up!</Text>
@@ -2918,9 +3165,57 @@ export default function DiscoverScreen() {
                   onPress={(e) => {
                     const coord = e.nativeEvent.coordinate;
                     setPinCoord(coord);
+                    setPickerSelectedRouteId(null);
                     reverseGeocode(coord.latitude, coord.longitude);
                   }}
                 >
+                  {/* Public routes — orange (run/walk) / blue (ride) */}
+                  {hPickerPublicRoutes.map((route: any) => {
+                    const path = typeof route.path === "string" ? JSON.parse(route.path) : (route.path || []);
+                    if (!path || path.length < 2) return null;
+                    const isRide = route.activity_type === "ride";
+                    const stroke = isRide ? "#2E86AB" : "#FF6B35";
+                    const selected = pickerSelectedRouteId === `pr-${route.id}`;
+                    return (
+                      <Polyline
+                        key={`pr-${route.id}`}
+                        coordinates={path}
+                        strokeColor={selected ? "#FFFFFF" : stroke}
+                        strokeWidth={selected ? 5 : 3}
+                        tappable
+                        onPress={() => {
+                          const start = path[0];
+                          setPinCoord({ latitude: start.latitude, longitude: start.longitude });
+                          setPickerSelectedRouteId(`pr-${route.id}`);
+                          reverseGeocode(start.latitude, start.longitude);
+                          if (route.distance_miles) setHDist(String(route.distance_miles.toFixed(2)));
+                          Haptics.selectionAsync();
+                        }}
+                      />
+                    );
+                  })}
+                  {/* Community paths — green */}
+                  {hPickerCommunityPaths.map((path: any) => {
+                    const selected = pickerSelectedRouteId === `cp-${path.id}`;
+                    return (
+                      <Polyline
+                        key={`cp-${path.id}`}
+                        coordinates={path.route_path}
+                        strokeColor={selected ? "#FFFFFF" : "#00D97E"}
+                        strokeWidth={selected ? 5 : 3}
+                        tappable
+                        onPress={() => {
+                          const start = path.route_path[0];
+                          setPinCoord({ latitude: start.latitude, longitude: start.longitude });
+                          setPickerSelectedRouteId(`cp-${path.id}`);
+                          if (path.name) setHLocation(path.name);
+                          else reverseGeocode(start.latitude, start.longitude);
+                          if (path.distance_miles) setHDist(String(path.distance_miles.toFixed(2)));
+                          Haptics.selectionAsync();
+                        }}
+                      />
+                    );
+                  })}
                   <Marker coordinate={pinCoord} pinColor={C.primary} />
                 </MapView>
               ) : (
@@ -3038,7 +3333,7 @@ export default function DiscoverScreen() {
                 style={[s.activityPill, hActivityType === "run" && s.activityPillActive, { flex: 1 }]}
                 onPress={() => { setHActivityType("run"); setHMinPace((p) => Math.max(4, p)); Haptics.selectionAsync(); }}
               >
-                <Ionicons name="body" size={14} color={hActivityType === "run" ? C.bg : C.textMuted} />
+                <MaterialCommunityIcons name="run-fast" size={16} color={hActivityType === "run" ? C.bg : C.textMuted} />
                 <Text style={[s.activityPillTxt, hActivityType === "run" && s.activityPillTxtActive]}>Run</Text>
               </Pressable>
               <Pressable
@@ -3086,31 +3381,34 @@ export default function DiscoverScreen() {
 
             {/* Date + Time */}
             <Text style={s.hLabel}>Date & Time *</Text>
-            <View style={{ flexDirection: "row", gap: 10 }}>
-              <View style={{ flex: 1 }}><MiniCalendarPicker value={hDate} onChange={setHDate} /></View>
-              <View style={{ flex: 1, flexDirection: "row", gap: 6, alignSelf: "flex-start" }}>
-                <TextInput
-                  style={[s.hInput, { flex: 1 }]}
-                  value={hTime}
-                  onChangeText={handleTimeChange}
-                  placeholder="7:30"
-                  placeholderTextColor={C.textMuted}
-                  keyboardType="number-pad"
-                  maxLength={5}
-                />
-                <View style={{ flexDirection: "column", gap: 4 }}>
-                  {(["AM", "PM"] as const).map((period) => (
-                    <Pressable
-                      key={period}
-                      style={{ flex: 1, paddingHorizontal: 10, borderRadius: 9, borderWidth: 1, alignItems: "center", justifyContent: "center", backgroundColor: hAmPm === period ? C.primaryMuted : C.card, borderColor: hAmPm === period ? C.primary : C.border }}
-                      onPress={() => { setHAmPm(period); Haptics.selectionAsync(); }}
-                    >
-                      <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: hAmPm === period ? C.primary : C.textSecondary }}>{period}</Text>
-                    </Pressable>
-                  ))}
+            <MiniCalendarPicker
+              value={hDate}
+              onChange={setHDate}
+              rightSlot={
+                <View style={{ flex: 1, flexDirection: "row", gap: 6 }}>
+                  <TextInput
+                    style={[s.hInput, { flex: 1 }]}
+                    value={hTime}
+                    onChangeText={handleTimeChange}
+                    placeholder="7:30"
+                    placeholderTextColor={C.textMuted}
+                    keyboardType="number-pad"
+                    maxLength={5}
+                  />
+                  <View style={{ flexDirection: "column", gap: 4 }}>
+                    {(["AM", "PM"] as const).map((period) => (
+                      <Pressable
+                        key={period}
+                        style={{ flex: 1, paddingHorizontal: 10, borderRadius: 9, borderWidth: 1, alignItems: "center", justifyContent: "center", backgroundColor: hAmPm === period ? C.primaryMuted : C.card, borderColor: hAmPm === period ? C.primary : C.border }}
+                        onPress={() => { setHAmPm(period); Haptics.selectionAsync(); }}
+                      >
+                        <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: hAmPm === period ? C.primary : C.textSecondary }}>{period}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
                 </View>
-              </View>
-            </View>
+              }
+            />
 
             {/* Privacy */}
             <Text style={s.hLabel}>View</Text>
@@ -3369,21 +3667,7 @@ export default function DiscoverScreen() {
         </View>
       </Modal>
 
-      {/* ── Map FAB ─────────────────────────────────────────────────────────── */}
-      {Platform.OS !== "web" && (
-        <Pressable
-          testID="map-fab"
-          style={[s.fab, { bottom: insets.bottom + 92 }]}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            router.push("/map" as any);
-          }}
-        >
-          <Ionicons name="map-outline" size={26} color={C.bg} />
-        </Pressable>
-      )}
-
-      <SharedPathPreviewModal
+<SharedPathPreviewModal
         visible={!!previewShareId}
         shareId={previewShareId}
         onClose={() => setPreviewShareId(null)}
@@ -3606,17 +3890,17 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   },
   searchInput: { flex: 1, fontFamily: "Outfit_400Regular", fontSize: 14, color: C.text },
 
-  activityToggleRow: { flexDirection: "row", gap: 8, marginTop: 10 },
+  activityToggleRow: { flexDirection: "row", gap: 10, marginTop: 10, alignItems: "center" },
   activityPill: {
-    flexDirection: "row", alignItems: "center", gap: 6,
-    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+    flexDirection: "row", alignItems: "center", gap: 8,
+    paddingHorizontal: 18, paddingVertical: 11, borderRadius: 999,
     backgroundColor: C.surface, borderWidth: 1.5, borderColor: C.border,
   },
   activityPillActive: { backgroundColor: C.primary, borderColor: C.primary },
-  activityPillTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textMuted },
+  activityPillTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: C.textMuted },
   activityPillTxtActive: { color: C.bg },
   filterToggleBtn: {
-    width: 36, height: 36, borderRadius: 18,
+    width: 44, height: 44, borderRadius: 22,
     backgroundColor: C.surface,
     borderWidth: 1.5, borderColor: C.border,
     alignItems: "center", justifyContent: "center",
@@ -3675,6 +3959,55 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     marginBottom: 7,
   },
   viewOnMapBtnTxt: { fontFamily: "Outfit_700Bold", fontSize: 17, color: C.bg, flex: 1, textAlign: "center", letterSpacing: 0.5 },
+
+  mapPreviewCard: {
+    backgroundColor: C.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: C.border,
+    overflow: "hidden",
+    marginBottom: 7,
+  },
+  mapPreviewMapWrap: {
+    height: 126,
+    position: "relative",
+    backgroundColor: C.surface,
+  },
+  mapPreviewPillRow: {
+    position: "absolute",
+    bottom: 10,
+    left: 10,
+    right: 10,
+    flexDirection: "row",
+    gap: 6,
+  },
+  mapPreviewPill: {
+    flex: 1,
+    backgroundColor: C.card + "EB",
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 7,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mapPreviewPillTxt: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 11,
+    color: C.text,
+    letterSpacing: 0.4,
+    textAlign: "center",
+  },
+  mapPreviewCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: C.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+  },
   sideBySideRow: {
     flexDirection: "row",
     gap: 10,
@@ -3760,13 +4093,13 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   hostAvatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: C.primaryMuted },
   hostAvatarFallback: { width: 52, height: 52, borderRadius: 26, backgroundColor: C.primaryMuted, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: C.primary + "55" },
   hostAvatarLetter: { fontFamily: "Outfit_700Bold", fontSize: 20, color: C.primary },
-  hostColumnName: { fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.text, textAlign: "center" },
+  hostColumnName: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.text, textAlign: "center" },
   hostColumnRating: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.gold, textAlign: "center" },
   hostColumnBadge: { fontFamily: "Outfit_600SemiBold", fontSize: 10, textAlign: "center" },
   crewBadge: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: C.primaryMuted, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2, marginTop: 3, alignSelf: "center" as const },
   crewBadgeEmoji: { fontSize: 10 },
   crewBadgeName: { fontFamily: "Outfit_600SemiBold", fontSize: 9, color: C.primary, maxWidth: 60 },
-  hostColumnDist: { fontFamily: "Outfit_700Bold", fontSize: 13, color: C.text, textAlign: "center", marginTop: 2 },
+  hostColumnDist: { fontFamily: "Outfit_700Bold", fontSize: 14, color: C.text, textAlign: "center", marginTop: 2 },
   hostColumnWeather: { fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted, textAlign: "center" },
   hostColumnWeatherPill: { marginTop: 5, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, borderWidth: 1, borderColor: C.border, alignSelf: "center" },
 
@@ -3776,7 +4109,7 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   joinCrewCta: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: `${C.primary}18`, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 10 },
   joinCrewCtaTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.primary, flex: 1 },
 
-  cardStats: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10, paddingTop: 10, paddingHorizontal: 14, paddingBottom: 12, borderTopWidth: 1, borderTopColor: C.border + "55" },
+  cardStats: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6, paddingTop: 8, paddingHorizontal: 14, paddingBottom: 6, borderTopWidth: 1, borderTopColor: C.border + "55" },
   stat: { flexDirection: "row", alignItems: "center", gap: 3, flex: 1, minWidth: 0 },
   statLg: { flexDirection: "row", alignItems: "center", gap: 3, flex: 4, minWidth: 0 },
   statSm: { flexDirection: "row", alignItems: "center", gap: 3, flex: 2, minWidth: 0 },
@@ -3785,6 +4118,7 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
   statDiv: { width: 1, height: 24, backgroundColor: C.border },
   statPill: { flex: 1, alignItems: "center", gap: 2 },
   statPillPace: { width: 96, alignItems: "center", gap: 2 },
+  statPillActivity: { width: 28, alignItems: "center", justifyContent: "center", gap: 4, paddingVertical: 2 },
   statPillValue: { fontFamily: "Outfit_700Bold", fontSize: 12, color: C.text },
   statPillLabel: { fontFamily: "Outfit_400Regular", fontSize: 10, color: C.textMuted, textTransform: "uppercase", letterSpacing: 0.3 },
 
@@ -3806,6 +4140,19 @@ function makeStyles(C: ColorScheme) { return StyleSheet.create({
     borderColor: C.borderLight,
   },
   tagTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 10, color: C.textSecondary },
+  crewVibePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 4,
+    backgroundColor: C.primaryMuted,
+    borderRadius: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: C.primary,
+  },
+  crewVibePillTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.primary, maxWidth: 220 },
 
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: 80, gap: 10 },
   emptyTitle: { fontFamily: "Outfit_700Bold", fontSize: 17, color: C.text },

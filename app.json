@@ -2,7 +2,7 @@
   "expo": {
     "name": "PaceUp",
     "slug": "paceup",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "paceup",
@@ -24,8 +24,9 @@
     },
     "ios": {
       "supportsTablet": false,
-      "buildNumber": "21",
+      "buildNumber": "1",
       "bundleIdentifier": "com.paceup",
+      "appleTeamId": "PX6JG78DT5",
       "infoPlist": {
         "NSSupportsLiveActivities": true,
         "NSCameraUsageDescription": "PaceUp uses your camera to add photos to your runs and rides.",
@@ -58,7 +59,12 @@
     },
     "android": {
       "package": "com.paceup",
-      "versionCode": 21,
+      "versionCode": 23,
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyAUcRGgFOJ3qTxgqIxcRREIwsKPpw11dks"
+        }
+      },
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -147,6 +153,8 @@
       "expo-audio",
       "./plugins/with-android-widget",
       "./plugins/with-paceup-widget-extension",
+      "./plugins/with-paceup-watch-bridge",
+      "@bacons/apple-targets/app.plugin",
       [
         "react-native-health-connect",
         {
@@ -182,7 +190,21 @@
               "appExtensions": [
                 {
                   "targetName": "PaceUpWidgetExtension",
-                  "bundleIdentifier": "com.paceup.PaceUpWidget"
+                  "bundleIdentifier": "com.paceup.PaceUpWidget",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.paceup.app"
+                    ]
+                  }
+                },
+                {
+                  "targetName": "PaceUpWatch",
+                  "bundleIdentifier": "com.paceup.watchkitapp",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.paceup.app"
+                    ]
+                  }
                 }
               ]
             }

@@ -19,7 +19,7 @@ const MAP_TYPE = Platform.OS === "ios" ? ("mutedStandard" as const) : ("standard
 import MAP_STYLE from "@/lib/mapStyle";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
@@ -300,6 +300,10 @@ function ProfileScreenInner() {
   const [uploadingProfile, setUploadingProfile] = useState(false);
   const [topRunsModal, setTopRunsModal] = useState<"longest" | "fastest" | null>(null);
   const [showSoloHistory, setShowSoloHistory] = useState(false);
+  const [savedRoutesFilter, setSavedRoutesFilter] = useState<"all" | "run" | "ride" | "walk">("all");
+  const [chartRange, setChartRange] = useState<"1w" | "1m" | "12w" | "16w" | "6mo">("16w");
+  const [showChartRangeMenu, setShowChartRangeMenu] = useState(false);
+  const [selectedBarIdx, setSelectedBarIdx] = useState<number | null>(null);
   const [historyActivityFilter, setHistoryActivityFilter] = useState<"run" | "ride" | "walk">("run");
   const [historyTypeFilter, setHistoryTypeFilter] = useState<"all" | HistoryEventType>("all");
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
@@ -325,6 +329,9 @@ function ProfileScreenInner() {
   const [achFilter, setAchFilter] = useState("All");
   const [showEditName, setShowEditName] = useState(false);
   const [editNameValue, setEditNameValue] = useState("");
+  const [showEditUsername, setShowEditUsername] = useState(false);
+  const [editUsernameValue, setEditUsernameValue] = useState("");
+  const [usernameError, setUsernameError] = useState("");
   const [nameError, setNameError] = useState("");
   const [nameDaysRemaining, setNameDaysRemaining] = useState<number | null>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -425,6 +432,18 @@ function ProfileScreenInner() {
     staleTime: 0,
   });
 
+  const { data: streakInfo } = useQuery<{
+    current_streak_days: number;
+    longest_streak_days: number;
+    last_run_date: string | null;
+    at_risk: boolean;
+    ran_today: boolean;
+  }>({
+    queryKey: ["/api/streaks"],
+    enabled: !!user,
+    staleTime: 60_000,
+  });
+
   const { data: friendRequests } = useQuery<{ incoming: any[]; sent: any[] }>({
     queryKey: ["/api/friends/requests"],
     enabled: !!user,
@@ -491,6 +510,67 @@ function ProfileScreenInner() {
     enabled: !!user,
   });
 
+  // Personal Bests — combines solo runs + completed event participations (public/crew)
+  const pbRankings = React.useMemo(() => {
+    const RUN_CATS = [
+      { label: "1 Mile", miles: 1.0, tolerance: 0.15 },
+      { label: "2 Miles", miles: 2.0, tolerance: 0.2 },
+      { label: "5K", miles: 3.1, tolerance: 0.25 },
+      { label: "5 Miles", miles: 5.0, tolerance: 0.3 },
+      { label: "10K", miles: 6.2, tolerance: 0.35 },
+    ];
+    const RIDE_CATS = [
+      { label: "10 Miles", miles: 10.0, tolerance: 0.75 },
+      { label: "25 Miles", miles: 25.0, tolerance: 1.5 },
+      { label: "50 Miles", miles: 50.0, tolerance: 2.5 },
+      { label: "100 km", miles: 62.1, tolerance: 3.0 },
+      { label: "100 Miles", miles: 100.0, tolerance: 4.0 },
+    ];
+    const cats = profileActivity === "ride" ? RIDE_CATS : RUN_CATS;
+
+    type PBEntry = { id: string; date: string; distance_miles: number; pace_min_per_mile: number | null; activity_type: string; source: "solo" | "event" };
+
+    const fromSolo: PBEntry[] = soloRuns
+      .filter((r) => r.completed && (r.activity_type ?? "run") === profileActivity)
+      .map((r) => ({
+        id: `solo-${r.id}`,
+        date: r.date,
+        distance_miles: r.distance_miles,
+        pace_min_per_mile: r.pace_min_per_mile,
+        activity_type: r.activity_type ?? "run",
+        source: "solo",
+      }));
+
+    const fromEvents: PBEntry[] = runs
+      .filter((r) => (r.activity_type ?? "run") === profileActivity && (r.my_final_distance ?? 0) > 0)
+      .map((r) => ({
+        id: `event-${r.id}`,
+        date: r.date,
+        distance_miles: r.my_final_distance as number,
+        pace_min_per_mile: r.my_final_pace ?? null,
+        activity_type: r.activity_type ?? "run",
+        source: "event",
+      }));
+
+    const all = [...fromSolo, ...fromEvents];
+
+    return cats
+      .map((cat) => {
+        const qualifying = all
+          .filter((r) => Math.abs(r.distance_miles - cat.miles) <= cat.tolerance && r.pace_min_per_mile != null)
+          .sort((a, b) => {
+            if (profileActivity === "ride") {
+              const sA = a.pace_min_per_mile && a.pace_min_per_mile > 0 ? 60 / a.pace_min_per_mile : 0;
+              const sB = b.pace_min_per_mile && b.pace_min_per_mile > 0 ? 60 / b.pace_min_per_mile : 0;
+              return sB - sA;
+            }
+            return (a.pace_min_per_mile ?? 99) - (b.pace_min_per_mile ?? 99);
+          });
+        return qualifying.length > 0 ? { ...cat, runs: qualifying } : null;
+      })
+      .filter(Boolean) as { label: string; miles: number; tolerance: number; runs: PBEntry[] }[];
+  }, [soloRuns, runs, profileActivity]);
+
   const actStats = React.useMemo(() => {
     const now = new Date();
     // Solo run stats
@@ -530,6 +610,30 @@ function ProfileScreenInner() {
       .reduce((s, r) => s + (r.my_final_distance ?? 0), 0);
     const grpSeconds = groupParticipated.reduce((s, r) =>
       s + (r.my_final_distance && r.my_final_pace ? r.my_final_distance * r.my_final_pace * 60 : 0), 0);
+    // Last 16 weeks — bar chart (Mon–Sun weeks), values in miles
+    const WEEKS = 16;
+    const weeklyDistances: number[] = new Array(WEEKS).fill(0);
+    const startOfCurrentWeek = new Date(now);
+    // Roll back to Monday of the current week
+    const dow = (startOfCurrentWeek.getDay() + 6) % 7; // Mon=0..Sun=6
+    startOfCurrentWeek.setHours(0, 0, 0, 0);
+    startOfCurrentWeek.setDate(startOfCurrentWeek.getDate() - dow);
+    const pushIntoWeeks = (dateStr: string | Date, miles: number) => {
+      const d = new Date(dateStr);
+      const diffMs = startOfCurrentWeek.getTime() - d.getTime();
+      const weekOffset = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000));
+      // weekOffset 0 = current week, 1 = last week, ..., (WEEKS-1) = oldest
+      const idx = WEEKS - 1 - weekOffset; // leftmost = oldest, rightmost = current
+      if (idx >= 0 && idx < WEEKS) weeklyDistances[idx] += miles;
+    };
+    filtered.forEach((r) => pushIntoWeeks(r.date, r.distance_miles));
+    groupParticipated.forEach((r) => pushIntoWeeks(r.date, r.my_final_distance ?? 0));
+    // Streak (trailing weeks with > 0 miles, counted from current week backwards)
+    let streakWeeks = 0;
+    for (let i = weeklyDistances.length - 1; i >= 0; i--) {
+      if (weeklyDistances[i] > 0) streakWeeks += 1;
+      else break;
+    }
     return {
       totalMiles: totalMiles + grpTotal,
       monthMiles: monthMiles + grpMonth,
@@ -537,8 +641,80 @@ function ProfileScreenInner() {
       count: filtered.length + groupParticipated.length,
       avgPace,
       totalMovingSeconds: totalMovingSeconds + grpSeconds,
+      weeklyDistances,
+      streakWeeks,
     };
   }, [soloRuns, runs, profileActivity]);
+
+  // ─── Chart data (dynamic range) ─────────────────────────────────────────
+  const chartData = React.useMemo(() => {
+    const now = new Date();
+    const soloForAct = soloRuns.filter((r) => (r.activity_type ?? "run") === profileActivity && r.completed);
+    const groupForAct = runs.filter((r) => {
+      const isPast = new Date(r.date) < now;
+      return isPast && (r.my_final_distance ?? 0) > 0 && (r.activity_type ?? "run") === profileActivity;
+    });
+
+    const rangeConfig: Record<typeof chartRange, { buckets: number; bucketDays: number; label: string; unit: "day" | "week" }> = {
+      "1w":  { buckets: 7,  bucketDays: 1,  label: "Last week",     unit: "day"  },
+      "1m":  { buckets: 5,  bucketDays: 7,  label: "Last month",    unit: "week" },
+      "12w": { buckets: 12, bucketDays: 7,  label: "Last 12 weeks", unit: "week" },
+      "16w": { buckets: 16, bucketDays: 7,  label: "Last 16 weeks", unit: "week" },
+      "6mo": { buckets: 26, bucketDays: 7,  label: "Last 6 months", unit: "week" },
+    };
+    const cfg = rangeConfig[chartRange];
+    const buckets = Array.from({ length: cfg.buckets }, () => ({ miles: 0, count: 0 }));
+
+    // Anchor: rightmost bucket is the current day (for daily) or current week (for weekly, Mon-start)
+    const anchor = new Date(now);
+    anchor.setHours(0, 0, 0, 0);
+    if (cfg.unit === "week") {
+      const dow = (anchor.getDay() + 6) % 7; // Mon=0
+      anchor.setDate(anchor.getDate() - dow);
+    }
+    const bucketMs = cfg.bucketDays * 24 * 60 * 60 * 1000;
+
+    const push = (dateStr: string | Date, miles: number) => {
+      const d = new Date(dateStr);
+      d.setHours(0, 0, 0, 0);
+      if (cfg.unit === "week") {
+        const dow = (d.getDay() + 6) % 7;
+        d.setDate(d.getDate() - dow);
+      }
+      const diffMs = anchor.getTime() - d.getTime();
+      const offset = Math.floor(diffMs / bucketMs);
+      const idx = cfg.buckets - 1 - offset;
+      if (idx >= 0 && idx < cfg.buckets) {
+        buckets[idx].miles += miles;
+        buckets[idx].count += 1;
+      }
+    };
+    soloForAct.forEach((r) => push(r.date, r.distance_miles));
+    groupForAct.forEach((r) => push(r.date, r.my_final_distance ?? 0));
+
+    let streak = 0;
+    for (let i = buckets.length - 1; i >= 0; i--) {
+      if (buckets[i].miles > 0) streak += 1;
+      else break;
+    }
+
+    const bucketLabel = (idx: number) => {
+      const d = new Date(anchor);
+      const offsetFromRight = cfg.buckets - 1 - idx;
+      d.setDate(d.getDate() - offsetFromRight * cfg.bucketDays);
+      if (cfg.unit === "day") {
+        return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+      }
+      const end = new Date(d);
+      end.setDate(end.getDate() + 6);
+      return `${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${end.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+    };
+
+    return { buckets, label: cfg.label, unit: cfg.unit, streak, bucketLabel };
+  }, [soloRuns, runs, profileActivity, chartRange]);
+
+  // Clear selected bar when range changes
+  React.useEffect(() => { setSelectedBarIdx(null); }, [chartRange, profileActivity]);
 
 
   const computedTopRuns = React.useMemo(() => {
@@ -662,6 +838,25 @@ function ProfileScreenInner() {
     },
   });
 
+  const usernameMutation = useMutation({
+    mutationFn: async (username: string) => {
+      const res = await apiRequest("PUT", "/api/users/me/username", { username });
+      const body = await res.json();
+      if (!res.ok) throw { status: res.status, ...body };
+      return body;
+    },
+    onSuccess: () => {
+      refreshUser();
+      setShowEditUsername(false);
+      setUsernameError("");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    onError: (e: any) => {
+      setUsernameError(e.message ?? "Failed to update username");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    },
+  });
+
   const sendRequestMutation = useMutation({
     mutationFn: async (userId: string) => {
       const res = await apiRequest("POST", "/api/friends/request", { userId });
@@ -721,20 +916,35 @@ function ProfileScreenInner() {
       ]}
       showsVerticalScrollIndicator={false}
     >
-      {/* ── Profile Header ────────────────────────────────────────────────── */}
-      <WalkthroughPulse stepId="profile-intro" style={{ borderRadius: 16 }}>
-      <View style={styles.profileHeader}>
+      {/* ── Profile Hero (centered) ──────────────────────────────────────── */}
+      <View style={styles.heroTopBar}>
         <Pressable
-          style={styles.avatarWrap}
+          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/notifications"); }}
+          style={styles.logoutBtn}
+        >
+          <Feather name="bell" size={18} color={C.textMuted} />
+        </Pressable>
+        <Pressable
+          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowSettings(true); }}
+          style={styles.logoutBtn}
+        >
+          <Feather name="settings" size={18} color={C.textMuted} />
+        </Pressable>
+      </View>
+
+      <WalkthroughPulse stepId="profile-intro" style={{ borderRadius: 16 }}>
+      <View style={styles.heroCentered}>
+        <Pressable
+          style={styles.heroAvatarWrap}
           onPress={handleChangeProfilePhoto}
           disabled={uploadingProfile}
           testID="change-photo-btn"
         >
           {user.photo_url ? (
-            <Image source={{ uri: user.photo_url }} style={styles.avatarPhoto} />
+            <Image source={{ uri: user.photo_url }} style={styles.heroAvatarPhoto} />
           ) : (
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{user.name?.charAt(0)?.toUpperCase() ?? "?"}</Text>
+            <View style={styles.heroAvatar}>
+              <Text style={styles.heroAvatarText}>{user.name?.charAt(0)?.toUpperCase() ?? "?"}</Text>
             </View>
           )}
           <View style={styles.cameraBadge}>
@@ -745,88 +955,236 @@ function ProfileScreenInner() {
           </View>
         </Pressable>
 
-        <View style={styles.profileInfo}>
+        <Pressable
+          onPress={() => {
+            setEditUsernameValue(user.username ?? "");
+            setUsernameError("");
+            setShowEditUsername(true);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          }}
+          hitSlop={8}
+        >
+          <Text style={styles.heroHandle}>
+            @{user.username || (user.email ?? "").split("@")[0] || "runner"}
+          </Text>
+        </Pressable>
+
+        <Pressable
+          style={styles.heroNameRow}
+          onPress={() => {
+            const changedAt = (user as any).name_changed_at;
+            if (changedAt) {
+              const daysSince = (Date.now() - new Date(changedAt).getTime()) / (1000 * 60 * 60 * 24);
+              if (daysSince < 30) setNameDaysRemaining(Math.ceil(30 - daysSince));
+              else setNameDaysRemaining(null);
+            } else {
+              setNameDaysRemaining(null);
+            }
+            setEditNameValue(user.name ?? "");
+            setNameError("");
+            setShowEditName(true);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          }}
+        >
+          <Text style={styles.heroName} numberOfLines={1}>{user.name ?? "User"}</Text>
+          <Feather name="edit-2" size={14} color={C.textMuted} />
+        </Pressable>
+
+        <View style={styles.heroRoleRow}>
+          <Feather name="user" size={11} color={C.primary} />
+          <Text style={[styles.roleText, { color: C.primary }]}>Runner</Text>
+        </View>
+
+        {(streakInfo?.current_streak_days ?? 0) > 0 && (
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, marginTop: 6 }}>
+            <Text style={{ fontSize: 13 }}>🔥</Text>
+            <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 12, color: "#FF6B35", letterSpacing: 0.5 }}>
+              {streakInfo!.current_streak_days} DAY STREAK
+            </Text>
+            {streakInfo!.at_risk && (
+              <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 10, color: C.textMuted, letterSpacing: 0.3 }}>
+                · AT RISK
+              </Text>
+            )}
+            {streakInfo!.longest_streak_days > streakInfo!.current_streak_days && (
+              <Text style={{ fontFamily: "Outfit_500Medium", fontSize: 10, color: C.textMuted }}>
+                · best {streakInfo!.longest_streak_days}
+              </Text>
+            )}
+          </View>
+        )}
+
+        <View style={styles.heroStatsRow}>
           <Pressable
-            style={styles.profileNameRow}
+            style={({ pressed }) => [styles.heroStatCol, { opacity: pressed ? 0.6 : 1 }]}
             onPress={() => {
-              const changedAt = (user as any).name_changed_at;
-              if (changedAt) {
-                const daysSince = (Date.now() - new Date(changedAt).getTime()) / (1000 * 60 * 60 * 24);
-                if (daysSince < 30) setNameDaysRemaining(Math.ceil(30 - daysSince));
-                else setNameDaysRemaining(null);
-              } else {
-                setNameDaysRemaining(null);
-              }
-              setEditNameValue(user.name ?? "");
-              setNameError("");
-              setShowEditName(true);
+              setHistoryActivityFilter(profileActivity);
+              setHistoryTypeFilter("all");
+              setShowSoloHistory(true);
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             }}
           >
-            <Text style={styles.profileName}>{user.name ?? "User"}</Text>
-            <Feather name="edit-2" size={13} color={C.textMuted} style={{ marginTop: 2 }} />
+            <Text style={styles.heroStatNum}>{actStats.count}</Text>
+            <Text style={styles.heroStatLabel}>
+              {profileActivity === "ride" ? "RIDES" : profileActivity === "walk" ? "WALKS" : "RUNS"}
+            </Text>
           </Pressable>
-          <Text style={styles.profileEmail}>{user.email}</Text>
-          <View style={styles.roleChip}>
-            <Feather name="user" size={11} color={C.primary} />
-            <Text style={[styles.roleText, { color: C.primary }]}>Runner</Text>
+          <View style={styles.heroStatDivider} />
+          <Pressable
+            style={({ pressed }) => [styles.heroStatCol, { opacity: pressed ? 0.6 : 1 }]}
+            onPress={() => { setShowFriendList(true); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+          >
+            <Text style={styles.heroStatNum}>{friendsList.length}</Text>
+            <Text style={styles.heroStatLabel}>FRIENDS</Text>
+            {incomingRequests.length > 0 && (
+              <View style={[styles.friendsQuickDot, { position: "absolute", top: -4, right: 8 }]}>
+                <Text style={styles.friendsQuickDotTxt}>{incomingRequests.length}</Text>
+              </View>
+            )}
+          </Pressable>
+          <View style={styles.heroStatDivider} />
+          <View style={styles.heroStatCol}>
+            <Text style={styles.heroStatNum}>{user.hosted_runs ?? 0}</Text>
+            <Text style={styles.heroStatLabel}>HOSTED</Text>
           </View>
-        </View>
-
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-          <Pressable
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/notifications"); }}
-            style={styles.logoutBtn}
-          >
-            <Feather name="bell" size={18} color={C.textMuted} />
-          </Pressable>
-          <Pressable
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowSettings(true); }}
-            style={styles.logoutBtn}
-          >
-            <Feather name="settings" size={18} color={C.textMuted} />
-          </Pressable>
-          <Pressable
-            onPress={async () => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              await logout();
-              router.replace("/(auth)/login");
-            }}
-            style={styles.logoutBtn}
-          >
-            <Feather name="log-out" size={18} color={C.textMuted} />
-          </Pressable>
         </View>
       </View>
       </WalkthroughPulse>
 
-      {/* ── Friends / Achievements Quick-Access Row ────────────────────────── */}
-      <View
-        style={styles.statsGrid}
-        onLayout={(e) => { achievementsAnchorY.current = e.nativeEvent.layout.y; }}
-      >
-        <WalkthroughPulse stepId="friends" style={{ flex: 1, borderRadius: 16 }}>
+      {/* ── This Year, So Far ────────────────────────────────────────────── */}
+      <View style={styles.yearCard}>
+        <View style={styles.yearCardHeader}>
+          <Text style={styles.yearCardLabel}>THIS YEAR, SO FAR</Text>
+          <Text style={styles.yearCardYear}>{new Date().getFullYear()}</Text>
+        </View>
+        <View style={styles.yearCardRow}>
+          <View style={styles.yearCardStat}>
+            <Text style={styles.yearCardStatNum}>{toDisplayDist(actStats.yearMiles, distUnit)}</Text>
+            <Text style={styles.yearCardStatLabel}>DISTANCE</Text>
+          </View>
+          <View style={styles.yearCardStat}>
+            <Text style={styles.yearCardStatNum}>
+              {actStats.avgPace != null
+                ? (profileActivity === "ride"
+                    ? toDisplaySpeed(actStats.avgPace, distUnit)
+                    : toDisplayPace(actStats.avgPace, distUnit))
+                : "—"}
+            </Text>
+            <Text style={styles.yearCardStatLabel}>
+              {profileActivity === "ride" ? "AVG SPEED" : "AVG PACE"}
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      {/* ── Activity bar chart (range selectable) ────────────────────────── */}
+      <View style={styles.barCard}>
+        <View style={styles.barCardHeader}>
           <Pressable
-            style={({ pressed }) => [styles.statCard, { opacity: pressed ? 0.8 : 1 }]}
-            onPress={() => { setShowFriendList(true); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+            style={styles.rangePickerBtn}
+            onPress={() => { setShowChartRangeMenu(true); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
           >
-            <Feather name="users" size={18} color={C.primary} />
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-              <Text style={styles.goalLabel}>
-                {"Friends: "}
-                <Text style={styles.editBtnText}>{friendsList.length}</Text>
-              </Text>
-              {incomingRequests.length > 0 && (
-                <View style={styles.friendsQuickDot}>
-                  <Text style={styles.friendsQuickDotTxt}>{incomingRequests.length}</Text>
+            <Text style={styles.yearCardLabel}>{chartData.label.toUpperCase()}</Text>
+            <Feather name="chevron-down" size={13} color={C.textMuted} />
+          </Pressable>
+          {chartData.streak > 0 && (
+            <Text style={styles.streakPill}>
+              {chartData.streak}{chartData.unit === "day" ? "D" : "W"} STREAK
+            </Text>
+          )}
+        </View>
+        {(() => {
+          const maxM = Math.max(1, ...chartData.buckets.map((b) => b.miles));
+          return (
+            <>
+              <View style={styles.barRow}>
+                {chartData.buckets.map((b, i) => {
+                  const h = Math.max(4, (b.miles / maxM) * 60);
+                  const isSel = selectedBarIdx === i;
+                  return (
+                    <Pressable
+                      key={i}
+                      onPress={() => {
+                        Haptics.selectionAsync();
+                        setSelectedBarIdx(isSel ? null : i);
+                      }}
+                      style={styles.barPressArea}
+                      hitSlop={{ top: 8, bottom: 8, left: 2, right: 2 }}
+                    >
+                      <View
+                        style={[
+                          styles.bar,
+                          {
+                            height: h,
+                            backgroundColor: b.miles > 0 ? (isSel ? C.primary : C.primary) : C.border,
+                            opacity: selectedBarIdx != null && !isSel ? 0.45 : 1,
+                          },
+                        ]}
+                      />
+                    </Pressable>
+                  );
+                })}
+              </View>
+              {selectedBarIdx != null && chartData.buckets[selectedBarIdx] && (
+                <View style={styles.barTooltip}>
+                  <Text style={styles.barTooltipLabel}>{chartData.bucketLabel(selectedBarIdx)}</Text>
+                  <View style={styles.barTooltipStats}>
+                    <Text style={styles.barTooltipStat}>
+                      {chartData.buckets[selectedBarIdx].count} {profileActivity === "ride" ? "rides" : profileActivity === "walk" ? "walks" : "runs"}
+                    </Text>
+                    <Text style={styles.barTooltipDot}>·</Text>
+                    <Text style={styles.barTooltipStat}>
+                      {toDisplayDist(chartData.buckets[selectedBarIdx].miles, distUnit)}
+                    </Text>
+                  </View>
                 </View>
               )}
-            </View>
-          </Pressable>
-        </WalkthroughPulse>
-        <WalkthroughPulse stepId="achievements" style={{ flex: 1, borderRadius: 16 }}>
+            </>
+          );
+        })()}
+      </View>
+
+      {/* ── Chart range picker modal ─────────────────────────────────────── */}
+      <Modal
+        visible={showChartRangeMenu}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowChartRangeMenu(false)}
+      >
+        <Pressable style={styles.rangeModalBackdrop} onPress={() => setShowChartRangeMenu(false)}>
+          <View style={styles.rangeModalCard}>
+            {([
+              { k: "1w",  label: "Last week" },
+              { k: "1m",  label: "Last month" },
+              { k: "12w", label: "Last 12 weeks" },
+              { k: "16w", label: "Last 16 weeks" },
+              { k: "6mo", label: "Last 6 months" },
+            ] as const).map((o) => {
+              const active = chartRange === o.k;
+              return (
+                <Pressable
+                  key={o.k}
+                  onPress={() => { setChartRange(o.k); setShowChartRangeMenu(false); Haptics.selectionAsync(); }}
+                  style={[styles.rangeModalRow, active && { backgroundColor: C.primaryMuted }]}
+                >
+                  <Text style={[styles.rangeModalRowTxt, active && { color: C.primary, fontFamily: "Outfit_700Bold" }]}>
+                    {o.label}
+                  </Text>
+                  {active && <Feather name="check" size={16} color={C.primary} />}
+                </Pressable>
+              );
+            })}
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* ── Achievements Quick-Access ─────────────────────────────────────── */}
+      <View
+        onLayout={(e) => { achievementsAnchorY.current = e.nativeEvent.layout.y; }}
+      >
+        <WalkthroughPulse stepId="achievements" style={{ borderRadius: 16 }}>
           <Pressable
-            style={({ pressed }) => [styles.statCard, { opacity: pressed ? 0.8 : 1 }]}
+            style={({ pressed }) => [styles.statCard, { opacity: pressed ? 0.8 : 1, width: "100%" }]}
             onPress={() => { setShowAchievements((prev) => !prev); setSelectedAchievement(null); setAchFilter("All"); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
           >
             <Feather name="award" size={18} color={C.primary} />
@@ -958,8 +1316,78 @@ function ProfileScreenInner() {
           </View>
         )}
 
+      {/* ── Personal Bests ─────────────────────────────────────────────── */}
+      {pbRankings.length > 0 && (
+        <View style={[styles.section, { marginBottom: 14 }]}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Personal Bests</Text>
+          </View>
+          {pbRankings.map((cat) => (
+            <View
+              key={cat.label}
+              style={{
+                backgroundColor: C.card,
+                borderWidth: 1,
+                borderColor: C.border,
+                borderRadius: 14,
+                padding: 12,
+                marginBottom: 8,
+              }}
+            >
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 14, color: C.text }}>{cat.label}</Text>
+                <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.primary }}>
+                  Best: {cat.runs[0].pace_min_per_mile
+                    ? (profileActivity === "ride"
+                        ? toDisplaySpeed(cat.runs[0].pace_min_per_mile, distUnit)
+                        : toDisplayPace(cat.runs[0].pace_min_per_mile, distUnit))
+                    : "—"}
+                </Text>
+              </View>
+              {cat.runs.slice(0, 3).map((run, i) => (
+                <View
+                  key={run.id}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    paddingVertical: 4,
+                    gap: 10,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 22,
+                      height: 22,
+                      borderRadius: 11,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      backgroundColor: i === 0 ? "#FFD70033" : i === 1 ? "#C0C0C033" : "#CD7F3233",
+                    }}
+                  >
+                    <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 11, color: C.text }}>{i + 1}</Text>
+                  </View>
+                  <Text style={{ flex: 1, fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary }}>
+                    {formatDisplayDate(run.date)}
+                  </Text>
+                  <Text style={{ fontFamily: "Outfit_500Medium", fontSize: 12, color: C.text, minWidth: 60, textAlign: "right" }}>
+                    {toDisplayDist(run.distance_miles, distUnit)}
+                  </Text>
+                  <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 12, color: C.primary, minWidth: 72, textAlign: "right" }}>
+                    {run.pace_min_per_mile
+                      ? (profileActivity === "ride"
+                          ? toDisplaySpeed(run.pace_min_per_mile, distUnit)
+                          : toDisplayPace(run.pace_min_per_mile, distUnit))
+                      : "—"}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ))}
+        </View>
+      )}
+
       {/* ── My Stats ──────────────────────────────────────────────────────── */}
-      <View style={styles.section}>
+      <View style={[styles.section, { marginBottom: 14 }]}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>My Stats</Text>
         </View>
@@ -989,57 +1417,50 @@ function ProfileScreenInner() {
         </View>
       </View>
 
-      {/* ── Saved Routes shortcut ─────────────────────────────────────────── */}
+      {/* ── Saved Routes + View Past Activity (side-by-side) ───────────────── */}
       {(() => {
-        const savedCount = profileSavedPaths.filter((p) => (p.activity_type ?? "run") === profileActivity).length;
+        const savedCount = profileSavedPaths.length;
         return (
-          <Pressable
-            style={({ pressed }) => [styles.viewPastBtn, { opacity: pressed ? 0.8 : 1, borderColor: "#FF6B3544" }]}
-            onPress={() => {
-              setShowProfileSavedPaths(true);
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            }}
-          >
-            <Feather name="bookmark" size={16} color="#FF6B35" />
-            <Text style={[styles.viewPastBtnTxt, { color: "#FF6B35" }]}>
-              {profileActivity === "ride" ? "Saved Ride Routes" : profileActivity === "walk" ? "Saved Walk Routes" : "Saved Run Routes"}
-            </Text>
-            {savedCount > 0 && (
-              <View style={[styles.histEventBadge, { backgroundColor: "#FF6B3522", marginRight: 4 }]}>
-                <Text style={[styles.histEventBadgeTxt, { color: "#FF6B35" }]}>
-                  {savedCount}
-                </Text>
-              </View>
-            )}
-            <Feather name="chevron-right" size={16} color="#FF6B35" />
-          </Pressable>
+          <View style={[styles.statsGrid, { marginBottom: 14 }]}>
+            <Pressable
+              style={({ pressed }) => [styles.statCard, { opacity: pressed ? 0.8 : 1, borderColor: "#FF6B3544", flexDirection: "row" }]}
+              onPress={() => { setShowProfileSavedPaths(true); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+            >
+              <Feather name="bookmark" size={16} color="#FF6B35" />
+              <Text style={[styles.goalLabel, { color: "#FF6B35", flexShrink: 1 }]} numberOfLines={1}>
+                Saved Routes
+              </Text>
+              {savedCount > 0 && (
+                <View style={[styles.histEventBadge, { backgroundColor: "#FF6B3522" }]}>
+                  <Text style={[styles.histEventBadgeTxt, { color: "#FF6B35" }]}>{savedCount}</Text>
+                </View>
+              )}
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.statCard, { opacity: pressed ? 0.8 : 1, flexDirection: "row" }]}
+              onPress={() => {
+                setHistoryActivityFilter(profileActivity);
+                setHistoryTypeFilter("all");
+                setShowSoloHistory(true);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+            >
+              <Ionicons name={profileActivity === "ride" ? "bicycle-outline" : profileActivity === "walk" ? "footsteps-outline" : "walk-outline"} size={16} color={C.primary} />
+              <Text style={[styles.goalLabel, { flexShrink: 1 }]} numberOfLines={1}>
+                {profileActivity === "ride" ? "Past Rides" : profileActivity === "walk" ? "Past Walks" : "Past Runs"}
+              </Text>
+            </Pressable>
+          </View>
         );
       })()}
 
-      {/* ── View Past Runs / Rides ────────────────────────────────────────── */}
-      <Pressable
-        style={({ pressed }) => [styles.viewPastBtn, { opacity: pressed ? 0.8 : 1 }]}
-        onPress={() => {
-          setHistoryActivityFilter(profileActivity);
-          setHistoryTypeFilter("all");
-          setShowSoloHistory(true);
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        }}
-      >
-        <Ionicons name={profileActivity === "ride" ? "bicycle-outline" : profileActivity === "walk" ? "footsteps-outline" : "walk-outline"} size={16} color={C.primary} />
-        <Text style={styles.viewPastBtnTxt}>
-          {profileActivity === "ride" ? "View Past Rides" : profileActivity === "walk" ? "View Past Walks" : "View Past Runs"}
-        </Text>
-        <Feather name="chevron-right" size={16} color={C.primary} />
-      </Pressable>
-
       {/* ── Activity Toggle ────────────────────────────────────────────────── */}
-      <View style={[styles.actToggleRow, { marginBottom: 8 }]}>
+      <View style={[styles.actToggleRow, { marginBottom: 14 }]}>
         <Pressable
           style={[styles.actToggleBtn, profileActivity === "run" && styles.actToggleBtnActive]}
           onPress={() => { setProfileActivity("run"); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
         >
-          <Ionicons name="body" size={14} color={profileActivity === "run" ? C.primary : C.textMuted} />
+          <MaterialCommunityIcons name="run-fast" size={16} color={profileActivity === "run" ? C.primary : C.textMuted} />
           <Text style={[styles.actToggleTxt, profileActivity === "run" && styles.actToggleTxtActive]}>Runs</Text>
         </Pressable>
         <Pressable
@@ -1325,6 +1746,64 @@ function ProfileScreenInner() {
           >
             {nameMutation.isPending ? <ActivityIndicator color={C.bg} /> : <Text style={styles.modalBtnText}>Save Name</Text>}
           </Pressable>
+        </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── Change Username ─────────────────────────────────────────────── */}
+      <Modal visible={showEditUsername} transparent animationType="slide" onRequestClose={() => setShowEditUsername(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+        <Pressable style={styles.modalOverlay} onPress={() => setShowEditUsername(false)} />
+        <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 24 }]}>
+          <Text style={styles.modalTitle}>Change Username</Text>
+          {(() => {
+            const used = (user as any).username_change_count ?? 0;
+            const remaining = Math.max(0, 2 - used);
+            const locked = remaining === 0;
+            return (
+              <>
+                <View style={[styles.nameLockBanner, locked ? undefined : { backgroundColor: C.primaryMuted, borderColor: C.primary + "33" } as any]}>
+                  <Feather name={locked ? "lock" : "info"} size={14} color={locked ? C.orange : C.primary} />
+                  <Text style={[styles.nameLockTxt, !locked && { color: C.primary }]}>
+                    {locked
+                      ? "You've used all 2 username changes."
+                      : `You have ${remaining} username change${remaining === 1 ? "" : "s"} left. You can only change your username twice.`}
+                  </Text>
+                </View>
+                <View style={styles.modalField}>
+                  <Text style={styles.modalLabel}>Username</Text>
+                  <TextInput
+                    style={[styles.modalInput, locked && { opacity: 0.5 }]}
+                    value={editUsernameValue}
+                    onChangeText={(t) => { setEditUsernameValue(t.replace(/[^a-zA-Z0-9_]/g, "").toLowerCase()); setUsernameError(""); }}
+                    placeholder="yourname"
+                    placeholderTextColor={C.textMuted}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    maxLength={16}
+                    editable={!locked}
+                  />
+                  {usernameError !== "" && <Text style={styles.nameErrorTxt}>{usernameError}</Text>}
+                  <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 11, color: C.textMuted, marginTop: 4 }}>
+                    3–16 characters. Letters, numbers, underscores.
+                  </Text>
+                </View>
+                <Pressable
+                  style={({ pressed }) => [styles.modalBtn, (locked || usernameMutation.isPending) && { opacity: 0.5 }, { opacity: pressed && !locked ? 0.8 : undefined }]}
+                  onPress={() => {
+                    if (locked) return;
+                    const v = editUsernameValue.trim();
+                    if (v.length < 3) { setUsernameError("At least 3 characters"); return; }
+                    if (v === (user.username ?? "")) { setUsernameError("That's already your username"); return; }
+                    usernameMutation.mutate(v);
+                  }}
+                  disabled={locked || usernameMutation.isPending}
+                >
+                  {usernameMutation.isPending ? <ActivityIndicator color={C.bg} /> : <Text style={styles.modalBtnText}>Save Username</Text>}
+                </Pressable>
+              </>
+            );
+          })()}
         </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -1941,7 +2420,8 @@ function ProfileScreenInner() {
 
       {/* ── Past Activity History Modal ─────────────────────────────────────── */}
       <Modal visible={showSoloHistory} transparent animationType="slide" onRequestClose={() => setShowSoloHistory(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setShowSoloHistory(false)} />
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" }}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowSoloHistory(false)} />
         <View style={[styles.modalSheet, styles.friendModalSheet, { paddingBottom: insets.bottom + 16, paddingHorizontal: 16, height: "75%", flexDirection: "column" }]}>
           {/* Header */}
           <View style={styles.modalTitleRow}>
@@ -2215,6 +2695,7 @@ function ProfileScreenInner() {
               </ScrollView>
             );
           })()}
+        </View>
         </View>
       </Modal>
 
@@ -2566,19 +3047,44 @@ function ProfileScreenInner() {
       <Modal visible={showProfileSavedPaths} transparent animationType="slide" onRequestClose={() => setShowProfileSavedPaths(false)}>
         <View style={{ flex: 1, backgroundColor: "#00000088", justifyContent: "flex-end" }}>
           <View style={{ backgroundColor: C.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: insets.bottom + 24, maxHeight: "80%" }}>
-            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                 <Feather name="bookmark" size={18} color="#FF6B35" />
                 <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 18, color: C.text }}>
-                  {profileActivity === "ride" ? "Saved Ride Routes" : profileActivity === "walk" ? "Saved Walk Routes" : "Saved Run Routes"}
+                  Saved Routes
                 </Text>
               </View>
               <Pressable onPress={() => setShowProfileSavedPaths(false)} hitSlop={12}>
                 <Feather name="x" size={22} color={C.textSecondary} />
               </Pressable>
             </View>
+            {/* Activity filter toggle */}
+            <View style={[styles.actToggleRow, { marginBottom: 14 }]}>
+              {(["all", "run", "ride", "walk"] as const).map((k) => (
+                <Pressable
+                  key={k}
+                  style={[styles.actToggleBtn, savedRoutesFilter === k && styles.actToggleBtnActive]}
+                  onPress={() => { setSavedRoutesFilter(k); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+                >
+                  <Text style={[styles.actToggleTxt, savedRoutesFilter === k && styles.actToggleTxtActive]}>
+                    {k === "all" ? "All" : k === "run" ? "Runs" : k === "ride" ? "Rides" : "Walks"}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
             <ScrollView showsVerticalScrollIndicator={false}>
-              {profileSavedPaths.filter((p) => (p.activity_type ?? "run") === profileActivity).length === 0 ? (
+              {(() => {
+                const matchesFilter = (p: any) => {
+                  if (savedRoutesFilter === "all") return true;
+                  const act = p.activity_type ?? "run";
+                  // Runs and walks share a pool — show the same set for both
+                  if (savedRoutesFilter === "run" || savedRoutesFilter === "walk") {
+                    return act === "run" || act === "walk";
+                  }
+                  return act === savedRoutesFilter;
+                };
+                const visiblePaths = profileSavedPaths.filter(matchesFilter);
+                return visiblePaths.length === 0 ? (
                 <View style={{ alignItems: "center", paddingVertical: 32 }}>
                   <Feather name="map" size={32} color={C.textMuted} />
                   <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 15, color: C.textMuted, marginTop: 12, textAlign: "center" }}>
@@ -2586,8 +3092,7 @@ function ProfileScreenInner() {
                   </Text>
                 </View>
               ) : (
-                profileSavedPaths
-                  .filter((p) => (p.activity_type ?? "run") === profileActivity)
+                visiblePaths
                   .map((path) => {
                     const coords = Array.isArray(path.route_path) ? path.route_path : [];
                     const isExpanded = expandedPathId === path.id;
@@ -2609,7 +3114,7 @@ function ProfileScreenInner() {
                         onPress={() => {
                           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                           setExpandedPathId(isExpanded ? null : path.id);
-                          setExpandedPathActivity(profileActivity as "run" | "ride" | "walk");
+                          setExpandedPathActivity((path.activity_type ?? "run") as "run" | "ride" | "walk");
                         }}
                         style={{ backgroundColor: C.card, borderRadius: 14, marginBottom: 10, borderWidth: 1, borderColor: isExpanded ? C.primary + "55" : C.border, overflow: "hidden" }}
                       >
@@ -2709,7 +3214,7 @@ function ProfileScreenInner() {
                                   setTimeout(() => router.push("/(tabs)/solo"), 100);
                                 }}
                               >
-                                <Ionicons name="body" size={18} color={C.primary} />
+                                <MaterialCommunityIcons name="run-fast" size={20} color={C.primary} />
                                 <Text style={{ fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.text }}>Solo</Text>
                               </Pressable>
                               <Pressable
@@ -2729,7 +3234,8 @@ function ProfileScreenInner() {
                       </Pressable>
                     );
                   })
-              )}
+              );
+              })()}
             </ScrollView>
           </View>
         </View>
@@ -2751,6 +3257,88 @@ function makeStyles(C: ReturnType<typeof import("@/contexts/ThemeContext").useTh
   container: { flex: 1, backgroundColor: C.bg },
   content: { paddingHorizontal: 20, gap: 24 },
   profileHeader: { flexDirection: "row", alignItems: "center", gap: 14 },
+
+  heroTopBar: { flexDirection: "row", justifyContent: "flex-end", gap: 4, marginBottom: 4 },
+  heroCentered: { alignItems: "center", gap: 6, paddingTop: 4, paddingBottom: 14 },
+  heroAvatarWrap: { position: "relative", marginBottom: 10 },
+  heroAvatar: {
+    width: 112, height: 112, borderRadius: 56,
+    backgroundColor: C.primaryMuted, borderWidth: 3, borderColor: C.primary,
+    alignItems: "center", justifyContent: "center",
+  },
+  heroAvatarPhoto: {
+    width: 112, height: 112, borderRadius: 56,
+    borderWidth: 3, borderColor: C.primary,
+  },
+  heroAvatarText: { fontFamily: "Outfit_700Bold", fontSize: 44, color: C.primary },
+  heroHandle: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted, fontStyle: "italic" },
+  heroNameRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 2 },
+  heroName: { fontFamily: "Outfit_700Bold", fontSize: 28, color: C.text, textAlign: "center" },
+  heroRoleRow: {
+    flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4,
+    backgroundColor: C.card, borderRadius: 6,
+    paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: C.border,
+  },
+  heroStatsRow: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    marginTop: 16, paddingVertical: 10, alignSelf: "stretch",
+  },
+  heroStatCol: { flex: 1, alignItems: "center", gap: 2 },
+  heroStatNum: { fontFamily: "Outfit_700Bold", fontSize: 22, color: C.text },
+  heroStatLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.textMuted, letterSpacing: 0.8 },
+  heroStatDivider: { width: 1, height: 32, backgroundColor: C.border },
+
+  yearCard: {
+    backgroundColor: C.card, borderRadius: 16, padding: 18,
+    borderWidth: 1, borderColor: C.border,
+  },
+  yearCardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
+  yearCardLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.textMuted, letterSpacing: 0.8 },
+  yearCardYear: { fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.textMuted, letterSpacing: 0.8 },
+  yearCardRow: { flexDirection: "row", gap: 16 },
+  yearCardStat: { flex: 1, gap: 4 },
+  yearCardStatNum: { fontFamily: "Outfit_700Bold", fontSize: 26, color: C.text },
+  yearCardStatLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.textMuted, letterSpacing: 0.8 },
+
+  barCard: {
+    backgroundColor: C.card, borderRadius: 16, padding: 18,
+    borderWidth: 1, borderColor: C.border,
+  },
+  barCardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
+  streakPill: { fontFamily: "Outfit_700Bold", fontSize: 11, color: C.primary, letterSpacing: 0.5 },
+  barRow: { flexDirection: "row", alignItems: "flex-end", gap: 4, height: 64 },
+  barPressArea: { flex: 1, justifyContent: "flex-end", alignItems: "stretch", height: 64 },
+  bar: { width: "100%", borderRadius: 3, minHeight: 4 },
+  rangePickerBtn: { flexDirection: "row", alignItems: "center", gap: 4 },
+  rangeModalBackdrop: {
+    flex: 1, backgroundColor: "rgba(0,0,0,0.5)",
+    alignItems: "center", justifyContent: "center",
+  },
+  rangeModalCard: {
+    width: "80%",
+    backgroundColor: C.card,
+    borderRadius: 16, borderWidth: 1, borderColor: C.border,
+    paddingVertical: 6,
+  },
+  rangeModalRow: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingVertical: 12, paddingHorizontal: 18,
+  },
+  rangeModalRowTxt: { fontFamily: "Outfit_500Medium", fontSize: 15, color: C.text },
+  barTooltip: {
+    marginTop: 14,
+    paddingVertical: 10, paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: C.surface,
+    borderWidth: 1, borderColor: C.border,
+    alignItems: "center", gap: 2,
+  },
+  barTooltipLabel: {
+    fontFamily: "Outfit_600SemiBold", fontSize: 11, color: C.textMuted, letterSpacing: 0.5,
+  },
+  barTooltipStats: { flexDirection: "row", alignItems: "center", gap: 6 },
+  barTooltipStat: { fontFamily: "Outfit_700Bold", fontSize: 14, color: C.text },
+  barTooltipDot: { fontFamily: "Outfit_700Bold", fontSize: 14, color: C.textMuted },
 
   actToggleRow: { flexDirection: "row", backgroundColor: C.surface, borderRadius: 10, padding: 3, gap: 3, borderWidth: 1, borderColor: C.border },
   actToggleBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: "transparent" },

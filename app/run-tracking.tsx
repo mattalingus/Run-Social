@@ -578,6 +578,8 @@ export default function RunTrackingScreen() {
   const playCoachPreview = async (voice: "nova" | "onyx" | "shimmer" | "echo") => {
     if (Platform.OS === "web") return;
     const token = ++previewTokenRef.current;
+    const text = PREVIEW_PHRASES[voice];
+    // Stop any in-flight preview
     try {
       if (previewSoundRef.current) {
         await previewSoundRef.current.stopAsync().catch(() => {});
@@ -586,35 +588,68 @@ export default function RunTrackingScreen() {
       }
     } catch (_) {}
     setPreviewingVoice(voice);
+
+    // Restore audio mode to MixWithOthers so background music resumes after preview
+    const restore = async () => {
+      try {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: true,
+          interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
+          shouldDuckAndroid: false,
+          playThroughEarpieceAndroid: false,
+        });
+      } catch (_) {}
+    };
+
     try {
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
         interruptionModeIOS: InterruptionModeIOS.DuckOthers,
         playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
+        staysActiveInBackground: true,
         interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
         shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
       });
-      const res = await apiRequest("POST", "/api/tts", { text: PREVIEW_PHRASES[voice], voice });
-      if (!res.ok || previewTokenRef.current !== token) { setPreviewingVoice(null); return; }
+    } catch (_) {}
+
+    // Try OpenAI TTS first
+    try {
+      const res = await apiRequest("POST", "/api/tts", { text, voice });
+      if (!res.ok) throw new Error(`tts ${res.status}`);
+      if (previewTokenRef.current !== token) { setPreviewingVoice(null); await restore(); return; }
       const arrayBuffer = await res.arrayBuffer();
       const base64 = Buffer.from(arrayBuffer).toString("base64");
       const filename = `${FileSystem.cacheDirectory}coach_preview_${voice}.mp3`;
       await FileSystem.writeAsStringAsync(filename, base64, { encoding: FileSystem.EncodingType.Base64 });
-      if (previewTokenRef.current !== token) { setPreviewingVoice(null); return; }
-      const { sound } = await Audio.Sound.createAsync({ uri: filename });
+      if (previewTokenRef.current !== token) { setPreviewingVoice(null); await restore(); return; }
+      const { sound } = await Audio.Sound.createAsync({ uri: filename }, { shouldPlay: true, volume: 1.0 });
       previewSoundRef.current = sound;
       sound.setOnPlaybackStatusUpdate((status: any) => {
-        if (status.didJustFinish) {
+        if (status?.didJustFinish) {
           setPreviewingVoice(null);
           sound.unloadAsync().catch(() => {});
           if (previewSoundRef.current === sound) previewSoundRef.current = null;
+          restore();
         }
       });
-      await sound.playAsync();
       return;
-    } catch (_) {}
-    setPreviewingVoice(null);
+    } catch (err) {
+      // TTS failed — fall back to on-device speech so user still hears something
+      try {
+        Speech.stop();
+      } catch (_) {}
+      Speech.speak(text, {
+        rate: 0.95,
+        onDone: () => { setPreviewingVoice(null); restore(); },
+        onError: () => { setPreviewingVoice(null); restore(); },
+        onStopped: () => { setPreviewingVoice(null); restore(); },
+      });
+      return;
+    }
   };
 
   useEffect(() => {
@@ -670,7 +705,7 @@ export default function RunTrackingScreen() {
     const text = pickRideCoachPhrase(triggerType, value, paceMinPerMile, totalSeconds);
     try {
       const res = await apiRequest("POST", "/api/tts", { text, voice: coachVoiceRef.current });
-      if (!res.ok) return;
+      if (!res.ok) throw new Error(`tts ${res.status}`);
       const arrayBuffer = await res.arrayBuffer();
       const base64 = Buffer.from(arrayBuffer).toString("base64");
       const filename = `${FileSystem.cacheDirectory}ride_coach_${triggerType}_${value}.mp3`;
@@ -690,8 +725,14 @@ export default function RunTrackingScreen() {
       } finally {
         sound.unloadAsync().catch(() => {});
       }
-      await ensureAudioMode(false);
-    } catch {}
+    } catch {
+      // TTS failed — on-device speech fallback while session still ducked
+      await new Promise<void>((resolve) => {
+        Speech.speak(text, { rate: 0.95, onDone: resolve, onError: resolve });
+      });
+    }
+    // Always restore audio mode so background music resumes even on error paths
+    await ensureAudioMode(false);
   }, [ensureAudioMode]);
 
   const announcePace = useCallback(async (distance: number, totalSeconds: number) => {
@@ -807,6 +848,32 @@ export default function RunTrackingScreen() {
   }, [phase]);
 
   useEffect(() => { elapsedRef.current = elapsed; }, [elapsed]);
+
+  // ─── Live Activity heartbeat ──────────────────────────────────────────────
+  // Push an update to the iOS Live Activity every 2s while active so the
+  // lock-screen widget's time doesn't appear frozen between GPS fixes.
+  // The native redesign uses SwiftUI's self-ticking .timer view, but this
+  // heartbeat is needed for the currently-shipped widget binary (which
+  // displays whatever elapsedSeconds was last pushed).
+  useEffect(() => {
+    if (Platform.OS !== "ios") return;
+    if (phase !== "active") return;
+    if (!liveActivityStartedRef.current) return;
+    const id = setInterval(() => {
+      const paceNum = totalDistRef.current > 0.01
+        ? elapsedRef.current / 60 / totalDistRef.current
+        : 0;
+      LiveActivity.update({
+        elapsedSeconds: elapsedRef.current,
+        distanceMiles: totalDistRef.current,
+        paceMinPerMile: paceNum,
+        activityType: (activityFilter ?? "run") as "run" | "ride" | "walk",
+        isPaused: false,
+        distanceUnit: distUnit === "km" ? "km" : "mi",
+      });
+    }, 2000);
+    return () => clearInterval(id);
+  }, [phase, activityFilter, distUnit]);
 
 
   // ─── Periodic autosave (crash recovery) ───────────────────────────────────
@@ -1004,19 +1071,32 @@ export default function RunTrackingScreen() {
             prevSmoothedAltRef.current = smoothed;
           } else {
             const stepDelta = smoothed - (prevSmoothedAltRef.current ?? lastSmoothedAltRef.current);
+            // Movement gate: barometric pressure drifts with weather, and even at
+            // rest produces slow consistent rises that would satisfy a streak +
+            // rise filter. Only accumulate gain when the user is actually moving
+            // (speed > 0.5 m/s ≈ 1.1 mph). When at rest, hold the streak counter
+            // steady — don't increment, don't reset — so a brief stop mid-climb
+            // doesn't lose the in-progress rise.
+            const isMoving = speed != null && speed > 0.5;
             if (stepDelta > 0) {
-              elevConsecutiveUpRef.current += 1;
-              const totalRise = smoothed - lastSmoothedAltRef.current;
-              // Require ≥ 5 consecutive upward readings AND ≥ 3.0 m total rise
-              if (elevConsecutiveUpRef.current >= 5 && totalRise >= 3.0) {
-                elevationGainRef.current += totalRise * 3.28084;
-                lastSmoothedAltRef.current = smoothed;
+              if (isMoving) {
+                elevConsecutiveUpRef.current += 1;
+                const totalRise = smoothed - lastSmoothedAltRef.current;
+                // Require ≥ 8 consecutive upward readings (8s of climbing) AND
+                // ≥ 5.0 m (~16 ft) total rise. Weather pressure drift over a 30-min
+                // run is typically ≤ 0.5 hPa = ~4 m, so 5 m kicks it out.
+                if (elevConsecutiveUpRef.current >= 8 && totalRise >= 5.0) {
+                  elevationGainRef.current += totalRise * 3.28084;
+                  lastSmoothedAltRef.current = smoothed;
+                }
               }
             } else {
-              // Hysteresis: only reset streak and advance baseline if descent > 0.5 m
-              if (stepDelta < -0.5) {
+              // Hysteresis: reset streak and advance baseline on descent > 1.0 m.
+              // Tightened from 0.5 m → 1.0 m to avoid the streak prematurely
+              // breaking on small noise-level dips during a real climb.
+              if (stepDelta < -1.0) {
                 elevConsecutiveUpRef.current = 0;
-                if (smoothed < lastSmoothedAltRef.current - 0.5) {
+                if (smoothed < lastSmoothedAltRef.current - 1.0) {
                   lastSmoothedAltRef.current = smoothed;
                 }
               }
@@ -1085,7 +1165,11 @@ export default function RunTrackingScreen() {
         latitude,
         longitude
       );
-      if (d >= 0 && d < MAX_STEP_MILES) {
+      // T2.18: GPS jitter floor. iPhone GPS routinely produces 1–3m wobble when
+      // the user is stationary, which over a 30-min run accumulates to a
+      // phantom ~10 meters. Anything under 3m (0.00186 mi) is treated as noise.
+      const MIN_STEP_MILES = 3 / 1609.344;
+      if (d >= MIN_STEP_MILES && d < MAX_STEP_MILES) {
         totalDistRef.current += d;
         setDisplayDist(totalDistRef.current);
 
@@ -1144,6 +1228,7 @@ export default function RunTrackingScreen() {
         ? elapsedRef.current / 60 / totalDistRef.current
         : 0;
       const actType = (activityFilter ?? "run") as "run" | "ride" | "walk";
+      const laUnit = distUnit === "km" ? "km" : "mi";
       if (!liveActivityStartedRef.current) {
         liveActivityStartedRef.current = true;
         LiveActivity.start({
@@ -1151,6 +1236,8 @@ export default function RunTrackingScreen() {
           distanceMiles: totalDistRef.current,
           paceMinPerMile: paceNum,
           activityType: actType,
+          isPaused: false,
+          distanceUnit: laUnit,
         });
         if (Platform.OS === "android") {
           AndroidLiveNotification.start({
@@ -1167,6 +1254,8 @@ export default function RunTrackingScreen() {
           distanceMiles: totalDistRef.current,
           paceMinPerMile: paceNum,
           activityType: actType,
+          isPaused: false,
+          distanceUnit: laUnit,
         });
         if (Platform.OS === "android") {
           AndroidLiveNotification.update({
@@ -1317,7 +1406,25 @@ export default function RunTrackingScreen() {
           return;
         }
         foregroundOnlyRef.current = true;
+        // Foreground-only location means iOS suspends our JS as soon as the
+        // screen locks or the app backgrounds, so milestone callbacks never
+        // fire and the audio coach goes silent until the user reopens the app.
+        // Tell them once, with the actionable fix.
+        if (coachEnabledRef.current) {
+          Alert.alert(
+            "Audio coach needs Always-On location",
+            "Your location is set to 'While Using the App'. iOS pauses PaceUp the moment your screen locks, so mile announcements won't play in your headphones until you unlock.\n\nTo fix: Settings → PaceUp → Location → Always.",
+            [{ text: "Got it" }]
+          );
+        }
       }
+    }
+    // Pre-warm the audio session at run start so iOS keeps the app alive in
+    // background under the "audio" UIBackgroundMode. Without this, the audio
+    // session is only established the first time announcePace runs — which
+    // for a backgrounded foreground-only-location user, never happens.
+    if (Platform.OS !== "web" && coachEnabledRef.current) {
+      try { await ensureAudioMode(false); } catch {}
     }
     lastCoordRef.current = null;
     lastCoordTimestampRef.current = null;
@@ -1418,6 +1525,19 @@ export default function RunTrackingScreen() {
   function handlePause() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setPhase("paused");
+    if (Platform.OS !== "web" && liveActivityStartedRef.current) {
+      const paceNum = totalDistRef.current > 0.01
+        ? elapsedRef.current / 60 / totalDistRef.current
+        : 0;
+      LiveActivity.update({
+        elapsedSeconds: elapsedRef.current,
+        distanceMiles: totalDistRef.current,
+        paceMinPerMile: paceNum,
+        activityType: (activityFilter ?? "run") as "run" | "ride" | "walk",
+        isPaused: true,
+        distanceUnit: distUnit === "km" ? "km" : "mi",
+      });
+    }
   }
 
   function handleResume() {
@@ -1425,6 +1545,22 @@ export default function RunTrackingScreen() {
     lastCoordRef.current = null;
     lastCoordTimestampRef.current = null;
     setPhase("active");
+    if (Platform.OS !== "web" && liveActivityStartedRef.current) {
+      const paceNum = totalDistRef.current > 0.01
+        ? elapsedRef.current / 60 / totalDistRef.current
+        : 0;
+      LiveActivity.update({
+        elapsedSeconds: elapsedRef.current,
+        distanceMiles: totalDistRef.current,
+        paceMinPerMile: paceNum,
+        activityType: (activityFilter ?? "run") as "run" | "ride" | "walk",
+        isPaused: false,
+        // startedAt omitted → bridge recomputes as now - elapsedSeconds,
+        // which shifts the timer anchor forward by the exact pause duration
+        // so the live ticker resumes from the correct value.
+        distanceUnit: distUnit === "km" ? "km" : "mi",
+      });
+    }
   }
 
   function doFinish() {
@@ -1446,6 +1582,7 @@ export default function RunTrackingScreen() {
       distanceMiles: totalDistRef.current,
       paceMinPerMile: finalPaceNum,
       activityType: activityFilter as "run" | "ride" | "walk",
+      distanceUnit: distUnit === "km" ? "km" : "mi",
     });
     if (Platform.OS === "android") {
       AndroidLiveNotification.end({
@@ -1709,6 +1846,25 @@ export default function RunTrackingScreen() {
         }
       }
     }
+    // All retries failed. Queue the payload to AsyncStorage so the run is NEVER
+    // lost — the queue is flushed on every successful apiRequest and on app
+    // foreground. User gets a friendly message instead of a data-loss error.
+    try {
+      const { queuePendingRun } = require("@/lib/pendingRuns");
+      await queuePendingRun(payload as unknown as Record<string, unknown>);
+      if (user) {
+        await AsyncStorage.setItem(`paceup_saved_draft_${user.id}`, draftIdRef.current);
+        await AsyncStorage.removeItem(`paceup_draft_run_${user.id}`).catch(() => {});
+      }
+      savingGuardRef.current = false;
+      setSaving(false);
+      Alert.alert(
+        "Saved Offline",
+        "We couldn't reach the server, but your run is safe on this device and will sync automatically the next time you're back online.",
+      );
+      setTimeout(() => router.replace("/(tabs)/solo" as any), 300);
+      return;
+    } catch (_) {}
     savingGuardRef.current = false;
     setSaving(false);
     Alert.alert("Save Failed", lastErr?.message ?? "Could not save your activity. Your data has been preserved — try again.");

@@ -76,8 +76,16 @@ export async function sendPushNotification(
   const valid = tokenList.filter((t) => t && t.startsWith("ExponentPushToken["));
   if (!valid.length) return;
 
+  // Build all chunks up front, fire them at Expo in parallel. Sequential
+  // awaits used to mean a 200-recipient send took 2 round-trips × ~500ms =
+  // ~1s blocking the request that triggered it. With Promise.all the same
+  // 200 fan out in a single round-trip's worth of latency.
+  const chunks: string[][] = [];
   for (let i = 0; i < valid.length; i += BATCH_SIZE) {
-    const chunk = valid.slice(i, i + BATCH_SIZE);
+    chunks.push(valid.slice(i, i + BATCH_SIZE));
+  }
+
+  await Promise.all(chunks.map(async (chunk) => {
     const messages: PushMessage[] = chunk.map((to) => ({
       to,
       title,
@@ -116,7 +124,7 @@ export async function sendPushNotification(
     } catch (err) {
       console.error("[push] Failed to send notification batch:", err);
     }
-  }
+  }));
 }
 
 export type NotifType = "run_reminders" | "crew_activity" | "weekly_summary" | "friend_requests" | "direct_messages";

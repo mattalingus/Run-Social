@@ -45,6 +45,52 @@ export function unitLabel(unit: DistanceUnit): string {
   return unit === "km" ? "km" : "mi";
 }
 
+/**
+ * Common race distances (in miles). If a planned/goal distance lands within
+ * tolerance of one of these, it should render as the race label (e.g. "5K",
+ * "Half Marathon") instead of a raw number.
+ */
+const RACE_DISTANCES_MI: { mi: number; label: string }[] = [
+  { mi: 0.62137, label: "1K" },
+  { mi: 1.86411, label: "3K" },
+  { mi: 3.10686, label: "5K" },
+  { mi: 6.21371, label: "10K" },
+  { mi: 9.32057, label: "15K" },
+  { mi: 12.42742, label: "20K" },
+  { mi: 13.10940, label: "Half Marathon" },
+  { mi: 15.53428, label: "25K" },
+  { mi: 18.64114, label: "30K" },
+  { mi: 26.21880, label: "Marathon" },
+  { mi: 31.06855, label: "50K" },
+  { mi: 62.13711, label: "100K" },
+];
+
+// ~50m tolerance
+const RACE_TOLERANCE_MI = 0.035;
+
+/**
+ * If miles is within tolerance of a common race distance, return its label.
+ * Otherwise returns null.
+ */
+export function toRaceLabel(miles: number | null | undefined): string | null {
+  if (miles == null || !isFinite(miles) || isNaN(miles)) return null;
+  for (const r of RACE_DISTANCES_MI) {
+    if (Math.abs(miles - r.mi) <= RACE_TOLERANCE_MI) return r.label;
+  }
+  return null;
+}
+
+/**
+ * Smart distance display — shows "5K" / "Half Marathon" / "Marathon" when the
+ * value matches a common race distance, otherwise falls back to the standard
+ * unit-aware format.
+ */
+export function toDisplayDistSmart(miles: number | null | undefined, unit: DistanceUnit): string {
+  const race = toRaceLabel(miles);
+  if (race) return race;
+  return toDisplayDist(miles, unit);
+}
+
 export function toDisplaySpeed(minPerMile: number | null | undefined, unit: DistanceUnit): string {
   if (minPerMile == null || !isFinite(minPerMile) || isNaN(minPerMile) || minPerMile <= 0) return "—";
   if (unit === "km") {

@@ -71,7 +71,14 @@ export default function RunResultsScreen() {
       const res = await apiRequest("GET", `/api/runs/${id}/results`);
       return res.json();
     },
-    refetchInterval: 10000,
+    // T2.15: stop polling once at least one finalized result exists. Keeps the
+    // page fresh during the host-end grace window but avoids forever-poll
+    // once results have been computed.
+    refetchInterval: (query) => {
+      const data = query.state.data as any[] | undefined;
+      const hasFinal = Array.isArray(data) && data.some((r: any) => r?.final_rank != null);
+      return hasFinal ? false : 10000;
+    },
     staleTime: 0,
   });
 
@@ -161,6 +168,38 @@ export default function RunResultsScreen() {
   const hasPaceGroups = run?.pace_groups && (run.pace_groups as any[]).length > 0;
   const hasAnyGroupLabel = finished.some((r: any) => r.pace_group_label);
 
+  // Pace-group recommendation: did the user run noticeably faster or slower
+  // than their declared group? If so, suggest moving up/down for next event.
+  // Activity-language-adaptive (pace for run/walk, speed for ride).
+  const paceGroupRec = useMemo(() => {
+    if (!hasPaceGroups || !myResult?.final_pace || !(myResult as any)?.pace_group_label) return null;
+    const groups = run!.pace_groups as any[];
+    const myGroup = groups.find((g) => g.label === (myResult as any).pace_group_label);
+    if (!myGroup) return null;
+    const isRide = run?.activity_type === "ride";
+    const myMetric = isRide
+      ? (myResult.final_pace > 0 ? 60 / myResult.final_pace : 0)
+      : myResult.final_pace;
+    if (isRide) {
+      if (myMetric > myGroup.maxPace + 1) {
+        const faster = groups.filter((g) => g.minPace > myGroup.maxPace).sort((a, b) => a.minPace - b.minPace)[0];
+        if (faster) return { direction: "faster" as const, target: faster, myMetric };
+      } else if (myMetric < myGroup.minPace - 1) {
+        const slower = groups.filter((g) => g.maxPace < myGroup.minPace).sort((a, b) => b.maxPace - a.maxPace)[0];
+        if (slower) return { direction: "slower" as const, target: slower, myMetric };
+      }
+    } else {
+      if (myMetric < myGroup.minPace - 0.3) {
+        const faster = groups.filter((g) => g.maxPace < myGroup.minPace).sort((a, b) => b.maxPace - a.maxPace)[0];
+        if (faster) return { direction: "faster" as const, target: faster, myMetric };
+      } else if (myMetric > myGroup.maxPace + 0.3) {
+        const slower = groups.filter((g) => g.minPace > myGroup.maxPace).sort((a, b) => a.minPace - b.minPace)[0];
+        if (slower) return { direction: "slower" as const, target: slower, myMetric };
+      }
+    }
+    return null;
+  }, [hasPaceGroups, myResult, run]);
+
   const { data: aiSummary, isLoading: summaryLoading } = useQuery<{ summary: string } | undefined>({
     queryKey: ["/api/solo-runs", id, "ai-summary"],
     enabled: !!id,
@@ -242,6 +281,45 @@ export default function RunResultsScreen() {
             </View>
           </View>
 
+          {/* Pace-group recommendation card — only shown when user out-paced or under-paced their group */}
+          {paceGroupRec && (() => {
+            const isRide = run?.activity_type === "ride";
+            const myLabel = (myResult as any)?.pace_group_label;
+            const target = paceGroupRec.target;
+            const unit = isRide ? "mph" : "min/mi";
+            const dirVerb = paceGroupRec.direction === "faster" ? "moving up" : "trying";
+            const myMetricFmt = isRide
+              ? `${paceGroupRec.myMetric.toFixed(1)} mph`
+              : `${formatPace(paceGroupRec.myMetric)} /mi`;
+            const myGroup = (run!.pace_groups as any[]).find((g) => g.label === myLabel);
+            const myGroupRangeStr = myGroup
+              ? `${myGroup.minPace}–${myGroup.maxPace} ${unit}`
+              : "";
+            return (
+              <View style={{
+                backgroundColor: C.primaryMuted,
+                borderRadius: 16,
+                borderWidth: 1,
+                borderColor: C.primary + "55",
+                padding: 16,
+                marginBottom: 16,
+                flexDirection: "row",
+                alignItems: "flex-start",
+                gap: 12,
+              }}>
+                <Feather name={paceGroupRec.direction === "faster" ? "trending-up" : "trending-down"} size={20} color={C.primary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 14, color: C.primary, marginBottom: 4 }}>
+                    {paceGroupRec.direction === "faster" ? "You crushed your group" : "Easier next time?"}
+                  </Text>
+                  <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 13, color: C.text, lineHeight: 18 }}>
+                    You averaged {myMetricFmt} in {myLabel}{myGroupRangeStr ? ` (${myGroupRangeStr})` : ""}. Consider {dirVerb} to {target.label} ({target.minPace}–{target.maxPace} {unit}) on your next event.
+                  </Text>
+                </View>
+              </View>
+            );
+          })()}
+
           {/* Rate Host Card */}
           {canRateHost && (
             <Pressable
@@ -279,6 +357,68 @@ export default function RunResultsScreen() {
                <ActivityIndicator size="small" color={C.primary} />
             </View>
           )}
+
+          {/* T2.2 Mode B — per-stage splits leaderboard. Only when the event was
+              configured with stages and we have at least one finisher who has
+              stage_splits data. */}
+          {Array.isArray((run as any)?.stages) && (run as any).stages.length >= 2 && (() => {
+            const stages: any[] = (run as any).stages;
+            const withSplits = finished.filter((r: any) => Array.isArray(r.stage_splits) && r.stage_splits.length > 0);
+            if (withSplits.length === 0) return null;
+            return (
+              <View style={{ marginBottom: 18 }}>
+                <Text style={[s.sectionTitle, { marginBottom: 8 }]}>Stage Splits</Text>
+                {stages.map((stage, sIdx) => {
+                  const stageRows = withSplits.map((r: any) => {
+                    const split = (r.stage_splits as any[]).find((sp: any) => sp?.stageIdx === sIdx);
+                    if (!split || !split.startedAt || !split.finishedAt) return null;
+                    const elapsedSec = Math.max(1, (new Date(split.finishedAt).getTime() - new Date(split.startedAt).getTime()) / 1000);
+                    return {
+                      user_id: r.user_id,
+                      name: r.name,
+                      elapsedSec,
+                      distance: split.distance ?? 0,
+                      pace: split.pace ?? 0,
+                    };
+                  }).filter(Boolean) as any[];
+                  if (stageRows.length === 0) return null;
+                  stageRows.sort((a, b) => a.elapsedSec - b.elapsedSec);
+                  const isRide = stage.activityType === "ride";
+                  const isWalk = stage.activityType === "walk";
+                  const actLabel = isRide ? "Ride" : isWalk ? "Walk" : "Run";
+                  return (
+                    <View key={sIdx} style={{ backgroundColor: C.card, borderRadius: 14, borderWidth: 1, borderColor: C.border, padding: 12, marginBottom: 8 }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                        <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: C.primary, alignItems: "center", justifyContent: "center" }}>
+                          <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 11, color: C.bg }}>{sIdx + 1}</Text>
+                        </View>
+                        <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 14, color: C.text }}>{actLabel}</Text>
+                        {stage.distanceMiles ? (
+                          <Text style={{ fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textMuted }}>· {stage.distanceMiles} mi</Text>
+                        ) : null}
+                      </View>
+                      {stageRows.slice(0, 8).map((row: any, idx: number) => {
+                        const isMe = row.user_id === user?.id;
+                        const m = Math.floor(row.elapsedSec / 60);
+                        const sec = Math.floor(row.elapsedSec % 60);
+                        return (
+                          <View key={row.user_id} style={{ flexDirection: "row", alignItems: "center", paddingVertical: 4 }}>
+                            <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 12, color: idx === 0 ? C.primary : C.textMuted, width: 22 }}>#{idx + 1}</Text>
+                            <Text style={{ flex: 1, fontFamily: "Outfit_500Medium", fontSize: 13, color: isMe ? C.primary : C.text }} numberOfLines={1}>
+                              {row.name}{isMe ? " (you)" : ""}
+                            </Text>
+                            <Text style={{ fontFamily: "Outfit_700Bold", fontSize: 13, color: C.text }}>
+                              {m}:{sec.toString().padStart(2, "0")}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  );
+                })}
+              </View>
+            );
+          })()}
 
           {/* Leaderboard */}
           {finished.length > 0 && (() => {
@@ -493,6 +633,10 @@ export default function RunResultsScreen() {
               participantCount: isGroupRun ? results.length : undefined,
               finishRank: isGroupRun && myResult?.final_rank ? myResult.final_rank : undefined,
               eventTitle: run?.crew_id && run?.crew_name ? run.crew_name : run?.title,
+              // Crew event → render crew name on the card; public event → render
+              // "{N} runners". Crew name takes precedence so the card screams
+              // "Founders Crew" instead of a generic count.
+              crewName: run?.crew_id && run?.crew_name ? run.crew_name : null,
             }}
           />
         );

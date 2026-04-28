@@ -51,8 +51,8 @@ export default function RegisterScreen() {
       setError("Passwords do not match");
       return;
     }
-    if (!/^[^\s@]{2,30}$/.test(username.trim())) {
-      setError("Username cannot contain spaces or @ and must be 2–30 characters");
+    if (!/^[^\s@]{3,16}$/.test(username.trim())) {
+      setError("Username cannot contain spaces or @ and must be 3–16 characters");
       return;
     }
     setError("");
@@ -137,6 +137,7 @@ export default function RegisterScreen() {
                 placeholderTextColor={C.textMuted}
                 autoCapitalize="none"
                 autoCorrect={false}
+                maxLength={16}
               />
             </View>
           </View>
@@ -290,16 +291,6 @@ const styles = StyleSheet.create({
   genderChipTxt: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: C.textSecondary },
   genderChipTxtActive: { color: C.primary },
   eyeBtn: { padding: 4, marginLeft: 8 },
-  infoBox: {
-    flexDirection: "row",
-    gap: 8,
-    backgroundColor: C.primaryMuted,
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: C.primary + "33",
-  },
-  infoText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: C.textSecondary, flex: 1, lineHeight: 18 },
   primaryBtn: {
     backgroundColor: C.primary,
     borderRadius: 14,

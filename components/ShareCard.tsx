@@ -115,6 +115,9 @@ export interface ShareCardProps {
   participantCount?: number;
   finishRank?: number;
   eventTitle?: string;
+  // When present, this is a crew event — render the crew name instead of the
+  // participant count. Public events fall back to "{N} runners/riders/walkers".
+  crewName?: string | null;
   caption?: string;
   backgroundPhoto?: string | null;
   collagePhotos?: string[];
@@ -269,6 +272,7 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
     participantCount,
     finishRank,
     eventTitle,
+    crewName,
     caption,
     backgroundPhoto,
     collagePhotos,
@@ -336,20 +340,21 @@ const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
 
   const OverlayGroupBadges = ({ white = false }: { white?: boolean }) => {
     if (!isGroup) return null;
+    // Crew event → show crew name. Public event → show "{N} runners/riders/walkers".
+    // Rank tags onto the same line ("Founders Crew · 1st") only when the user
+    // actually placed (finishRank set). Plain text, font-matched to the rest
+    // of the card. No pill chrome.
+    const primaryLabel = crewName && crewName.trim().length > 0
+      ? crewName.trim()
+      : `${participantCount} ${actParticipants}`;
+    const rankSuffix = finishRank != null ? ` · ${ordinal(finishRank)}` : "";
     return (
-      <View style={st.overlayGroupRow}>
-        <View style={[st.groupPill, white && { backgroundColor: "rgba(255,255,255,0.12)", borderColor: "rgba(255,255,255,0.25)" }]}>
-          <Ionicons name="people" size={13} color={white ? "#FFFFFF" : GOLD} style={{ marginRight: 5 }} />
-          <Text style={[st.groupPillTxt, white && { color: "#FFFFFF" }]}>{participantCount} {actParticipants}</Text>
-        </View>
-        {finishRank != null && (
-          <View style={[st.rankPill, white && { backgroundColor: "rgba(255,255,255,0.12)", borderColor: "rgba(255,255,255,0.25)" }]}>
-            <Ionicons name="trophy" size={11} color={white ? "#FFFFFF" : PRIMARY} style={{ marginRight: 4 }} />
-            <Text style={[st.rankPillTxt, white && { color: "#FFFFFF" }]}>{ordinal(finishRank)}</Text>
-          </View>
-        )}
-        {eventTitle && <Text style={[st.eventTitle, white && { color: "rgba(255,255,255,0.7)" }]} numberOfLines={1}>{eventTitle}</Text>}
-      </View>
+      <Text
+        style={[st.overlayGroupLine, white && { color: "rgba(255,255,255,0.85)" }]}
+        numberOfLines={1}
+      >
+        {primaryLabel}{rankSuffix}
+      </Text>
     );
   };
 
@@ -1150,50 +1155,17 @@ const st = StyleSheet.create({
     marginBottom: 10,
   },
 
-  overlayGroupRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 22,
-    paddingTop: 8,
-    paddingBottom: 4,
-    flexWrap: "wrap",
-  },
-  groupPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: GOLD + "22",
-    borderWidth: 1,
-    borderColor: GOLD + "55",
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  groupPillTxt: {
-    fontFamily: "Outfit_700Bold",
-    fontSize: 12,
-    color: GOLD,
-  },
-  rankPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: PRIMARY + "22",
-    borderWidth: 1,
-    borderColor: PRIMARY + "55",
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  rankPillTxt: {
-    fontFamily: "Outfit_700Bold",
-    fontSize: 12,
-    color: PRIMARY,
-  },
-  eventTitle: {
+  // Group/crew context line — plain text, font-matched to the rest of the
+  // card so it sits cleanly without competing for attention. Replaces the
+  // earlier pills layout per design feedback.
+  overlayGroupLine: {
     fontFamily: "Outfit_600SemiBold",
     fontSize: 13,
     color: TEXT_SEC,
-    flex: 1,
+    letterSpacing: 0.3,
+    paddingHorizontal: 22,
+    paddingTop: 6,
+    paddingBottom: 2,
   },
   overlayCaption: {
     fontFamily: "Outfit_400Regular",

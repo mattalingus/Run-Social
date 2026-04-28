@@ -62,6 +62,9 @@ struct PaceUpLiveActivityAttributes: ActivityAttributes {
     var distanceMiles: Double
     var paceMinPerMile: Double
     var activityType: String
+    var startedAt: Double
+    var isPaused: Bool
+    var distanceUnit: String
   }
   var activityName: String
 }
@@ -87,11 +90,16 @@ class PaceUpActivityBridge: NSObject {
     let t = data["activityType"] as? String ?? "run"
     let n = t == "ride" ? "Ride" : t == "walk" ? "Walk" : "Run"
     let attrs = PaceUpLiveActivityAttributes(activityName: n)
+    let elapsed = data["elapsedSeconds"] as? Int ?? 0
+    let nowTs = Date().timeIntervalSince1970
     let state = PaceUpLiveActivityAttributes.ContentState(
-      elapsedSeconds: data["elapsedSeconds"] as? Int ?? 0,
+      elapsedSeconds: elapsed,
       distanceMiles: data["distanceMiles"] as? Double ?? 0.0,
       paceMinPerMile: data["paceMinPerMile"] as? Double ?? 0.0,
-      activityType: t
+      activityType: t,
+      startedAt: (data["startedAt"] as? Double) ?? (nowTs - Double(elapsed)),
+      isPaused: (data["isPaused"] as? Bool) ?? false,
+      distanceUnit: (data["distanceUnit"] as? String) ?? "mi"
     )
     do {
       _currentActivity = try Activity.request(
@@ -111,11 +119,16 @@ class PaceUpActivityBridge: NSObject {
     guard #available(iOS 16.2, *) else { resolve(nil); return }
     guard let activity = _currentActivity else { resolve(nil); return }
     let t = data["activityType"] as? String ?? "run"
+    let elapsed = data["elapsedSeconds"] as? Int ?? 0
+    let nowTs = Date().timeIntervalSince1970
     let state = PaceUpLiveActivityAttributes.ContentState(
-      elapsedSeconds: data["elapsedSeconds"] as? Int ?? 0,
+      elapsedSeconds: elapsed,
       distanceMiles: data["distanceMiles"] as? Double ?? 0.0,
       paceMinPerMile: data["paceMinPerMile"] as? Double ?? 0.0,
-      activityType: t
+      activityType: t,
+      startedAt: (data["startedAt"] as? Double) ?? (nowTs - Double(elapsed)),
+      isPaused: (data["isPaused"] as? Bool) ?? false,
+      distanceUnit: (data["distanceUnit"] as? String) ?? "mi"
     )
     Task { await activity.update(using: state); resolve(nil) }
   }
@@ -128,11 +141,16 @@ class PaceUpActivityBridge: NSObject {
     guard #available(iOS 16.2, *) else { resolve(nil); return }
     guard let activity = _currentActivity else { resolve(nil); return }
     let t = data["activityType"] as? String ?? "run"
+    let elapsed = data["elapsedSeconds"] as? Int ?? 0
+    let nowTs = Date().timeIntervalSince1970
     let state = PaceUpLiveActivityAttributes.ContentState(
-      elapsedSeconds: data["elapsedSeconds"] as? Int ?? 0,
+      elapsedSeconds: elapsed,
       distanceMiles: data["distanceMiles"] as? Double ?? 0.0,
       paceMinPerMile: data["paceMinPerMile"] as? Double ?? 0.0,
-      activityType: t
+      activityType: t,
+      startedAt: (data["startedAt"] as? Double) ?? (nowTs - Double(elapsed)),
+      isPaused: (data["isPaused"] as? Bool) ?? false,
+      distanceUnit: (data["distanceUnit"] as? String) ?? "mi"
     )
     Task {
       await activity.end(using: state, dismissalPolicy: .after(.now + 30))
@@ -207,6 +225,9 @@ struct PaceUpLiveActivityAttributes: ActivityAttributes {
     var distanceMiles: Double
     var paceMinPerMile: Double
     var activityType: String
+    var startedAt: Double
+    var isPaused: Bool
+    var distanceUnit: String
   }
   var activityName: String
 }
@@ -218,32 +239,133 @@ import ActivityKit
 import SwiftUI
 import WidgetKit
 
+// MARK: - Brand Tokens
+
+private let kGreen      = Color(red: 0, green: 0.851, blue: 0.494)    // PaceUp primary
+private let kGreenSoft  = Color(red: 0, green: 0.851, blue: 0.494).opacity(0.18)
+private let kBg         = Color(red: 5 / 255,  green: 12 / 255, blue: 9 / 255)
+private let kCard       = Color(red: 18 / 255, green: 28 / 255, blue: 22 / 255)
+private let kTextDim    = Color.white.opacity(0.55)
+private let kTextMuted  = Color.white.opacity(0.38)
+private let kAmber      = Color(red: 1.0, green: 0.72, blue: 0.0)      // paused accent
+
 // MARK: - Helpers
 
-private func actIcon(_ name: String) -> String {
-  switch name.lowercased() {
+private func actIcon(_ t: String) -> String {
+  switch t.lowercased() {
   case "ride": return "bicycle"
   case "walk": return "figure.walk"
   default:     return "figure.run"
   }
 }
 
-private func fmtTime(_ s: Int) -> String {
-  let h = s / 3600, m = (s % 3600) / 60, sec = s % 60
-  if h > 0 { return String(format: "%d:%02d:%02d", h, m, sec) }
-  return String(format: "%02d:%02d", m, sec)
+private func actLabel(_ t: String) -> String {
+  switch t.lowercased() {
+  case "ride": return "Ride"
+  case "walk": return "Walk"
+  default:     return "Run"
+  }
 }
 
-private func fmtDist(_ mi: Double) -> String { String(format: "%.2f", mi) }
+private func paceLabel(_ unit: String, _ t: String) -> String {
+  if t.lowercased() == "ride" { return unit == "km" ? "km/h" : "mph" }
+  return unit == "km" ? "/km" : "/mi"
+}
 
-private func fmtPace(_ p: Double) -> String {
+private func distLabel(_ unit: String) -> String { unit == "km" ? "km" : "mi" }
+
+private func fmtStaticTime(_ s: Int) -> String {
+  let h = s / 3600, m = (s % 3600) / 60, sec = s % 60
+  if h > 0 { return String(format: "%d:%02d:%02d", h, m, sec) }
+  return String(format: "%d:%02d", m, sec)
+}
+
+private func fmtDist(_ miles: Double, unit: String) -> String {
+  let v = unit == "km" ? miles * 1.609344 : miles
+  return String(format: "%.2f", v)
+}
+
+private func fmtPace(_ p: Double, unit: String, activity: String) -> String {
+  // For rides, paceMinPerMile is actually speed-derived; show mph/kmh
+  if activity.lowercased() == "ride" {
+    guard p > 0 else { return "--" }
+    let mph = 60.0 / p
+    let v = unit == "km" ? mph * 1.609344 : mph
+    return String(format: "%.1f", v)
+  }
+  // Run/walk: min per mile → min per km if unit=km
   guard p > 0 else { return "--:--" }
-  let m = Int(p), s = Int((p - Double(m)) * 60)
+  let pAdj = unit == "km" ? p / 1.609344 : p
+  let m = Int(pAdj), s = Int((pAdj - Double(m)) * 60)
   return String(format: "%d:%02d", m, s)
 }
 
-private let kGreen = Color(red: 0, green: 0.851, blue: 0.494)
-private let kBg    = Color(red: 5 / 255, green: 12 / 255, blue: 9 / 255)
+/// Live-ticking timer that self-updates on the lock screen without needing
+/// update pushes from the app. Anchored to \`startedAt\`. When paused we
+/// render a static snapshot instead so the display freezes at the exact
+/// paused value.
+@ViewBuilder
+private func liveTimer(state: PaceUpLiveActivityAttributes.ContentState,
+                       font: Font) -> some View {
+  if state.isPaused {
+    Text(fmtStaticTime(state.elapsedSeconds))
+      .font(font)
+      .monospacedDigit()
+      .foregroundColor(.white)
+  } else {
+    Text(Date(timeIntervalSince1970: state.startedAt), style: .timer)
+      .font(font)
+      .monospacedDigit()
+      .foregroundColor(.white)
+      .multilineTextAlignment(.leading)
+  }
+}
+
+// MARK: - Small Reusable Pieces
+
+private struct StatBlock: View {
+  let label: String
+  let value: String
+  let unit: String
+  var align: HorizontalAlignment = .leading
+  var body: some View {
+    VStack(alignment: align, spacing: 2) {
+      Text(label)
+        .font(.system(size: 10, weight: .semibold))
+        .tracking(1.0)
+        .foregroundColor(kTextMuted)
+      HStack(alignment: .lastTextBaseline, spacing: 3) {
+        Text(value)
+          .font(.system(size: 22, weight: .heavy, design: .rounded))
+          .monospacedDigit()
+          .foregroundColor(.white)
+        Text(unit)
+          .font(.system(size: 11, weight: .semibold, design: .rounded))
+          .foregroundColor(kTextDim)
+      }
+    }
+  }
+}
+
+private struct StatusPill: View {
+  let isPaused: Bool
+  var body: some View {
+    HStack(spacing: 5) {
+      Circle()
+        .fill(isPaused ? kAmber : kGreen)
+        .frame(width: 6, height: 6)
+      Text(isPaused ? "PAUSED" : "LIVE")
+        .font(.system(size: 10, weight: .bold, design: .rounded))
+        .tracking(0.8)
+        .foregroundColor(isPaused ? kAmber : kGreen)
+    }
+    .padding(.horizontal, 8)
+    .padding(.vertical, 4)
+    .background(
+      Capsule().fill((isPaused ? kAmber : kGreen).opacity(0.15))
+    )
+  }
+}
 
 // MARK: - Lock Screen / Notification Banner View
 
@@ -251,32 +373,68 @@ struct PaceUpLockScreenView: View {
   let ctx: ActivityViewContext<PaceUpLiveActivityAttributes>
 
   var body: some View {
-    HStack(spacing: 16) {
-      Image(systemName: actIcon(ctx.attributes.activityName))
-        .font(.system(size: 22, weight: .semibold))
-        .foregroundColor(kGreen)
-
-      VStack(alignment: .leading, spacing: 2) {
-        Text(ctx.attributes.activityName)
-          .font(.system(size: 11, weight: .medium))
-          .foregroundColor(.gray)
-        Text(fmtTime(ctx.state.elapsedSeconds))
-          .font(.system(size: 22, weight: .bold, design: .monospaced))
-          .foregroundColor(.white)
+    let s = ctx.state
+    VStack(spacing: 0) {
+      // ── Top row: brand chip + status ─────────────────────────────────────
+      HStack(spacing: 10) {
+        ZStack {
+          Circle()
+            .fill(kGreenSoft)
+            .frame(width: 28, height: 28)
+          Image(systemName: actIcon(s.activityType))
+            .font(.system(size: 14, weight: .bold))
+            .foregroundColor(kGreen)
+        }
+        VStack(alignment: .leading, spacing: 0) {
+          Text("PACEUP")
+            .font(.system(size: 9, weight: .bold, design: .rounded))
+            .tracking(1.4)
+            .foregroundColor(kGreen)
+          Text(actLabel(s.activityType) + " in progress")
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundColor(.white)
+        }
+        Spacer()
+        StatusPill(isPaused: s.isPaused)
       }
 
-      Spacer()
-
-      VStack(alignment: .trailing, spacing: 2) {
-        Text(fmtDist(ctx.state.distanceMiles) + " mi")
-          .font(.system(size: 16, weight: .semibold))
-          .foregroundColor(.white)
-        Text(fmtPace(ctx.state.paceMinPerMile) + " /mi")
-          .font(.system(size: 12, weight: .medium))
-          .foregroundColor(.gray)
+      // ── Hero: live-ticking timer ─────────────────────────────────────────
+      HStack(alignment: .firstTextBaseline) {
+        liveTimer(state: s, font: .system(size: 44, weight: .heavy, design: .rounded))
+        Spacer(minLength: 0)
       }
+      .padding(.top, 10)
+
+      Text("ELAPSED")
+        .font(.system(size: 9, weight: .bold, design: .rounded))
+        .tracking(1.2)
+        .foregroundColor(kTextMuted)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, -2)
+
+      // ── Stats row: distance + pace/speed ─────────────────────────────────
+      HStack(spacing: 0) {
+        StatBlock(
+          label: "DISTANCE",
+          value: fmtDist(s.distanceMiles, unit: s.distanceUnit),
+          unit: distLabel(s.distanceUnit)
+        )
+        Spacer()
+        Rectangle()
+          .fill(Color.white.opacity(0.08))
+          .frame(width: 1, height: 34)
+        Spacer()
+        StatBlock(
+          label: s.activityType.lowercased() == "ride" ? "SPEED" : "PACE",
+          value: fmtPace(s.paceMinPerMile, unit: s.distanceUnit, activity: s.activityType),
+          unit: paceLabel(s.distanceUnit, s.activityType),
+          align: .trailing
+        )
+      }
+      .padding(.top, 14)
     }
-    .padding(16)
+    .padding(.horizontal, 16)
+    .padding(.vertical, 14)
   }
 }
 
@@ -287,48 +445,76 @@ struct PaceUpLiveActivityWidget: Widget {
     ActivityConfiguration(for: PaceUpLiveActivityAttributes.self) { ctx in
       PaceUpLockScreenView(ctx: ctx)
         .activityBackgroundTint(kBg)
-        .activitySystemActionForegroundColor(.white)
+        .activitySystemActionForegroundColor(kGreen)
     } dynamicIsland: { ctx in
-      DynamicIsland {
+      let s = ctx.state
+      return DynamicIsland {
+        // ── Expanded ───────────────────────────────────────────────────────
         DynamicIslandExpandedRegion(.leading) {
-          Label {
-            Text(fmtDist(ctx.state.distanceMiles) + " mi")
-              .font(.system(size: 15, weight: .semibold))
-              .foregroundColor(.white)
-          } icon: {
-            Image(systemName: actIcon(ctx.attributes.activityName))
-              .foregroundColor(kGreen)
+          HStack(spacing: 8) {
+            ZStack {
+              Circle().fill(kGreenSoft).frame(width: 24, height: 24)
+              Image(systemName: actIcon(s.activityType))
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(kGreen)
+            }
+            VStack(alignment: .leading, spacing: -1) {
+              Text("PACEUP")
+                .font(.system(size: 8, weight: .bold, design: .rounded))
+                .tracking(1.2)
+                .foregroundColor(kGreen)
+              Text(actLabel(s.activityType))
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.white)
+            }
           }
         }
         DynamicIslandExpandedRegion(.trailing) {
-          Label {
-            Text(fmtPace(ctx.state.paceMinPerMile) + "/mi")
-              .font(.system(size: 15, weight: .semibold))
-              .foregroundColor(.white)
-          } icon: {
-            Image(systemName: "speedometer")
-              .foregroundColor(kGreen)
-          }
+          StatusPill(isPaused: s.isPaused)
+        }
+        DynamicIslandExpandedRegion(.center) {
+          liveTimer(state: s, font: .system(size: 34, weight: .heavy, design: .rounded))
         }
         DynamicIslandExpandedRegion(.bottom) {
-          HStack {
+          HStack(spacing: 0) {
+            StatBlock(
+              label: "DISTANCE",
+              value: fmtDist(s.distanceMiles, unit: s.distanceUnit),
+              unit: distLabel(s.distanceUnit)
+            )
             Spacer()
-            Text(fmtTime(ctx.state.elapsedSeconds))
-              .font(.system(size: 20, weight: .bold, design: .monospaced))
-              .foregroundColor(.white)
+            Rectangle().fill(Color.white.opacity(0.08)).frame(width: 1, height: 28)
             Spacer()
+            StatBlock(
+              label: s.activityType.lowercased() == "ride" ? "SPEED" : "PACE",
+              value: fmtPace(s.paceMinPerMile, unit: s.distanceUnit, activity: s.activityType),
+              unit: paceLabel(s.distanceUnit, s.activityType),
+              align: .trailing
+            )
           }
+          .padding(.top, 4)
         }
       } compactLeading: {
-        Image(systemName: actIcon(ctx.attributes.activityName))
+        Image(systemName: actIcon(s.activityType))
           .foregroundColor(kGreen)
       } compactTrailing: {
-        Text(fmtDist(ctx.state.distanceMiles))
-          .font(.system(size: 12, weight: .semibold))
-          .foregroundColor(.white)
+        // Live ticker so the Dynamic Island itself pulses with the timer
+        if s.isPaused {
+          Text(fmtStaticTime(s.elapsedSeconds))
+            .font(.system(size: 13, weight: .bold, design: .rounded))
+            .monospacedDigit()
+            .foregroundColor(kAmber)
+        } else {
+          Text(Date(timeIntervalSince1970: s.startedAt), style: .timer)
+            .font(.system(size: 13, weight: .bold, design: .rounded))
+            .monospacedDigit()
+            .foregroundColor(.white)
+            .frame(maxWidth: 58)
+            .multilineTextAlignment(.trailing)
+        }
       } minimal: {
-        Image(systemName: "figure.run")
-          .foregroundColor(kGreen)
+        Image(systemName: actIcon(s.activityType))
+          .foregroundColor(s.isPaused ? kAmber : kGreen)
       }
       .widgetURL(URL(string: "paceup://live"))
       .keylineTint(kGreen)
@@ -345,8 +531,14 @@ import WidgetKit
 private let kAppGroup = "${APP_GROUP}"
 private let kDataFile = "widget_data.json"
 
-private let kGreenW = Color(red: 0, green: 0.851, blue: 0.494)
-private let kBgW    = Color(red: 5 / 255, green: 12 / 255, blue: 9 / 255)
+// Brand tokens — match the Live Activity + in-app theme
+private let kGreenW      = Color(red: 0, green: 0.851, blue: 0.494)
+private let kGreenSoftW  = Color(red: 0, green: 0.851, blue: 0.494).opacity(0.18)
+private let kBgW         = Color(red: 5 / 255,  green: 12 / 255, blue: 9 / 255)
+private let kBgWTop      = Color(red: 12 / 255, green: 22 / 255, blue: 17 / 255)
+private let kTextDimW    = Color.white.opacity(0.55)
+private let kTextMutedW  = Color.white.opacity(0.38)
+private let kHairline    = Color.white.opacity(0.08)
 
 // MARK: - Data model
 
@@ -356,16 +548,32 @@ struct WidgetPayload: Codable {
   var distanceRangeMiles: String
   var weeklyMiles: Double
   var monthlyGoal: Double
+  // Optional — older app builds won't write these. Defaults via decoder below.
+  var distanceUnit: String?
+  var currentStreak: Int?
+  var totalRuns: Int?
 }
 
-// MARK: - Timeline entry
+extension WidgetPayload {
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    nextRunTitle       = (try? c.decode(String.self, forKey: .nextRunTitle)) ?? ""
+    nextRunTimestamp   = (try? c.decode(Double.self, forKey: .nextRunTimestamp)) ?? 0
+    distanceRangeMiles = (try? c.decode(String.self, forKey: .distanceRangeMiles)) ?? ""
+    weeklyMiles        = (try? c.decode(Double.self, forKey: .weeklyMiles)) ?? 0
+    monthlyGoal        = (try? c.decode(Double.self, forKey: .monthlyGoal)) ?? 0
+    distanceUnit       = (try? c.decode(String.self, forKey: .distanceUnit))
+    currentStreak      = (try? c.decode(Int.self,    forKey: .currentStreak))
+    totalRuns          = (try? c.decode(Int.self,    forKey: .totalRuns))
+  }
+}
+
+// MARK: - Timeline entry + provider
 
 struct PaceUpWidgetEntry: TimelineEntry {
   let date: Date
   let payload: WidgetPayload
 }
-
-// MARK: - Provider
 
 struct PaceUpWidgetProvider: TimelineProvider {
 
@@ -377,7 +585,10 @@ struct PaceUpWidgetProvider: TimelineProvider {
         nextRunTimestamp: Date().addingTimeInterval(3600).timeIntervalSince1970,
         distanceRangeMiles: "3-5",
         weeklyMiles: 12.4,
-        monthlyGoal: 50
+        monthlyGoal: 50,
+        distanceUnit: "mi",
+        currentStreak: 4,
+        totalRuns: 87
       )
     )
   }
@@ -387,8 +598,9 @@ struct PaceUpWidgetProvider: TimelineProvider {
   }
 
   func getTimeline(in _: Context, completion: @escaping (Timeline<PaceUpWidgetEntry>) -> Void) {
+    // Refresh every 10 minutes so the "in 23m" countdown stays accurate
     let e = makeEntry()
-    let refresh = Calendar.current.date(byAdding: .minute, value: 15, to: Date()) ?? Date()
+    let refresh = Calendar.current.date(byAdding: .minute, value: 10, to: Date()) ?? Date()
     completion(Timeline(entries: [e], policy: .after(refresh)))
   }
 
@@ -398,7 +610,10 @@ struct PaceUpWidgetProvider: TimelineProvider {
       nextRunTimestamp: 0,
       distanceRangeMiles: "",
       weeklyMiles: 0,
-      monthlyGoal: 0
+      monthlyGoal: 0,
+      distanceUnit: "mi",
+      currentStreak: 0,
+      totalRuns: 0
     )
     if let containerURL = FileManager.default.containerURL(
       forSecurityApplicationGroupIdentifier: kAppGroup
@@ -414,6 +629,16 @@ struct PaceUpWidgetProvider: TimelineProvider {
 
 // MARK: - Helpers
 
+private func distUnit(_ p: WidgetPayload) -> String { p.distanceUnit ?? "mi" }
+
+private func convertedMiles(_ mi: Double, unit: String) -> Double {
+  unit == "km" ? mi * 1.609344 : mi
+}
+
+private func fmtMiles(_ mi: Double, unit: String) -> String {
+  String(format: "%.1f", convertedMiles(mi, unit: unit))
+}
+
 private func timeUntilLabel(timestamp: Double) -> String {
   guard timestamp > 0 else { return "" }
   let seconds = timestamp - Date().timeIntervalSince1970
@@ -426,50 +651,175 @@ private func timeUntilLabel(timestamp: Double) -> String {
   return "Starting soon"
 }
 
+// Short relative label for tight spaces ("2h 14m" / "23m" / "NOW")
+private func shortTimeUntil(_ timestamp: Double) -> String {
+  guard timestamp > 0 else { return "" }
+  let seconds = timestamp - Date().timeIntervalSince1970
+  guard seconds > 0 else { return "NOW" }
+  let hours = Int(seconds) / 3600
+  let minutes = (Int(seconds) % 3600) / 60
+  if hours >= 24 { return "\\(hours / 24)d" }
+  if hours >= 1  { return "\\(hours)h \\(minutes)m" }
+  return "\\(minutes)m"
+}
+
+// MARK: - Shared visuals
+
+private struct BrandHeader: View {
+  var subtitle: String? = nil
+  var body: some View {
+    HStack(spacing: 6) {
+      ZStack {
+        Circle().fill(kGreenSoftW).frame(width: 20, height: 20)
+        Image(systemName: "figure.run")
+          .font(.system(size: 10, weight: .bold))
+          .foregroundColor(kGreenW)
+      }
+      Text("PACEUP")
+        .font(.system(size: 10, weight: .bold, design: .rounded))
+        .tracking(1.4)
+        .foregroundColor(kGreenW)
+      if let s = subtitle {
+        Text("·")
+          .font(.system(size: 10, weight: .bold))
+          .foregroundColor(kTextMutedW)
+        Text(s)
+          .font(.system(size: 10, weight: .semibold, design: .rounded))
+          .tracking(0.6)
+          .foregroundColor(kTextDimW)
+      }
+    }
+  }
+}
+
+private struct TimeUntilPill: View {
+  let timestamp: Double
+  var body: some View {
+    let s = shortTimeUntil(timestamp)
+    HStack(spacing: 4) {
+      Image(systemName: "clock.fill")
+        .font(.system(size: 8, weight: .bold))
+      Text("IN \\(s)")
+        .font(.system(size: 10, weight: .bold, design: .rounded))
+        .tracking(0.6)
+    }
+    .foregroundColor(kGreenW)
+    .padding(.horizontal, 8)
+    .padding(.vertical, 4)
+    .background(Capsule().fill(kGreenSoftW))
+  }
+}
+
+private struct WeeklyGoalRing: View {
+  let weeklyMiles: Double
+  let weeklyGoal: Double
+  let unit: String
+  var size: CGFloat = 68
+  var body: some View {
+    let pct = weeklyGoal > 0 ? min(weeklyMiles / weeklyGoal, 1.0) : 0
+    ZStack {
+      Circle()
+        .stroke(Color.white.opacity(0.1), lineWidth: 6)
+      Circle()
+        .trim(from: 0, to: pct)
+        .stroke(
+          AngularGradient(
+            gradient: Gradient(colors: [kGreenW.opacity(0.7), kGreenW]),
+            center: .center
+          ),
+          style: StrokeStyle(lineWidth: 6, lineCap: .round)
+        )
+        .rotationEffect(.degrees(-90))
+      VStack(spacing: -1) {
+        Text(String(format: "%.0f%%", pct * 100))
+          .font(.system(size: 16, weight: .heavy, design: .rounded))
+          .monospacedDigit()
+          .foregroundColor(.white)
+        Text("GOAL")
+          .font(.system(size: 7, weight: .bold, design: .rounded))
+          .tracking(1.0)
+          .foregroundColor(kTextMutedW)
+      }
+    }
+    .frame(width: size, height: size)
+  }
+}
+
 // MARK: - Small widget view
 
 struct PaceUpSmallView: View {
   let e: PaceUpWidgetEntry
   var body: some View {
-    ZStack(alignment: .topLeading) {
-      kBgW
-      VStack(alignment: .leading, spacing: 4) {
-        HStack(spacing: 4) {
-          Image(systemName: "figure.run")
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundColor(kGreenW)
-          Text("PaceUp")
-            .font(.system(size: 11, weight: .bold))
-            .foregroundColor(kGreenW)
-        }
-        Spacer()
-        if e.payload.nextRunTitle.isEmpty {
-          Text("No runs scheduled")
-            .font(.system(size: 13, weight: .medium))
-            .foregroundColor(.gray)
-        } else {
-          Text("NEXT RUN")
-            .font(.system(size: 9, weight: .semibold))
-            .foregroundColor(.gray)
-          Text(e.payload.nextRunTitle)
-            .font(.system(size: 14, weight: .bold))
+    let p = e.payload
+    let unit = distUnit(p)
+    VStack(alignment: .leading, spacing: 0) {
+      BrandHeader()
+      Spacer(minLength: 6)
+
+      if p.nextRunTitle.isEmpty {
+        // ── Empty state: show weekly progress instead ──
+        Text("THIS WEEK")
+          .font(.system(size: 9, weight: .bold, design: .rounded))
+          .tracking(1.2)
+          .foregroundColor(kTextMutedW)
+        HStack(alignment: .lastTextBaseline, spacing: 3) {
+          Text(fmtMiles(p.weeklyMiles, unit: unit))
+            .font(.system(size: 30, weight: .heavy, design: .rounded))
+            .monospacedDigit()
             .foregroundColor(.white)
-            .lineLimit(2)
-          let until = timeUntilLabel(timestamp: e.payload.nextRunTimestamp)
-          if !until.isEmpty {
-            Text(until)
-              .font(.system(size: 12, weight: .semibold))
-              .foregroundColor(kGreenW)
+          Text(unit)
+            .font(.system(size: 12, weight: .semibold, design: .rounded))
+            .foregroundColor(kTextDimW)
+        }
+        if p.monthlyGoal > 0 {
+          let weeklyGoal = p.monthlyGoal / 4.345
+          let pct = min(p.weeklyMiles / weeklyGoal, 1.0)
+          GeometryReader { g in
+            ZStack(alignment: .leading) {
+              Capsule().fill(Color.white.opacity(0.1)).frame(height: 5)
+              Capsule()
+                .fill(LinearGradient(colors: [kGreenW.opacity(0.7), kGreenW], startPoint: .leading, endPoint: .trailing))
+                .frame(width: max(5, g.size.width * pct), height: 5)
+            }
           }
-          if !e.payload.distanceRangeMiles.isEmpty {
-            Text("\\(e.payload.distanceRangeMiles) mi")
-              .font(.system(size: 11))
-              .foregroundColor(.gray)
+          .frame(height: 5)
+          .padding(.top, 6)
+          Text(String(format: "%.0f%% of weekly goal", pct * 100))
+            .font(.system(size: 9, weight: .semibold, design: .rounded))
+            .foregroundColor(kTextDimW)
+            .padding(.top, 3)
+        } else {
+          Text("Set a goal to track progress")
+            .font(.system(size: 9, weight: .medium))
+            .foregroundColor(kTextMutedW)
+            .padding(.top, 4)
+        }
+      } else {
+        // ── Next run state ──
+        Text("NEXT UP")
+          .font(.system(size: 9, weight: .bold, design: .rounded))
+          .tracking(1.2)
+          .foregroundColor(kTextMutedW)
+          .padding(.top, 2)
+        Text(p.nextRunTitle)
+          .font(.system(size: 15, weight: .heavy, design: .rounded))
+          .foregroundColor(.white)
+          .lineLimit(2)
+          .padding(.top, 1)
+
+        Spacer(minLength: 4)
+
+        HStack(spacing: 6) {
+          TimeUntilPill(timestamp: p.nextRunTimestamp)
+          if !p.distanceRangeMiles.isEmpty {
+            Text(p.distanceRangeMiles + " " + unit)
+              .font(.system(size: 10, weight: .semibold, design: .rounded))
+              .foregroundColor(kTextDimW)
           }
         }
       }
-      .padding(12)
     }
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     .widgetURL(URL(string: "paceup://discover")!)
   }
 }
@@ -479,73 +829,128 @@ struct PaceUpSmallView: View {
 struct PaceUpMediumView: View {
   let e: PaceUpWidgetEntry
   var body: some View {
-    ZStack {
-      kBgW
-      HStack(spacing: 16) {
-        VStack(alignment: .leading, spacing: 4) {
-          HStack(spacing: 4) {
-            Image(systemName: "figure.run")
-              .font(.system(size: 12, weight: .semibold))
-              .foregroundColor(kGreenW)
-            Text("PaceUp")
-              .font(.system(size: 11, weight: .bold))
-              .foregroundColor(kGreenW)
-          }
-          Spacer()
-          if e.payload.nextRunTitle.isEmpty {
-            Text("No upcoming runs")
-              .font(.system(size: 12))
-              .foregroundColor(.gray)
-          } else {
-            Text("NEXT RUN")
-              .font(.system(size: 9, weight: .semibold))
-              .foregroundColor(.gray)
-            Text(e.payload.nextRunTitle)
-              .font(.system(size: 13, weight: .bold))
+    let p = e.payload
+    let unit = distUnit(p)
+    HStack(spacing: 14) {
+      // ── Left: Next run / empty state ───────────────────────────────
+      VStack(alignment: .leading, spacing: 0) {
+        BrandHeader(subtitle: "NEXT UP")
+        Spacer(minLength: 8)
+        if p.nextRunTitle.isEmpty {
+          VStack(alignment: .leading, spacing: 4) {
+            Text("No events scheduled")
+              .font(.system(size: 13, weight: .semibold, design: .rounded))
               .foregroundColor(.white)
-              .lineLimit(2)
-            let until = timeUntilLabel(timestamp: e.payload.nextRunTimestamp)
-            if !until.isEmpty {
-              Text(until)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(kGreenW)
-            }
-            if !e.payload.distanceRangeMiles.isEmpty {
-              Text("\\(e.payload.distanceRangeMiles) mi")
-                .font(.system(size: 11))
-                .foregroundColor(.gray)
+            Text("Tap to discover runs near you")
+              .font(.system(size: 10, weight: .medium))
+              .foregroundColor(kTextMutedW)
+          }
+        } else {
+          Text(p.nextRunTitle)
+            .font(.system(size: 16, weight: .heavy, design: .rounded))
+            .foregroundColor(.white)
+            .lineLimit(2)
+            .minimumScaleFactor(0.85)
+          Spacer(minLength: 6)
+          HStack(spacing: 6) {
+            TimeUntilPill(timestamp: p.nextRunTimestamp)
+            if !p.distanceRangeMiles.isEmpty {
+              Text(p.distanceRangeMiles + " " + unit)
+                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                .foregroundColor(kTextDimW)
             }
           }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+      }
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
-        Rectangle().fill(Color.white.opacity(0.12)).frame(width: 1)
+      Rectangle().fill(kHairline).frame(width: 1)
 
-        VStack(alignment: .leading, spacing: 4) {
+      // ── Right: Weekly progress ring + stats ────────────────────────
+      VStack(alignment: .leading, spacing: 0) {
+        HStack(spacing: 4) {
           Text("THIS WEEK")
-            .font(.system(size: 9, weight: .semibold))
-            .foregroundColor(.gray)
-          Text(String(format: "%.1f mi", e.payload.weeklyMiles))
-            .font(.system(size: 20, weight: .bold))
-            .foregroundColor(.white)
-          if e.payload.monthlyGoal > 0 {
-            let weeklyGoal = e.payload.monthlyGoal / 4
-            let pct = min(e.payload.weeklyMiles / weeklyGoal, 1.0)
-            Text(String(format: "%.0f%% of %.0f mi/wk", pct * 100, weeklyGoal))
-              .font(.system(size: 10))
-              .foregroundColor(.gray)
-            GeometryReader { g in
-              ZStack(alignment: .leading) {
-                Capsule().fill(Color.white.opacity(0.15)).frame(height: 4)
-                Capsule().fill(kGreenW).frame(width: g.size.width * pct, height: 4)
+            .font(.system(size: 9, weight: .bold, design: .rounded))
+            .tracking(1.2)
+            .foregroundColor(kTextMutedW)
+          Spacer()
+          if let streak = p.currentStreak, streak > 0 {
+            HStack(spacing: 2) {
+              Text("🔥")
+                .font(.system(size: 9))
+              Text("\\(streak)")
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .foregroundColor(.white)
+            }
+          }
+        }
+
+        Spacer(minLength: 4)
+
+        HStack(spacing: 12) {
+          if p.monthlyGoal > 0 {
+            let weeklyGoal = p.monthlyGoal / 4.345
+            WeeklyGoalRing(weeklyMiles: p.weeklyMiles, weeklyGoal: weeklyGoal, unit: unit, size: 64)
+          } else {
+            // No goal — compact hero number instead of the ring
+            VStack(alignment: .leading, spacing: -2) {
+              HStack(alignment: .lastTextBaseline, spacing: 2) {
+                Text(fmtMiles(p.weeklyMiles, unit: unit))
+                  .font(.system(size: 28, weight: .heavy, design: .rounded))
+                  .monospacedDigit()
+                  .foregroundColor(.white)
+                Text(unit)
+                  .font(.system(size: 11, weight: .semibold, design: .rounded))
+                  .foregroundColor(kTextDimW)
+              }
+              Text("NO GOAL SET")
+                .font(.system(size: 8, weight: .bold, design: .rounded))
+                .tracking(1.0)
+                .foregroundColor(kTextMutedW)
+            }
+            .frame(width: 64, alignment: .leading)
+          }
+
+          VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: -1) {
+              HStack(alignment: .lastTextBaseline, spacing: 2) {
+                Text(fmtMiles(p.weeklyMiles, unit: unit))
+                  .font(.system(size: 18, weight: .heavy, design: .rounded))
+                  .monospacedDigit()
+                  .foregroundColor(.white)
+                Text(unit)
+                  .font(.system(size: 9, weight: .semibold, design: .rounded))
+                  .foregroundColor(kTextDimW)
+              }
+              Text("LOGGED")
+                .font(.system(size: 8, weight: .bold, design: .rounded))
+                .tracking(1.0)
+                .foregroundColor(kTextMutedW)
+            }
+
+            if p.monthlyGoal > 0 {
+              let weeklyGoal = p.monthlyGoal / 4.345
+              let remaining = max(0, weeklyGoal - p.weeklyMiles)
+              VStack(alignment: .leading, spacing: -1) {
+                HStack(alignment: .lastTextBaseline, spacing: 2) {
+                  Text(String(format: "%.1f", convertedMiles(remaining, unit: unit)))
+                    .font(.system(size: 18, weight: .heavy, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundColor(remaining > 0 ? .white : kGreenW)
+                  Text(unit)
+                    .font(.system(size: 9, weight: .semibold, design: .rounded))
+                    .foregroundColor(kTextDimW)
+                }
+                Text(remaining > 0 ? "TO GO" : "GOAL HIT")
+                  .font(.system(size: 8, weight: .bold, design: .rounded))
+                  .tracking(1.0)
+                  .foregroundColor(remaining > 0 ? kTextMutedW : kGreenW)
               }
             }
-            .frame(height: 4)
           }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
       }
-      .padding(14)
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
     .widgetURL(URL(string: "paceup://discover")!)
   }
@@ -557,11 +962,24 @@ struct PaceUpWidgetEntryView: View {
   @Environment(\\.widgetFamily) var family
   let entry: PaceUpWidgetEntry
   var body: some View {
-    if family == .systemMedium {
-      PaceUpMediumView(e: entry)
-    } else {
-      PaceUpSmallView(e: entry)
+    Group {
+      if family == .systemMedium {
+        PaceUpMediumView(e: entry)
+      } else {
+        PaceUpSmallView(e: entry)
+      }
     }
+  }
+}
+
+// Subtle top-to-bottom dark-green gradient background — gives depth vs. flat fill
+private struct WidgetBackground: View {
+  var body: some View {
+    LinearGradient(
+      colors: [kBgWTop, kBgW],
+      startPoint: .top,
+      endPoint: .bottom
+    )
   }
 }
 
@@ -573,13 +991,17 @@ struct PaceUpWidget: Widget {
     StaticConfiguration(kind: kind, provider: PaceUpWidgetProvider()) { entry in
       if #available(iOS 17.0, *) {
         PaceUpWidgetEntryView(entry: entry)
-          .containerBackground(kBgW, for: .widget)
+          .containerBackground(for: .widget) { WidgetBackground() }
       } else {
-        PaceUpWidgetEntryView(entry: entry)
+        ZStack {
+          WidgetBackground()
+          PaceUpWidgetEntryView(entry: entry)
+            .padding(14)
+        }
       }
     }
     .configurationDisplayName("PaceUp")
-    .description("Your next run and weekly progress.")
+    .description("Your next run, streak, and weekly goal progress.")
     .supportedFamilies([.systemSmall, .systemMedium])
   }
 }

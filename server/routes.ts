@@ -23,6 +23,59 @@ const GARMIN_ACTIVITIES_URL = "https://apis.garmin.com/wellness-api/rest/activit
 // Bypasses session cookie loss when the in-app browser redirects back for the callback.
 const garminPendingTokens = new Map<string, { userId: string; requestSecret: string }>();
 
+// ─── Strava (OAuth 2.0) ──────────────────────────────────────────────────────
+const STRAVA_AUTH_URL = "https://www.strava.com/oauth/authorize";
+const STRAVA_TOKEN_URL = "https://www.strava.com/oauth/token";
+const STRAVA_DEAUTH_URL = "https://www.strava.com/oauth/deauthorize";
+const STRAVA_ACTIVITIES_URL = "https://www.strava.com/api/v3/athlete/activities";
+
+// state → userId (OAuth CSRF + session-cookie-independent callback lookup)
+const stravaPendingState = new Map<string, { userId: string }>();
+
+async function refreshStravaAccessTokenIfNeeded(userId: string): Promise<string | null> {
+  const tokens = await storage.getStravaTokens(userId);
+  if (!tokens) return null;
+  // Treat anything within 60s of expiry as expired to avoid races.
+  const expiresAtMs = new Date(tokens.expires_at).getTime();
+  if (expiresAtMs - Date.now() > 60_000) return tokens.access_token;
+
+  const clientId = process.env.STRAVA_CLIENT_ID;
+  const clientSecret = process.env.STRAVA_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return null;
+
+  const resp = await fetch(STRAVA_TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: "refresh_token",
+      refresh_token: tokens.refresh_token,
+    }).toString(),
+  });
+  if (!resp.ok) {
+    console.warn("[Strava] refresh failed", resp.status, await resp.text());
+    return null;
+  }
+  const data: any = await resp.json();
+  const newExpiresAt = new Date(data.expires_at * 1000);
+  await storage.saveStravaTokens(
+    userId,
+    tokens.athlete_id,
+    data.access_token,
+    data.refresh_token ?? tokens.refresh_token,
+    newExpiresAt
+  );
+  return data.access_token;
+}
+
+function mapStravaActivityType(type: string): "run" | "ride" | "walk" {
+  const t = (type ?? "").toLowerCase();
+  if (t === "ride" || t.includes("cycl") || t.includes("bike") || t === "virtualride" || t === "ebikeride") return "ride";
+  if (t === "walk" || t === "hike") return "walk";
+  return "run";
+}
+
 // Decode Google's encoded-polyline format to [{lat,lng}].
 function decodePolyline(encoded: string): Array<{ lat: number; lng: number }> {
   const points: Array<{ lat: number; lng: number }> = [];
@@ -114,6 +167,47 @@ function formatPaceStr(avgPaceDecimal: number): string {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
+/**
+ * Privacy + block enforcement for run-touching endpoints (RSVP, join, etc.)
+ * Returns { deny: false } when access is allowed; otherwise { deny: true, status, message }.
+ * Hosts always pass (caller should check host_id === userId before calling).
+ */
+async function checkRunAccess(
+  run: { id: string; host_id: string; privacy?: string | null; crew_id?: string | null },
+  userId: string
+): Promise<{ deny: false } | { deny: true; status: number; message: string }> {
+  // Mutual block — either side blocked = no access
+  const [blockedBy, blocking] = await Promise.all([
+    storage.isBlockedBy(userId, run.host_id),
+    storage.isBlocking(userId, run.host_id),
+  ]);
+  if (blockedBy || blocking) return { deny: true, status: 404, message: "Event not found" };
+
+  // Crew event: caller must be a crew member
+  if (run.crew_id) {
+    const isMember = await storage.isCrewMember(run.crew_id, userId);
+    if (!isMember) return { deny: true, status: 403, message: "This event is for crew members only" };
+    return { deny: false };
+  }
+
+  // Friend-only event: caller must be a confirmed friend of the host
+  if (run.privacy === "friends") {
+    const friends = await storage.areFriends(userId, run.host_id);
+    if (!friends) return { deny: true, status: 403, message: "This event is for the host's friends only" };
+    return { deny: false };
+  }
+
+  // Private event (invite token): caller must have an explicit invite row
+  if (run.privacy === "private") {
+    const access = await storage.hasRunAccess(run.id, userId);
+    if (!access) return { deny: true, status: 403, message: "You don't have access to this event" };
+    return { deny: false };
+  }
+
+  // Public event: anyone (modulo blocks above) can join
+  return { deny: false };
+}
+
 async function postCrewRunRecap(runId: string): Promise<void> {
   const run = await storage.getRunById(runId);
   if (!run?.crew_id) return;
@@ -185,6 +279,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     standardHeaders: true,
     legacyHeaders: false,
     message: { message: "Too many accounts created from this IP. Please try again later." },
+  });
+
+  // T2.6: cap event creation to 10/hour per IP. Stops runaway retry loops and
+  // abuse without ever inconveniencing real users.
+  const createRunLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: "You're creating events too quickly. Please slow down." },
   });
 
   app.post("/api/auth/register", signupLimiter, async (req, res) => {
@@ -589,6 +693,43 @@ async function go(e){
     }
   });
 
+  app.put("/api/users/me/username", requireAuth, async (req, res) => {
+    try {
+      const { username } = req.body;
+      if (!username || typeof username !== "string") return res.status(400).json({ message: "Username is required" });
+      const trimmed = username.trim().toLowerCase();
+      if (trimmed.length < 3 || trimmed.length > 16) return res.status(400).json({ message: "Username must be 3–16 characters" });
+      if (!/^[a-z0-9_]+$/.test(trimmed)) return res.status(400).json({ message: "Only letters, numbers, and underscores" });
+
+      const current = await storage.getUserById(req.session.userId!);
+      if (!current) return res.status(404).json({ message: "User not found" });
+
+      const usedCount = (current as any).username_change_count ?? 0;
+      if (usedCount >= 2) {
+        return res.status(429).json({ message: "You've used all 2 username changes" });
+      }
+      if ((current.username ?? "").toLowerCase() === trimmed) {
+        return res.status(400).json({ message: "That's already your username" });
+      }
+
+      const existing = await storage.getUserByUsername(trimmed);
+      if (existing && existing.id !== current.id) {
+        return res.status(409).json({ message: "That username is taken" });
+      }
+
+      await pool.query(
+        `UPDATE users SET username = $1, username_change_count = COALESCE(username_change_count, 0) + 1 WHERE id = $2`,
+        [trimmed, current.id]
+      );
+      const updated = await storage.getUserById(current.id);
+      if (!updated) return res.status(404).json({ message: "User not found" });
+      const { password: _, ...safeUser } = updated;
+      res.json(safeUser);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.put("/api/users/me/goals", requireAuth, async (req, res) => {
     try {
       const { monthlyGoal, yearlyGoal, paceGoal } = req.body;
@@ -638,6 +779,48 @@ async function go(e){
       const { token } = req.body;
       await storage.updatePushToken(req.session.userId!, token ?? null);
       res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  // T1.8: app launch / foreground checks this. If non-null, the home shell
+  // shows a "Continue Event" banner that routes to /run-live/:id (or
+  // /run-tracking for the user's own active solo run).
+  app.get("/api/users/me/active-run", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      // Group event the user is presently engaged in (started, not yet completed).
+      const groupRes = await pool.query(
+        `SELECT r.id, r.title, r.activity_type, r.started_at, r.crew_id, c.name AS crew_name, r.host_id
+           FROM runs r
+           LEFT JOIN crews c ON c.id = r.crew_id
+           LEFT JOIN run_participants rp
+             ON rp.run_id = r.id AND rp.user_id = $1 AND rp.status NOT IN ('cancelled', 'dnf')
+          WHERE r.is_active = true
+            AND r.is_completed = false
+            AND r.is_deleted IS NOT TRUE
+            AND (r.is_abandoned IS NOT TRUE)
+            AND (r.host_id = $1 OR rp.id IS NOT NULL)
+            AND rp.miles_logged IS NULL
+          ORDER BY r.started_at DESC
+          LIMIT 1`,
+        [userId]
+      );
+      if (groupRes.rows[0]) {
+        const r = groupRes.rows[0];
+        return res.json({
+          kind: "group",
+          run_id: r.id,
+          title: r.title,
+          activity_type: r.activity_type,
+          started_at: r.started_at,
+          crew_id: r.crew_id,
+          crew_name: r.crew_name,
+          is_host: r.host_id === userId,
+        });
+      }
+      return res.json(null);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
@@ -736,9 +919,12 @@ async function go(e){
 
       // Self — always allowed
       if (targetId !== requesterId) {
-        // Block check: if the target user has blocked the requester, return 404 (don't reveal existence)
-        const blocked = await storage.isBlockedBy(requesterId, targetId);
-        if (blocked) return res.status(404).json({ message: "User not found" });
+        // Block check (bi-directional): hide each other if either side has blocked
+        const [blockedBy, blocking] = await Promise.all([
+          storage.isBlockedBy(requesterId, targetId),
+          storage.isBlocking(requesterId, targetId),
+        ]);
+        if (blockedBy || blocking) return res.status(404).json({ message: "User not found" });
 
         // Privacy check: respect the target user's profile visibility setting
         const privacyRow = await pool.query(
@@ -813,20 +999,26 @@ async function go(e){
             0
           ) AS count,
           COALESCE(
+            -- Rolling average: last 10 completed runs of this activity type,
+            -- newest first. So a recent improvement actually moves the number.
             (SELECT AVG(p) FROM (
-              SELECT NULLIF(sr.pace_min_per_mile, 0) AS p
-              FROM solo_runs sr
-              WHERE sr.user_id = $1 AND sr.completed = true AND sr.is_deleted IS NOT TRUE
-              AND ($2 = 'mixed' OR sr.activity_type = $2)
-              AND sr.pace_min_per_mile IS NOT NULL AND sr.pace_min_per_mile > 0
-              UNION ALL
-              SELECT NULLIF(rp.final_pace, 0) AS p
-              FROM run_participants rp
-              JOIN runs r ON r.id = rp.run_id
-              WHERE rp.user_id = $1 AND rp.final_pace IS NOT NULL AND rp.final_pace > 0
-              AND r.is_completed = true AND r.is_deleted IS NOT TRUE
-              AND ($2 = 'mixed' OR r.activity_type = $2)
-            ) paces),
+              SELECT p, ts FROM (
+                SELECT NULLIF(sr.pace_min_per_mile, 0) AS p, sr.date AS ts
+                FROM solo_runs sr
+                WHERE sr.user_id = $1 AND sr.completed = true AND sr.is_deleted IS NOT TRUE
+                AND ($2 = 'mixed' OR sr.activity_type = $2)
+                AND sr.pace_min_per_mile IS NOT NULL AND sr.pace_min_per_mile > 0
+                UNION ALL
+                SELECT NULLIF(rp.final_pace, 0) AS p, COALESCE(r.started_at, r.date) AS ts
+                FROM run_participants rp
+                JOIN runs r ON r.id = rp.run_id
+                WHERE rp.user_id = $1 AND rp.final_pace IS NOT NULL AND rp.final_pace > 0
+                AND r.is_completed = true AND r.is_deleted IS NOT TRUE
+                AND ($2 = 'mixed' OR r.activity_type = $2)
+              ) all_paces
+              ORDER BY ts DESC
+              LIMIT 10
+            ) recent_paces),
             0
           ) AS avg_pace
       `, [targetId, activityType]);
@@ -1024,7 +1216,7 @@ async function go(e){
         : undefined;
       const [publicRuns, publicCrewRuns] = await Promise.all([
         storage.getPublicRuns({ ...filters, currentUserId: req.session.userId }),
-        storage.getPublicCrewRuns(bounds),
+        storage.getPublicCrewRuns(bounds, req.session.userId),
       ]);
       if (req.session.userId) {
         const [friendLocked, invited, crewRuns, userCrewRows] = await Promise.all([
@@ -1361,7 +1553,7 @@ async function go(e){
     }
   });
 
-  app.post("/api/runs", requireAuth, async (req, res) => {
+  app.post("/api/runs", requireAuth, createRunLimiter, async (req, res) => {
     try {
       const host = await storage.getUserById(req.session.userId!);
       if (host && host.rating_count >= 5 && parseFloat(host.avg_rating ?? "5") < 3.5) {
@@ -1372,6 +1564,22 @@ async function go(e){
       const { title, date: reqDateStr } = req.body;
       if (!title || typeof title !== "string" || !title.trim()) return res.status(400).json({ message: "Title is required" });
       if (title.trim().length > 100) return res.status(400).json({ message: "Title must be 100 characters or less" });
+      // T2.1: strip any HTML/script tags from free-text fields. Allowed chars
+      // cover any reasonable event title; rejects on detection so a malicious
+      // payload doesn't silently slip through truncation.
+      const HAS_HTML = /<[^>]*>|javascript:|on\w+\s*=/i;
+      if (HAS_HTML.test(title)) return res.status(400).json({ message: "Title contains invalid characters" });
+      if (typeof req.body.description === "string" && req.body.description.length > 0) {
+        if (req.body.description.length > 500) return res.status(400).json({ message: "Description must be 500 characters or less" });
+        if (HAS_HTML.test(req.body.description)) return res.status(400).json({ message: "Description contains invalid characters" });
+      }
+      if (typeof req.body.crewVibe === "string" && req.body.crewVibe.length > 0) {
+        if (req.body.crewVibe.length > 30) return res.status(400).json({ message: "Crew vibe must be 30 characters or less" });
+        if (HAS_HTML.test(req.body.crewVibe)) return res.status(400).json({ message: "Crew vibe contains invalid characters" });
+      }
+      if (typeof req.body.locationName === "string" && HAS_HTML.test(req.body.locationName)) {
+        return res.status(400).json({ message: "Location name contains invalid characters" });
+      }
       if (reqDateStr) {
         const reqDate = new Date(reqDateStr);
         if (isNaN(reqDate.getTime())) return res.status(400).json({ message: "Invalid date" });
@@ -1388,18 +1596,35 @@ async function go(e){
       if (!Number.isFinite(minDist) || !Number.isFinite(maxDist)) return res.status(400).json({ message: "Distance values must be numbers" });
       if (minDist < 0 || maxDist < 0) return res.status(400).json({ message: "Distance values must be positive" });
       if (minDist > 200 || maxDist > 200) return res.status(400).json({ message: "Distance cannot exceed 200 miles" });
-      // Enforce strict ordering unconditionally; crew runs send minDist=0 and maxDist=target so 0 < target passes naturally
-      if (minDist >= maxDist) return res.status(400).json({ message: "Minimum distance must be less than maximum distance" });
+      // Allow single-distance events (min == max == plannedDistance). Only reject inverted ranges.
+      if (minDist > maxDist) return res.status(400).json({ message: "Minimum distance must be less than maximum distance" });
       const minPaceVal = parseFloat(req.body.minPace ?? req.body.min_pace ?? 0);
       const maxPaceVal = parseFloat(req.body.maxPace ?? req.body.max_pace ?? 0);
       if ((minPaceVal > 0 && minPaceVal < 2) || minPaceVal > 60) return res.status(400).json({ message: "Pace must be between 2 and 60 min/mile" });
       if ((maxPaceVal > 0 && maxPaceVal < 2) || maxPaceVal > 60) return res.status(400).json({ message: "Pace must be between 2 and 60 min/mile" });
-      // Enforce strict ordering unconditionally; crew runs send minPace=0 and maxPace=target so 0 < target passes naturally
-      if (minPaceVal >= maxPaceVal) return res.status(400).json({ message: "Minimum pace must be less than maximum pace" });
+      // Allow single-pace events (min == max). Only reject inverted ranges.
+      if (minPaceVal > maxPaceVal) return res.status(400).json({ message: "Minimum pace must be less than maximum pace" });
       const maxParticipantsRaw = parseInt(req.body.maxParticipants ?? req.body.max_participants ?? 20, 10);
       // Crew runs send 9999 for "effectively unlimited"; public/private runs are capped at 500.
       if (!Number.isInteger(maxParticipantsRaw) || isNaN(maxParticipantsRaw) || maxParticipantsRaw < 1 || maxParticipantsRaw > 9999) return res.status(400).json({ message: "Max participants must be between 1 and 9999" });
       const run = await storage.createRun({ ...req.body, hostId: req.session.userId!, savedPathId: req.body.savedPathId || null });
+      // Auto-RSVP the host so they count as 1 in the "going" pill from the start.
+      // T1.6: critical — if this fails, the event is broken (host is its own host
+      // but not a participant, so won't appear in is_present logic, won't get
+      // pings, won't be on the leaderboard). We retry once; if both fail, the
+      // event row is rolled back so the host doesn't see a half-broken creation.
+      try {
+        await storage.joinRun(run.id, req.session.userId!, null);
+      } catch (e1: any) {
+        console.error("[create-run] auto-rsvp host failed (1st):", e1?.message ?? e1);
+        try {
+          await storage.joinRun(run.id, req.session.userId!, null);
+        } catch (e2: any) {
+          console.error("[create-run] auto-rsvp host failed (2nd, rolling back):", e2?.message ?? e2);
+          await pool.query(`DELETE FROM runs WHERE id = $1`, [run.id]).catch(() => {});
+          return res.status(500).json({ message: "Could not finalize event creation. Please try again." });
+        }
+      }
       res.status(201).json(run);
       // Notify — crew runs notify crew members; regular runs notify friends (fire-and-forget)
       if (run.crew_id) {
@@ -1513,6 +1738,25 @@ async function go(e){
     }
   });
 
+  app.post("/api/community-paths/:id/variants", requireAuth, async (req, res) => {
+    try {
+      const { name, routePath, distanceMiles, activityTypes } = req.body ?? {};
+      if (!name || typeof name !== "string") return res.status(400).json({ message: "name required" });
+      if (!Array.isArray(routePath) || routePath.length < 2) return res.status(400).json({ message: "routePath must have 2+ points" });
+      const dist = typeof distanceMiles === "number" ? distanceMiles : 0;
+      const acts = Array.isArray(activityTypes) && activityTypes.length ? activityTypes : ["run"];
+      const variant = await storage.addPathVariant(req.params.id as string, {
+        name: name.trim(),
+        route_path: routePath,
+        distance_miles: dist,
+        activity_types: acts,
+      });
+      res.json(variant);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.post("/api/solo-runs/:id/publish-route", requireAuth, async (req, res) => {
     try {
       const { routeName } = req.body;
@@ -1553,6 +1797,8 @@ async function go(e){
 
       const limit = parseInt(req.query.limit as string) || 50;
       const messages = await storage.getCrewMessages(crewId, limit);
+      // Mark chat as read when messages are fetched
+      await storage.markCrewChatRead(crewId, userId).catch(() => {});
       res.json(messages);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
@@ -1604,7 +1850,7 @@ async function go(e){
           const tokens: string[] = tokensRes.rows.map((r: any) => r.push_token);
           if (tokens.length > 0) {
             const preview = gif_url ? "Sent a GIF 🎬" : (message.length > 60 ? message.slice(0, 57) + "…" : message);
-            sendPushNotification(tokens, `${user.name} · ${crewName}`, preview, { screen: "crew-chat", crewId });
+            sendPushNotification(tokens, `${user.name} · ${crewName}`, preview, { screen: "crew-chat", crewId, senderId: userId });
           }
         } catch (err: any) {
           console.error("[crew-chat-notif]", err?.message ?? err);
@@ -1770,11 +2016,20 @@ async function go(e){
       if (run.host_id === req.session.userId) return res.status(400).json({ message: "You are the host" });
       if (run.is_deleted) return res.status(400).json({ message: "This event has been cancelled" });
       if (run.is_completed) return res.status(400).json({ message: "This event has already ended" });
-      if (run.date && new Date(run.date) < new Date()) return res.status(400).json({ message: "This event has already passed" });
+      // Privacy + block guards. Defense-in-depth — frontend hides events from
+      // blocked users, but a malicious client could still call this endpoint
+      // with a known run id.
+      const gate = await checkRunAccess(run, req.session.userId!);
+      if (gate.deny) return res.status(gate.status).json({ message: gate.message });
+      // Past-planned-time is NOT a block. Hosts often start late; we let people
+      // RSVP up until the event is actually completed/cancelled.
       const result = await storage.togglePlan(req.session.userId!, req.params.id as string);
       res.json(result);
-      // Notify host only when planning (not unplanning), fire-and-forget
-      if (result.planned) {
+      // Notify host only when planning (not unplanning), fire-and-forget.
+      // T2.17: suppress the push if RSVP arrived >1h after the planned start
+      // — host has likely moved on; stale "Someone plans" pings are noise.
+      const tooLateForHostPush = run.date && (Date.now() - new Date(run.date).getTime()) > 60 * 60 * 1000;
+      if (result.planned && !tooLateForHostPush) {
         storage.getUserById(run.host_id).then(async (host) => {
           if (host && userWantsNotif(host, 'run_reminders')) {
             const planner = await storage.getUserById(req.session.userId!);
@@ -1806,6 +2061,14 @@ async function go(e){
       const run = await storage.getRunById(req.params.id as string);
       if (!run) return res.status(404).json({ message: "Run not found" });
       if (run.is_deleted) return res.status(410).json({ message: "This run has been cancelled", isDeleted: true });
+      // Bi-directional block check — blocked users can't see each other's events
+      if (req.session.userId && run.host_id && run.host_id !== req.session.userId) {
+        const [blockedBy, blocking] = await Promise.all([
+          storage.isBlockedBy(req.session.userId, run.host_id),
+          storage.isBlocking(req.session.userId, run.host_id),
+        ]);
+        if (blockedBy || blocking) return res.status(404).json({ message: "Run not found" });
+      }
       if (run.crew_id) {
         if (!req.session.userId) return res.status(403).json({ message: "Crew run — members only", isCrewRun: true });
         // Host always has access to their own crew run regardless of membership
@@ -1848,9 +2111,17 @@ async function go(e){
       const run = await storage.getRunById(req.params.id as string);
       if (!run) return res.status(404).json({ message: "Run not found" });
       if (run.host_id === req.session.userId) return res.status(400).json({ message: "You are the host" });
+      // Privacy + block guards (T1.1, T1.2)
+      const gate = await checkRunAccess(run, req.session.userId!);
+      if (gate.deny) return res.status(gate.status).json({ message: gate.message });
       const user = await storage.getUserById(req.session.userId!);
       // Eligibility checks only apply to strict runs
       if (run.is_strict) {
+        // T2.9: handle NULL avg_pace cleanly — new users with no completed runs
+        // shouldn't fall into a confusing reject. Tell them what to do instead.
+        if (user.avg_pace == null) {
+          return res.status(400).json({ message: "Complete a run first so we can match you to this strict event." });
+        }
         const paceOk = user.avg_pace >= run.min_pace && user.avg_pace <= run.max_pace;
         const recentDistances = await storage.getUserRecentDistances(req.session.userId!);
         const isRide = run.activity_type === "ride";
@@ -1873,12 +2144,11 @@ async function go(e){
         }
       }
 
-      // Time guard: reject if event is more than 2 hours in the past
-      const runDate = new Date(run.date);
-      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
-      if (runDate < twoHoursAgo) {
-        return res.status(400).json({ message: "This event has already taken place" });
-      }
+      // No "past planned time" guard. While the host has not actually started
+      // (is_active = false) and the event is not completed/cancelled, joining
+      // is allowed regardless of the originally-scheduled time. The late-start
+      // monitor auto-removes truly stale unstarted events; storage.joinRun
+      // throws RUN_COMPLETED / RUN_CANCELLED for terminal states.
 
       const paceGroupLabel = req.body.paceGroupLabel ?? null;
       let participant;
@@ -1908,6 +2178,55 @@ async function go(e){
   });
 
   // Update pace group for an existing participant (used after proximity auto-join)
+  // T2.2 Mode B: stage progression endpoints. Participant taps "Start" then
+  // "End" on each stage of a chain event; we write into stage_splits.
+  app.post("/api/runs/:id/start-stage", requireAuth, async (req, res) => {
+    try {
+      const stageIdx = parseInt(req.body?.stageIdx, 10);
+      if (!Number.isInteger(stageIdx) || stageIdx < 0 || stageIdx > 2) {
+        return res.status(400).json({ message: "Invalid stageIdx (0-2)" });
+      }
+      const run = await storage.getRunById(req.params.id as string);
+      if (!run) return res.status(404).json({ message: "Run not found" });
+      const stages = Array.isArray((run as any).stages) ? (run as any).stages : null;
+      if (!stages || !stages[stageIdx]) return res.status(400).json({ message: "Stage not configured for this event" });
+      const splits = await storage.startParticipantStage(
+        req.params.id as string,
+        req.session.userId!,
+        stageIdx,
+        stages[stageIdx].activityType
+      );
+      res.json({ splits });
+    } catch (e: any) {
+      if (e.message === "PARTICIPANT_NOT_FOUND") return res.status(404).json({ message: "Join the event first" });
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/runs/:id/end-stage", requireAuth, async (req, res) => {
+    try {
+      const stageIdx = parseInt(req.body?.stageIdx, 10);
+      const distance = parseFloat(req.body?.distance);
+      const pace = parseFloat(req.body?.pace);
+      if (!Number.isInteger(stageIdx) || stageIdx < 0 || stageIdx > 2) {
+        return res.status(400).json({ message: "Invalid stageIdx" });
+      }
+      if (!Number.isFinite(distance) || distance < 0) return res.status(400).json({ message: "Invalid distance" });
+      const splits = await storage.endParticipantStage(
+        req.params.id as string,
+        req.session.userId!,
+        stageIdx,
+        distance,
+        Number.isFinite(pace) ? pace : 0
+      );
+      res.json({ splits });
+    } catch (e: any) {
+      if (e.message === "PARTICIPANT_NOT_FOUND") return res.status(404).json({ message: "Join the event first" });
+      if (e.message === "STAGE_NOT_STARTED") return res.status(400).json({ message: "Start the stage first" });
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.patch("/api/runs/:id/pace-group", requireAuth, async (req, res) => {
     try {
       const { paceGroupLabel } = req.body;
@@ -1980,20 +2299,25 @@ async function go(e){
         patch.date = parsedPatchDate.toISOString();
       }
       // Strings
+      // T2.1: same XSS guard used on create
+      const HAS_HTML = /<[^>]*>|javascript:|on\w+\s*=/i;
       if (body.title !== undefined) {
         const t = String(body.title).trim();
         if (!t) return res.status(400).json({ message: "Title cannot be empty" });
         if (t.length > 120) return res.status(400).json({ message: "Title too long (max 120)" });
+        if (HAS_HTML.test(t)) return res.status(400).json({ message: "Title contains invalid characters" });
         patch.title = t;
       }
       if (body.description !== undefined) {
         const d = body.description == null ? null : String(body.description).trim();
         if (d && d.length > 1000) return res.status(400).json({ message: "Description too long (max 1000)" });
+        if (d && HAS_HTML.test(d)) return res.status(400).json({ message: "Description contains invalid characters" });
         patch.description = d || null;
       }
       if (body.locationName !== undefined) {
         const l = String(body.locationName).trim();
         if (!l) return res.status(400).json({ message: "Location cannot be empty" });
+        if (HAS_HTML.test(l)) return res.status(400).json({ message: "Location name contains invalid characters" });
         patch.locationName = l;
       }
       if (body.locationLat !== undefined) {
@@ -2032,8 +2356,47 @@ async function go(e){
         if (!Number.isInteger(n) || n < 1 || n > 9999) return res.status(400).json({ message: "Max participants 1–9999" });
         patch.maxParticipants = n;
       }
+      if (body.paceGroups !== undefined) {
+        if (body.paceGroups === null) {
+          patch.paceGroups = null;
+        } else if (Array.isArray(body.paceGroups)) {
+          const cleaned: { label: string; minPace: number; maxPace: number }[] = [];
+          for (const g of body.paceGroups) {
+            const label = String(g?.label ?? "").trim().slice(0, 40);
+            const minP = parseFloat(g?.minPace);
+            const maxP = parseFloat(g?.maxPace);
+            if (!label) return res.status(400).json({ message: "Pace group label required" });
+            if (!isFinite(minP) || !isFinite(maxP) || minP < 0 || maxP < 0) return res.status(400).json({ message: `Invalid pace for group ${label}` });
+            if (minP > maxP) return res.status(400).json({ message: `Group ${label}: faster pace must be ≤ slower pace` });
+            cleaned.push({ label, minPace: minP, maxPace: maxP });
+          }
+          if (cleaned.length > 8) return res.status(400).json({ message: "Max 8 pace groups" });
+          patch.paceGroups = cleaned;
+        } else {
+          return res.status(400).json({ message: "paceGroups must be an array or null" });
+        }
+      }
 
       const { after, changedFields } = await storage.updateRun(req.params.id as string, req.session.userId!, patch);
+
+      // T2.7: when pace groups change, NULL out any participant pace_group_label
+      // that no longer exists in the new groups list. Their dangling label was
+      // breaking the leaderboard grouping on the live + results screens.
+      if (changedFields.includes("paceGroups")) {
+        const validLabels = Array.isArray(patch.paceGroups) ? patch.paceGroups.map((g) => g.label) : [];
+        if (validLabels.length === 0) {
+          await pool.query(
+            `UPDATE run_participants SET pace_group_label = NULL WHERE run_id = $1 AND pace_group_label IS NOT NULL`,
+            [req.params.id as string]
+          );
+        } else {
+          await pool.query(
+            `UPDATE run_participants SET pace_group_label = NULL
+             WHERE run_id = $1 AND pace_group_label IS NOT NULL AND pace_group_label <> ALL($2::text[])`,
+            [req.params.id as string, validLabels]
+          );
+        }
+      }
 
       // Build a human-readable change summary for the push notification.
       if (changedFields.length > 0) {
@@ -2056,6 +2419,7 @@ async function go(e){
           }
           const paceChanged = changedFields.includes("minPace") || changedFields.includes("maxPace");
           if (paceChanged) parts.push("pace updated");
+          if (changedFields.includes("paceGroups")) parts.push("pace groups updated");
           if (changedFields.includes("maxParticipants")) parts.push(`cap: ${after.max_participants}`);
 
           const headline = changedFields.length === 1 && changedFields[0] === "date"
@@ -2366,18 +2730,16 @@ async function go(e){
       }
 
       if (Array.isArray(mileSplits) && mileSplits.length > 0) {
-        let prevMile = 0;
+        // Client sends { label: string, paceMinPerMile: number, isPartial: boolean }
+        // (see contexts/LiveTrackingContext.tsx). Validator must match the real shape
+        // — the previous mile/time check rejected every real run.
         for (const split of mileSplits) {
-          if (typeof split.mile !== "number" || split.mile < 1) {
-            return res.status(400).json({ message: "Each mileSplit must have mile >= 1" });
+          if (typeof split?.label !== "string" || split.label.length === 0 || split.label.length > 8) {
+            return res.status(400).json({ message: "Each mileSplit must have a non-empty label" });
           }
-          if (typeof split.time !== "number" || split.time <= 0) {
-            return res.status(400).json({ message: "Each mileSplit time must be > 0" });
+          if (typeof split?.paceMinPerMile !== "number" || split.paceMinPerMile <= 0 || split.paceMinPerMile > 60) {
+            return res.status(400).json({ message: "Each mileSplit paceMinPerMile must be between 0 and 60" });
           }
-          if (split.mile <= prevMile) {
-            return res.status(400).json({ message: "mileSplits must have strictly increasing mile values" });
-          }
-          prevMile = split.mile;
         }
       }
 
@@ -2570,7 +2932,52 @@ async function go(e){
         parseFloat(latitude), parseFloat(longitude),
         parseFloat(cumulativeDistance), parseFloat(pace)
       );
-      res.json(result);
+
+      // T2.10: pace-group recommendation. After ~1 mile of tracking, if the
+      // participant's actual pace is consistently outside their declared
+      // group's range, suggest a better-matching group. Returned in the ping
+      // response; client renders a one-time dismissible drop-down.
+      let paceRecommendation: { suggestGroup: string; reason: "faster" | "slower"; minPace: number; maxPace: number } | null = null;
+      try {
+        const dist = parseFloat(cumulativeDistance) || 0;
+        const livePace = parseFloat(pace) || 0;
+        if (dist >= 1 && livePace > 0) {
+          const ctx = await pool.query(
+            `SELECT r.pace_groups, r.activity_type, rp.pace_group_label
+               FROM runs r LEFT JOIN run_participants rp ON rp.run_id = r.id AND rp.user_id = $2
+              WHERE r.id = $1`,
+            [req.params.id, req.session.userId]
+          );
+          const row = ctx.rows[0];
+          const groups = Array.isArray(row?.pace_groups) ? row.pace_groups : null;
+          const myLabel = row?.pace_group_label;
+          if (groups && groups.length > 1 && myLabel) {
+            const myGroup = groups.find((g: any) => g.label === myLabel);
+            if (myGroup) {
+              const isRide = row.activity_type === "ride";
+              const myMetric = isRide ? (livePace > 0 ? 60 / livePace : 0) : livePace;
+              const tooFast = isRide ? myMetric > myGroup.maxPace + 1 : myMetric < myGroup.minPace - 0.3;
+              const tooSlow = isRide ? myMetric < myGroup.minPace - 1 : myMetric > myGroup.maxPace + 0.3;
+              if (tooFast) {
+                const better = isRide
+                  ? groups.filter((g: any) => g.minPace > myGroup.maxPace).sort((a: any, b: any) => a.minPace - b.minPace)[0]
+                  : groups.filter((g: any) => g.maxPace < myGroup.minPace).sort((a: any, b: any) => b.maxPace - a.maxPace)[0];
+                if (better) paceRecommendation = { suggestGroup: better.label, reason: "faster", minPace: better.minPace, maxPace: better.maxPace };
+              } else if (tooSlow) {
+                const better = isRide
+                  ? groups.filter((g: any) => g.maxPace < myGroup.minPace).sort((a: any, b: any) => b.maxPace - a.maxPace)[0]
+                  : groups.filter((g: any) => g.minPace > myGroup.maxPace).sort((a: any, b: any) => a.minPace - b.minPace)[0];
+                if (better) paceRecommendation = { suggestGroup: better.label, reason: "slower", minPace: better.minPace, maxPace: better.maxPace };
+              }
+            }
+          }
+        }
+      } catch (recErr: any) {
+        // Recommendation is best-effort; don't fail the ping.
+        console.error("[pace-rec]", recErr?.message ?? recErr);
+      }
+
+      res.json({ ...result, paceRecommendation });
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
@@ -2806,17 +3213,73 @@ async function go(e){
             allowForce: true,
           });
         }
+      } else {
+        // T1.12: force-end with zero distance → mark abandoned and skip the
+        // leaderboard rank computation entirely. Otherwise we'd produce ranks
+        // for empty runs (final_rank against final_pace=0 = nonsense rows).
+        const distResult = await pool.query<{ total_dist: string }>(
+          `SELECT COALESCE(
+             (SELECT SUM(max_d) FROM (
+                SELECT MAX(cumulative_distance) AS max_d
+                FROM run_tracking_points WHERE run_id = $1 GROUP BY user_id
+              ) s), 0
+           ) AS total_dist`,
+          [req.params.id]
+        );
+        const totalDist = parseFloat(distResult.rows[0]?.total_dist ?? "0") || 0;
+        if (totalDist < 0.1) {
+          await pool.query(
+            `UPDATE runs SET is_active = false, is_completed = false, is_abandoned = true WHERE id = $1`,
+            [req.params.id]
+          );
+          await pool.query(
+            `UPDATE run_participants SET status = 'cancelled', is_present = false, final_pace = NULL, final_distance = NULL, final_rank = NULL WHERE run_id = $1`,
+            [req.params.id]
+          );
+          await pool.query(`DELETE FROM planned_runs WHERE run_id = $1`, [req.params.id]);
+          return res.json({ success: true, abandoned: true });
+        }
       }
 
-      await storage.forceCompleteRun(req.params.id as string);
-      storage.finalizeTagAlongsForRun(req.params.id as string).catch((e: any) =>
-        console.error('[tag-along] finalizeTagAlongsForRun error', e?.message)
+      // T2.14: 60s grace window — set pending_end_at so any participant still
+      // mid-finish-call gets to land their result. Late-start monitor sweeps
+      // runs where pending_end_at < NOW() and calls forceCompleteRun. Stragglers
+      // are notified immediately so they know to wrap up.
+      await pool.query(
+        `UPDATE runs SET pending_end_at = NOW() + INTERVAL '60 seconds' WHERE id = $1`,
+        [req.params.id]
       );
-      res.json({ success: true });
-      // Fire-and-forget: post AI crew recap to crew chat
-      postCrewRunRecap(req.params.id as string).catch((bgErr: any) =>
-        console.error("[bg] crew recap (host-end):", bgErr?.message ?? bgErr)
+      // Push to anyone still tracking
+      const stragglers = await pool.query<{ push_token: string | null; name: string }>(
+        `SELECT u.push_token, u.name
+           FROM run_participants rp
+           JOIN users u ON u.id = rp.user_id
+          WHERE rp.run_id = $1
+            AND rp.is_present = true
+            AND rp.final_pace IS NULL
+            AND rp.user_id != $2
+            AND u.push_token IS NOT NULL`,
+        [req.params.id, req.session.userId]
       );
+      const tokens = stragglers.rows.map((r) => r.push_token!).filter(Boolean);
+      if (tokens.length > 0) {
+        sendPushNotification(
+          tokens,
+          "Host is ending the run",
+          "Tap Finish in the next 60 seconds so your time counts.",
+          { runId: req.params.id as string, screen: "live-tracking" }
+        ).catch((e: any) => console.error("[push] host-ending notif:", e?.message ?? e));
+      }
+      res.json({ success: true, gracePeriodSeconds: 60 });
+      // Fire-and-forget: post AI crew recap to crew chat (after grace window)
+      setTimeout(() => {
+        postCrewRunRecap(req.params.id as string).catch((bgErr: any) =>
+          console.error("[bg] crew recap (host-end):", bgErr?.message ?? bgErr)
+        );
+        storage.finalizeTagAlongsForRun(req.params.id as string).catch((e: any) =>
+          console.error('[tag-along] finalizeTagAlongsForRun error', e?.message)
+        );
+      }, 60_000);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
@@ -3050,6 +3513,10 @@ async function go(e){
       if (!req.file) return res.status(400).json({ message: "No photo provided" });
       const run = await storage.getRunById(req.params.id as string);
       if (!run) return res.status(404).json({ message: "Run not found" });
+      // T1.7: don't accept photos for events that are gone or abandoned. Photos
+      // uploaded post-cleanup orphan into the table without a viewable parent.
+      if (run.is_deleted) return res.status(410).json({ message: "This event has been cancelled" });
+      if ((run as any).is_abandoned) return res.status(410).json({ message: "This event was abandoned" });
       const participants = await storage.getRunParticipants(req.params.id as string);
       const isParticipant = participants.some((p: any) => p.id === req.session.userId);
       const isHost = run.host_id === req.session.userId;
@@ -3446,6 +3913,84 @@ async function go(e){
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
+  // Crew pace-group label memory — chief sets, all members read.
+  app.get("/api/crews/:id/pace-group-labels", requireAuth, async (req, res) => {
+    try {
+      const crewId = req.params.id as string;
+      const isMember = await storage.isCrewMember(crewId, req.session.userId!);
+      if (!isMember) return res.status(403).json({ message: "Not a crew member." });
+      const labels = await storage.getCrewPaceGroupLabels(crewId);
+      res.json({ labels });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.put("/api/crews/:id/pace-group-labels", requireAuth, async (req, res) => {
+    try {
+      const crewId = req.params.id as string;
+      const role = await storage.getCrewMemberRole(crewId, req.session.userId!);
+      if (role !== "crew_chief") return res.status(403).json({ message: "Only the crew chief can rename pace groups." });
+      const body = Array.isArray(req.body?.labels) ? req.body.labels : [];
+      const sanitized = body
+        .map((b: any, i: number) => ({
+          position: Number.isInteger(b?.position) ? b.position : i,
+          label: typeof b?.label === "string" ? b.label : "",
+        }))
+        .filter((b: any) => b.label.trim().length > 0)
+        .slice(0, 8);
+      await storage.setCrewPaceGroupLabels(crewId, sanitized);
+      const labels = await storage.getCrewPaceGroupLabels(crewId);
+      res.json({ labels });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  // Chief-only: edit crew profile (image/emoji unlimited; name one-time)
+  app.patch("/api/crews/:id", requireAuth, async (req, res) => {
+    try {
+      const crewId = req.params.id as string;
+      const userId = req.session.userId!;
+      const { name, image_url, emoji } = req.body ?? {};
+
+      const role = await storage.getCrewMemberRole(crewId, userId);
+      if (role !== "crew_chief") return res.status(403).json({ message: "Only the crew chief can edit the crew." });
+
+      const currentRes = await pool.query(`SELECT * FROM crews WHERE id = $1`, [crewId]);
+      const current = currentRes.rows[0];
+      if (!current) return res.status(404).json({ message: "Crew not found." });
+
+      const patch: Record<string, any> = {};
+
+      if (typeof image_url === "string" || image_url === null) patch.image_url = image_url;
+      if (typeof emoji === "string" && emoji.trim().length > 0) patch.emoji = emoji.trim();
+
+      if (typeof name === "string") {
+        const trimmed = name.trim();
+        if (!trimmed) return res.status(400).json({ message: "Name cannot be empty." });
+        if (trimmed.length > 30) return res.status(400).json({ message: "Name too long." });
+        if (trimmed.toLowerCase() !== (current.name ?? "").toLowerCase()) {
+          const used = (current as any).name_change_count ?? 0;
+          if (used >= 1) return res.status(409).json({ message: "Crew name can only be changed once." });
+          patch.name = trimmed;
+          // Bump counter via a dedicated query (updateCrew doesn't expose this column generically)
+          await pool.query(`UPDATE crews SET name_change_count = COALESCE(name_change_count, 0) + 1 WHERE id = $1`, [crewId]);
+        }
+      }
+
+      if (Object.keys(patch).length === 0) return res.json(current);
+
+      const updated = await storage.updateCrew(crewId, patch);
+      res.json(updated);
+    } catch (e: any) {
+      if (e.message?.includes("crews_name_lower_unique") || e.code === "23505") {
+        return res.status(409).json({ message: "A crew with that name already exists." });
+      }
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.get("/api/crews/:id/runs", requireAuth, async (req, res) => {
     try {
       const runs = await storage.getCrewRuns(req.params.id as string);
@@ -3464,6 +4009,62 @@ async function go(e){
     try {
       const data = await storage.getCrewAchievements(req.params.id as string);
       res.json(data);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // ─── User Streaks ────────────────────────────────────────────────────────
+  app.get("/api/streaks", requireAuth, async (req, res) => {
+    try {
+      const info = await storage.getUserStreaks(req.session.userId!);
+      res.json(info);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // ─── Crew Goals ──────────────────────────────────────────────────────────
+  app.get("/api/crews/:id/goals", requireAuth, async (req, res) => {
+    try {
+      const crewId = req.params.id as string;
+      const activityParam = String(req.query.activity ?? "all");
+      const allowed = ["run", "ride", "walk", "all"] as const;
+      if (!(allowed as readonly string[]).includes(activityParam)) {
+        return res.status(400).json({ message: "Invalid activity" });
+      }
+      const activityType = activityParam as (typeof allowed)[number];
+      const [goal, progress] = await Promise.all([
+        storage.getCrewGoal(crewId, activityType),
+        storage.getCrewGoalProgress(crewId, activityType),
+      ]);
+      res.json({
+        activity_type: activityType,
+        weekly_target_miles: goal?.weekly_target_miles ?? null,
+        monthly_target_miles: goal?.monthly_target_miles ?? null,
+        weekly_miles: progress.weekly_miles,
+        monthly_miles: progress.monthly_miles,
+        updated_by: goal?.updated_by ?? null,
+        updated_at: goal?.updated_at ?? null,
+      });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.put("/api/crews/:id/goals", requireAuth, async (req, res) => {
+    try {
+      const crewId = req.params.id as string;
+      const callerId = req.session.userId!;
+      const role = await storage.getCrewMemberRole(crewId, callerId);
+      if (role !== "crew_chief") {
+        return res.status(403).json({ message: "Only the Crew Chief can set goals" });
+      }
+      const { activity_type, weekly_target_miles, monthly_target_miles } = req.body ?? {};
+      const allowed = ["run", "ride", "walk", "all"];
+      if (!allowed.includes(activity_type)) {
+        return res.status(400).json({ message: "Invalid activity_type" });
+      }
+      const w = weekly_target_miles == null ? null : Number(weekly_target_miles);
+      const m = monthly_target_miles == null ? null : Number(monthly_target_miles);
+      if (w != null && (!isFinite(w) || w < 0)) return res.status(400).json({ message: "Invalid weekly target" });
+      if (m != null && (!isFinite(m) || m < 0)) return res.status(400).json({ message: "Invalid monthly target" });
+      await storage.saveCrewGoal(crewId, activity_type, w, m, callerId);
+      res.json({ ok: true });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
@@ -3569,6 +4170,11 @@ async function go(e){
   app.get("/api/dm/:friendId", requireAuth, async (req, res) => {
     try {
       const limit = Math.min(Number(req.query.limit as string) || 50, 100);
+      const [iBlocked, theyBlocked] = await Promise.all([
+        storage.isBlocking(req.session.userId!, req.params.friendId as string),
+        storage.isBlockedBy(req.session.userId!, req.params.friendId as string),
+      ]);
+      if (iBlocked || theyBlocked) return res.status(403).json({ message: "Thread unavailable" });
       const messages = await storage.getDmThread(req.session.userId!, req.params.friendId as string, limit);
       res.json(messages);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
@@ -3754,6 +4360,137 @@ async function go(e){
         const wasNew = await storage.saveGarminActivity(req.session.userId!, garminId, {
           title: act.activityName ?? actTypeLabel,
           date: new Date((act.startTimeInSeconds ?? Math.floor(Date.now() / 1000)) * 1000),
+          distanceMiles: distMiles,
+          paceMinPerMile,
+          durationSeconds: durationSec,
+          activityType: actType,
+        });
+        if (wasNew) imported++;
+      }
+      res.json({ imported, total: activities.length });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // ─── Strava OAuth 2.0 ────────────────────────────────────────────────────────
+
+  app.get("/api/strava/status", requireAuth, async (req, res) => {
+    try {
+      const tokens = await storage.getStravaTokens(req.session.userId!);
+      let lastSync: string | null = null;
+      if (tokens) lastSync = await storage.getStravaLastSync(req.session.userId!);
+      res.json({ connected: !!tokens, lastSync });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/strava/auth", requireAuth, async (req, res) => {
+    try {
+      const clientId = process.env.STRAVA_CLIENT_ID;
+      if (!clientId) return res.status(503).json({ message: "Strava integration is not configured. Add STRAVA_CLIENT_ID." });
+      const callbackUrl = `${req.protocol}://${req.get("host")}/api/strava/callback`;
+      const state = crypto.randomBytes(16).toString("hex");
+      stravaPendingState.set(state, { userId: req.session.userId! });
+      setTimeout(() => stravaPendingState.delete(state), 15 * 60 * 1000);
+      const authUrl = `${STRAVA_AUTH_URL}?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(callbackUrl)}&approval_prompt=auto&scope=read,activity:read_all&state=${state}`;
+      res.json({ authUrl });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/strava/callback", async (req: any, res) => {
+    try {
+      const code = String(req.query.code as string ?? "");
+      const state = String(req.query.state as string ?? "");
+      const error = String(req.query.error as string ?? "");
+      if (error) return res.status(400).send(`Strava authorization was cancelled or denied: ${error}`);
+      if (!code || !state) return res.status(400).send("Missing OAuth parameters. Please try connecting Strava again.");
+
+      const pending = stravaPendingState.get(state);
+      if (!pending) return res.status(400).send("OAuth state expired. Please return to the PaceUp app and tap Connect again.");
+      stravaPendingState.delete(state);
+
+      const clientId = process.env.STRAVA_CLIENT_ID;
+      const clientSecret = process.env.STRAVA_CLIENT_SECRET;
+      if (!clientId || !clientSecret) return res.status(503).send("Strava integration is not configured.");
+
+      const tokenResp = await fetch(STRAVA_TOKEN_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecret,
+          code,
+          grant_type: "authorization_code",
+        }).toString(),
+      });
+      if (!tokenResp.ok) {
+        const txt = await tokenResp.text();
+        return res.status(500).send(`Strava token exchange failed: ${txt}`);
+      }
+      const tokenData: any = await tokenResp.json();
+      const athleteId = String(tokenData.athlete?.id ?? "");
+      if (!tokenData.access_token || !tokenData.refresh_token || !athleteId) {
+        return res.status(500).send("Invalid token response from Strava.");
+      }
+      const expiresAt = new Date(tokenData.expires_at * 1000);
+      await storage.saveStravaTokens(pending.userId, athleteId, tokenData.access_token, tokenData.refresh_token, expiresAt);
+
+      res.send(`<!DOCTYPE html><html><head><title>PaceUp — Strava Connected</title>
+<meta http-equiv="refresh" content="0;url=paceup://strava-connected">
+<style>body{background:#050C09;color:#fff;font-family:sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;} h1{color:#00D97E;font-size:24px;} p{color:#aaa;margin-top:8px;} a{color:#00D97E;}</style></head>
+<body>
+<h1>Strava Connected!</h1>
+<p>Returning to PaceUp…</p>
+<p><a href="paceup://strava-connected">Tap here if the app didn't open automatically</a></p>
+<script>window.location.href="paceup://strava-connected";</script>
+</body></html>`);
+    } catch (e: any) { res.status(500).send(`Error: ${e.message}`); }
+  });
+
+  app.post("/api/strava/disconnect", requireAuth, async (req, res) => {
+    try {
+      // Best-effort deauthorize so the user sees PaceUp removed from Strava's connected apps list.
+      const tokens = await storage.getStravaTokens(req.session.userId!);
+      if (tokens?.access_token) {
+        try {
+          await fetch(STRAVA_DEAUTH_URL, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${tokens.access_token}` },
+          });
+        } catch (e) {
+          console.warn("[Strava] deauthorize failed (non-fatal):", e);
+        }
+      }
+      await storage.clearStravaTokens(req.session.userId!);
+      res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/strava/sync", requireAuth, async (req, res) => {
+    try {
+      const accessToken = await refreshStravaAccessTokenIfNeeded(req.session.userId!);
+      if (!accessToken) return res.status(401).json({ message: "Strava account not connected." });
+
+      const since = Math.floor(Date.now() / 1000) - 30 * 24 * 60 * 60;
+      const url = `${STRAVA_ACTIVITIES_URL}?after=${since}&per_page=100`;
+      const resp = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+      if (!resp.ok) {
+        return res.status(502).json({ message: `Strava API error: ${resp.status} ${await resp.text()}` });
+      }
+      const activities: any[] = await resp.json();
+      let imported = 0;
+      for (const act of activities) {
+        const stravaId = String(act.id ?? "");
+        if (!stravaId) continue;
+        const distMeters = typeof act.distance === "number" ? act.distance : 0;
+        const distMiles = distMeters / 1609.344;
+        const durationSec = typeof act.moving_time === "number" ? act.moving_time : (typeof act.elapsed_time === "number" ? act.elapsed_time : null);
+        const paceMinPerMile = durationSec && distMiles > 0 ? (durationSec / 60) / distMiles : null;
+        const actType = mapStravaActivityType(String(act.type ?? act.sport_type ?? ""));
+        const actLabel = actType === "ride" ? "Strava Ride" : actType === "walk" ? "Strava Walk" : "Strava Run";
+        // Filter obviously-bad rows (e.g. indoor manual entries with no distance).
+        if (distMeters < 100 || !durationSec || durationSec < 60) continue;
+        const wasNew = await storage.saveStravaActivity(req.session.userId!, stravaId, {
+          title: act.name ?? actLabel,
+          date: new Date(act.start_date ?? Date.now()),
           distanceMiles: distMiles,
           paceMinPerMile,
           durationSeconds: durationSec,

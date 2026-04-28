@@ -19,6 +19,7 @@ import { PurchasesProvider } from "@/contexts/PurchasesContext";
 import { WalkthroughProvider } from "@/contexts/WalkthroughContext";
 import NotificationBanner from "@/components/NotificationBanner";
 import WalkthroughOverlay from "@/components/WalkthroughOverlay";
+import GoalStatusCard from "@/components/GoalStatusCard";
 import { useWidgetSync } from "@/lib/useWidgetSync";
 import { StatusBar } from "expo-status-bar";
 import {
@@ -31,6 +32,7 @@ import { PlayfairDisplay_700Bold } from "@expo-google-fonts/playfair-display";
 import { DancingScript_700Bold } from "@expo-google-fonts/dancing-script";
 import { Nunito_800ExtraBold } from "@expo-google-fonts/nunito";
 import C from "@/constants/colors";
+import ActiveRunBanner from "@/components/ActiveRunBanner";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -137,10 +139,24 @@ function RootLayoutNav() {
     const sub = AppState.addEventListener("change", (state) => {
       if (state === "active" && user && user.onboarding_complete !== false) {
         registerPushToken(user.id);
+        // Also flush any solo runs queued offline from previous sessions.
+        try {
+          const { flushPendingRuns } = require("@/lib/pendingRuns");
+          flushPendingRuns().catch(() => {});
+        } catch (_) {}
       }
     });
     return () => sub.remove();
   }, [user]);
+
+  // Flush any queued pending solo runs once on mount when we have a user.
+  useEffect(() => {
+    if (!user) return;
+    try {
+      const { flushPendingRuns } = require("@/lib/pendingRuns");
+      flushPendingRuns().catch(() => {});
+    } catch (_) {}
+  }, [user?.id]);
 
   // Retry pending photo uploads from previous sessions
   const pendingUploadsRetried = useRef(false);
@@ -288,11 +304,32 @@ function RootLayoutNav() {
     return () => { try { sub?.remove(); } catch (_) {} };
   }, []);
 
+  // Foreground push: when a notification arrives while the app is open, refresh
+  // the bell + friends + crew caches so the new request shows immediately
+  // instead of waiting on the 30-second poll.
+  useEffect(() => {
+    let sub: { remove: () => void } | null = null;
+    try {
+      sub = Notifications.addNotificationReceivedListener(() => {
+        try {
+          queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/friends/requests"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/friends"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/crew-invites"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/crews"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/dm/unread-count"] });
+        } catch (_) {}
+      });
+    } catch (_) {}
+    return () => { try { sub?.remove(); } catch (_) {} };
+  }, []);
+
   if (isLoading) return null;
 
   return (
     <>
       <StatusBar style={theme === "dark" ? "light" : "dark"} />
+      {user && <ActiveRunBanner />}
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.bg } }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="onboarding" options={{ headerShown: false }} />
@@ -319,11 +356,11 @@ function RootLayoutNav() {
         />
         <Stack.Screen
           name="run-tracking"
-          options={{ headerShown: false }}
+          options={{ headerShown: false, gestureEnabled: false, fullScreenGestureEnabled: false }}
         />
         <Stack.Screen
           name="run-live/[id]"
-          options={{ headerShown: false }}
+          options={{ headerShown: false, gestureEnabled: false, fullScreenGestureEnabled: false }}
         />
         <Stack.Screen
           name="run-results/[id]"
@@ -339,6 +376,7 @@ function RootLayoutNav() {
         />
       </Stack>
       {user && <NotificationBanner />}
+      {user && <GoalStatusCard />}
       {user && <WalkthroughOverlay />}
     </>
   );
